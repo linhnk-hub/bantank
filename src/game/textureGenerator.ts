@@ -273,4 +273,291 @@ export function generateTileTextures(scene: Phaser.Scene): void {
       canvas.refresh();
     }
   }
+
+  // 10. RUINED BASE (16x16 pixel) - Rubble and destroyed flag
+  if (!scene.textures.exists('tile_9_ruined')) {
+    const canvas = scene.textures.createCanvas('tile_9_ruined', 16, 16);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, 16, 16);
+
+      // Charred rubble
+      ctx.fillStyle = '#404040';
+      ctx.fillRect(2, 6, 12, 9);
+      ctx.fillStyle = '#737373';
+      ctx.fillRect(4, 8, 8, 5);
+
+      // Skull / ruins symbol
+      ctx.fillStyle = '#e5e5e5';
+      ctx.fillRect(6, 4, 4, 3);
+      ctx.fillRect(5, 7, 6, 3);
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(6, 8, 1, 1);
+      ctx.fillRect(9, 8, 1, 1);
+      canvas.refresh();
+    }
+  }
+
+  // 11. BULLET (4x4 pixel) - Golden/orange core with bright center
+  if (!scene.textures.exists('bullet')) {
+    const canvas = scene.textures.createCanvas('bullet', 4, 4);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      ctx.fillStyle = '#ea580c'; // Orange rim
+      ctx.fillRect(0, 0, 4, 4);
+      ctx.fillStyle = '#fef08a'; // White-yellow core
+      ctx.fillRect(1, 1, 2, 2);
+      canvas.refresh();
+    }
+  }
+
+  // 12. P1 YELLOW TANK SPRITES (16x16 pixel in 4 directions)
+  generateTankTextures(scene);
+
+  // 13. BRICK 8x8 SUB-TILES
+  generateBrickSubTileTextures(scene);
+}
+
+function generateTankTextures(scene: Phaser.Scene): void {
+  const directions: Array<'up' | 'down' | 'left' | 'right'> = ['up', 'down', 'left', 'right'];
+
+  for (const dir of directions) {
+    const key = `tank_p1_${dir}`;
+    if (scene.textures.exists(key)) continue;
+
+    const canvas = scene.textures.createCanvas(key, 16, 16);
+    if (!canvas) continue;
+    const ctx = canvas.getContext();
+
+    // Transparent background
+    ctx.clearRect(0, 0, 16, 16);
+
+    const yellowMain = '#eab308';
+    const yellowLight = '#fef08a';
+    const yellowDark = '#a16207';
+    const trackColor = '#475569';
+    const trackLight = '#94a3b8';
+
+    if (dir === 'up') {
+      // Left track (x: 1..3, y: 2..15)
+      ctx.fillStyle = trackColor;
+      ctx.fillRect(1, 2, 3, 13);
+      ctx.fillStyle = trackLight;
+      ctx.fillRect(1, 3, 3, 2);
+      ctx.fillRect(1, 7, 3, 2);
+      ctx.fillRect(1, 11, 3, 2);
+
+      // Right track (x: 12..14, y: 2..15)
+      ctx.fillStyle = trackColor;
+      ctx.fillRect(12, 2, 3, 13);
+      ctx.fillStyle = trackLight;
+      ctx.fillRect(12, 3, 3, 2);
+      ctx.fillRect(12, 7, 3, 2);
+      ctx.fillRect(12, 11, 3, 2);
+
+      // Tank Body (x: 4..11, y: 4..14)
+      ctx.fillStyle = yellowMain;
+      ctx.fillRect(4, 4, 8, 11);
+      ctx.fillStyle = yellowLight;
+      ctx.fillRect(4, 4, 8, 1);
+      ctx.fillRect(4, 4, 1, 11);
+      ctx.fillStyle = yellowDark;
+      ctx.fillRect(4, 14, 8, 1);
+      ctx.fillRect(11, 4, 1, 11);
+
+      // Central Turret (x: 5..10, y: 6..11)
+      ctx.fillStyle = yellowDark;
+      ctx.fillRect(5, 6, 6, 6);
+      ctx.fillStyle = yellowLight;
+      ctx.fillRect(6, 7, 4, 4);
+
+      // Cannon Barrel (x: 7..8, y: 0..6)
+      ctx.fillStyle = yellowLight;
+      ctx.fillRect(7, 0, 2, 7);
+      ctx.fillStyle = yellowDark;
+      ctx.fillRect(7, 0, 1, 7);
+    } else if (dir === 'down') {
+      // Left track
+      ctx.fillStyle = trackColor;
+      ctx.fillRect(1, 1, 3, 13);
+      ctx.fillStyle = trackLight;
+      ctx.fillRect(1, 2, 3, 2);
+      ctx.fillRect(1, 6, 3, 2);
+      ctx.fillRect(1, 10, 3, 2);
+
+      // Right track
+      ctx.fillStyle = trackColor;
+      ctx.fillRect(12, 1, 3, 13);
+      ctx.fillStyle = trackLight;
+      ctx.fillRect(12, 2, 3, 2);
+      ctx.fillRect(12, 6, 3, 2);
+      ctx.fillRect(12, 10, 3, 2);
+
+      // Tank Body
+      ctx.fillStyle = yellowMain;
+      ctx.fillRect(4, 1, 8, 11);
+      ctx.fillStyle = yellowLight;
+      ctx.fillRect(4, 1, 8, 1);
+      ctx.fillRect(4, 1, 1, 11);
+      ctx.fillStyle = yellowDark;
+      ctx.fillRect(4, 11, 8, 1);
+      ctx.fillRect(11, 1, 1, 11);
+
+      // Central Turret
+      ctx.fillStyle = yellowDark;
+      ctx.fillRect(5, 4, 6, 6);
+      ctx.fillStyle = yellowLight;
+      ctx.fillRect(6, 5, 4, 4);
+
+      // Cannon Barrel
+      ctx.fillStyle = yellowLight;
+      ctx.fillRect(7, 9, 2, 7);
+      ctx.fillStyle = yellowDark;
+      ctx.fillRect(8, 9, 1, 7);
+    } else if (dir === 'left') {
+      // Top track (x: 2..15, y: 1..3)
+      ctx.fillStyle = trackColor;
+      ctx.fillRect(2, 1, 13, 3);
+      ctx.fillStyle = trackLight;
+      ctx.fillRect(3, 1, 2, 3);
+      ctx.fillRect(7, 1, 2, 3);
+      ctx.fillRect(11, 1, 2, 3);
+
+      // Bottom track (x: 2..15, y: 12..14)
+      ctx.fillStyle = trackColor;
+      ctx.fillRect(2, 12, 13, 3);
+      ctx.fillStyle = trackLight;
+      ctx.fillRect(3, 12, 2, 3);
+      ctx.fillRect(7, 12, 2, 3);
+      ctx.fillRect(11, 12, 2, 3);
+
+      // Tank Body (x: 4..14, y: 4..11)
+      ctx.fillStyle = yellowMain;
+      ctx.fillRect(4, 4, 11, 8);
+      ctx.fillStyle = yellowLight;
+      ctx.fillRect(4, 4, 11, 1);
+      ctx.fillRect(4, 4, 1, 8);
+      ctx.fillStyle = yellowDark;
+      ctx.fillRect(4, 11, 11, 1);
+      ctx.fillRect(14, 4, 1, 8);
+
+      // Central Turret
+      ctx.fillStyle = yellowDark;
+      ctx.fillRect(6, 5, 6, 6);
+      ctx.fillStyle = yellowLight;
+      ctx.fillRect(7, 6, 4, 4);
+
+      // Cannon Barrel (x: 0..6, y: 7..8)
+      ctx.fillStyle = yellowLight;
+      ctx.fillRect(0, 7, 7, 2);
+      ctx.fillStyle = yellowDark;
+      ctx.fillRect(0, 8, 7, 1);
+    } else if (dir === 'right') {
+      // Top track
+      ctx.fillStyle = trackColor;
+      ctx.fillRect(1, 1, 13, 3);
+      ctx.fillStyle = trackLight;
+      ctx.fillRect(2, 1, 2, 3);
+      ctx.fillRect(6, 1, 2, 3);
+      ctx.fillRect(10, 1, 2, 3);
+
+      // Bottom track
+      ctx.fillStyle = trackColor;
+      ctx.fillRect(1, 12, 13, 3);
+      ctx.fillStyle = trackLight;
+      ctx.fillRect(2, 12, 2, 3);
+      ctx.fillRect(6, 12, 2, 3);
+      ctx.fillRect(10, 12, 2, 3);
+
+      // Tank Body
+      ctx.fillStyle = yellowMain;
+      ctx.fillRect(1, 4, 11, 8);
+      ctx.fillStyle = yellowLight;
+      ctx.fillRect(1, 4, 11, 1);
+      ctx.fillRect(1, 4, 1, 8);
+      ctx.fillStyle = yellowDark;
+      ctx.fillRect(1, 11, 11, 1);
+      ctx.fillRect(11, 4, 1, 8);
+
+      // Central Turret
+      ctx.fillStyle = yellowDark;
+      ctx.fillRect(4, 5, 6, 6);
+      ctx.fillStyle = yellowLight;
+      ctx.fillRect(5, 6, 4, 4);
+
+      // Cannon Barrel
+      ctx.fillStyle = yellowLight;
+      ctx.fillRect(9, 7, 7, 2);
+      ctx.fillStyle = yellowDark;
+      ctx.fillRect(9, 7, 7, 1);
+    }
+
+    canvas.refresh();
+  }
+}
+
+function generateBrickSubTileTextures(scene: Phaser.Scene): void {
+  // 8x8 Quarter-tile textures
+  if (!scene.textures.exists('brick_sub_tl')) {
+    const canvas = scene.textures.createCanvas('brick_sub_tl', 8, 8);
+    if (canvas) {
+      drawSubTile(canvas.getContext(), 0, 0);
+      canvas.refresh();
+    }
+  }
+  if (!scene.textures.exists('brick_sub_tr')) {
+    const canvas = scene.textures.createCanvas('brick_sub_tr', 8, 8);
+    if (canvas) {
+      drawSubTile(canvas.getContext(), 8, 0);
+      canvas.refresh();
+    }
+  }
+  if (!scene.textures.exists('brick_sub_bl')) {
+    const canvas = scene.textures.createCanvas('brick_sub_bl', 8, 8);
+    if (canvas) {
+      drawSubTile(canvas.getContext(), 0, 8);
+      canvas.refresh();
+    }
+  }
+  if (!scene.textures.exists('brick_sub_br')) {
+    const canvas = scene.textures.createCanvas('brick_sub_br', 8, 8);
+    if (canvas) {
+      drawSubTile(canvas.getContext(), 8, 8);
+      canvas.refresh();
+    }
+  }
+}
+
+function drawSubTile(ctx: CanvasRenderingContext2D, srcX: number, srcY: number): void {
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(0, 0, 8, 8);
+
+  const brickRed = '#c84c0c';
+  const brickLight = '#e47d33';
+  const brickDark = '#8c2800';
+
+  // 2 rows of bricks inside an 8px sub-tile
+  for (let r = 0; r < 2; r++) {
+    const y = r * 4;
+    const globalRow = (srcY / 4) + r;
+    const offset = (globalRow % 2 === 0) ? 0 : 4;
+
+    for (let b = -2; b < 3; b++) {
+      const globalX = b * 8 + offset;
+      const localX = globalX - srcX;
+
+      if (localX + 7 > 0 && localX < 8) {
+        const x = Math.max(0, localX);
+        const w = Math.min(7, 8 - localX);
+        ctx.fillStyle = brickRed;
+        ctx.fillRect(x, y, w, 3);
+        ctx.fillStyle = brickLight;
+        ctx.fillRect(x, y, w, 1);
+        ctx.fillRect(x, y, 1, 3);
+        ctx.fillStyle = brickDark;
+        ctx.fillRect(x, y + 2, w, 1);
+      }
+    }
+  }
 }

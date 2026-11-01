@@ -7,30 +7,53 @@ import React, { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
 import { MAP_DIMENSIONS } from '../core/constants.ts';
 import { StageViewerScene, type SceneTileHoverInfo } from './scenes/StageViewerScene.ts';
+import { BattleScene } from './scenes/BattleScene.ts';
+import { GameEngine } from '../core/gameEngine.ts';
+import type { GameCoreState } from '../core/types.ts';
 
 interface PhaserGameProps {
-  showGrid: boolean;
-  showCoords: boolean;
+  mode: 'inspector' | 'battle';
+  // Props for Milestone 1 inspector
+  showGrid?: boolean;
+  showCoords?: boolean;
   onTileHover?: (info: SceneTileHoverInfo | null) => void;
+  // Props for Milestone 2 battle
+  engine?: GameEngine;
+  onStateUpdate?: (state: GameCoreState) => void;
 }
 
 export const PhaserGame: React.FC<PhaserGameProps> = ({
-  showGrid,
-  showCoords,
+  mode,
+  showGrid = true,
+  showCoords = false,
   onTileHover,
+  engine,
+  onStateUpdate,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
-  const sceneRef = useRef<StageViewerScene | null>(null);
+  const stageSceneRef = useRef<StageViewerScene | null>(null);
+  const battleSceneRef = useRef<BattleScene | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const scene = new StageViewerScene();
-    sceneRef.current = scene;
+    let activeScene: Phaser.Scene;
 
-    if (onTileHover) {
-      scene.setTileHoverCallback(onTileHover);
+    if (mode === 'inspector') {
+      const stageScene = new StageViewerScene();
+      stageSceneRef.current = stageScene;
+      if (onTileHover) {
+        stageScene.setTileHoverCallback(onTileHover);
+      }
+      activeScene = stageScene;
+    } else {
+      const battleScene = new BattleScene(engine);
+      battleSceneRef.current = battleScene;
+      if (onStateUpdate) {
+        battleScene.setStateCallback(onStateUpdate);
+      }
+      activeScene = battleScene;
     }
 
     const config: Phaser.Types.Core.GameConfig = {
@@ -45,39 +68,57 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
       },
-      scene: [scene],
+      scene: [activeScene],
     };
 
     const game = new Phaser.Game(config);
     gameRef.current = game;
 
+    // Handle tab visibility change for simulation pausing
+    const handleVisibility = () => {
+      const isVisible = document.visibilityState === 'visible';
+      if (mode === 'battle' && battleSceneRef.current) {
+        battleSceneRef.current.getEngine().handleVisibilityChange(isVisible);
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
       game.destroy(true);
       gameRef.current = null;
-      sceneRef.current = null;
+      stageSceneRef.current = null;
+      battleSceneRef.current = null;
     };
-  }, []);
+  }, [mode, engine]);
 
-  // Sync grid overlay toggle
+  // Sync grid overlay toggle (Inspector mode)
   useEffect(() => {
-    if (sceneRef.current) {
-      sceneRef.current.toggleGrid(showGrid);
+    if (stageSceneRef.current && showGrid !== undefined) {
+      stageSceneRef.current.toggleGrid(showGrid);
     }
   }, [showGrid]);
 
-  // Sync coords overlay toggle
+  // Sync coords overlay toggle (Inspector mode)
   useEffect(() => {
-    if (sceneRef.current) {
-      sceneRef.current.toggleCoords(showCoords);
+    if (stageSceneRef.current && showCoords !== undefined) {
+      stageSceneRef.current.toggleCoords(showCoords);
     }
   }, [showCoords]);
 
-  // Sync hover callback
+  // Sync hover callback (Inspector mode)
   useEffect(() => {
-    if (sceneRef.current && onTileHover) {
-      sceneRef.current.setTileHoverCallback(onTileHover);
+    if (stageSceneRef.current && onTileHover) {
+      stageSceneRef.current.setTileHoverCallback(onTileHover);
     }
   }, [onTileHover]);
+
+  // Sync state callback (Battle mode)
+  useEffect(() => {
+    if (battleSceneRef.current && onStateUpdate) {
+      battleSceneRef.current.setStateCallback(onStateUpdate);
+    }
+  }, [onStateUpdate]);
 
   return (
     <div className="relative flex items-center justify-center w-full h-full bg-neutral-950 p-2 select-none">

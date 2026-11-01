@@ -92,3 +92,34 @@ export const TILE_METADATA: Record<number, {
     presentInStage1: true,
   },
 };
+
+export const TANK_CONFIG = {
+  SPRITE_SIZE: 16,
+  HITBOX_SIZE: 14,
+  HITBOX_INSET: 1,
+  SPEED_PX_S: 60,
+  SPEED_PX_TICK: 1.0, // exactly 1.0 px per tick at 60Hz
+  SNAP_THRESHOLD: 4,
+  MAX_X: 192, // 208 - 16
+  MAX_Y: 192, // 208 - 16
+  SPAWN: {
+    x: 48,
+    y: 192,
+    direction: 'UP' as const,
+  },
+} as const;
+
+export const BULLET_CONFIG = {
+  SIZE: 4,
+  SPEED_PX_S: 160,
+  SPEED_PX_TICK: 160 / 60, // ~2.6667 px per tick
+  MAX_ACTIVE: 1,
+} as const;
+
+export const SIMULATION_CONFIG = {
+  FIXED_DT_S: 1 / 60,
+  FIXED_DT_MS: 1000 / 60, // ~16.6667 ms
+  MAX_TICKS_PER_FRAME: 8,
+  MAX_ACCUMULATOR_MS: 250,
+  SUB_TILE_SIZE: 8,
+} as const;
