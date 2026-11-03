@@ -65,11 +65,11 @@ export function calculateLayoutMetrics(
       const availH = h - 280;
       canvasSizePx = Math.floor(Math.min(availW, availH, 728));
     } else {
-      const headerAndStatsH = 68;
-      const controlsH = 210;
-      const availH = h - headerAndStatsH - controlsH - 12;
-      const availW = w - 16;
-      canvasSizePx = Math.floor(Math.min(availH, availW, 380));
+      const headerH = 38;
+      const controlsH = 160;
+      const availH = Math.max(208, h - headerH - controlsH - 16);
+      const availW = Math.max(208, w - 16);
+      canvasSizePx = Math.floor(Math.min(availH, availW));
     }
     leftControlWidthPx = 0;
     rightControlWidthPx = 0;

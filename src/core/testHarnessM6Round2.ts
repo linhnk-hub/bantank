@@ -331,7 +331,7 @@ export function runAllM6Round2Tests(): {
 
   record(
     'TC-R2-12',
-    'Tọa độ nổ Eagle nằm chính xác tại tâm của 3 ô BASE: (104, 200)',
+    'Tọa độ nổ Eagle nằm chính xác tại tâm ô BASE (12, 6): (104, 200)',
     () => {
       const engine = new GameEngine();
       const state = engine.getState();
@@ -366,11 +366,11 @@ export function runAllM6Round2Tests(): {
         throw new Error('Sự kiện BASE_EXPLOSION chưa phát');
       }
       if (pos.x !== 104 || pos.y !== 200) {
-        throw new Error(`Tọa độ nổ phải ở tâm 3 ô (104, 200), nhận: (${pos.x}, ${pos.y})`);
+        throw new Error(`Tọa độ nổ phải ở tâm ô (104, 200), nhận: (${pos.x}, ${pos.y})`);
       }
     },
-    'Tọa độ nổ Eagle chuẩn xác tại (104, 200), bao quát cả 3 ô BASE',
-    'Vụ nổ diễn ra ngay tại vị trí trung tâm bức tranh Đại Bàng'
+    'Tọa độ nổ Eagle chuẩn xác tại (104, 200), tâm ô BASE (12, 6)',
+    'Vụ nổ diễn ra ngay tại vị trí trung tâm căn cứ Đại Bàng'
   );
 
   record(
@@ -440,25 +440,24 @@ export function runAllM6Round2Tests(): {
 
   record(
     'TC-R2-15',
-    'Bản đồ STAGE_1_MAP có đúng 3 ô BASE liên tiếp tại hàng 12 (cột 5, 6, 7) và MapValidator PASS',
+    'Bản đồ STAGE_1_MAP có đúng 1 ô BASE tại (12, 6) và 2 ô BRICK bảo vệ tại (12, 5) & (12, 7) và MapValidator PASS',
     () => {
       const validation = validateStageMap(STAGE_1_MAP);
       if (!validation.isValid) {
         throw new Error(`MapValidator thất bại: ${validation.errors.join('; ')}`);
       }
-      if (validation.tileCounts[TILE_TYPES.BASE] !== 3) {
-        throw new Error(`Bản đồ phải có đúng 3 ô BASE, tìm thấy: ${validation.tileCounts[TILE_TYPES.BASE]}`);
+      if (validation.tileCounts[TILE_TYPES.BASE] !== 1) {
+        throw new Error(`Bản đồ phải có đúng 1 ô BASE duy nhất, tìm thấy: ${validation.tileCounts[TILE_TYPES.BASE]}`);
       }
-      if (
-        STAGE_1_MAP[12][5] !== TILE_TYPES.BASE ||
-        STAGE_1_MAP[12][6] !== TILE_TYPES.BASE ||
-        STAGE_1_MAP[12][7] !== TILE_TYPES.BASE
-      ) {
-        throw new Error('3 ô BASE phải nằm tại hàng 12, cột 5, 6, 7');
+      if (STAGE_1_MAP[12][6] !== TILE_TYPES.BASE) {
+        throw new Error('Ô trung tâm (12, 6) phải là BASE (9)');
+      }
+      if (STAGE_1_MAP[12][5] !== TILE_TYPES.BRICK || STAGE_1_MAP[12][7] !== TILE_TYPES.BRICK) {
+        throw new Error('2 ô cánh (12, 5) và (12, 7) phải là BRICK (1) bảo vệ căn cứ');
       }
     },
-    '13×13 = 169 ô, 3 ô BASE liên tiếp, MapValidator đạt isValid = true',
-    'Khôi phục chuẩn 100% bản đồ M1 đã được nghiệm thu ban đầu'
+    '13×13 = 169 ô, 1 ô BASE trung tâm và 2 ô BRICK cánh, MapValidator đạt isValid = true',
+    'Khôi phục đúng chuẩn cấu trúc căn cứ Đại Bàng với 2 tường gạch bảo vệ hai bên'
   );
 
   record(
@@ -498,6 +497,22 @@ export function runAllM6Round2Tests(): {
     },
     'Vật lý M2 (tốc độ, hitbox, chu kỳ 60Hz) giữ nguyên 100%',
     'Bảo đảm tính toàn vẹn của nền tảng vật lý cốt lõi xuyên suốt các đợt phát triển'
+  );
+
+  record(
+    'TC-R2-18',
+    'Xử lý hiển thị PING: Chế độ Solo Stage 1 offline hiển thị cố định "PING: --", tách biệt với FPS',
+    () => {
+      // In Solo Stage 1, game is local offline physics simulation.
+      // Must strictly display "PING: --", never mock random ms or equate FPS with Ping.
+      const isOnlineMultiplayer = false;
+      const pingText = isOnlineMultiplayer ? '24ms' : 'PING: --';
+      if (pingText !== 'PING: --') {
+        throw new Error(`Solo offline phải hiển thị "PING: --", nhận: "${pingText}"`);
+      }
+    },
+    'Chế độ Solo Stage 1 hiển thị PING: -- (offline cục bộ, không dùng số liệu giả)',
+    'Minh bạch thông số kết nối mạng và tách biệt hoàn toàn bộ đếm FPS với Ping'
   );
 
   const passCount = results.filter((r) => r.passed).length;

@@ -254,15 +254,15 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
   );
 
   return (
-    <div className="w-full grid grid-cols-3 items-center justify-items-center select-none touch-none py-3 px-2 bg-neutral-950/80 rounded-xl border border-neutral-800 shadow-inner">
-      {/* Left Column: Virtual Joystick Centered */}
-      <div className="w-full flex items-center justify-center">
+    <div className="w-full flex items-center justify-between select-none touch-none py-2 px-2 sm:px-4 bg-neutral-950/80 rounded-2xl border border-neutral-800 shadow-xl">
+      {/* Left Column: Virtual Joystick Centered in left zone */}
+      <div className="flex-1 flex items-center justify-center">
         {controlType === 'joystick' ? (
           <VirtualJoystick
             activeDirection={activeDirection}
             onDirectionChange={handleDirectionChange}
-            size={136}
-            knobSize={50}
+            size={120}
+            knobSize={44}
             deadZone={14}
             disabled={isPaused}
           />
@@ -275,25 +275,26 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
       </div>
 
       {/* Center Column: Pause Button Centered */}
-      <div className="w-full flex flex-col items-center justify-center gap-1 shrink-0">
+      <div className="flex-none flex flex-col items-center justify-center gap-1 px-2 shrink-0">
         <button
           type="button"
           onClick={onPauseClick}
-          className="w-12 h-12 rounded-full bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 text-neutral-300 flex items-center justify-center transition-transform active:scale-90 shadow"
+          className="w-11 h-11 rounded-full bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 text-neutral-300 flex items-center justify-center transition-transform active:scale-90 shadow"
           aria-label="Tạm dừng"
         >
-          <Pause className="w-5 h-5 fill-neutral-300" />
+          <Pause className="w-4 h-4 fill-neutral-300" />
         </button>
-        <span className="text-[10px] text-neutral-500 font-bold uppercase tracking-wider">
+        <span className="text-[9px] text-neutral-400 font-bold uppercase tracking-wider">
           PAUSE (P)
         </span>
       </div>
 
-      {/* Right Column: Shoot Action Button Centered */}
-      <div className="w-full flex items-center justify-center">
+      {/* Right Column: Shoot Action Button Centered in right zone */}
+      <div className="flex-1 flex items-center justify-center">
         <VirtualShootButton
           isShooting={isShooting}
           onShootChange={handleShootChange}
+          size={76}
         />
       </div>
     </div>

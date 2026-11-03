@@ -71,21 +71,27 @@ export function validateStageMap(matrix: StageMapMatrix): MapValidationResult {
     }
   }
 
-  // Validate 3 consecutive BASE cells at [row 12, col 5, 6, 7] (M1 specification)
+  // Validate exactly 1 BASE cell at [row 12, col 6] protected by BRICK at [12, 5] and [12, 7]
   const baseCount = tileCounts[TILE_TYPES.BASE] || 0;
-  const hasThreeBaseCells = (
-    baseCount === 3 &&
-    baseCoordinates.length === 3 &&
-    baseCoordinates.some(c => c.row === 12 && c.col === 5) &&
-    baseCoordinates.some(c => c.row === 12 && c.col === 6) &&
-    baseCoordinates.some(c => c.row === 12 && c.col === 7)
+  const isBaseAtCenter = (
+    baseCount === 1 &&
+    baseCoordinates.length === 1 &&
+    baseCoordinates[0].row === 12 &&
+    baseCoordinates[0].col === 6
   );
+  const hasBrickWings = matrix[12]?.[5] === TILE_TYPES.BRICK && matrix[12]?.[7] === TILE_TYPES.BRICK;
 
-  if (baseCount !== 3) {
-    errors.push(`Số ô BASE không khớp: tìm thấy ${baseCount} ô (kỳ vọng đúng 3 ô BASE liên tiếp tại [12, 5], [12, 6], [12, 7])`);
-  } else if (!hasThreeBaseCells) {
-    errors.push('3 ô BASE không nằm đúng vị trí liên tiếp tại [hàng 12, cột 5, 6, 7]');
+  if (baseCount !== 1) {
+    errors.push(`Số ô BASE không khớp: tìm thấy ${baseCount} ô (kỳ vọng đúng 1 ô BASE tại [12, 6])`);
+  } else if (!isBaseAtCenter) {
+    errors.push('Ô BASE không nằm đúng vị trí trung tâm tại [hàng 12, cột 6]');
   }
+
+  if (!hasBrickWings) {
+    errors.push('Hai ô cánh bảo vệ [hàng 12, cột 5] và [hàng 12, cột 7] phải là tường gạch BRICK');
+  }
+
+  const hasThreeBaseCells = false;
 
   // Check if Stage 1 contains any unintroduced tile types (WATER, GRASS, ICE)
   if (tileCounts[TILE_TYPES.WATER] > 0 || tileCounts[TILE_TYPES.GRASS] > 0 || tileCounts[TILE_TYPES.ICE] > 0) {

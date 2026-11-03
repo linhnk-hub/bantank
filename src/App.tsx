@@ -396,9 +396,148 @@ export default function App() {
             </div>
           </main>
         </div>
+      ) : !isDesktop ? (
+        /* =========================================================================
+            MOBILE / TABLET PORTRAIT MODE (Dedicated 100dvh Centered Layout)
+            - Top: Slim HUD (Brand, STAGE 1, FPS, PING: --, Score, Lives, Quick Actions)
+            - Center: Game Canvas (Strictly 1:1, centered horizontally & vertically, no overflow)
+            - Bottom: Touch Controls (Centered with symmetric flex layout, no left skew)
+            - 100dvh: Zero vertical scrolling during combat!
+           ========================================================================= */
+        <div className="flex-1 flex flex-col h-[100dvh] w-screen overflow-hidden safe-area-inset justify-between py-1 bg-neutral-950">
+          {/* Slim Portrait Top HUD */}
+          <header className="h-9 bg-neutral-950/95 border-b border-neutral-800 px-3 flex items-center justify-between text-xs shrink-0 z-30">
+            {/* Left: Brand & Stage */}
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded bg-amber-500 flex items-center justify-center font-black text-black text-[11px] shadow">
+                BT
+              </div>
+              <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
+                STAGE 1
+              </span>
+              <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
+            </div>
+
+            {/* Center: Live Match Metrics */}
+            <div className="flex items-center gap-2 text-xs font-mono">
+              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${getFpsBadgeStyle(fps)}`}>
+                FPS: {fps}
+              </span>
+              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold border bg-neutral-900 border-neutral-700 text-neutral-400" title="Chế độ Solo Stage 1 - Offline">
+                PING: --
+              </span>
+              <div className="flex items-center gap-1 text-amber-400">
+                <Trophy className="w-3.5 h-3.5" />
+                <span className="font-bold">{gameState?.score ?? 0}</span>
+              </div>
+              <div className="flex items-center gap-1 text-rose-400 font-bold">
+                <Heart className="w-3.5 h-3.5 fill-rose-500" />
+                <span>×{gameState?.p1State.lives ?? 3}</span>
+              </div>
+              <div className="flex items-center gap-1 text-sky-400">
+                <Shield className="w-3.5 h-3.5" />
+                <span>{gameState?.enemyQueue.length ?? 0}</span>
+              </div>
+            </div>
+
+            {/* Right: Quick Action Buttons */}
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300"
+                title={isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}
+              >
+                {isFullscreen ? <Minimize className="w-3.5 h-3.5 text-amber-400" /> : <Maximize className="w-3.5 h-3.5 text-amber-400" />}
+              </button>
+
+              <button
+                type="button"
+                onClick={requestLandscape}
+                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-amber-400"
+                title="Chuyển sang xoay ngang màn hình"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsDevDrawerOpen(true)}
+                className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-[10px] font-semibold"
+                title="Bảng Kiểm thử & QA"
+              >
+                <Wrench className="w-3 h-3 text-amber-400" />
+                <span>QA</span>
+              </button>
+            </div>
+          </header>
+
+          {/* Center Column: Game Canvas Strictly Sized & Centered (1:1 Square, No Overflow, No Cut) */}
+          <main className="flex-1 flex items-center justify-center p-1 overflow-hidden">
+            <div
+              style={{
+                width: `${layout.canvasSizePx}px`,
+                height: `${layout.canvasSizePx}px`,
+                maxWidth: `${layout.canvasSizePx}px`,
+                maxHeight: `${layout.canvasSizePx}px`,
+              }}
+              className="flex-none flex items-center justify-center overflow-hidden relative mx-auto rounded-xl border border-neutral-800 bg-black shadow-2xl"
+            >
+              <PhaserGame
+                mode="battle"
+                engine={gameEngine}
+                onStateUpdate={setGameState}
+                onFpsUpdate={setFps}
+                onPause={handlePause}
+                canvasSizePx={layout.canvasSizePx}
+              />
+
+              {/* In MENU state: Overlay allowing immediate match start */}
+              {gameState?.matchState === 'MENU' && (
+                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20 rounded-xl">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center font-black text-black text-sm mb-2 shadow-lg">
+                    BT
+                  </div>
+                  <h2 className="text-base font-black text-white tracking-wider mb-1">
+                    BANTANK ONLINE
+                  </h2>
+                  <p className="text-[11px] text-amber-300 font-mono font-bold mb-3">
+                    STAGE 1 • 30 Xe Địch • 1 Căn Cứ Đại Bàng
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRestart}
+                    className="py-2 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-lg shadow-amber-500/30 transition-transform active:scale-95 flex items-center gap-1.5"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-black" />
+                    <span>BẮT ĐẦU TRẬN ĐẤU</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </main>
+
+          {/* Bottom Area: Centered Touch Controls with Symmetric Flex Layout */}
+          <footer className="w-full shrink-0 px-2 pb-1 flex justify-center">
+            <div
+              style={{
+                width: `${layout.canvasSizePx}px`,
+                maxWidth: '440px',
+              }}
+              className="w-full mx-auto"
+            >
+              <TouchControls
+                onInputChange={handleTouchInput}
+                onPauseClick={isPaused ? handleResume : handlePause}
+                isPaused={isPaused}
+                controlType="joystick"
+              />
+            </div>
+          </footer>
+        </div>
       ) : (
         /* =========================================================================
-            PORTRAIT & ENLARGED DESKTOP PC MODE
+            ENLARGED DESKTOP PC MODE (8/4 Grid Layout with Full Visibility)
            ========================================================================= */
         <div className="flex-1 flex flex-col w-full">
           {/* Header */}

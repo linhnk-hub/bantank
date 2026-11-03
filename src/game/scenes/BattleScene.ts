@@ -432,15 +432,8 @@ export class BattleScene extends Phaser.Scene {
         }
 
         if (tileType === TILE_TYPES.BASE) {
-          let normalTexKey = 'tile_9_center';
-          let ruinedTexKey = 'tile_9_ruined';
-          if (r === 12 && c === 5) {
-            normalTexKey = 'tile_9_left';
-            ruinedTexKey = 'bunker_flank_ruined';
-          } else if (r === 12 && c === 7) {
-            normalTexKey = 'tile_9_right';
-            ruinedTexKey = 'bunker_flank_ruined';
-          }
+          const normalTexKey = 'tile_9';
+          const ruinedTexKey = 'tile_9_ruined';
           const texKey = terrain.isBaseDestroyed ? ruinedTexKey : normalTexKey;
 
           const baseImg = this.add.image(x, y, texKey);
