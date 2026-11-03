@@ -127,145 +127,160 @@ export function applyDeterministicBulletImpact(
   let bitsToDestroy = 0;
 
   if (direction === 'UP') {
-    // Approach bottom face: BL (bit 2) and BR (bit 3)
-    const bottomFaceMask = mask & (SUB_TILE_MASKS.BL | SUB_TILE_MASKS.BR);
-    let targetFace: 'bottom' | 'top' = 'bottom';
-
-    if (bottomFaceMask === 0) {
-      // Bottom face already destroyed, check top face: TL and TR
-      targetFace = 'top';
-    }
-
     const overlapLeft = Math.max(0, Math.min(bulletBox.right, xMid) - Math.max(bulletBox.left, tileX));
     const overlapRight = Math.max(0, Math.min(bulletBox.right, tileX + 16) - Math.max(bulletBox.left, xMid));
 
-    const leftBit = targetFace === 'bottom' ? SUB_TILE_MASKS.BL : SUB_TILE_MASKS.TL;
-    const rightBit = targetFace === 'bottom' ? SUB_TILE_MASKS.BR : SUB_TILE_MASKS.TR;
+    // Left column candidate: BL (front face) or TL (rear face)
+    let leftCandidateBit = 0;
+    if (mask & SUB_TILE_MASKS.BL) {
+      leftCandidateBit = SUB_TILE_MASKS.BL;
+    } else if (bulletBox.top < yMid && (mask & SUB_TILE_MASKS.TL)) {
+      leftCandidateBit = SUB_TILE_MASKS.TL;
+    }
 
-    const hasLeft = (mask & leftBit) !== 0;
-    const hasRight = (mask & rightBit) !== 0;
+    // Right column candidate: BR (front face) or TR (rear face)
+    let rightCandidateBit = 0;
+    if (mask & SUB_TILE_MASKS.BR) {
+      rightCandidateBit = SUB_TILE_MASKS.BR;
+    } else if (bulletBox.top < yMid && (mask & SUB_TILE_MASKS.TR)) {
+      rightCandidateBit = SUB_TILE_MASKS.TR;
+    }
 
-    if (hasLeft && hasRight) {
-      if (overlapLeft > 0 && overlapRight === 0) {
-        bitsToDestroy = leftBit;
-      } else if (overlapRight > 0 && overlapLeft === 0) {
-        bitsToDestroy = rightBit;
-      } else if (overlapLeft > overlapRight) {
-        bitsToDestroy = leftBit; // Unbalanced: greater overlap
-      } else if (overlapRight > overlapLeft) {
-        bitsToDestroy = rightBit; // Unbalanced: greater overlap
-      } else if (overlapLeft === overlapRight && overlapLeft > 0) {
-        bitsToDestroy = leftBit | rightBit; // Balanced straddle: both
+    if (overlapLeft > 0 && overlapRight > 0) {
+      if (leftCandidateBit !== 0 && rightCandidateBit !== 0) {
+        if (overlapLeft > overlapRight) {
+          bitsToDestroy = leftCandidateBit;
+        } else if (overlapRight > overlapLeft) {
+          bitsToDestroy = rightCandidateBit;
+        } else {
+          bitsToDestroy = leftCandidateBit | rightCandidateBit;
+        }
+      } else if (leftCandidateBit !== 0) {
+        bitsToDestroy = leftCandidateBit;
+      } else if (rightCandidateBit !== 0) {
+        bitsToDestroy = rightCandidateBit;
       }
-    } else if (hasLeft && !hasRight) {
-      if (overlapLeft > 0) bitsToDestroy = leftBit;
-    } else if (!hasLeft && hasRight) {
-      if (overlapRight > 0) bitsToDestroy = rightBit;
+    } else if (overlapLeft > 0 && leftCandidateBit !== 0) {
+      bitsToDestroy = leftCandidateBit;
+    } else if (overlapRight > 0 && rightCandidateBit !== 0) {
+      bitsToDestroy = rightCandidateBit;
     }
   } else if (direction === 'DOWN') {
-    // Approach top face: TL (bit 0) and TR (bit 1)
-    const topFaceMask = mask & (SUB_TILE_MASKS.TL | SUB_TILE_MASKS.TR);
-    let targetFace: 'top' | 'bottom' = 'top';
-
-    if (topFaceMask === 0) {
-      targetFace = 'bottom';
-    }
-
     const overlapLeft = Math.max(0, Math.min(bulletBox.right, xMid) - Math.max(bulletBox.left, tileX));
     const overlapRight = Math.max(0, Math.min(bulletBox.right, tileX + 16) - Math.max(bulletBox.left, xMid));
 
-    const leftBit = targetFace === 'top' ? SUB_TILE_MASKS.TL : SUB_TILE_MASKS.BL;
-    const rightBit = targetFace === 'top' ? SUB_TILE_MASKS.TR : SUB_TILE_MASKS.BR;
+    // Left column candidate: TL (front face) or BL (rear face)
+    let leftCandidateBit = 0;
+    if (mask & SUB_TILE_MASKS.TL) {
+      leftCandidateBit = SUB_TILE_MASKS.TL;
+    } else if (bulletBox.bottom > yMid && (mask & SUB_TILE_MASKS.BL)) {
+      leftCandidateBit = SUB_TILE_MASKS.BL;
+    }
 
-    const hasLeft = (mask & leftBit) !== 0;
-    const hasRight = (mask & rightBit) !== 0;
+    // Right column candidate: TR (front face) or BR (rear face)
+    let rightCandidateBit = 0;
+    if (mask & SUB_TILE_MASKS.TR) {
+      rightCandidateBit = SUB_TILE_MASKS.TR;
+    } else if (bulletBox.bottom > yMid && (mask & SUB_TILE_MASKS.BR)) {
+      rightCandidateBit = SUB_TILE_MASKS.BR;
+    }
 
-    if (hasLeft && hasRight) {
-      if (overlapLeft > 0 && overlapRight === 0) {
-        bitsToDestroy = leftBit;
-      } else if (overlapRight > 0 && overlapLeft === 0) {
-        bitsToDestroy = rightBit;
-      } else if (overlapLeft > overlapRight) {
-        bitsToDestroy = leftBit;
-      } else if (overlapRight > overlapLeft) {
-        bitsToDestroy = rightBit;
-      } else if (overlapLeft === overlapRight && overlapLeft > 0) {
-        bitsToDestroy = leftBit | rightBit;
+    if (overlapLeft > 0 && overlapRight > 0) {
+      if (leftCandidateBit !== 0 && rightCandidateBit !== 0) {
+        if (overlapLeft > overlapRight) {
+          bitsToDestroy = leftCandidateBit;
+        } else if (overlapRight > overlapLeft) {
+          bitsToDestroy = rightCandidateBit;
+        } else {
+          bitsToDestroy = leftCandidateBit | rightCandidateBit;
+        }
+      } else if (leftCandidateBit !== 0) {
+        bitsToDestroy = leftCandidateBit;
+      } else if (rightCandidateBit !== 0) {
+        bitsToDestroy = rightCandidateBit;
       }
-    } else if (hasLeft && !hasRight) {
-      if (overlapLeft > 0) bitsToDestroy = leftBit;
-    } else if (!hasLeft && hasRight) {
-      if (overlapRight > 0) bitsToDestroy = rightBit;
+    } else if (overlapLeft > 0 && leftCandidateBit !== 0) {
+      bitsToDestroy = leftCandidateBit;
+    } else if (overlapRight > 0 && rightCandidateBit !== 0) {
+      bitsToDestroy = rightCandidateBit;
     }
   } else if (direction === 'LEFT') {
-    // Approach right face: TR (bit 1) and BR (bit 3)
-    const rightFaceMask = mask & (SUB_TILE_MASKS.TR | SUB_TILE_MASKS.BR);
-    let targetFace: 'right' | 'left' = 'right';
-
-    if (rightFaceMask === 0) {
-      targetFace = 'left';
-    }
-
     const overlapTop = Math.max(0, Math.min(bulletBox.bottom, yMid) - Math.max(bulletBox.top, tileY));
     const overlapBottom = Math.max(0, Math.min(bulletBox.bottom, tileY + 16) - Math.max(bulletBox.top, yMid));
 
-    const topBit = targetFace === 'right' ? SUB_TILE_MASKS.TR : SUB_TILE_MASKS.TL;
-    const bottomBit = targetFace === 'right' ? SUB_TILE_MASKS.BR : SUB_TILE_MASKS.BL;
+    // Top row candidate: TR (front face) or TL (rear face)
+    let topCandidateBit = 0;
+    if (mask & SUB_TILE_MASKS.TR) {
+      topCandidateBit = SUB_TILE_MASKS.TR;
+    } else if (bulletBox.left < xMid && (mask & SUB_TILE_MASKS.TL)) {
+      topCandidateBit = SUB_TILE_MASKS.TL;
+    }
 
-    const hasTop = (mask & topBit) !== 0;
-    const hasBottom = (mask & bottomBit) !== 0;
+    // Bottom row candidate: BR (front face) or BL (rear face)
+    let bottomCandidateBit = 0;
+    if (mask & SUB_TILE_MASKS.BR) {
+      bottomCandidateBit = SUB_TILE_MASKS.BR;
+    } else if (bulletBox.left < xMid && (mask & SUB_TILE_MASKS.BL)) {
+      bottomCandidateBit = SUB_TILE_MASKS.BL;
+    }
 
-    if (hasTop && hasBottom) {
-      if (overlapTop > 0 && overlapBottom === 0) {
-        bitsToDestroy = topBit;
-      } else if (overlapBottom > 0 && overlapTop === 0) {
-        bitsToDestroy = bottomBit;
-      } else if (overlapTop > overlapBottom) {
-        bitsToDestroy = topBit;
-      } else if (overlapBottom > overlapTop) {
-        bitsToDestroy = bottomBit;
-      } else if (overlapTop === overlapBottom && overlapTop > 0) {
-        bitsToDestroy = topBit | bottomBit;
+    if (overlapTop > 0 && overlapBottom > 0) {
+      if (topCandidateBit !== 0 && bottomCandidateBit !== 0) {
+        if (overlapTop > overlapBottom) {
+          bitsToDestroy = topCandidateBit;
+        } else if (overlapBottom > overlapTop) {
+          bitsToDestroy = bottomCandidateBit;
+        } else {
+          bitsToDestroy = topCandidateBit | bottomCandidateBit;
+        }
+      } else if (topCandidateBit !== 0) {
+        bitsToDestroy = topCandidateBit;
+      } else if (bottomCandidateBit !== 0) {
+        bitsToDestroy = bottomCandidateBit;
       }
-    } else if (hasTop && !hasBottom) {
-      if (overlapTop > 0) bitsToDestroy = topBit;
-    } else if (!hasTop && hasBottom) {
-      if (overlapBottom > 0) bitsToDestroy = bottomBit;
+    } else if (overlapTop > 0 && topCandidateBit !== 0) {
+      bitsToDestroy = topCandidateBit;
+    } else if (overlapBottom > 0 && bottomCandidateBit !== 0) {
+      bitsToDestroy = bottomCandidateBit;
     }
   } else if (direction === 'RIGHT') {
-    // Approach left face: TL (bit 0) and BL (bit 2)
-    const leftFaceMask = mask & (SUB_TILE_MASKS.TL | SUB_TILE_MASKS.BL);
-    let targetFace: 'left' | 'right' = 'left';
-
-    if (leftFaceMask === 0) {
-      targetFace = 'right';
-    }
-
     const overlapTop = Math.max(0, Math.min(bulletBox.bottom, yMid) - Math.max(bulletBox.top, tileY));
     const overlapBottom = Math.max(0, Math.min(bulletBox.bottom, tileY + 16) - Math.max(bulletBox.top, yMid));
 
-    const topBit = targetFace === 'left' ? SUB_TILE_MASKS.TL : SUB_TILE_MASKS.TR;
-    const bottomBit = targetFace === 'left' ? SUB_TILE_MASKS.BL : SUB_TILE_MASKS.BR;
+    // Top row candidate: TL (front face) or TR (rear face)
+    let topCandidateBit = 0;
+    if (mask & SUB_TILE_MASKS.TL) {
+      topCandidateBit = SUB_TILE_MASKS.TL;
+    } else if (bulletBox.right > xMid && (mask & SUB_TILE_MASKS.TR)) {
+      topCandidateBit = SUB_TILE_MASKS.TR;
+    }
 
-    const hasTop = (mask & topBit) !== 0;
-    const hasBottom = (mask & bottomBit) !== 0;
+    // Bottom row candidate: BL (front face) or BR (rear face)
+    let bottomCandidateBit = 0;
+    if (mask & SUB_TILE_MASKS.BL) {
+      bottomCandidateBit = SUB_TILE_MASKS.BL;
+    } else if (bulletBox.right > xMid && (mask & SUB_TILE_MASKS.BR)) {
+      bottomCandidateBit = SUB_TILE_MASKS.BR;
+    }
 
-    if (hasTop && hasBottom) {
-      if (overlapTop > 0 && overlapBottom === 0) {
-        bitsToDestroy = topBit;
-      } else if (overlapBottom > 0 && overlapTop === 0) {
-        bitsToDestroy = bottomBit;
-      } else if (overlapTop > overlapBottom) {
-        bitsToDestroy = topBit;
-      } else if (overlapBottom > overlapTop) {
-        bitsToDestroy = bottomBit;
-      } else if (overlapTop === overlapBottom && overlapTop > 0) {
-        bitsToDestroy = topBit | bottomBit;
+    if (overlapTop > 0 && overlapBottom > 0) {
+      if (topCandidateBit !== 0 && bottomCandidateBit !== 0) {
+        if (overlapTop > overlapBottom) {
+          bitsToDestroy = topCandidateBit;
+        } else if (overlapBottom > overlapTop) {
+          bitsToDestroy = bottomCandidateBit;
+        } else {
+          bitsToDestroy = topCandidateBit | bottomCandidateBit;
+        }
+      } else if (topCandidateBit !== 0) {
+        bitsToDestroy = topCandidateBit;
+      } else if (bottomCandidateBit !== 0) {
+        bitsToDestroy = bottomCandidateBit;
       }
-    } else if (hasTop && !hasBottom) {
-      if (overlapTop > 0) bitsToDestroy = topBit;
-    } else if (!hasTop && hasBottom) {
-      if (overlapBottom > 0) bitsToDestroy = bottomBit;
+    } else if (overlapTop > 0 && topCandidateBit !== 0) {
+      bitsToDestroy = topCandidateBit;
+    } else if (overlapBottom > 0 && bottomCandidateBit !== 0) {
+      bitsToDestroy = bottomCandidateBit;
     }
   }
 

@@ -140,6 +140,32 @@ export interface InputState {
 export type EnemyType = 'BASIC' | 'FAST' | 'POWER' | 'ARMOR';
 export type EnemyAIState = 'PATROL' | 'CHASE' | 'SEARCH';
 
+export interface EnemyDebugLog {
+  enemyId: string;
+  type: EnemyType;
+  pos: { x: number; y: number };
+  direction: Direction;
+  aiState: EnemyAIState;
+  selectedTarget: 'p1' | 'eagle';
+  targetPos: { x: number; y: number };
+  scoring: {
+    distanceScore: number;
+    aStarScore: number;
+    losScore: number;
+    battlefieldScore: number;
+    totalRawScore: number;
+  };
+  losToP1: boolean;
+  losDistancePx: number;
+  isAligned: boolean;
+  aimTimer: number;
+  requiredAimTime: number;
+  shootCooldown: number;
+  spawnShieldTimer: number;
+  canShoot: boolean;
+  hasActiveBullet: boolean;
+}
+
 export interface EnemyTank extends TankStructure {
   enemyType: EnemyType;
   hp: number;
@@ -162,6 +188,7 @@ export interface EnemyTank extends TankStructure {
   lastP1Direction: Direction | null;
   flankOffset?: { x: number; y: number }; // Assigned approach vector by Coordinator
   spawnShieldTimer: number; // 1.0s invulnerability at spawn
+  debugLog?: EnemyDebugLog;
 }
 
 export interface P1PlayerState {
@@ -173,6 +200,10 @@ export interface P1PlayerState {
   spawnCheckTimer: number; // Re-check every 100ms when waiting
 }
 
+/* ====================================================================
+   MILESTONE 4: MATCH LIFECYCLE & STAGE PROGRESSION TYPES
+==================================================================== */
+
 export interface GameCoreState {
   tickCount: number;
   p1: TankStructure;
@@ -183,9 +214,21 @@ export interface GameCoreState {
   enemyQueue: EnemyType[]; // Queue of 30 enemies
   totalDefeatedEnemies: number;
   score: number;
+  highScore: number;
+  defeatedCounts: {
+    BASIC: number;
+    FAST: number;
+    POWER: number;
+    ARMOR: number;
+  };
+  currentStageId: number;
+  currentStageName: string;
+  stageElapsedSeconds: number;
   terrain: RuntimeTerrainState;
   isGameOver: boolean;
   isStageClear: boolean;
   gameOverReason: string | null;
   diagnosticLog: string | null;
+  matchState: 'MENU' | 'STAGE_START' | 'PLAYING' | 'PAUSED' | 'STAGE_CLEAR' | 'GAME_OVER' | 'SUMMARY_STATS';
 }
+

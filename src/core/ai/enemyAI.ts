@@ -240,6 +240,9 @@ export function updateEnemyAI(
   // Decrease timers
   if (enemy.spawnShieldTimer > 0) {
     enemy.spawnShieldTimer = Math.max(0, enemy.spawnShieldTimer - dt);
+    enemy.isShielded = enemy.spawnShieldTimer > 0;
+  } else {
+    enemy.isShielded = false;
   }
   if (enemy.shootCooldown > 0) {
     enemy.shootCooldown = Math.max(0, enemy.shootCooldown - dt);
@@ -254,7 +257,7 @@ export function updateEnemyAI(
     enemy.leadEvalTimer = Math.max(0, enemy.leadEvalTimer - dt);
   }
 
-  // 1. Line of Sight Check to P1
+  // 1. Line of Sight Check to P1 (Exact 80px radius per M3 spec)
   // Per Point A: Enemy CAN see and target shielded P1! Only dead P1 is ignored.
   const p1Detected =
     !p1IsDead &&
@@ -310,17 +313,22 @@ export function updateEnemyAI(
 
   // 4. Determine Navigation Destination based on State & Scoring
   let destination = { x: 96, y: 192 }; // Base Eagle default
+  let selectedTarget: 'p1' | 'eagle' = 'eagle';
+  let scoringResult: ReturnType<typeof scoreAndSelectTarget> | null = null;
 
   if (enemy.aiState === 'CHASE') {
+    selectedTarget = 'p1';
     // Lead prediction destination if available, otherwise direct P1
     destination = enemy.leadPos ?? { x: p1.x, y: p1.y };
     enemy.targetPos = destination;
   } else if (enemy.aiState === 'SEARCH' && enemy.lastKnownP1Pos) {
+    selectedTarget = 'p1';
     destination = enemy.lastKnownP1Pos;
     enemy.targetPos = destination;
   } else {
     // PATROL state: use multi-criteria target scoring (Point B)
-    const scoringResult = scoreAndSelectTarget(enemy, p1, p1IsDead, terrain, otherTanks);
+    scoringResult = scoreAndSelectTarget(enemy, p1, p1IsDead, terrain, otherTanks);
+    selectedTarget = scoringResult.selectedTarget;
     destination = scoringResult.destination;
     enemy.targetPos = destination;
   }
@@ -374,10 +382,17 @@ export function updateEnemyAI(
   let shouldShoot = false;
   let isAligned = false;
 
-  // Check alignment with P1
-  if (!p1IsDead && isAlignedWithTarget(enemy, p1.x, p1.y, AI_CONFIG.ALIGNMENT_TOLERANCE_PX)) {
-    if (hasLineOfSight(enemy.x, enemy.y, p1.x, p1.y, terrain, 180)) {
-      isAligned = true;
+  // Check alignment with P1 (direct or predicted lead)
+  if (!p1IsDead) {
+    const directAligned = isAlignedWithTarget(enemy, p1.x, p1.y, AI_CONFIG.ALIGNMENT_TOLERANCE_PX);
+    const leadAligned = enemy.leadPos
+      ? isAlignedWithTarget(enemy, enemy.leadPos.x, enemy.leadPos.y, AI_CONFIG.ALIGNMENT_TOLERANCE_PX)
+      : false;
+
+    if (directAligned || leadAligned) {
+      if (hasLineOfSight(enemy.x, enemy.y, p1.x, p1.y, terrain, AI_CONFIG.DETECTION_RADIUS_PX)) {
+        isAligned = true;
+      }
     }
   }
 
@@ -391,9 +406,10 @@ export function updateEnemyAI(
     isAligned = true;
   }
 
+  const requiredAimTime = enemy.aimTime ?? ENEMY_CONFIG.SPECS[enemy.enemyType].aimTime;
+
   if (isAligned) {
     enemy.aimTimer = (enemy.aimTimer || 0) + dt;
-    const requiredAimTime = enemy.aimTime ?? ENEMY_CONFIG.SPECS[enemy.enemyType].aimTime;
 
     if (
       enemy.aimTimer >= requiredAimTime &&
@@ -406,6 +422,34 @@ export function updateEnemyAI(
     // Alignment broken: reset aim timer
     enemy.aimTimer = 0;
   }
+
+  // Detailed debug log for auditing AI behavior
+  const p1Dist = Math.hypot(p1.x - enemy.x, p1.y - enemy.y);
+  enemy.debugLog = {
+    enemyId: enemy.id,
+    type: enemy.enemyType,
+    pos: { x: enemy.x, y: enemy.y },
+    direction: enemy.direction,
+    aiState: enemy.aiState,
+    selectedTarget,
+    targetPos: destination,
+    scoring: {
+      distanceScore: scoringResult?.p1Candidate?.components.distanceScore ?? 0,
+      aStarScore: scoringResult?.p1Candidate?.components.aStarScore ?? 0,
+      losScore: scoringResult?.p1Candidate?.components.losScore ?? 0,
+      battlefieldScore: scoringResult?.p1Candidate?.components.battlefieldScore ?? 0,
+      totalRawScore: scoringResult?.p1Candidate?.score ?? 0,
+    },
+    losToP1: p1Detected,
+    losDistancePx: p1Dist,
+    isAligned,
+    aimTimer: enemy.aimTimer || 0,
+    requiredAimTime,
+    shootCooldown: enemy.shootCooldown,
+    spawnShieldTimer: enemy.spawnShieldTimer,
+    canShoot: (enemy.aimTimer || 0) >= requiredAimTime && enemy.shootCooldown <= 0 && enemy.spawnShieldTimer <= 0,
+    hasActiveBullet: false,
+  };
 
   return { shouldShoot, targetDir };
 }

@@ -20,6 +20,7 @@ interface PhaserGameProps {
   // Props for Milestone 2 battle
   engine?: GameEngine;
   onStateUpdate?: (state: GameCoreState) => void;
+  onPause?: () => void;
 }
 
 export const PhaserGame: React.FC<PhaserGameProps> = ({
@@ -29,6 +30,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   onTileHover,
   engine,
   onStateUpdate,
+  onPause,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -52,6 +54,9 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       battleSceneRef.current = battleScene;
       if (onStateUpdate) {
         battleScene.setStateCallback(onStateUpdate);
+      }
+      if (onPause) {
+        battleScene.setPauseCallback(onPause);
       }
       activeScene = battleScene;
     }

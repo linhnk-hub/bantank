@@ -24,6 +24,9 @@ import {
   getTankHitbox,
   intersectAABB,
 } from './physics.ts';
+import { MATCH_STATES, MatchStateMachine, type MatchState } from './matchState.ts';
+import { StageManager, type StageDefinition } from './stageManager.ts';
+import { ScoreManager } from './scoreManager.ts';
 
 export class GameEngine {
   private state: GameCoreState;
@@ -32,6 +35,16 @@ export class GameEngine {
   private lastShootState: boolean = false;
   private enemyManager: EnemyManager;
   private enableEnemies: boolean;
+  private stageManager: StageManager;
+  private scoreManager: ScoreManager;
+  private matchStateMachine: MatchStateMachine;
+  private externalInput: InputState = {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    shoot: false,
+  };
 
   constructor(
     customTerrain?: RuntimeTerrainState,
@@ -40,10 +53,15 @@ export class GameEngine {
     customEnemyQueue?: EnemyType[]
   ) {
     this.enableEnemies = enableEnemies;
+    this.stageManager = new StageManager();
+    this.scoreManager = new ScoreManager();
+    this.matchStateMachine = new MatchStateMachine(MATCH_STATES.PLAYING);
     this.enemyManager = new EnemyManager();
     if (customEnemyQueue) {
       this.enemyManager.reset(customEnemyQueue);
     }
+
+    const currentStage = this.stageManager.getCurrentStage();
 
     this.state = {
       tickCount: 0,
@@ -61,12 +79,18 @@ export class GameEngine {
       enemies: this.enableEnemies ? this.enemyManager.getActiveEnemies() : [],
       enemyQueue: this.enableEnemies ? this.enemyManager.getQueue() : [],
       totalDefeatedEnemies: 0,
-      score: 0,
-      terrain: customTerrain ?? createRuntimeTerrainState(),
+      score: this.scoreManager.getTotalScore(),
+      highScore: this.scoreManager.getHighScore(),
+      defeatedCounts: this.scoreManager.getStageStats(),
+      currentStageId: currentStage.id,
+      currentStageName: currentStage.name,
+      stageElapsedSeconds: 0,
+      terrain: customTerrain ?? createRuntimeTerrainState(currentStage.map),
       isGameOver: false,
       isStageClear: false,
       gameOverReason: null,
       diagnosticLog: null,
+      matchState: MATCH_STATES.PLAYING,
     };
   }
 
@@ -78,6 +102,160 @@ export class GameEngine {
     return this.enemyManager;
   }
 
+  public getStageManager(): StageManager {
+    return this.stageManager;
+  }
+
+  public getScoreManager(): ScoreManager {
+    return this.scoreManager;
+  }
+
+  public getStateMachine(): MatchStateMachine {
+    return this.matchStateMachine;
+  }
+
+  public getMatchState(): MatchState {
+    return this.state.matchState;
+  }
+
+  public setExternalInput(input: Partial<InputState>): void {
+    this.externalInput = {
+      ...this.externalInput,
+      ...input,
+    };
+  }
+
+  public getExternalInput(): InputState {
+    return { ...this.externalInput };
+  }
+
+  public pause(): boolean {
+    if (this.state.matchState === MATCH_STATES.PLAYING) {
+      const trans = this.matchStateMachine.transitionTo(MATCH_STATES.PAUSED);
+      if (trans.success) {
+        this.isPaused = true;
+        this.state.matchState = MATCH_STATES.PAUSED;
+        // Clear inputs upon pausing
+        this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public resume(): boolean {
+    if (this.state.matchState === MATCH_STATES.PAUSED) {
+      const trans = this.matchStateMachine.transitionTo(MATCH_STATES.PLAYING);
+      if (trans.success) {
+        this.isPaused = false;
+        this.accumulatorMs = 0; // Essential: reset backlog so no time-jump occurs
+        this.state.matchState = MATCH_STATES.PLAYING;
+        return true;
+      }
+    }
+    return false;
+  }
+
+  public restartStage(): void {
+    const stage = this.stageManager.getCurrentStage();
+    this.accumulatorMs = 0;
+    this.lastShootState = false;
+    this.isPaused = false;
+    this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
+    this.enemyManager.reset(stage.enemyQueue);
+    this.scoreManager.resetRun();
+
+    this.state = {
+      tickCount: 0,
+      p1: createP1Tank(),
+      p1State: {
+        lives: P1_CONFIG.STARTING_LIVES,
+        isDead: false,
+        respawnTimer: 0,
+        shieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,
+        waitingForClearSpawn: false,
+        spawnCheckTimer: 0,
+      },
+      bullet: null,
+      bullets: [],
+      enemies: this.enableEnemies ? this.enemyManager.getActiveEnemies() : [],
+      enemyQueue: this.enableEnemies ? this.enemyManager.getQueue() : [],
+      totalDefeatedEnemies: 0,
+      score: this.scoreManager.getTotalScore(),
+      highScore: this.scoreManager.getHighScore(),
+      defeatedCounts: this.scoreManager.getStageStats(),
+      currentStageId: stage.id,
+      currentStageName: stage.name,
+      stageElapsedSeconds: 0,
+      terrain: createRuntimeTerrainState(stage.map),
+      isGameOver: false,
+      isStageClear: false,
+      gameOverReason: null,
+      diagnosticLog: null,
+      matchState: MATCH_STATES.PLAYING,
+    };
+    this.matchStateMachine.transitionTo(MATCH_STATES.PLAYING, true);
+  }
+
+  public quitToMenu(): void {
+    this.isPaused = true;
+    this.accumulatorMs = 0;
+    this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
+    this.state.matchState = MATCH_STATES.MENU;
+    this.matchStateMachine.transitionTo(MATCH_STATES.MENU, true);
+  }
+
+  public advanceToNextStage(): boolean {
+    if (!this.stageManager.hasNextStage()) {
+      return false;
+    }
+    const nextStageId = this.stageManager.getNextStageId();
+    if (!nextStageId) return false;
+
+    this.stageManager.setCurrentStage(nextStageId);
+    const stage = this.stageManager.getCurrentStage();
+
+    this.scoreManager.advanceToNextStage();
+    this.accumulatorMs = 0;
+    this.isPaused = false;
+    this.enemyManager.reset(stage.enemyQueue);
+
+    // Carry forward P1 lives and existing total score
+    const preservedLives = this.state.p1State.lives;
+
+    this.state = {
+      tickCount: 0,
+      p1: createP1Tank(),
+      p1State: {
+        lives: preservedLives,
+        isDead: false,
+        respawnTimer: 0,
+        shieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,
+        waitingForClearSpawn: false,
+        spawnCheckTimer: 0,
+      },
+      bullet: null,
+      bullets: [],
+      enemies: this.enableEnemies ? this.enemyManager.getActiveEnemies() : [],
+      enemyQueue: this.enableEnemies ? this.enemyManager.getQueue() : [],
+      totalDefeatedEnemies: 0,
+      score: this.scoreManager.getTotalScore(),
+      highScore: this.scoreManager.getHighScore(),
+      defeatedCounts: this.scoreManager.getStageStats(),
+      currentStageId: stage.id,
+      currentStageName: stage.name,
+      stageElapsedSeconds: 0,
+      terrain: createRuntimeTerrainState(stage.map),
+      isGameOver: false,
+      isStageClear: false,
+      gameOverReason: null,
+      diagnosticLog: null,
+      matchState: MATCH_STATES.PLAYING,
+    };
+    this.matchStateMachine.transitionTo(MATCH_STATES.PLAYING, true);
+    return true;
+  }
+
   public reset(
     customTerrain?: RuntimeTerrainState,
     customP1?: TankStructure,
@@ -86,8 +264,13 @@ export class GameEngine {
   ): void {
     this.accumulatorMs = 0;
     this.lastShootState = false;
+    this.isPaused = false;
     this.enableEnemies = enableEnemies;
     this.enemyManager.reset(customEnemyQueue);
+    this.scoreManager.resetRun();
+    this.matchStateMachine.transitionTo(MATCH_STATES.PLAYING, true);
+
+    const currentStage = this.stageManager.getCurrentStage();
 
     this.state = {
       tickCount: 0,
@@ -105,12 +288,18 @@ export class GameEngine {
       enemies: this.enableEnemies ? this.enemyManager.getActiveEnemies() : [],
       enemyQueue: this.enableEnemies ? this.enemyManager.getQueue() : [],
       totalDefeatedEnemies: 0,
-      score: 0,
-      terrain: customTerrain ?? createRuntimeTerrainState(),
+      score: this.scoreManager.getTotalScore(),
+      highScore: this.scoreManager.getHighScore(),
+      defeatedCounts: this.scoreManager.getStageStats(),
+      currentStageId: currentStage.id,
+      currentStageName: currentStage.name,
+      stageElapsedSeconds: 0,
+      terrain: customTerrain ?? createRuntimeTerrainState(currentStage.map),
       isGameOver: false,
       isStageClear: false,
       gameOverReason: null,
       diagnosticLog: null,
+      matchState: MATCH_STATES.PLAYING,
     };
   }
 
@@ -148,7 +337,13 @@ export class GameEngine {
    * Executes exactly one deterministic simulation tick (dt = 1/60s).
    */
   public stepTick(input: InputState): void {
-    if (this.isPaused || this.state.isGameOver || this.state.isStageClear) {
+    if (
+      this.isPaused ||
+      this.state.matchState === MATCH_STATES.PAUSED ||
+      this.state.matchState === MATCH_STATES.MENU ||
+      this.state.isGameOver ||
+      this.state.isStageClear
+    ) {
       return;
     }
 
@@ -164,6 +359,8 @@ export class GameEngine {
         if (this.state.p1State.lives <= 0) {
           this.state.isGameOver = true;
           this.state.gameOverReason = 'P1 hết mạng! Game Over.';
+          this.state.matchState = MATCH_STATES.GAME_OVER;
+          this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
           return;
         }
 
@@ -251,6 +448,8 @@ export class GameEngine {
       if (bulletResult.hitBase) {
         this.state.isGameOver = true;
         this.state.gameOverReason = 'Căn cứ đã bị phá hủy! Game Over.';
+        this.state.matchState = MATCH_STATES.GAME_OVER;
+        this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
       }
       if (bulletResult.isAlive) {
         survivingBullets.push(b);
@@ -299,7 +498,10 @@ export class GameEngine {
           const hitResult = this.enemyManager.damageEnemy(enemy.id);
           if (hitResult.destroyed) {
             this.state.totalDefeatedEnemies++;
-            this.state.score += hitResult.score;
+            this.scoreManager.recordEnemyDefeated(enemy.id, enemy.enemyType);
+            this.state.score = this.scoreManager.getTotalScore();
+            this.state.highScore = this.scoreManager.getHighScore();
+            this.state.defeatedCounts = this.scoreManager.getStageStats();
           }
           break; // Bullet hits only one tank
         }
@@ -348,6 +550,8 @@ export class GameEngine {
         if (this.state.p1State.lives <= 0) {
           this.state.isGameOver = true;
           this.state.gameOverReason = 'P1 hết mạng! Game Over.';
+          this.state.matchState = MATCH_STATES.GAME_OVER;
+          this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
         }
         break;
       }
@@ -371,6 +575,8 @@ export class GameEngine {
     if (this.state.terrain.isBaseDestroyed && !this.state.isGameOver) {
       this.state.isGameOver = true;
       this.state.gameOverReason = 'Căn cứ đã bị phá hủy! Game Over.';
+      this.state.matchState = MATCH_STATES.GAME_OVER;
+      this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
     }
 
     // 11. Check Stage Clear condition
@@ -378,9 +584,14 @@ export class GameEngine {
       !this.state.isGameOver &&
       !this.state.terrain.isBaseDestroyed &&
       this.state.p1State.lives > 0 &&
-      this.state.totalDefeatedEnemies >= ENEMY_CONFIG.TOTAL_COUNT
+      this.state.totalDefeatedEnemies >= ENEMY_CONFIG.TOTAL_COUNT &&
+      this.state.enemies.length === 0
     ) {
       this.state.isStageClear = true;
+      this.state.matchState = MATCH_STATES.STAGE_CLEAR;
+      this.matchStateMachine.transitionTo(MATCH_STATES.STAGE_CLEAR, true);
+      this.scoreManager.checkAndUpdateHighScore();
+      this.state.highScore = this.scoreManager.getHighScore();
     }
   }
 
@@ -389,10 +600,17 @@ export class GameEngine {
    * Manages accumulator, backlog limits, and frame clamp.
    */
   public advanceTime(deltaMs: number, input: InputState): number {
-    if (this.isPaused) {
+    if (
+      this.isPaused ||
+      this.state.matchState === MATCH_STATES.PAUSED ||
+      this.state.matchState === MATCH_STATES.MENU ||
+      this.state.isGameOver ||
+      this.state.isStageClear
+    ) {
       return 0;
     }
 
+    this.state.stageElapsedSeconds += deltaMs / 1000;
     this.accumulatorMs += deltaMs;
 
     // Frame lag clamp: prevent spiral of death

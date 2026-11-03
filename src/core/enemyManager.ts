@@ -217,15 +217,20 @@ export class EnemyManager {
       }
 
       // Handle Shooting (Only when no active bullet from this enemy in flight!)
-      if (aiDecision.shouldShoot) {
-        const enemyHasBullet = bullets.some((b) => b.ownerId === enemy.id);
-        if (!enemyHasBullet) {
-          const bullet = spawnBullet(enemy, null);
-          if (bullet) {
-            bullet.ownerType = 'enemy';
-            newBullets.push(bullet);
-            enemy.shootCooldown = ENEMY_CONFIG.SPECS[enemy.enemyType].shootCooldown;
-            enemy.aimTimer = 0; // Reset aim timer after shooting
+      const enemyHasBullet = bullets.some((b) => b.ownerId === enemy.id);
+      if (enemy.debugLog) {
+        enemy.debugLog.hasActiveBullet = enemyHasBullet;
+      }
+
+      if (aiDecision.shouldShoot && !enemyHasBullet) {
+        const bullet = spawnBullet(enemy, null);
+        if (bullet) {
+          bullet.ownerType = 'enemy';
+          newBullets.push(bullet);
+          enemy.shootCooldown = ENEMY_CONFIG.SPECS[enemy.enemyType].shootCooldown;
+          enemy.aimTimer = 0; // Reset aim timer after shooting
+          if (enemy.debugLog) {
+            enemy.debugLog.hasActiveBullet = true;
           }
         }
       }
@@ -245,7 +250,10 @@ export class EnemyManager {
     }
 
     // Spawn shield blocks all damage
-    if (enemy.spawnShieldTimer > 0) {
+    if (enemy.spawnShieldTimer <= 0) {
+      enemy.isShielded = false;
+    }
+    if (enemy.spawnShieldTimer > 0 || enemy.isShielded) {
       return { destroyed: false, score: 0, enemy };
     }
 

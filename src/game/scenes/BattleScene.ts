@@ -34,6 +34,9 @@ export class BattleScene extends Phaser.Scene {
     J: Phaser.Input.Keyboard.Key;
     SPACE: Phaser.Input.Keyboard.Key;
   };
+  private keyP?: Phaser.Input.Keyboard.Key;
+  private keyEsc?: Phaser.Input.Keyboard.Key;
+  private onPauseCallback?: () => void;
 
   constructor(customEngine?: GameEngine) {
     super({ key: 'BattleScene' });
@@ -51,6 +54,10 @@ export class BattleScene extends Phaser.Scene {
 
   public setStateCallback(cb: (state: GameCoreState) => void): void {
     this.onStateCallback = cb;
+  }
+
+  public setPauseCallback(cb: () => void): void {
+    this.onPauseCallback = cb;
   }
 
   create(): void {
@@ -90,17 +97,33 @@ export class BattleScene extends Phaser.Scene {
         J: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.J),
         SPACE: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
       };
+      this.keyP = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
+      this.keyEsc = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
     }
   }
 
   update(_time: number, delta: number): void {
-    // 1. Read Input
+    // Check Pause hotkeys (P or ESC)
+    if (
+      (this.keyP && Phaser.Input.Keyboard.JustDown(this.keyP)) ||
+      (this.keyEsc && Phaser.Input.Keyboard.JustDown(this.keyEsc))
+    ) {
+      this.onPauseCallback?.();
+    }
+
+    // 1. Read Input (merged keyboard + touch/external controls)
+    const ext = this.engine.getExternalInput();
     const input: InputState = {
-      up: Boolean(this.cursors?.up.isDown || this.wasd?.W.isDown),
-      down: Boolean(this.cursors?.down.isDown || this.wasd?.S.isDown),
-      left: Boolean(this.cursors?.left.isDown || this.wasd?.A.isDown),
-      right: Boolean(this.cursors?.right.isDown || this.wasd?.D.isDown),
-      shoot: Boolean(this.cursors?.space.isDown || this.wasd?.SPACE.isDown || this.wasd?.J.isDown),
+      up: Boolean(this.cursors?.up.isDown || this.wasd?.W.isDown || ext.up),
+      down: Boolean(this.cursors?.down.isDown || this.wasd?.S.isDown || ext.down),
+      left: Boolean(this.cursors?.left.isDown || this.wasd?.A.isDown || ext.left),
+      right: Boolean(this.cursors?.right.isDown || this.wasd?.D.isDown || ext.right),
+      shoot: Boolean(
+        this.cursors?.space.isDown ||
+          this.wasd?.SPACE.isDown ||
+          this.wasd?.J.isDown ||
+          ext.shoot
+      ),
     };
 
     // 2. Advance GameCore Simulation with Fixed Timestep 60Hz
@@ -286,6 +309,7 @@ export class BattleScene extends Phaser.Scene {
       img.setOrigin(0, 0);
       img.setDisplaySize(16, 16);
       img.setDepth(1);
+      (img as any).renderedMask = mask;
       this.terrainSprites.set(key, img);
       return;
     }
@@ -310,6 +334,7 @@ export class BattleScene extends Phaser.Scene {
       container.add(sub);
     }
 
+    (container as any).renderedMask = mask;
     this.terrainSprites.set(key, container);
   }
 
@@ -325,7 +350,7 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
-    // Sync any modified brick tiles
+    // Sync any modified brick tiles in real time
     for (const [key, mask] of Object.entries(terrain.brickSubTiles)) {
       const [rStr, cStr] = key.split('_');
       const r = parseInt(rStr, 10);
@@ -333,11 +358,16 @@ export class BattleScene extends Phaser.Scene {
       const spriteKey = `brick_${r}_${c}`;
       const existing = this.terrainSprites.get(spriteKey);
 
-      if (mask === 0 && existing) {
-        existing.destroy();
-        this.terrainSprites.delete(spriteKey);
-      } else if (mask > 0 && mask < 15 && (!existing || (existing as any).type !== 'Container')) {
-        this.renderBrickTile(r, c, mask);
+      if (mask === 0) {
+        if (existing) {
+          existing.destroy();
+          this.terrainSprites.delete(spriteKey);
+        }
+      } else {
+        const renderedMask = (existing as any)?.renderedMask;
+        if (!existing || renderedMask !== mask) {
+          this.renderBrickTile(r, c, mask);
+        }
       }
     }
   }

@@ -69,9 +69,9 @@ export interface TerrainCollisionResult {
 export function checkHitboxVsTerrain(
   box: AABB,
   terrain: RuntimeTerrainState,
-  options: { forBullet?: boolean } = {}
+  options: { forBullet?: boolean; direction?: Direction } = {}
 ): TerrainCollisionResult {
-  const { forBullet = false } = options;
+  const { forBullet = false, direction } = options;
   const totalW = MAP_DIMENSIONS.TOTAL_WIDTH_PX;
   const totalH = MAP_DIMENSIONS.TOTAL_HEIGHT_PX;
 
@@ -86,8 +86,25 @@ export function checkHitboxVsTerrain(
   const minRow = Math.max(0, Math.floor(box.top / tileSize));
   const maxRow = Math.min(MAP_DIMENSIONS.ROWS - 1, Math.floor((box.bottom - 0.0001) / tileSize));
 
-  for (let r = minRow; r <= maxRow; r++) {
-    for (let c = minCol; c <= maxCol; c++) {
+  // Determine row and col iteration order based on flight direction for bullets
+  const rowIndices: number[] = [];
+  if (forBullet && direction === 'UP') {
+    for (let r = maxRow; r >= minRow; r--) rowIndices.push(r);
+  } else {
+    for (let r = minRow; r <= maxRow; r++) rowIndices.push(r);
+  }
+
+  const colIndices: number[] = [];
+  if (forBullet && direction === 'LEFT') {
+    for (let c = maxCol; c >= minCol; c--) colIndices.push(c);
+  } else {
+    for (let c = minCol; c <= maxCol; c++) colIndices.push(c);
+  }
+
+  let baseHitResult: TerrainCollisionResult | null = null;
+
+  for (const r of rowIndices) {
+    for (const c of colIndices) {
       const tileType = terrain.currentMap[r][c];
 
       // EMPTY: no collision
@@ -122,25 +139,7 @@ export function checkHitboxVsTerrain(
         }
       }
 
-      // STEEL & BASE: block both
-      if (tileType === TILE_TYPES.STEEL || tileType === TILE_TYPES.BASE) {
-        const tileBox: AABB = {
-          left: c * tileSize,
-          right: (c + 1) * tileSize,
-          top: r * tileSize,
-          bottom: (r + 1) * tileSize,
-        };
-        if (intersectAABB(box, tileBox)) {
-          return {
-            collides: true,
-            isOutOfBounds: false,
-            hitTile: { row: r, col: c, type: tileType },
-          };
-        }
-        continue;
-      }
-
-      // BRICK: check individual 8x8 sub-tiles
+      // BRICK: check individual 8x8 sub-tiles first
       if (tileType === TILE_TYPES.BRICK) {
         const mask = getBrickMask(terrain, r, c);
         if (mask === 0) {
@@ -197,8 +196,61 @@ export function checkHitboxVsTerrain(
             };
           }
         }
+        continue;
+      }
+
+      // STEEL: blocks both
+      if (tileType === TILE_TYPES.STEEL) {
+        const tileBox: AABB = {
+          left: c * tileSize,
+          right: (c + 1) * tileSize,
+          top: r * tileSize,
+          bottom: (r + 1) * tileSize,
+        };
+        if (intersectAABB(box, tileBox)) {
+          return {
+            collides: true,
+            isOutOfBounds: false,
+            hitTile: { row: r, col: c, type: tileType },
+          };
+        }
+        continue;
+      }
+
+      // BASE: if bullet touches base, delay returning until all brick checks in this bounding box finish
+      if (tileType === TILE_TYPES.BASE) {
+        const tileBox: AABB = {
+          left: c * tileSize,
+          right: (c + 1) * tileSize,
+          top: r * tileSize,
+          bottom: (r + 1) * tileSize,
+        };
+        if (intersectAABB(box, tileBox)) {
+          if (forBullet) {
+            // Buffer base hit: if an intact brick is found in the same or adjacent overlapping cells, brick takes precedence!
+            if (!baseHitResult) {
+              baseHitResult = {
+                collides: true,
+                isOutOfBounds: false,
+                hitTile: { row: r, col: c, type: tileType },
+              };
+            }
+          } else {
+            return {
+              collides: true,
+              isOutOfBounds: false,
+              hitTile: { row: r, col: c, type: tileType },
+            };
+          }
+        }
+        continue;
       }
     }
+  }
+
+  // If a buffered base collision occurred and was not overridden by an intact brick sub-tile
+  if (baseHitResult) {
+    return baseHitResult;
   }
 
   return { collides: false, isOutOfBounds: false };

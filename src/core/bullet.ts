@@ -77,7 +77,10 @@ export function updateBullet(
   else if (bullet.direction === 'RIGHT') bullet.x += step;
 
   const bulletBox = getBulletHitbox(bullet.x, bullet.y);
-  const collision = checkHitboxVsTerrain(bulletBox, terrain, { forBullet: true });
+  const collision = checkHitboxVsTerrain(bulletBox, terrain, {
+    forBullet: true,
+    direction: bullet.direction,
+  });
 
   if (collision.isOutOfBounds) {
     return { isAlive: false, hitObstacle: true };

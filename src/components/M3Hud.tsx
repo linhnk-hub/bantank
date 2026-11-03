@@ -22,9 +22,10 @@ interface M3HudProps {
   state: GameCoreState | null;
   onReset: () => void;
   onSpawnEnemy: () => void;
+  onPause?: () => void;
 }
 
-export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy }) => {
+export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy, onPause }) => {
   if (!state) {
     return null;
   }
@@ -36,13 +37,22 @@ export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy }) =>
 
   return (
     <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 text-xs flex flex-col gap-3 shadow-xl">
-      {/* Top Header: Score, Lives & Actions */}
+      {/* Top Header: Stage, Score, High Score & Lives */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 pb-3">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold">
+            <span>{state.currentStageName || 'Stage 1'}</span>
+          </div>
+
           <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-neutral-950 border border-neutral-800">
             <Trophy className="w-4 h-4 text-amber-400" />
             <span className="text-neutral-400 font-mono">ĐIỂM:</span>
             <span className="text-amber-400 font-black font-mono text-sm">{state.score}</span>
+          </div>
+
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-neutral-950 border border-neutral-800 text-[11px]">
+            <span className="text-neutral-500 font-mono">HIGH:</span>
+            <span className="text-neutral-300 font-bold font-mono">{state.highScore}</span>
           </div>
 
           <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-neutral-950 border border-neutral-800">
@@ -60,12 +70,21 @@ export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy }) =>
         </div>
 
         <div className="flex items-center gap-2">
+          {onPause && (
+            <button
+              onClick={onPause}
+              className="flex items-center gap-1 px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] transition-colors shadow"
+            >
+              <span>Tạm Dừng (P)</span>
+            </button>
+          )}
+
           <button
             onClick={onSpawnEnemy}
             className="flex items-center gap-1 px-2.5 py-1 rounded bg-red-950/70 hover:bg-red-900 border border-red-800 text-red-300 text-[11px] font-semibold transition-colors"
           >
             <Cpu className="w-3 h-3" />
-            <span>Thả Xe Địch Ngay</span>
+            <span>Thả Địch</span>
           </button>
 
           <button
@@ -73,7 +92,7 @@ export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy }) =>
             className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] font-medium transition-colors"
           >
             <RotateCcw className="w-3 h-3" />
-            <span>Đặt lại Màn</span>
+            <span>Đặt lại</span>
           </button>
         </div>
       </div>
