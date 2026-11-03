@@ -41,7 +41,7 @@ export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy, onPa
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 pb-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold">
-            <span>{state.currentStageName || 'Stage 1'}</span>
+            <span>STAGE 1</span>
           </div>
 
           <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-neutral-950 border border-neutral-800">

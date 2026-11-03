@@ -68,7 +68,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           <div className="bg-neutral-950/70 border border-neutral-800/80 rounded-xl p-3 space-y-2 text-xs">
             <div className="font-bold text-neutral-300 pb-1 border-b border-neutral-800 flex justify-between">
               <span>THỐNG KÊ CHIẾN TÍCH</span>
-              <span className="text-neutral-400 font-mono">{state.currentStageName || 'Stage 1'}</span>
+              <span className="text-amber-400 font-mono">STAGE 1</span>
             </div>
 
             <div className="space-y-1.5 font-mono text-[11px] sm:text-xs">

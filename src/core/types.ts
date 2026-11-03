@@ -246,3 +246,13 @@ export interface CombatEvent {
   createdAtTick: number;
 }
 
+export interface TestCaseResult {
+  id: string;
+  name: string;
+  passed: boolean;
+  executionTimeMs: number;
+  errorMessage?: string;
+  expectedBehavior?: string;
+  whyItMatters?: string;
+}
+

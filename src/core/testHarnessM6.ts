@@ -144,45 +144,45 @@ export function runAllM6Tests(): TestCaseM6Result[] {
   );
 
   // =========================================================================
-  // GROUP 2: LỖI 2 – Sửa lớp bảo vệ căn cứ và Eagle
+  // GROUP 2: LỖI 2 – Khôi phục đúng cấu trúc Eagle M1 (3 ô BASE liên tiếp hàng 12, cột 5, 6, 7)
   // =========================================================================
 
   record(
     'TC-M6-06',
-    'Bản đồ STAGE_1_MAP chỉ có 1 Eagle tại (12, 6), cánh (12, 5) và (12, 7) là Gạch',
+    'Bản đồ STAGE_1_MAP có đúng 3 ô BASE liên tiếp tại hàng 12, cột 5, 6, 7 theo M1 đã duyệt',
     () => {
-      const baseCell = STAGE_1_MAP[12][6];
       const leftCell = STAGE_1_MAP[12][5];
+      const centerCell = STAGE_1_MAP[12][6];
       const rightCell = STAGE_1_MAP[12][7];
 
-      if (baseCell !== TILE_TYPES.BASE) {
-        throw new Error(`Ô (12, 6) phải là BASE (9), nhận: ${baseCell}`);
+      if (leftCell !== TILE_TYPES.BASE) {
+        throw new Error(`Ô (12, 5) phải là BASE (9), nhận: ${leftCell}`);
       }
-      if (leftCell !== TILE_TYPES.BRICK) {
-        throw new Error(`Ô cánh trái (12, 5) phải là BRICK (1), nhận: ${leftCell}`);
+      if (centerCell !== TILE_TYPES.BASE) {
+        throw new Error(`Ô (12, 6) phải là BASE (9), nhận: ${centerCell}`);
       }
-      if (rightCell !== TILE_TYPES.BRICK) {
-        throw new Error(`Ô cánh phải (12, 7) phải là BRICK (1), nhận: ${rightCell}`);
+      if (rightCell !== TILE_TYPES.BASE) {
+        throw new Error(`Ô (12, 7) phải là BASE (9), nhận: ${rightCell}`);
       }
 
-      // Ensure no other base cells exist
+      // Ensure exactly 3 base cells exist in the 13x13 map
       let baseCount = 0;
       for (let r = 0; r < 13; r++) {
         for (let c = 0; c < 13; c++) {
           if (STAGE_1_MAP[r][c] === TILE_TYPES.BASE) baseCount++;
         }
       }
-      if (baseCount !== 1) {
-        throw new Error(`Bản đồ phải có duy nhất 1 ô BASE, tìm thấy: ${baseCount}`);
+      if (baseCount !== 3) {
+        throw new Error(`Bản đồ phải có đúng 3 ô BASE liên tiếp theo chuẩn M1, tìm thấy: ${baseCount}`);
       }
     },
-    'Chỉ 1 Base tại (12,6); (12,5) và (12,7) là tường gạch',
-    'Khôi phục đúng cấu trúc kinh điển: đại bàng ở giữa, bảo vệ bằng gạch hai bên'
+    '3 ô BASE liên tiếp tại (12,5), (12,6), (12,7) khớp chuẩn M1 đã phê duyệt',
+    'Khôi phục đúng cấu trúc đại bàng 3 ô BASE liên tiếp của Milestone 1'
   );
 
   record(
     'TC-M6-07',
-    'Bắn vào gạch cánh trái (12, 5) chỉ phá hủy sub-tile gạch, KHÔNG làm nổ Base và KHÔNG Game Over',
+    'Bắn trúng ô BASE cánh trái (12, 5) kích hoạt destroyBase và chuyển Game Over',
     () => {
       const engine = new GameEngine();
       const state = engine.getState();
@@ -192,7 +192,7 @@ export function runAllM6Tests(): TestCaseM6Result[] {
 
       // Spawn bullet flying DOWN towards (12, 5) -> x = 80 + 6, y = 180
       const bullet = {
-        id: 'test_hit_left_brick',
+        id: 'test_hit_left_base',
         ownerId: 'enemy_bot',
         ownerType: 'enemy' as const,
         x: 86,
@@ -205,26 +205,26 @@ export function runAllM6Tests(): TestCaseM6Result[] {
 
       for (let i = 0; i < 10; i++) {
         engine.stepTick(emptyInput);
+        if (state.isGameOver) break;
       }
 
-      if (state.terrain.isBaseDestroyed) {
-        throw new Error('Bắn vào gạch cánh trái (12, 5) làm nổ căn cứ là sai');
+      if (!state.terrain.isBaseDestroyed) {
+        throw new Error('Bắn vào ô BASE (12, 5) phải kích hoạt isBaseDestroyed = true');
       }
-      if (state.isGameOver) {
-        throw new Error('Bắn vào gạch cánh trái (12, 5) gây Game Over là sai');
+      if (!state.isGameOver) {
+        throw new Error('Bắn vào ô BASE (12, 5) phải chuyển isGameOver = true');
       }
-      const mask = state.terrain.brickSubTiles['12_5'];
-      if (mask === 15 || mask === undefined) {
-        throw new Error('Gạch cánh trái chưa bị phá hủy sub-tile sau khi trúng đạn');
+      if (state.matchState !== 'GAME_OVER') {
+        throw new Error(`matchState phải là GAME_OVER, nhận: ${state.matchState}`);
       }
     },
-    'isBaseDestroyed = false, isGameOver = false, mask < 15',
-    'Tường gạch cánh trái nhận sát thương phá hủy sub-tile chuẩn M2 mà không ảnh hưởng Base'
+    'isBaseDestroyed = true, isGameOver = true khi đạn trúng ô BASE (12,5)',
+    'Toàn bộ diện tích 3 ô căn cứ Đại Bàng đều là vùng mục tiêu bảo vệ trọng yếu'
   );
 
   record(
     'TC-M6-08',
-    'Bắn vào gạch cánh phải (12, 7) chỉ phá hủy sub-tile gạch, KHÔNG làm nổ Base và KHÔNG Game Over',
+    'Bắn trúng ô BASE cánh phải (12, 7) kích hoạt destroyBase và chuyển Game Over',
     () => {
       const engine = new GameEngine();
       const state = engine.getState();
@@ -234,7 +234,7 @@ export function runAllM6Tests(): TestCaseM6Result[] {
 
       // Spawn bullet flying DOWN towards (12, 7) -> x = 112 + 6, y = 180
       const bullet = {
-        id: 'test_hit_right_brick',
+        id: 'test_hit_right_base',
         ownerId: 'enemy_bot',
         ownerType: 'enemy' as const,
         x: 118,
@@ -247,36 +247,43 @@ export function runAllM6Tests(): TestCaseM6Result[] {
 
       for (let i = 0; i < 10; i++) {
         engine.stepTick(emptyInput);
+        if (state.isGameOver) break;
       }
 
-      if (state.terrain.isBaseDestroyed) {
-        throw new Error('Bắn vào gạch cánh phải (12, 7) làm nổ căn cứ là sai');
+      if (!state.terrain.isBaseDestroyed) {
+        throw new Error('Bắn vào ô BASE (12, 7) phải kích hoạt isBaseDestroyed = true');
       }
-      if (state.isGameOver) {
-        throw new Error('Bắn vào gạch cánh phải (12, 7) gây Game Over là sai');
+      if (!state.isGameOver) {
+        throw new Error('Bắn vào ô BASE (12, 7) phải chuyển isGameOver = true');
       }
-      const mask = state.terrain.brickSubTiles['12_7'];
-      if (mask === 15 || mask === undefined) {
-        throw new Error('Gạch cánh phải chưa bị phá hủy sub-tile sau khi trúng đạn');
+      if (state.matchState !== 'GAME_OVER') {
+        throw new Error(`matchState phải là GAME_OVER, nhận: ${state.matchState}`);
       }
     },
-    'isBaseDestroyed = false, isGameOver = false, mask < 15',
-    'Tường gạch cánh phải nhận sát thương phá hủy sub-tile chuẩn M2 mà không ảnh hưởng Base'
+    'isBaseDestroyed = true, isGameOver = true khi đạn trúng ô BASE (12,7)',
+    'Cả hai cánh trái và phải của cụm Đại Bàng đều kích hoạt bảo vệ căn cứ'
   );
 
   record(
     'TC-M6-09',
-    'Bắn trúng trực tiếp Eagle (12, 6) kích hoạt destroyBase, nổ Eagle và chuyển Game Over',
+    'Bắn trúng trực tiếp tâm Eagle (12, 6) kích hoạt destroyBase, Game Over và phát sự kiện nổ tại (104, 200)',
     () => {
       const engine = new GameEngine();
       const state = engine.getState();
 
+      let explosionFired = false;
+      let explosionPos: { x: number; y: number } | null = null;
+      engine.on('BASE_EXPLOSION', (payload: any) => {
+        explosionFired = true;
+        explosionPos = { x: payload.x, y: payload.y };
+      });
+
       // Clear brick above (11, 6)
       state.terrain.currentMap[11][6] = TILE_TYPES.EMPTY;
 
-      // Spawn bullet flying DOWN directly into Eagle at (12, 6) -> x = 96 + 6, y = 180
+      // Spawn bullet flying DOWN directly into Eagle center at (12, 6) -> x = 96 + 6, y = 180
       const bullet = {
-        id: 'test_hit_eagle',
+        id: 'test_hit_eagle_center',
         ownerId: 'enemy_bot',
         ownerType: 'enemy' as const,
         x: 102,
@@ -301,21 +308,26 @@ export function runAllM6Tests(): TestCaseM6Result[] {
       if (state.matchState !== 'GAME_OVER') {
         throw new Error(`matchState phải là GAME_OVER, nhận: ${state.matchState}`);
       }
+      const pos = explosionPos as { x: number; y: number } | null;
+      if (!explosionFired || !pos) {
+        throw new Error('Chưa phát sự kiện BASE_EXPLOSION khi Base bị phá hủy');
+      }
+      if (pos.x !== 104 || pos.y !== 200) {
+        throw new Error(`Tọa độ nổ Base phải ở tâm 3 ô (104, 200), nhận: (${pos.x}, ${pos.y})`);
+      }
     },
-    'isBaseDestroyed = true, isGameOver = true, matchState = GAME_OVER',
+    'isBaseDestroyed = true, isGameOver = true, BASE_EXPLOSION tại (104, 200)',
     'Bảo toàn quy tắc cốt lõi: bảo vệ Đại Bàng là nhiệm vụ sinh tử của trận đấu'
   );
 
   record(
     'TC-M6-10',
-    'Khởi động lại (restartStage) khôi phục hoàn toàn 2 tường gạch (12,5), (12,7) và Eagle (12,6)',
+    'Khởi động lại (restartStage) khôi phục hoàn toàn cả 3 ô BASE (12,5), (12,6), (12,7) và isBaseDestroyed = false',
     () => {
       const engine = new GameEngine();
       const state = engine.getState();
 
-      // Damage brick and destroy base
-      state.terrain.brickSubTiles['12_5'] = 0;
-      state.terrain.brickSubTiles['12_7'] = 3;
+      // Destroy base
       state.terrain.isBaseDestroyed = true;
 
       // Restart stage
@@ -325,17 +337,15 @@ export function runAllM6Tests(): TestCaseM6Result[] {
       if (restoredState.terrain.isBaseDestroyed) {
         throw new Error('Căn cứ đại bàng vẫn bị phá hủy sau restart');
       }
-      if (restoredState.terrain.currentMap[12][6] !== TILE_TYPES.BASE) {
-        throw new Error('Ô (12, 6) chưa được khôi phục về BASE');
-      }
-      if (restoredState.terrain.currentMap[12][5] !== TILE_TYPES.BRICK || restoredState.terrain.currentMap[12][7] !== TILE_TYPES.BRICK) {
-        throw new Error('Hai ô gạch hai bên chưa được khôi phục về BRICK');
-      }
-      if (restoredState.terrain.brickSubTiles['12_5'] !== 15 || restoredState.terrain.brickSubTiles['12_7'] !== 15) {
-        throw new Error('Mặt nạ sub-tile hai bên chưa được khôi phục về 15');
+      if (
+        restoredState.terrain.currentMap[12][5] !== TILE_TYPES.BASE ||
+        restoredState.terrain.currentMap[12][6] !== TILE_TYPES.BASE ||
+        restoredState.terrain.currentMap[12][7] !== TILE_TYPES.BASE
+      ) {
+        throw new Error('3 ô BASE chưa được khôi phục về giá trị BASE (9)');
       }
     },
-    'Eagle nguyên vẹn, 2 ô gạch cánh khôi phục sub-tiles = 15',
+    'isBaseDestroyed = false, cả 3 ô (12,5), (12,6), (12,7) khôi phục BASE',
     'Khôi phục đầy đủ trạng thái ban đầu của sân đấu sau mỗi lần chơi lại'
   );
 

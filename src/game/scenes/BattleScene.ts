@@ -302,7 +302,9 @@ export class BattleScene extends Phaser.Scene {
     const newEvents = this.engine.popCombatEvents();
     for (const ev of newEvents) {
       if (ev.type === 'HIT_SPARK') {
-        const spark = this.add.image(ev.x, ev.y, 'hit_spark');
+        const clampedX = Math.max(4, Math.min(MAP_DIMENSIONS.TOTAL_WIDTH_PX - 4, ev.x));
+        const clampedY = Math.max(4, Math.min(MAP_DIMENSIONS.TOTAL_HEIGHT_PX - 4, ev.y));
+        const spark = this.add.image(clampedX, clampedY, 'hit_spark');
         spark.setOrigin(0.5, 0.5);
         spark.setDisplaySize(8, 8);
         spark.setDepth(25);
@@ -314,7 +316,10 @@ export class BattleScene extends Phaser.Scene {
           totalDurationMs: 150,
         });
       } else if (ev.type === 'TANK_EXPLOSION') {
-        const exp = this.add.image(ev.x, ev.y, 'explosion_1');
+        // Tank explosion max size 32x32 -> clamp center within [16, 192] so it stays 100% inside Canvas
+        const clampedX = Math.max(16, Math.min(MAP_DIMENSIONS.TOTAL_WIDTH_PX - 16, ev.x));
+        const clampedY = Math.max(16, Math.min(MAP_DIMENSIONS.TOTAL_HEIGHT_PX - 16, ev.y));
+        const exp = this.add.image(clampedX, clampedY, 'explosion_1');
         exp.setOrigin(0.5, 0.5);
         exp.setDisplaySize(16, 16);
         exp.setDepth(26);
@@ -326,7 +331,10 @@ export class BattleScene extends Phaser.Scene {
           totalDurationMs: 700, // Exactly 0.7s according to M3/M4 spec
         });
       } else if (ev.type === 'BASE_EXPLOSION') {
-        const exp = this.add.image(ev.x, ev.y, 'explosion_2');
+        // Eagle explosion max size 48x48 -> clamp center within [24, 184] so it stays 100% inside Canvas
+        const clampedX = Math.max(24, Math.min(MAP_DIMENSIONS.TOTAL_WIDTH_PX - 24, ev.x));
+        const clampedY = Math.max(24, Math.min(MAP_DIMENSIONS.TOTAL_HEIGHT_PX - 24, ev.y));
+        const exp = this.add.image(clampedX, clampedY, 'eagle_exp_1');
         exp.setOrigin(0.5, 0.5);
         exp.setDisplaySize(24, 24);
         exp.setDepth(27);
@@ -335,7 +343,7 @@ export class BattleScene extends Phaser.Scene {
           type: ev.type,
           sprite: exp,
           elapsedMs: 0,
-          totalDurationMs: 800,
+          totalDurationMs: 800, // 0.8s majestic grand golden explosion
         });
       }
     }
@@ -365,16 +373,20 @@ export class BattleScene extends Phaser.Scene {
               eff.sprite.setDisplaySize(24, 24);
             }
           } else if (eff.type === 'BASE_EXPLOSION') {
+            // Distinct Eagle Base Explosion frames: radiant white, golden amber, shockwave rings
             const progress = eff.elapsedMs / eff.totalDurationMs;
-            if (progress < 0.3) {
-              eff.sprite.setTexture('explosion_2');
+            if (progress < 0.25) {
+              eff.sprite.setTexture('eagle_exp_1');
               eff.sprite.setDisplaySize(24, 24);
-            } else if (progress < 0.7) {
-              eff.sprite.setTexture('explosion_3');
-              eff.sprite.setDisplaySize(32, 32);
+            } else if (progress < 0.55) {
+              eff.sprite.setTexture('eagle_exp_2');
+              eff.sprite.setDisplaySize(36, 36);
+            } else if (progress < 0.8) {
+              eff.sprite.setTexture('eagle_exp_3');
+              eff.sprite.setDisplaySize(48, 48);
             } else {
-              eff.sprite.setTexture('explosion_4');
-              eff.sprite.setDisplaySize(24, 24);
+              eff.sprite.setTexture('eagle_exp_4');
+              eff.sprite.setDisplaySize(36, 36);
             }
           } else if (eff.type === 'HIT_SPARK') {
             eff.sprite.setAlpha(Math.max(0, 1.0 - eff.elapsedMs / eff.totalDurationMs));
@@ -420,8 +432,15 @@ export class BattleScene extends Phaser.Scene {
         }
 
         if (tileType === TILE_TYPES.BASE) {
-          const normalTexKey = 'tile_9_center'; // Central Golden Eagle
-          const ruinedTexKey = 'tile_9_ruined';  // Ruined Central Eagle
+          let normalTexKey = 'tile_9_center';
+          let ruinedTexKey = 'tile_9_ruined';
+          if (r === 12 && c === 5) {
+            normalTexKey = 'tile_9_left';
+            ruinedTexKey = 'bunker_flank_ruined';
+          } else if (r === 12 && c === 7) {
+            normalTexKey = 'tile_9_right';
+            ruinedTexKey = 'bunker_flank_ruined';
+          }
           const texKey = terrain.isBaseDestroyed ? ruinedTexKey : normalTexKey;
 
           const baseImg = this.add.image(x, y, texKey);

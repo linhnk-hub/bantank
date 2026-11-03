@@ -42,8 +42,8 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
             <h2 className="text-xl sm:text-2xl font-black tracking-wider text-amber-400 uppercase">
               CHIẾN THẮNG MÀN CHƠI!
             </h2>
-            <p className="text-[11px] sm:text-xs text-neutral-300 font-semibold">
-              {state.currentStageName || 'Stage 1 - Mặt Trận Khởi Đầu'}
+            <p className="text-[11px] sm:text-xs text-amber-300 font-bold font-mono tracking-wide">
+              STAGE 1
             </p>
           </div>
 

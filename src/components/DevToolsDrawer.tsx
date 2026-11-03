@@ -17,6 +17,7 @@ import {
   CheckCircle2,
   Navigation,
 } from 'lucide-react';
+import { TestHarnessM6Round2Panel } from './TestHarnessM6Round2Panel.tsx';
 import { TestHarnessM6Panel } from './TestHarnessM6Panel.tsx';
 import { TestHarnessCorrectionsPanel } from './TestHarnessCorrectionsPanel.tsx';
 import { TestHarnessJoystickPanel } from './TestHarnessJoystickPanel.tsx';
@@ -31,6 +32,7 @@ import { TerrainLegend } from './TerrainLegend.tsx';
 import type { MapValidationResult } from '../core/types.ts';
 
 export type DevTabId =
+  | 'm6_round2'
   | 'corrections_m6'
   | 'corrections_m5'
   | 'joystick_pc'
@@ -53,7 +55,7 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
   onClose,
   validation,
 }) => {
-  const [activeDevTab, setActiveDevTab] = useState<DevTabId>('corrections_m6');
+  const [activeDevTab, setActiveDevTab] = useState<DevTabId>('m6_round2');
 
   if (!isOpen) return null;
 
@@ -70,11 +72,11 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
               <h2 className="text-sm font-extrabold text-white flex items-center gap-2">
                 BanTank Online — Bảng Điều Khiển Kiểm Thử & QA
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 font-bold">
-                  <CheckCircle2 className="w-3 h-3" /> 98/98 PASS
+                  <CheckCircle2 className="w-3 h-3" /> 115/115 PASS
                 </span>
               </h2>
               <p className="text-[11px] text-neutral-400">
-                Toàn bộ bộ kiểm thử tự động M1, M2, M3, M4, Sửa lỗi, UI Polish, Joystick & 6 Nhóm Gameplay/PC Scaling
+                Toàn bộ bộ kiểm thử tự động M1, M2, M3, M4, Sửa lỗi, UI Polish, Joystick, 6 Nhóm PC Scale & M6 Round 2 (Landscape/Eagle/Explosion)
               </p>
             </div>
           </div>
@@ -91,6 +93,18 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
 
         {/* Tab Navigation Strip */}
         <div className="bg-neutral-950/80 px-4 py-2 border-b border-neutral-800 flex items-center gap-1.5 overflow-x-auto text-xs shrink-0 scrollbar-thin">
+          <button
+            onClick={() => setActiveDevTab('m6_round2')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'm6_round2'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>M6 Round 2 (17 Tests)</span>
+          </button>
+
           <button
             onClick={() => setActiveDevTab('corrections_m6')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
@@ -214,6 +228,7 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
 
         {/* Tab Content Container */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {activeDevTab === 'm6_round2' && <TestHarnessM6Round2Panel />}
           {activeDevTab === 'corrections_m6' && <TestHarnessM6Panel />}
           {activeDevTab === 'corrections_m5' && <TestHarnessCorrectionsPanel />}
           {activeDevTab === 'joystick_pc' && <TestHarnessJoystickPanel />}

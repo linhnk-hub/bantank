@@ -40,6 +40,7 @@ export class GameEngine {
   private scoreManager: ScoreManager;
   private matchStateMachine: MatchStateMachine;
   private combatEvents: CombatEvent[] = [];
+  private eventListeners: Map<string, Set<(payload: any) => void>> = new Map();
   private externalInput: InputState = {
     up: false,
     down: false,
@@ -47,6 +48,29 @@ export class GameEngine {
     right: false,
     shoot: false,
   };
+
+  public on(event: string, callback: (payload: any) => void): () => void {
+    if (!this.eventListeners.has(event)) {
+      this.eventListeners.set(event, new Set());
+    }
+    this.eventListeners.get(event)!.add(callback);
+    return () => {
+      this.eventListeners.get(event)?.delete(callback);
+    };
+  }
+
+  public emit(event: string, payload?: any): void {
+    const listeners = this.eventListeners.get(event);
+    if (listeners) {
+      listeners.forEach((cb) => {
+        try {
+          cb(payload);
+        } catch (e) {
+          console.error(e);
+        }
+      });
+    }
+  }
 
   public popCombatEvents(): CombatEvent[] {
     const events = [...this.combatEvents];
@@ -62,6 +86,7 @@ export class GameEngine {
       y,
       createdAtTick: this.state.tickCount,
     });
+    this.emit(type, { x, y, type });
   }
 
   constructor(
@@ -478,6 +503,7 @@ export class GameEngine {
         this.state.gameOverReason = 'Căn cứ đã bị phá hủy! Game Over.';
         this.state.matchState = MATCH_STATES.GAME_OVER;
         this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
+        this.emitCombatEvent('BASE_EXPLOSION', 104, 200);
       }
       if (bulletResult.isAlive) {
         survivingBullets.push(b);
@@ -530,10 +556,10 @@ export class GameEngine {
             this.state.score = this.scoreManager.getTotalScore();
             this.state.highScore = this.scoreManager.getHighScore();
             this.state.defeatedCounts = this.scoreManager.getStageStats();
-            this.emitCombatEvent('TANK_EXPLOSION', enemy.x, enemy.y);
+            this.emitCombatEvent('TANK_EXPLOSION', enemy.x + 8, enemy.y + 8);
           } else {
             // Hit but not destroyed: emit impact spark at hit location
-            this.emitCombatEvent('HIT_SPARK', pb.x, pb.y);
+            this.emitCombatEvent('HIT_SPARK', pb.x + 2, pb.y + 2);
           }
           break; // Bullet hits only one tank
         }
@@ -566,7 +592,7 @@ export class GameEngine {
         }
 
         // If P1 is NOT shielded: P1 dies with explosion!
-        this.emitCombatEvent('TANK_EXPLOSION', this.state.p1.x, this.state.p1.y);
+        this.emitCombatEvent('TANK_EXPLOSION', this.state.p1.x + 8, this.state.p1.y + 8);
         this.state.p1State.lives -= 1;
         this.state.p1State.isDead = true;
         this.state.p1.isAlive = false;

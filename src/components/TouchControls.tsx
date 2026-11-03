@@ -153,11 +153,13 @@ export const VirtualDPad: React.FC<VirtualDPadProps> = ({
 export interface VirtualShootButtonProps {
   isShooting: boolean;
   onShootChange: (shooting: boolean) => void;
+  size?: number;
 }
 
 export const VirtualShootButton: React.FC<VirtualShootButtonProps> = ({
   isShooting,
   onShootChange,
+  size,
 }) => {
   return (
     <div className="flex flex-col items-center gap-1 select-none touch-none shrink-0">

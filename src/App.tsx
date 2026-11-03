@@ -25,6 +25,7 @@ import { validateStageMap } from './core/mapValidator.ts';
 import { GameEngine } from './core/gameEngine.ts';
 import { useOrientation } from './hooks/useOrientation.ts';
 import { useFullscreen } from './hooks/useFullscreen.ts';
+import { useViewportLayout } from './hooks/useViewportLayout.ts';
 import type { GameCoreState, InputState } from './core/types.ts';
 import type { SceneTileHoverInfo } from './game/scenes/StageViewerScene.ts';
 import {
@@ -103,6 +104,9 @@ export default function App() {
   const [landscapeDirection, setLandscapeDirection] = useState<ActiveDirection>(null);
   const [landscapeShooting, setLandscapeShooting] = useState<boolean>(false);
   const landscapeDirRef = useRef<ActiveDirection>(null);
+
+  // Screen layout metrics (landscape, phone, tablet, desktop scaling)
+  const layout = useViewportLayout();
 
   // Validate the official Stage 1 map using pure Game Core validator (M1)
   const validation = useMemo(() => validateStageMap(STAGE_1_MAP), []);
@@ -243,7 +247,7 @@ export default function App() {
           - Right: Virtual Shoot Button (80px target)
           - Top: Slim HUD (Score, Lives, Stage, Pause)
          ========================================================================= */}
-      {(!isDesktop && isLandscape) ? (
+      {(!isDesktop && layout.isLandscape) ? (
         <div className="flex-1 flex flex-col h-screen w-screen overflow-hidden safe-area-inset">
           {/* Slim Landscape Top HUD */}
           <header className="h-9 bg-neutral-950/95 border-b border-neutral-800 px-3 flex items-center justify-between text-xs shrink-0 z-30">
@@ -252,8 +256,8 @@ export default function App() {
               <div className="w-5 h-5 rounded bg-amber-500 flex items-center justify-center font-black text-black text-[11px] shadow">
                 BT
               </div>
-              <span className="font-extrabold text-white tracking-wide text-xs">
-                {gameState?.currentStageName || 'Stage 1'}
+              <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
+                STAGE 1
               </span>
               <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
             </div>
@@ -308,33 +312,48 @@ export default function App() {
                 title="Bảng Kiểm thử & QA"
               >
                 <Wrench className="w-3 h-3 text-amber-400" />
-                <span className="hidden sm:inline">QA (98 Tests)</span>
+                <span className="hidden sm:inline">QA (115 Tests)</span>
               </button>
             </div>
           </header>
 
-          {/* Landscape Main 3-Column Combat View (Balanced & Centered) */}
-          <main className="flex-1 flex flex-row items-center w-full h-[calc(100dvh-36px)] px-2 sm:px-6 py-0 overflow-hidden">
+          {/* Landscape Main 3-Column Combat View (Balanced & Centered with Explicit Canvas Pixel Scaling) */}
+          <main className="flex-1 flex flex-row items-center justify-center w-full h-[calc(100dvh-36px)] px-2 sm:px-4 py-0 overflow-hidden">
             {/* Left Column: Virtual Joystick Centered in left zone */}
-            <div className="flex-1 flex items-center justify-center h-full min-w-[120px]">
+            <div
+              style={{
+                width: `${layout.leftControlWidthPx}px`,
+                minWidth: `${Math.min(100, layout.leftControlWidthPx)}px`,
+              }}
+              className="flex-1 flex items-center justify-center h-full"
+            >
               <VirtualJoystick
                 activeDirection={landscapeDirection}
                 onDirectionChange={handleLandscapeDirectionChange}
-                size={140}
-                knobSize={50}
+                size={layout.isTabletOrDesktop ? 160 : 130}
+                knobSize={layout.isTabletOrDesktop ? 56 : 46}
                 deadZone={14}
                 disabled={isPaused}
               />
             </div>
 
-            {/* Center Column: Game Canvas 1:1 Aspect Ratio (Perfect Square) Centered */}
-            <div className="flex-none flex items-center justify-center h-full max-h-[calc(100dvh-36px)] aspect-square overflow-hidden p-0 relative">
+            {/* Center Column: Game Canvas 1:1 Aspect Ratio (Explicit Pixel Sized & Resized Instantly) */}
+            <div
+              style={{
+                width: `${layout.canvasSizePx}px`,
+                height: `${layout.canvasSizePx}px`,
+                maxWidth: `${layout.canvasSizePx}px`,
+                maxHeight: `${layout.canvasSizePx}px`,
+              }}
+              className="flex-none flex items-center justify-center overflow-hidden p-0 relative mx-auto"
+            >
               <PhaserGame
                 mode="battle"
                 engine={gameEngine}
                 onStateUpdate={setGameState}
                 onFpsUpdate={setFps}
                 onPause={handlePause}
+                canvasSizePx={layout.canvasSizePx}
               />
 
               {/* In MENU state: Overlay allowing immediate match start */}
@@ -346,8 +365,8 @@ export default function App() {
                   <h2 className="text-base font-black text-white tracking-wider mb-1">
                     BANTANK ONLINE
                   </h2>
-                  <p className="text-[11px] text-neutral-400 mb-3">
-                    Chiến dịch Solo • 30 Xe Địch • 1 Căn Cứ Đại Bàng
+                  <p className="text-[11px] text-amber-300 font-mono font-bold mb-3">
+                    STAGE 1 • 30 Xe Địch • 1 Đại Bàng Hoàng Gia
                   </p>
                   <button
                     type="button"
@@ -362,10 +381,17 @@ export default function App() {
             </div>
 
             {/* Right Column: Virtual Shoot Action Button Centered in right zone */}
-            <div className="flex-1 flex items-center justify-center h-full min-w-[140px]">
+            <div
+              style={{
+                width: `${layout.rightControlWidthPx}px`,
+                minWidth: `${Math.min(100, layout.rightControlWidthPx)}px`,
+              }}
+              className="flex-1 flex items-center justify-center h-full"
+            >
               <VirtualShootButton
                 isShooting={landscapeShooting}
                 onShootChange={handleLandscapeShootChange}
+                size={layout.isTabletOrDesktop ? 96 : 76}
               />
             </div>
           </main>
@@ -429,7 +455,7 @@ export default function App() {
                   <Wrench className="w-3.5 h-3.5 text-amber-400" />
                   <span className="hidden sm:inline">Kiểm thử</span>
                   <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
-                    98 Tests
+                    115 Tests
                   </span>
                 </button>
 
@@ -463,7 +489,7 @@ export default function App() {
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-200 font-semibold"
                 >
                   <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Bảng 98 Tests Tự Động</span>
+                  <span>Bảng 115 Tests Tự Động</span>
                 </button>
                 <button
                   onClick={() => setShowTouchControls((v) => !v)}
@@ -484,8 +510,8 @@ export default function App() {
                 <div className="bg-neutral-950 px-4 py-2.5 border-b border-neutral-800 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2.5">
                     <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
-                    <span className="font-semibold text-neutral-200">
-                      Battle Scene — {gameState?.currentStageName || 'Stage 1'} {isPaused ? '(PAUSED)' : ''}
+                    <span className="font-semibold text-amber-400 font-mono">
+                      STAGE 1 {isPaused ? '(PAUSED)' : ''}
                     </span>
                     {/* Live FPS & PING Performance Badges */}
                     <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${getFpsBadgeStyle(fps)}`}>
@@ -537,6 +563,7 @@ export default function App() {
                       onStateUpdate={setGameState}
                       onFpsUpdate={setFps}
                       onPause={handlePause}
+                      canvasSizePx={layout.canvasSizePx}
                     />
                   </div>
 
@@ -614,11 +641,11 @@ export default function App() {
                     <span className="font-bold text-white">Bảng Kiểm Thử & QA</span>
                   </div>
                   <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
-                    98/98 PASS
+                    115/115 PASS
                   </span>
                 </div>
                 <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  Đã kiểm toán và tích hợp toàn bộ 98 kiểm thử tự động (M1, M2, M3, M4, Sửa lỗi, UI Polish, Joystick, 5 Nhóm Gameplay & 6 Nhóm M6 PC Scale/Gameplay Corrections) trong ngăn kéo QA riêng biệt.
+                  Đã kiểm toán và tích hợp toàn bộ 115 kiểm thử tự động (M1, M2, M3, M4, Sửa lỗi, UI Polish, Joystick, 5 Nhóm Gameplay, 6 Nhóm M6 PC Scale & M6 Round 2 Responsive/Eagle/Explosion) trong ngăn kéo QA riêng biệt.
                 </p>
                 <button
                   type="button"

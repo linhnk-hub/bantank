@@ -22,6 +22,7 @@ interface PhaserGameProps {
   onStateUpdate?: (state: GameCoreState) => void;
   onFpsUpdate?: (fps: number) => void;
   onPause?: () => void;
+  canvasSizePx?: number;
 }
 
 export const PhaserGame: React.FC<PhaserGameProps> = ({
@@ -33,6 +34,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   onStateUpdate,
   onFpsUpdate,
   onPause,
+  canvasSizePx,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -137,13 +139,25 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     }
   }, [onFpsUpdate]);
 
+  // Instantly recalculate & refresh Phaser scale on canvasSizePx or orientation update
+  useEffect(() => {
+    if (gameRef.current) {
+      gameRef.current.scale.resize(MAP_DIMENSIONS.TOTAL_WIDTH_PX, MAP_DIMENSIONS.TOTAL_HEIGHT_PX);
+      gameRef.current.scale.refresh();
+    }
+  }, [canvasSizePx]);
+
   return (
     <div className="relative flex items-center justify-center w-full h-full select-none overflow-hidden">
       {/* Crisp pixel scaling container: strictly aspect-square 1:1 with crisp pixel scaling */}
       <div
         ref={containerRef}
-        className="w-full h-full max-w-full max-h-full aspect-square rounded-xl border-2 sm:border-4 border-neutral-700 shadow-2xl overflow-hidden bg-black flex items-center justify-center"
+        className="aspect-square rounded-xl border-2 sm:border-4 border-neutral-700 shadow-2xl overflow-hidden bg-black flex items-center justify-center shrink-0"
         style={{
+          width: canvasSizePx ? `${canvasSizePx}px` : '100%',
+          height: canvasSizePx ? `${canvasSizePx}px` : '100%',
+          maxWidth: canvasSizePx ? `${canvasSizePx}px` : '100%',
+          maxHeight: canvasSizePx ? `${canvasSizePx}px` : '100%',
           imageRendering: 'pixelated',
         }}
       />

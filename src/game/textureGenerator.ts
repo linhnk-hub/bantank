@@ -400,6 +400,7 @@ export function generateTileTextures(scene: Phaser.Scene): void {
 
   // 16. EXPLOSION & HIT SPARK EFFECTS
   generateExplosionTextures(scene);
+  generateEagleExplosionTextures(scene);
 }
 
 function generateTankTextures(scene: Phaser.Scene): void {
@@ -951,6 +952,143 @@ function generateExplosionTextures(scene: Phaser.Scene): void {
       ctx.fillStyle = '#737373';
       ctx.beginPath();
       ctx.arc(12, 12, 4, 0, Math.PI * 2);
+      ctx.fill();
+      canvas.refresh();
+    }
+  }
+}
+
+/**
+ * Creates distinct Eagle Base Explosion textures:
+ * Uses radiant white, golden amber, brilliant sunburst rays and shockwave rings.
+ * Completely distinct from tank explosion (orange/red).
+ */
+export function generateEagleExplosionTextures(scene: Phaser.Scene): void {
+  // 1. Eagle Explosion Frame 1 (24x24) - Divine golden-white flash core with radiant rays
+  if (!scene.textures.exists('eagle_exp_1')) {
+    const canvas = scene.textures.createCanvas('eagle_exp_1', 24, 24);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      ctx.clearRect(0, 0, 24, 24);
+      // Golden corona
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.arc(12, 12, 10, 0, Math.PI * 2);
+      ctx.fill();
+      // Brilliant sun yellow
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(12, 12, 7, 0, Math.PI * 2);
+      ctx.fill();
+      // Pure white-hot epicenter
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(12, 12, 4, 0, Math.PI * 2);
+      ctx.fill();
+      // Cross starburst rays
+      ctx.fillRect(11, 2, 2, 20);
+      ctx.fillRect(2, 11, 20, 2);
+      canvas.refresh();
+    }
+  }
+
+  // 2. Eagle Explosion Frame 2 (36x36) - Expanding radiant gold blast with shockwave ring
+  if (!scene.textures.exists('eagle_exp_2')) {
+    const canvas = scene.textures.createCanvas('eagle_exp_2', 36, 36);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      ctx.clearRect(0, 0, 36, 36);
+      // Outer radiant golden ring
+      ctx.strokeStyle = '#fef08a';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(18, 18, 16, 0, Math.PI * 2);
+      ctx.stroke();
+      // Golden explosion body
+      ctx.fillStyle = '#f59e0b';
+      ctx.beginPath();
+      ctx.arc(18, 18, 13, 0, Math.PI * 2);
+      ctx.fill();
+      // Inner amber flame
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(18, 18, 9, 0, Math.PI * 2);
+      ctx.fill();
+      // White hot core
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(18, 18, 5, 0, Math.PI * 2);
+      ctx.fill();
+      // Star rays
+      ctx.fillStyle = '#fef08a';
+      for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
+        const rx = 18 + Math.cos(angle) * 14;
+        const ry = 18 + Math.sin(angle) * 14;
+        ctx.fillRect(Math.round(rx) - 1, Math.round(ry) - 1, 2, 2);
+      }
+      canvas.refresh();
+    }
+  }
+
+  // 3. Eagle Explosion Frame 3 (48x48) - Grand imperial golden nova shockwave
+  if (!scene.textures.exists('eagle_exp_3')) {
+    const canvas = scene.textures.createCanvas('eagle_exp_3', 48, 48);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      ctx.clearRect(0, 0, 48, 48);
+      // Expanding golden shockwave ring
+      ctx.strokeStyle = '#fde047';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(24, 24, 22, 0, Math.PI * 2);
+      ctx.stroke();
+      // Golden smoke clouds
+      ctx.fillStyle = '#d97706';
+      ctx.beginPath();
+      ctx.arc(24, 24, 17, 0, Math.PI * 2);
+      ctx.fill();
+      // Amber inner blast
+      ctx.fillStyle = '#fbbf24';
+      ctx.beginPath();
+      ctx.arc(24, 24, 12, 0, Math.PI * 2);
+      ctx.fill();
+      // Pure white light burst
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(24, 24, 7, 0, Math.PI * 2);
+      ctx.fill();
+      // Radiant golden spark particles
+      ctx.fillStyle = '#fef08a';
+      for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 6) {
+        const px = 24 + Math.cos(angle) * 20;
+        const py = 24 + Math.sin(angle) * 20;
+        ctx.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3);
+      }
+      canvas.refresh();
+    }
+  }
+
+  // 4. Eagle Explosion Frame 4 (36x36) - Dissipating golden light and smoke aura
+  if (!scene.textures.exists('eagle_exp_4')) {
+    const canvas = scene.textures.createCanvas('eagle_exp_4', 36, 36);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      ctx.clearRect(0, 0, 36, 36);
+      // Fading outer ring
+      ctx.strokeStyle = '#b45309';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.arc(18, 18, 15, 0, Math.PI * 2);
+      ctx.stroke();
+      // Dissipating amber smoke
+      ctx.fillStyle = '#78350f';
+      ctx.beginPath();
+      ctx.arc(18, 18, 11, 0, Math.PI * 2);
+      ctx.fill();
+      // Core embers
+      ctx.fillStyle = '#d97706';
+      ctx.beginPath();
+      ctx.arc(18, 18, 6, 0, Math.PI * 2);
       ctx.fill();
       canvas.refresh();
     }

@@ -12,8 +12,9 @@ import { runAllUIPolishTests as runUIPolish } from '../src/core/testHarnessM4UIP
 import { runAllJoystickTests as runJoystick } from '../src/core/testHarnessM4Joystick.ts';
 import { runAllM5CorrectionTests as runM5Corrections } from '../src/core/testHarnessM5Corrections.ts';
 import { runAllM6Tests as runM6 } from '../src/core/testHarnessM6.ts';
+import { runAllM6Round2Tests as runM6Round2 } from '../src/core/testHarnessM6Round2.ts';
 
-console.log('--- RUNNING FULL 98-TEST AUTOMATED SUITE ---');
+console.log('--- RUNNING FULL 115-TEST AUTOMATED SUITE ---');
 
 const m2Results = runM2();
 const m3Results = runM3();
@@ -24,6 +25,7 @@ const uiPolishResults = runUIPolish();
 const joystickResults = runJoystick();
 const m5CorrectionsResults = runM5Corrections();
 const m6Results = runM6();
+const m6Round2Results = runM6Round2().results;
 
 const allSuites = [
   { name: 'M2 Physics & Tank (12 Tests)', results: m2Results },
@@ -35,6 +37,7 @@ const allSuites = [
   { name: 'Virtual Joystick & PC Scale (6 Tests)', results: joystickResults },
   { name: 'M5 UI Polish & Gameplay Corrections (15 Tests)', results: m5CorrectionsResults },
   { name: 'M6 Gameplay & Responsive Corrections (23 Tests)', results: m6Results },
+  { name: 'M6 Round 2 Responsive, Eagle & Explosions (17 Tests)', results: m6Round2Results },
 ];
 
 let totalTests = 0;
@@ -51,7 +54,7 @@ for (const suite of allSuites) {
   console.log(`[${suite.name}] ${passed}/${suite.results.length} PASS`);
   if (failed > 0) {
     for (const f of suite.results.filter(r => !r.passed)) {
-      const errorMsg = (f as any).message || (f as any).details || (f as any).actual || 'Unknown error';
+      const errorMsg = (f as any).errorMessage || (f as any).message || (f as any).details || (f as any).actual || 'Unknown error';
       console.error(`  FAIL: ${f.id} - ${f.name} -> ${errorMsg}`);
     }
   }
