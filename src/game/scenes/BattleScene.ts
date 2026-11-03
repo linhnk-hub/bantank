@@ -22,7 +22,14 @@ export class BattleScene extends Phaser.Scene {
   private enemyShieldSprites: Map<string, Phaser.GameObjects.Image> = new Map();
   private bulletSprites: Map<string, Phaser.GameObjects.Image> = new Map();
   private terrainSprites: Map<string, Phaser.GameObjects.GameObject> = new Map();
-  private baseSprites: Phaser.GameObjects.Image[] = [];
+  private baseSprites: Array<{
+    sprite: Phaser.GameObjects.Image;
+    row: number;
+    col: number;
+    normalTexKey: string;
+  }> = [];
+  private lastStageId: number = -1;
+  private lastTickCount: number = -1;
   private onStateCallback?: (state: GameCoreState) => void;
 
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
@@ -129,6 +136,16 @@ export class BattleScene extends Phaser.Scene {
     // 2. Advance GameCore Simulation with Fixed Timestep 60Hz
     this.engine.advanceTime(delta, input);
     const state = this.engine.getState();
+
+    // Check if stage was restarted or stage was changed
+    if (
+      (this.lastStageId !== -1 && this.lastStageId !== state.currentStageId) ||
+      (this.lastTickCount >= 0 && state.tickCount < this.lastTickCount)
+    ) {
+      this.refreshAllTerrain();
+    }
+    this.lastStageId = state.currentStageId;
+    this.lastTickCount = state.tickCount;
 
     // 3. Update P1 Tank & Shield
     if (this.p1Sprite) {
@@ -258,20 +275,23 @@ export class BattleScene extends Phaser.Scene {
         }
 
         if (tileType === TILE_TYPES.BASE) {
-          let texKey = 'tile_9_center';
-          if (r === 12 && c === 5) texKey = 'tile_9_left';
-          else if (r === 12 && c === 7) texKey = 'tile_9_right';
+          let normalTexKey = 'tile_9_center';
+          if (r === 12 && c === 5) normalTexKey = 'tile_9_left';
+          else if (r === 12 && c === 7) normalTexKey = 'tile_9_right';
 
-          if (terrain.isBaseDestroyed) {
-            texKey = 'tile_9_ruined';
-          }
+          const texKey = terrain.isBaseDestroyed ? 'tile_9_ruined' : normalTexKey;
 
           const baseImg = this.add.image(x, y, texKey);
           baseImg.setOrigin(0, 0);
           baseImg.setDisplaySize(tileSize, tileSize);
           baseImg.setDepth(2);
           this.terrainSprites.set(`base_${r}_${c}`, baseImg);
-          this.baseSprites.push(baseImg);
+          this.baseSprites.push({
+            sprite: baseImg,
+            row: r,
+            col: c,
+            normalTexKey,
+          });
           continue;
         }
 
@@ -341,11 +361,17 @@ export class BattleScene extends Phaser.Scene {
   private syncDynamicTerrain(state: GameCoreState): void {
     const terrain = state.terrain;
 
-    // Check base ruins
+    // Check base ruins: switch to ruined if destroyed, restore intact if not destroyed
     if (terrain.isBaseDestroyed) {
-      for (const baseImg of this.baseSprites) {
-        if (baseImg.texture.key !== 'tile_9_ruined') {
-          baseImg.setTexture('tile_9_ruined');
+      for (const item of this.baseSprites) {
+        if (item.sprite.active && item.sprite.texture.key !== 'tile_9_ruined') {
+          item.sprite.setTexture('tile_9_ruined');
+        }
+      }
+    } else {
+      for (const item of this.baseSprites) {
+        if (item.sprite.active && item.sprite.texture.key !== item.normalTexKey) {
+          item.sprite.setTexture(item.normalTexKey);
         }
       }
     }
