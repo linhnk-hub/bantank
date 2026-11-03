@@ -30,110 +30,115 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
   const timeFormatted = `${elapsedMinutes}m ${elapsedSeconds.toString().padStart(2, '0')}s`;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-in fade-in duration-200">
-      <div className="bg-neutral-900 border border-amber-500/50 rounded-xl max-w-md w-full p-6 shadow-2xl space-y-5">
-        {/* Header */}
-        <div className="text-center space-y-1">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 mb-1">
-            <Trophy className="w-8 h-8" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4 select-none animate-in fade-in duration-200">
+      <div className="bg-neutral-900 border border-amber-500/50 rounded-2xl max-w-md w-full max-h-[94dvh] sm:max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+        {/* Scrollable Content Body */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 sm:space-y-4 scrollbar-thin">
+          {/* Header */}
+          <div className="text-center space-y-1">
+            <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 mb-0.5">
+              <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
+            </div>
+            <h2 className="text-xl sm:text-2xl font-black tracking-wider text-amber-400 uppercase">
+              CHIẾN THẮNG MÀN CHƠI!
+            </h2>
+            <p className="text-[11px] sm:text-xs text-neutral-300 font-semibold">
+              {state.currentStageName || 'Stage 1 - Mặt Trận Khởi Đầu'}
+            </p>
           </div>
-          <h2 className="text-2xl font-black tracking-wider text-amber-400 uppercase">
-            CHIẾN THẮNG MÀN CHƠI!
-          </h2>
-          <p className="text-xs text-neutral-300 font-semibold">
-            {state.currentStageName || 'Stage 1 - Mặt Trận Khởi Đầu'}
-          </p>
+
+          {/* Score & Record Display */}
+          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-center space-y-1">
+            <div className="text-[11px] text-neutral-400 font-medium">TỔNG ĐIỂM TÍCH LŨY</div>
+            <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400 tracking-tight">
+              {state.score.toLocaleString()}
+            </div>
+            <div className="flex items-center justify-center gap-1.5 pt-0.5 text-[11px] sm:text-xs">
+              <Award className="w-3.5 h-3.5 text-amber-500" />
+              <span className="text-neutral-400">High Score:</span>
+              <span className="font-mono font-bold text-neutral-200">{state.highScore.toLocaleString()}</span>
+              {isNewRecord && (
+                <span className="px-1.5 py-0.2 rounded bg-amber-500 text-black font-extrabold text-[10px] animate-pulse">
+                  KỶ LỤC MỚI!
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Breakdown by Enemy Tier */}
+          <div className="bg-neutral-950/70 border border-neutral-800/80 rounded-xl p-3 space-y-2 text-xs">
+            <div className="font-bold text-neutral-300 pb-1 border-b border-neutral-800 flex justify-between items-center">
+              <span>BẢNG TỔNG KẾT CHIẾN DỊCH</span>
+              <div className="flex items-center gap-1 text-[11px] text-neutral-400 font-mono">
+                <Clock className="w-3 h-3 text-neutral-400" />
+                <span>{timeFormatted}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 font-mono text-[11px] sm:text-xs">
+              <div className="flex items-center justify-between text-neutral-300">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-neutral-400" />
+                  Xe Basic (100đ):
+                </span>
+                <span>{counts.BASIC} xe = {counts.BASIC * 100}đ</span>
+              </div>
+
+              <div className="flex items-center justify-between text-neutral-300">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-sky-400" />
+                  Xe Fast (200đ):
+                </span>
+                <span>{counts.FAST} xe = {counts.FAST * 200}đ</span>
+              </div>
+
+              <div className="flex items-center justify-between text-neutral-300">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-red-400" />
+                  Xe Power (300đ):
+                </span>
+                <span>{counts.POWER} xe = {counts.POWER * 300}đ</span>
+              </div>
+
+              <div className="flex items-center justify-between text-neutral-300">
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  Xe Armor (400đ):
+                </span>
+                <span>{counts.ARMOR} xe = {counts.ARMOR * 400}đ</span>
+              </div>
+
+              <div className="pt-1.5 border-t border-neutral-800/80 flex items-center justify-between font-bold text-emerald-400">
+                <span>Đã tiêu diệt:</span>
+                <span>{totalDefeated} / 30 xe (Toàn bộ)</span>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-neutral-300 pt-0.5">
+                <span className="flex items-center gap-1 text-red-400">
+                  <Heart className="w-3 h-3 fill-red-500" />
+                  Số mạng còn lại:
+                </span>
+                <span className="font-bold text-white">{state.p1State.lives} mạng</span>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* Score & Record Display */}
-        <div className="bg-neutral-950 border border-neutral-800 rounded-lg p-3 text-center space-y-1">
-          <div className="text-xs text-neutral-400 font-medium">TỔNG ĐIỂM TÍCH LŨY</div>
-          <div className="text-3xl font-black font-mono text-amber-400 tracking-tight">
-            {state.score.toLocaleString()}
-          </div>
-          <div className="flex items-center justify-center gap-2 pt-1 text-xs">
-            <Award className="w-3.5 h-3.5 text-amber-500" />
-            <span className="text-neutral-400">High Score:</span>
-            <span className="font-mono font-bold text-neutral-200">{state.highScore.toLocaleString()}</span>
-            {isNewRecord && (
-              <span className="px-1.5 py-0.2 rounded bg-amber-500 text-black font-extrabold text-[10px] animate-pulse">
-                KỶ LỤC MỚI!
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Breakdown by Enemy Tier */}
-        <div className="bg-neutral-950/70 border border-neutral-800/80 rounded-lg p-3 space-y-2 text-xs">
-          <div className="font-bold text-neutral-300 pb-1 border-b border-neutral-800 flex justify-between items-center">
-            <span>BẢNG TỔNG KẾT CHIẾN DỊCH</span>
-            <div className="flex items-center gap-1 text-[11px] text-neutral-400 font-mono">
-              <Clock className="w-3 h-3 text-neutral-400" />
-              <span>{timeFormatted}</span>
-            </div>
-          </div>
-
-          <div className="space-y-1.5 font-mono">
-            <div className="flex items-center justify-between text-neutral-300">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-neutral-400"></span>
-                Xe Basic (100đ):
-              </span>
-              <span>{counts.BASIC} xe = {counts.BASIC * 100}đ</span>
-            </div>
-
-            <div className="flex items-center justify-between text-neutral-300">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-sky-400"></span>
-                Xe Fast (200đ):
-              </span>
-              <span>{counts.FAST} xe = {counts.FAST * 200}đ</span>
-            </div>
-
-            <div className="flex items-center justify-between text-neutral-300">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-red-400"></span>
-                Xe Power (300đ):
-              </span>
-              <span>{counts.POWER} xe = {counts.POWER * 300}đ</span>
-            </div>
-
-            <div className="flex items-center justify-between text-neutral-300">
-              <span className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-                Xe Armor (400đ):
-              </span>
-              <span>{counts.ARMOR} xe = {counts.ARMOR * 400}đ</span>
-            </div>
-
-            <div className="pt-1.5 border-t border-neutral-800/80 flex items-center justify-between font-bold text-emerald-400">
-              <span>Đã tiêu diệt:</span>
-              <span>{totalDefeated} / 30 xe (Toàn bộ)</span>
-            </div>
-
-            <div className="flex items-center justify-between text-[11px] text-neutral-300 pt-0.5">
-              <span className="flex items-center gap-1 text-red-400">
-                <Heart className="w-3 h-3 fill-red-500" />
-                Số mạng còn lại:
-              </span>
-              <span className="font-bold text-white">{state.p1State.lives} mạng</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Action Buttons */}
-        <div className="flex gap-3">
+        {/* Sticky Action Footer: ALWAYS accessible */}
+        <div className="p-3 sm:p-4 bg-neutral-950/95 border-t border-neutral-800 flex gap-2.5 shrink-0 safe-area-inset">
           <button
+            type="button"
             onClick={onNextStageOrReplay}
-            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs transition-colors shadow-lg shadow-amber-500/20 active:scale-98"
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs transition-all shadow-lg shadow-amber-500/20 active:scale-95"
           >
             <RotateCcw className="w-4 h-4" />
             <span>CHƠI LẠI / TIẾP TỤC</span>
           </button>
 
           <button
+            type="button"
             onClick={onQuitToMenu}
-            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs transition-colors border border-neutral-700 active:scale-98"
+            className="flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs transition-all border border-neutral-700 active:scale-95"
           >
             <Home className="w-4 h-4" />
             <span>VỀ MENU</span>

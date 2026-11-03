@@ -127,10 +127,10 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
 
   return (
     <div className="relative flex items-center justify-center w-full h-full select-none overflow-hidden">
-      {/* Crisp pixel scaling container: strictly aspect-square 1:1, responsive max-h and max-w */}
+      {/* Crisp pixel scaling container: strictly aspect-square 1:1, responsive max-h and max-w up to 3.5x (728px) */}
       <div
         ref={containerRef}
-        className="max-h-[calc(100vh-80px)] max-w-full aspect-square rounded border-2 sm:border-4 border-neutral-700 shadow-2xl overflow-hidden bg-black flex items-center justify-center"
+        className="w-full max-w-[min(calc(100vh-130px),728px,100%)] aspect-square rounded-xl border-2 sm:border-4 border-neutral-700 shadow-2xl overflow-hidden bg-black flex items-center justify-center"
         style={{
           imageRendering: 'pixelated',
         }}

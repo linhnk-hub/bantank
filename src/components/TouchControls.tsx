@@ -5,9 +5,12 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Crosshair, Pause } from 'lucide-react';
+import { VirtualJoystick } from './VirtualJoystick.tsx';
 import type { InputState } from '../core/types.ts';
 
 export type ActiveDirection = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null;
+
+export { VirtualJoystick } from './VirtualJoystick.tsx';
 
 export interface VirtualDPadProps {
   activeDirection: ActiveDirection;
@@ -194,13 +197,14 @@ export interface TouchControlsProps {
   onInputChange: (input: Partial<InputState>) => void;
   onPauseClick: () => void;
   isPaused: boolean;
-  layout?: 'portrait' | 'landscape';
+  controlType?: 'joystick' | 'dpad';
 }
 
 export const TouchControls: React.FC<TouchControlsProps> = ({
   onInputChange,
   onPauseClick,
   isPaused,
+  controlType = 'joystick',
 }) => {
   const [activeDirection, setActiveDirection] = useState<ActiveDirection>(null);
   const [isShooting, setIsShooting] = useState<boolean>(false);
@@ -249,11 +253,22 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
 
   return (
     <div className="w-full flex items-center justify-between select-none touch-none py-2 px-3 bg-neutral-950/80 rounded-xl border border-neutral-800">
-      {/* Left: 4-Way Virtual D-Pad (Zero Diagonal, 48px Ergonomic Touch Targets) */}
-      <VirtualDPad
-        activeDirection={activeDirection}
-        onDirectionChange={handleDirectionChange}
-      />
+      {/* Left: Virtual Joystick (or D-Pad fallback) */}
+      {controlType === 'joystick' ? (
+        <VirtualJoystick
+          activeDirection={activeDirection}
+          onDirectionChange={handleDirectionChange}
+          size={136}
+          knobSize={50}
+          deadZone={14}
+          disabled={isPaused}
+        />
+      ) : (
+        <VirtualDPad
+          activeDirection={activeDirection}
+          onDirectionChange={handleDirectionChange}
+        />
+      )}
 
       {/* Center: Pause Button */}
       <div className="flex flex-col items-center gap-1 shrink-0">

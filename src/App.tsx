@@ -13,7 +13,7 @@ import { GameOverModal } from './components/GameOverModal.tsx';
 import { StageClearModal } from './components/StageClearModal.tsx';
 import {
   TouchControls,
-  VirtualDPad,
+  VirtualJoystick,
   VirtualShootButton,
   type ActiveDirection,
 } from './components/TouchControls.tsx';
@@ -26,9 +26,7 @@ import { useOrientation } from './hooks/useOrientation.ts';
 import type { GameCoreState, InputState } from './core/types.ts';
 import type { SceneTileHoverInfo } from './game/scenes/StageViewerScene.ts';
 import {
-  Crosshair,
   RotateCcw,
-  Swords,
   Pause,
   Smartphone,
   Wrench,
@@ -39,6 +37,7 @@ import {
   Trophy,
   Shield,
   Layers,
+  Monitor,
 } from 'lucide-react';
 
 export default function App() {
@@ -46,7 +45,13 @@ export default function App() {
   const [gameEngine, setGameEngine] = useState<GameEngine>(() => new GameEngine());
   const [gameState, setGameState] = useState<GameCoreState | null>(null);
   const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [showTouchControls, setShowTouchControls] = useState<boolean>(true);
+
+  // On desktop PC with fine mouse pointer, default touch controls to hidden to maximize canvas size
+  const [showTouchControls, setShowTouchControls] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    const isDesktop = window.innerWidth >= 1024 && window.matchMedia('(pointer: fine)').matches;
+    return !isDesktop;
+  });
 
   // Orientation & Responsive hook
   const { isLandscape, requestLandscape, showRotateGuide, dismissGuide } = useOrientation();
@@ -182,9 +187,9 @@ export default function App() {
 
       {/* =========================================================================
           LANDSCAPE MODE (Mobile / Tablet 3-Column Ergonomic Layout)
-          - Left: 4-Way D-Pad (48px targets)
+          - Left: Virtual Joystick (smooth 4-way dominant axis)
           - Center: Game Canvas (1:1 square, fitted without distortion)
-          - Right: Shoot Button (80px target)
+          - Right: Virtual Shoot Button (80px target)
           - Top: Slim HUD (Score, Lives, Stage, Pause)
          ========================================================================= */}
       {isLandscape ? (
@@ -236,22 +241,26 @@ export default function App() {
                 title="Bảng Kiểm thử & QA"
               >
                 <Wrench className="w-3 h-3 text-amber-400" />
-                <span className="hidden sm:inline">QA (54 Tests)</span>
+                <span className="hidden sm:inline">QA (60 Tests)</span>
               </button>
             </div>
           </header>
 
           {/* Landscape Main 3-Column Combat View */}
           <main className="flex-1 flex flex-row items-center justify-between w-full h-[calc(100vh-40px)] px-4 sm:px-8 py-2 overflow-hidden">
-            {/* Left Column: Virtual 4-Way D-Pad */}
-            <div className="flex items-center justify-center shrink-0 w-36 h-36">
-              <VirtualDPad
+            {/* Left Column: Modern Virtual Joystick */}
+            <div className="flex items-center justify-center shrink-0 w-38 h-38">
+              <VirtualJoystick
                 activeDirection={landscapeDirection}
                 onDirectionChange={handleLandscapeDirectionChange}
+                size={144}
+                knobSize={52}
+                deadZone={14}
+                disabled={isPaused}
               />
             </div>
 
-            {/* Center Column: Game Canvas 1:1 Aspect Ratio */}
+            {/* Center Column: Game Canvas 1:1 Aspect Ratio (Perfect Square) */}
             <div className="flex-1 flex items-center justify-center h-full max-h-[calc(100vh-48px)] aspect-square overflow-hidden p-1">
               <PhaserGame
                 mode="battle"
@@ -262,7 +271,7 @@ export default function App() {
             </div>
 
             {/* Right Column: Virtual Shoot Action Button */}
-            <div className="flex items-center justify-center shrink-0 w-36 h-36">
+            <div className="flex items-center justify-center shrink-0 w-38 h-38">
               <VirtualShootButton
                 isShooting={landscapeShooting}
                 onShootChange={handleLandscapeShootChange}
@@ -272,12 +281,12 @@ export default function App() {
         </div>
       ) : (
         /* =========================================================================
-            PORTRAIT & DESKTOP MODE
+            PORTRAIT & ENLARGED DESKTOP PC MODE
            ========================================================================= */
         <div className="flex-1 flex flex-col w-full">
           {/* Header */}
           <header className="border-b border-neutral-800 bg-neutral-900/90 backdrop-blur px-4 py-2.5 sticky top-0 z-30 shadow-md">
-            <div className="max-w-7xl mx-auto flex items-center justify-between gap-2">
+            <div className="max-w-[1560px] mx-auto flex items-center justify-between gap-2">
               {/* Brand */}
               <div className="flex items-center gap-2.5">
                 <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center font-black text-black shadow-lg shadow-amber-500/20 text-sm">
@@ -291,14 +300,14 @@ export default function App() {
                     </span>
                   </h1>
                   <p className="text-[10px] sm:text-xs text-neutral-400 hidden sm:block">
-                    Phaser 3 + React + Pure Game Core | Vòng đời trận đấu | Cross-Platform
+                    Phaser 3 + React + Pure Game Core | Vòng đời trận đấu | Cross-Platform & PC Scale
                   </p>
                 </div>
               </div>
 
               {/* Header Right Actions */}
               <div className="flex items-center gap-1.5 text-xs">
-                {/* Screen Orientation Rotate Button */}
+                {/* Screen Orientation Rotate Button (Mobile/Tablet) */}
                 <button
                   type="button"
                   onClick={requestLandscape}
@@ -306,7 +315,7 @@ export default function App() {
                   title="Chuyển sang chế độ xoay ngang màn hình"
                 >
                   <Smartphone className="w-3.5 h-3.5" />
-                  <span className="text-xs">Xoay ngang</span>
+                  <span className="text-xs hidden sm:inline">Xoay ngang</span>
                 </button>
 
                 {/* Developer Tools Drawer Button */}
@@ -318,11 +327,11 @@ export default function App() {
                   <Wrench className="w-3.5 h-3.5 text-amber-400" />
                   <span className="hidden sm:inline">Kiểm thử</span>
                   <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
-                    54 Tests
+                    60 Tests
                   </span>
                 </button>
 
-                {/* Collapsible Menu Toggle */}
+                {/* Collapsible Menu Toggle (Mobile) */}
                 <button
                   type="button"
                   onClick={() => setIsMenuExpanded((v) => !v)}
@@ -345,7 +354,7 @@ export default function App() {
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-200 font-semibold"
                 >
                   <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Mở bảng 54 Tests Tự Động</span>
+                  <span>Mở bảng 60 Tests Tự Động</span>
                 </button>
                 <button
                   onClick={() => setShowTouchControls((v) => !v)}
@@ -357,11 +366,11 @@ export default function App() {
             )}
           </header>
 
-          {/* Main Content Area */}
-          <main className="flex-1 max-w-7xl mx-auto w-full p-3 sm:p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
-            {/* Left Column: Phaser Game Canvas + Touch Controls (7 Cols) */}
-            <section className="lg:col-span-7 flex flex-col gap-3">
-              <div className="bg-neutral-900 border border-neutral-800 rounded-xl overflow-hidden shadow-xl flex flex-col">
+          {/* Main Content Area: Expanded to max-w-[1560px] with 8/4 grid on PC */}
+          <main className="flex-1 max-w-[1560px] mx-auto w-full p-3 sm:p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-start">
+            {/* Left Column: Enlarged Phaser Game Canvas (8 Cols on PC for maximum visibility) */}
+            <section className="lg:col-span-8 flex flex-col gap-3">
+              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
                 {/* Viewport Header */}
                 <div className="bg-neutral-950 px-4 py-2.5 border-b border-neutral-800 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
@@ -372,21 +381,22 @@ export default function App() {
                   </div>
 
                   <div className="flex items-center gap-2">
+                    {/* Toggle Touch Controls on PC/Tablet */}
                     <button
                       onClick={() => setShowTouchControls((v) => !v)}
-                      className={`flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium border transition-colors ${
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors ${
                         showTouchControls
                           ? 'bg-neutral-800 text-amber-400 border-amber-500/40'
                           : 'text-neutral-400 border-neutral-800 hover:text-neutral-200'
                       }`}
                     >
                       <Smartphone className="w-3 h-3" />
-                      <span>Cảm ứng: {showTouchControls ? 'Bật' : 'Tắt'}</span>
+                      <span>Joystick: {showTouchControls ? 'Bật' : 'Tắt'}</span>
                     </button>
 
                     <button
                       onClick={isPaused ? handleResume : handlePause}
-                      className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px]"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] font-semibold"
                     >
                       <Pause className="w-3 h-3" />
                       <span>{isPaused ? 'Tiếp tục' : 'Tạm dừng (P)'}</span>
@@ -394,7 +404,7 @@ export default function App() {
 
                     <button
                       onClick={handleResetGame}
-                      className="flex items-center gap-1 px-2.5 py-0.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[11px]"
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[11px]"
                     >
                       <RotateCcw className="w-3 h-3" />
                       <span>Đặt lại</span>
@@ -402,8 +412,8 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Canvas Container */}
-                <div className="p-3 sm:p-4 bg-neutral-950/70 flex items-center justify-center min-h-[360px] sm:min-h-[440px]">
+                {/* Canvas Container: Prominently enlarged on PC up to 728px square */}
+                <div className="p-3 sm:p-5 lg:p-6 bg-neutral-950/80 flex items-center justify-center min-h-[380px] sm:min-h-[500px] lg:min-h-[640px] xl:min-h-[720px]">
                   <PhaserGame
                     mode="battle"
                     engine={gameEngine}
@@ -413,30 +423,37 @@ export default function App() {
                 </div>
 
                 {/* Viewport Footer */}
-                <div className="bg-neutral-950 px-4 py-2 border-t border-neutral-800 flex flex-wrap items-center justify-between text-xs gap-2">
-                  <div className="flex items-center gap-2 text-neutral-400 text-[11px]">
-                    <span>Điều khiển: <strong className="text-neutral-200">WASD / Mũi tên / D-Pad</strong></span>
+                <div className="bg-neutral-950 px-4 py-2.5 border-t border-neutral-800 flex flex-wrap items-center justify-between text-xs gap-2">
+                  <div className="flex items-center gap-3 text-neutral-400 text-[11px]">
+                    <span className="flex items-center gap-1 text-neutral-300">
+                      <Monitor className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Bàn phím PC:</span>
+                    </span>
+                    <span>Di chuyển: <strong className="text-white">WASD / Mũi tên</strong></span>
                     <span>•</span>
-                    <span>Bắn: <strong className="text-neutral-200">Space / J / Nút Bắn</strong></span>
+                    <span>Bắn: <strong className="text-white">Space / J</strong></span>
+                    <span>•</span>
+                    <span>Tạm dừng: <strong className="text-white">P / ESC</strong></span>
                   </div>
                   <div className="text-[11px] text-neutral-500 font-mono">
-                    {MAP_DIMENSIONS.ROWS}×{MAP_DIMENSIONS.COLS} Tiles (208×208 px)
+                    208×208 px (Scale 1:1 Pixel-Art)
                   </div>
                 </div>
               </div>
 
-              {/* Virtual Touch Controls (Under viewport in Portrait mode) */}
+              {/* Virtual Touch Controls with Joystick (Visible when toggled on or on mobile) */}
               {showTouchControls && (
                 <TouchControls
                   onInputChange={handleTouchInput}
                   onPauseClick={isPaused ? handleResume : handlePause}
                   isPaused={isPaused}
+                  controlType="joystick"
                 />
               )}
             </section>
 
-            {/* Right Column: Live Combat HUD & Quick Stats (5 Cols) */}
-            <section className="lg:col-span-5 flex flex-col gap-4">
+            {/* Right Column: Live Combat HUD & Quick Stats (4 Cols on PC) */}
+            <section className="lg:col-span-4 flex flex-col gap-4">
               <M3Hud
                 state={gameState}
                 onReset={handleResetGame}
@@ -455,11 +472,11 @@ export default function App() {
                     <span className="font-bold text-white">Bảng Kiểm Thử & QA</span>
                   </div>
                   <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
-                    54/54 PASS
+                    60/60 PASS
                   </span>
                 </div>
                 <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  Đã tách riêng toàn bộ 54 kiểm thử tự động (M1, M2, M3, M4, Sửa lỗi và UI Polish) vào bảng QA riêng biệt để giao diện chơi luôn gọn gàng và không che khuất màn hình.
+                  Đã kiểm toán và tích hợp toàn bộ 60 kiểm thử tự động (M1, M2, M3, M4, Sửa lỗi, UI Polish & Virtual Joystick) trong ngăn kéo QA riêng biệt.
                 </p>
                 <button
                   type="button"
