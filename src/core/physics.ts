@@ -271,3 +271,36 @@ export function trySafeGridSnap(
 
   return { success: true, snappedX: candidateX, snappedY: candidateY };
 }
+
+/**
+ * Checks if a tank hitbox collides with any other active tank.
+ * Prevents tanks from overlapping or pushing through each other.
+ */
+export function checkTankVsTanks(
+  selfId: string,
+  box: AABB,
+  otherTanks?: Array<{ id: string; x: number; y: number; isAlive?: boolean }>
+): boolean {
+  if (!otherTanks || otherTanks.length === 0) return false;
+  for (const other of otherTanks) {
+    if (other.id === selfId || other.isAlive === false) continue;
+    const otherBox = getTankHitbox(other.x, other.y);
+    if (intersectAABB(box, otherBox)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Checks if two bullets intersect (head-on collision cancellation).
+ */
+export function checkBulletVsBullet(
+  bulletA: { x: number; y: number },
+  bulletB: { x: number; y: number }
+): boolean {
+  const boxA = getBulletHitbox(bulletA.x, bulletA.y);
+  const boxB = getBulletHitbox(bulletB.x, bulletB.y);
+  return intersectAABB(boxA, boxB);
+}
+

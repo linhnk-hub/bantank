@@ -123,3 +123,81 @@ export const SIMULATION_CONFIG = {
   MAX_ACCUMULATOR_MS: 250,
   SUB_TILE_SIZE: 8,
 } as const;
+
+export const P1_CONFIG = {
+  STARTING_LIVES: 3,
+  RESPAWN_DELAY_S: 2.0,
+  RESPAWN_SHIELD_S: 3.0,
+  SPAWN_X: 48,
+  SPAWN_Y: 192,
+  SPAWN_DIRECTION: 'UP' as const,
+} as const;
+
+export const ENEMY_CONFIG = {
+  MAX_ACTIVE: 5,
+  TOTAL_COUNT: 30,
+  SPAWN_INTERVAL_S: 1.0, // Minimum 1.0s between successful spawns
+  SPAWN_SHIELD_S: 1.0,   // 1s invulnerability at spawn
+  SPAWN_POINTS: [
+    { x: 0, y: 0 },
+    { x: 96, y: 0 },
+    { x: 192, y: 0 },
+  ] as const,
+  SPECS: {
+    BASIC: {
+      speed: 60,
+      hp: 1,
+      score: 100,
+      aimTime: 0.35,
+      shootCooldown: 1.5,
+    },
+    FAST: {
+      speed: 90,
+      hp: 1,
+      score: 200,
+      aimTime: 0.15,
+      shootCooldown: 1.2,
+    },
+    POWER: {
+      speed: 60,
+      hp: 2,
+      score: 300,
+      aimTime: 0.55,
+      shootCooldown: 2.0,
+    },
+    ARMOR: {
+      speed: 45,
+      hp: 4,
+      score: 400,
+      aimTime: 0.65,
+      shootCooldown: 2.5,
+    },
+  } as const,
+  // Fixed sequence of 30 enemies
+  QUEUE: [
+    ...Array(15).fill('BASIC'),
+    ...Array(7).fill('FAST'),
+    ...Array(5).fill('POWER'),
+    ...Array(3).fill('ARMOR'),
+  ] as const,
+} as const;
+
+export const AI_CONFIG = {
+  DETECTION_RADIUS_PX: 80,
+  LOST_TARGET_HOLD_S: 0.3,
+  SEARCH_MAX_S: 3.0,
+  PATH_RECOMPUTE_THROTTLE_S: 0.5,
+  BASE_TARGET_COORDS: { x: 96, y: 192 }, // Center of 3 Base tiles
+  // Alignment & Aiming
+  ALIGNMENT_TOLERANCE_PX: 4, // Gun bore alignment must be <= 4px
+  // Lead Prediction
+  LEAD_PREDICTION_MAX_TIME_S: 1.0,
+  LEAD_PREDICTION_MAX_DIST_PX: 48,
+  LEAD_PREDICTION_INTERVAL_S: 0.1, // 100ms re-evaluation
+  // Patrol
+  PATROL_MIN_HOLD_DIR_S: 0.5,
+  // Coordinator
+  COORDINATOR_UPDATE_INTERVAL_S: 0.5,
+} as const;
+
+

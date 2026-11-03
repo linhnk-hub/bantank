@@ -10,7 +10,7 @@ import {
   type InputState,
   type RuntimeTerrainState,
 } from './types.ts';
-import { getTankHitbox, checkHitboxVsTerrain, trySafeGridSnap } from './physics.ts';
+import { getTankHitbox, checkHitboxVsTerrain, trySafeGridSnap, checkTankVsTanks } from './physics.ts';
 
 export function createP1Tank(): TankStructure {
   return {
@@ -33,7 +33,8 @@ export function createP1Tank(): TankStructure {
 export function updateTankMovement(
   tank: TankStructure,
   input: InputState,
-  terrain: RuntimeTerrainState
+  terrain: RuntimeTerrainState,
+  otherTanks?: Array<{ id: string; x: number; y: number; isAlive: boolean }>
 ): void {
   if (!tank.isAlive) return;
 
@@ -88,7 +89,10 @@ export function updateTankMovement(
   const nextHitbox = getTankHitbox(nextX, nextY);
   const collision = checkHitboxVsTerrain(nextHitbox, terrain, { forBullet: false });
 
-  if (!collision.collides) {
+  // 5. Test Tank-to-Tank collision if other tanks are provided
+  const tankConflict = otherTanks ? checkTankVsTanks(tank.id, nextHitbox, otherTanks) : false;
+
+  if (!collision.collides && !tankConflict) {
     tank.x = nextX;
     tank.y = nextY;
   }

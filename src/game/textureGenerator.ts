@@ -315,7 +315,14 @@ export function generateTileTextures(scene: Phaser.Scene): void {
   // 12. P1 YELLOW TANK SPRITES (16x16 pixel in 4 directions)
   generateTankTextures(scene);
 
-  // 13. BRICK 8x8 SUB-TILES
+  // 13. ENEMY TANK SPRITES (4 types x 4 directions)
+  generateEnemyTextures(scene);
+
+  // 14. SHIELD AURA & ENEMY BULLETS
+  generateShieldTexture(scene);
+  generateEnemyBulletTexture(scene);
+
+  // 15. BRICK 8x8 SUB-TILES
   generateBrickSubTileTextures(scene);
 }
 
@@ -561,3 +568,219 @@ function drawSubTile(ctx: CanvasRenderingContext2D, srcX: number, srcY: number):
     }
   }
 }
+
+const ENEMY_PALETTES = {
+  BASIC: {
+    main: '#cbd5e1',
+    light: '#f8fafc',
+    dark: '#64748b',
+    track: '#334155',
+    trackLight: '#94a3b8',
+  },
+  FAST: {
+    main: '#06b6d4',
+    light: '#67e8f9',
+    dark: '#0e7490',
+    track: '#164e63',
+    trackLight: '#22d3ee',
+  },
+  POWER: {
+    main: '#16a34a',
+    light: '#86efac',
+    dark: '#14532d',
+    track: '#052e16',
+    trackLight: '#4ade80',
+  },
+  ARMOR: {
+    main: '#dc2626',
+    light: '#f87171',
+    dark: '#991b1b',
+    track: '#450a0a',
+    trackLight: '#ef4444',
+  },
+};
+
+function generateEnemyTextures(scene: Phaser.Scene): void {
+  const directions: Array<'up' | 'down' | 'left' | 'right'> = ['up', 'down', 'left', 'right'];
+  const types = ['BASIC', 'FAST', 'POWER', 'ARMOR'] as const;
+
+  for (const t of types) {
+    const pal = ENEMY_PALETTES[t];
+
+    for (const dir of directions) {
+      const key = `tank_${t.toLowerCase()}_${dir}`;
+      if (scene.textures.exists(key)) continue;
+
+      const canvas = scene.textures.createCanvas(key, 16, 16);
+      if (!canvas) continue;
+      const ctx = canvas.getContext();
+
+      ctx.clearRect(0, 0, 16, 16);
+
+      if (dir === 'up') {
+        // Tracks
+        ctx.fillStyle = pal.track;
+        ctx.fillRect(1, 2, 3, 13);
+        ctx.fillRect(12, 2, 3, 13);
+        ctx.fillStyle = pal.trackLight;
+        ctx.fillRect(1, 3, 3, 2);
+        ctx.fillRect(1, 8, 3, 2);
+        ctx.fillRect(12, 3, 3, 2);
+        ctx.fillRect(12, 8, 3, 2);
+
+        // Body
+        ctx.fillStyle = pal.main;
+        ctx.fillRect(4, 4, 8, 11);
+        ctx.fillStyle = pal.light;
+        ctx.fillRect(4, 4, 8, 1);
+        ctx.fillRect(4, 4, 1, 11);
+        ctx.fillStyle = pal.dark;
+        ctx.fillRect(4, 14, 8, 1);
+        ctx.fillRect(11, 4, 1, 11);
+
+        // Turret
+        ctx.fillStyle = pal.dark;
+        ctx.fillRect(5, 6, 6, 6);
+        ctx.fillStyle = pal.light;
+        ctx.fillRect(6, 7, 4, 4);
+
+        // Cannon
+        ctx.fillStyle = pal.light;
+        ctx.fillRect(7, 0, 2, 7);
+      } else if (dir === 'down') {
+        // Tracks
+        ctx.fillStyle = pal.track;
+        ctx.fillRect(1, 1, 3, 13);
+        ctx.fillRect(12, 1, 3, 13);
+        ctx.fillStyle = pal.trackLight;
+        ctx.fillRect(1, 3, 3, 2);
+        ctx.fillRect(1, 8, 3, 2);
+        ctx.fillRect(12, 3, 3, 2);
+        ctx.fillRect(12, 8, 3, 2);
+
+        // Body
+        ctx.fillStyle = pal.main;
+        ctx.fillRect(4, 1, 8, 11);
+        ctx.fillStyle = pal.light;
+        ctx.fillRect(4, 1, 8, 1);
+        ctx.fillRect(4, 1, 1, 11);
+        ctx.fillStyle = pal.dark;
+        ctx.fillRect(4, 11, 8, 1);
+        ctx.fillRect(11, 1, 1, 11);
+
+        // Turret
+        ctx.fillStyle = pal.dark;
+        ctx.fillRect(5, 4, 6, 6);
+        ctx.fillStyle = pal.light;
+        ctx.fillRect(6, 5, 4, 4);
+
+        // Cannon
+        ctx.fillStyle = pal.light;
+        ctx.fillRect(7, 9, 2, 7);
+      } else if (dir === 'left') {
+        // Tracks
+        ctx.fillStyle = pal.track;
+        ctx.fillRect(2, 1, 13, 3);
+        ctx.fillRect(2, 12, 13, 3);
+        ctx.fillStyle = pal.trackLight;
+        ctx.fillRect(3, 1, 2, 3);
+        ctx.fillRect(8, 1, 2, 3);
+        ctx.fillRect(3, 12, 2, 3);
+        ctx.fillRect(8, 12, 2, 3);
+
+        // Body
+        ctx.fillStyle = pal.main;
+        ctx.fillRect(4, 4, 11, 8);
+        ctx.fillStyle = pal.light;
+        ctx.fillRect(4, 4, 11, 1);
+        ctx.fillRect(4, 4, 1, 8);
+        ctx.fillStyle = pal.dark;
+        ctx.fillRect(4, 11, 11, 1);
+        ctx.fillRect(14, 4, 1, 8);
+
+        // Turret
+        ctx.fillStyle = pal.dark;
+        ctx.fillRect(6, 5, 6, 6);
+        ctx.fillStyle = pal.light;
+        ctx.fillRect(7, 6, 4, 4);
+
+        // Cannon
+        ctx.fillStyle = pal.light;
+        ctx.fillRect(0, 7, 7, 2);
+      } else if (dir === 'right') {
+        // Tracks
+        ctx.fillStyle = pal.track;
+        ctx.fillRect(1, 1, 13, 3);
+        ctx.fillRect(1, 12, 13, 3);
+        ctx.fillStyle = pal.trackLight;
+        ctx.fillRect(3, 1, 2, 3);
+        ctx.fillRect(8, 1, 2, 3);
+        ctx.fillRect(3, 12, 2, 3);
+        ctx.fillRect(8, 12, 2, 3);
+
+        // Body
+        ctx.fillStyle = pal.main;
+        ctx.fillRect(1, 4, 11, 8);
+        ctx.fillStyle = pal.light;
+        ctx.fillRect(1, 4, 11, 1);
+        ctx.fillRect(1, 4, 1, 8);
+        ctx.fillStyle = pal.dark;
+        ctx.fillRect(1, 11, 11, 1);
+        ctx.fillRect(11, 4, 1, 8);
+
+        // Turret
+        ctx.fillStyle = pal.dark;
+        ctx.fillRect(4, 5, 6, 6);
+        ctx.fillStyle = pal.light;
+        ctx.fillRect(5, 6, 4, 4);
+
+        // Cannon
+        ctx.fillStyle = pal.light;
+        ctx.fillRect(9, 7, 7, 2);
+      }
+
+      canvas.refresh();
+    }
+  }
+}
+
+function generateShieldTexture(scene: Phaser.Scene): void {
+  if (scene.textures.exists('shield_aura')) return;
+
+  const canvas = scene.textures.createCanvas('shield_aura', 18, 18);
+  if (!canvas) return;
+  const ctx = canvas.getContext();
+
+  ctx.clearRect(0, 0, 18, 18);
+
+  // Outer glowing ring
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(9, 9, 8, 0, Math.PI * 2);
+  ctx.stroke();
+
+  // Bright sparkles on diagonals
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(9, 0, 1, 2);
+  ctx.fillRect(9, 16, 1, 2);
+  ctx.fillRect(0, 9, 2, 1);
+  ctx.fillRect(16, 9, 2, 1);
+
+  canvas.refresh();
+}
+
+function generateEnemyBulletTexture(scene: Phaser.Scene): void {
+  if (scene.textures.exists('bullet_enemy')) return;
+
+  const canvas = scene.textures.createCanvas('bullet_enemy', 4, 4);
+  if (!canvas) return;
+  const ctx = canvas.getContext();
+
+  ctx.fillStyle = '#ef4444'; // Red outer
+  ctx.fillRect(0, 0, 4, 4);
+  ctx.fillStyle = '#fef08a'; // White-yellow core
+  ctx.fillRect(1, 1, 2, 2);
+  canvas.refresh();
+}
+

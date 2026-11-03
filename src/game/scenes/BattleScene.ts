@@ -5,14 +5,22 @@
 
 import Phaser from 'phaser';
 import { MAP_DIMENSIONS } from '../../core/constants.ts';
-import { TILE_TYPES, SUB_TILE_MASKS, type InputState, type GameCoreState } from '../../core/types.ts';
+import {
+  TILE_TYPES,
+  SUB_TILE_MASKS,
+  type InputState,
+  type GameCoreState,
+} from '../../core/types.ts';
 import { GameEngine } from '../../core/gameEngine.ts';
 import { generateTileTextures } from '../textureGenerator.ts';
 
 export class BattleScene extends Phaser.Scene {
   private engine: GameEngine;
   private p1Sprite?: Phaser.GameObjects.Image;
-  private bulletSprite?: Phaser.GameObjects.Image;
+  private p1ShieldSprite?: Phaser.GameObjects.Image;
+  private enemySprites: Map<string, Phaser.GameObjects.Image> = new Map();
+  private enemyShieldSprites: Map<string, Phaser.GameObjects.Image> = new Map();
+  private bulletSprites: Map<string, Phaser.GameObjects.Image> = new Map();
   private terrainSprites: Map<string, Phaser.GameObjects.GameObject> = new Map();
   private baseSprites: Phaser.GameObjects.Image[] = [];
   private onStateCallback?: (state: GameCoreState) => void;
@@ -46,7 +54,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create(): void {
-    // 1. Generate all textures (tiles, tank, bullet, ruined base)
+    // 1. Generate all textures (tiles, tank, bullet, enemies, ruined base)
     generateTileTextures(this);
 
     // 2. Black background
@@ -58,18 +66,18 @@ export class BattleScene extends Phaser.Scene {
     this.refreshAllTerrain();
 
     // 4. Create Tank P1 Sprite
-    const p1State = this.engine.getState().p1;
-    this.p1Sprite = this.add.image(p1State.x, p1State.y, `tank_p1_${p1State.direction.toLowerCase()}`);
+    const p1 = this.engine.getState().p1;
+    this.p1Sprite = this.add.image(p1.x, p1.y, `tank_p1_${p1.direction.toLowerCase()}`);
     this.p1Sprite.setOrigin(0, 0);
     this.p1Sprite.setDisplaySize(16, 16);
     this.p1Sprite.setDepth(10);
 
-    // 5. Create Bullet Sprite
-    this.bulletSprite = this.add.image(0, 0, 'bullet');
-    this.bulletSprite.setOrigin(0, 0);
-    this.bulletSprite.setDisplaySize(4, 4);
-    this.bulletSprite.setVisible(false);
-    this.bulletSprite.setDepth(15);
+    // 5. Create P1 Shield Aura Sprite
+    this.p1ShieldSprite = this.add.image(p1.x - 1, p1.y - 1, 'shield_aura');
+    this.p1ShieldSprite.setOrigin(0, 0);
+    this.p1ShieldSprite.setDisplaySize(18, 18);
+    this.p1ShieldSprite.setDepth(12);
+    this.p1ShieldSprite.setVisible(false);
 
     // 6. Setup Keyboard Input
     if (this.input.keyboard) {
@@ -99,27 +107,108 @@ export class BattleScene extends Phaser.Scene {
     this.engine.advanceTime(delta, input);
     const state = this.engine.getState();
 
-    // 3. Update Tank Sprite
-    if (this.p1Sprite && state.p1.isAlive) {
-      this.p1Sprite.setPosition(state.p1.x, state.p1.y);
-      this.p1Sprite.setTexture(`tank_p1_${state.p1.direction.toLowerCase()}`);
-      this.p1Sprite.setVisible(true);
-    }
+    // 3. Update P1 Tank & Shield
+    if (this.p1Sprite) {
+      if (state.p1.isAlive && !state.p1State.isDead) {
+        this.p1Sprite.setPosition(state.p1.x, state.p1.y);
+        this.p1Sprite.setTexture(`tank_p1_${state.p1.direction.toLowerCase()}`);
+        this.p1Sprite.setVisible(true);
 
-    // 4. Update Bullet Sprite
-    if (this.bulletSprite) {
-      if (state.bullet !== null) {
-        this.bulletSprite.setPosition(state.bullet.x, state.bullet.y);
-        this.bulletSprite.setVisible(true);
+        const hasShield = state.p1.isShielded || state.p1State.shieldTimer > 0;
+        if (this.p1ShieldSprite) {
+          this.p1ShieldSprite.setPosition(state.p1.x - 1, state.p1.y - 1);
+          this.p1ShieldSprite.setVisible(hasShield);
+        }
       } else {
-        this.bulletSprite.setVisible(false);
+        this.p1Sprite.setVisible(false);
+        if (this.p1ShieldSprite) this.p1ShieldSprite.setVisible(false);
       }
     }
 
-    // 5. Update Dynamic Terrain (Bricks & Base)
+    // 4. Update Enemy Sprites
+    const activeEnemyIds = new Set<string>();
+    for (const enemy of state.enemies) {
+      if (!enemy.isAlive) continue;
+      activeEnemyIds.add(enemy.id);
+
+      let sprite = this.enemySprites.get(enemy.id);
+      const textureKey = `tank_${enemy.enemyType.toLowerCase()}_${enemy.direction.toLowerCase()}`;
+
+      if (!sprite) {
+        sprite = this.add.image(enemy.x, enemy.y, textureKey);
+        sprite.setOrigin(0, 0);
+        sprite.setDisplaySize(16, 16);
+        sprite.setDepth(9);
+        this.enemySprites.set(enemy.id, sprite);
+      } else {
+        sprite.setPosition(enemy.x, enemy.y);
+        if (sprite.texture.key !== textureKey) {
+          sprite.setTexture(textureKey);
+        }
+      }
+
+      // Enemy spawn shield
+      let shield = this.enemyShieldSprites.get(enemy.id);
+      const isShielded = enemy.isShielded || enemy.spawnShieldTimer > 0;
+      if (isShielded) {
+        if (!shield) {
+          shield = this.add.image(enemy.x - 1, enemy.y - 1, 'shield_aura');
+          shield.setOrigin(0, 0);
+          shield.setDisplaySize(18, 18);
+          shield.setDepth(11);
+          this.enemyShieldSprites.set(enemy.id, shield);
+        } else {
+          shield.setPosition(enemy.x - 1, enemy.y - 1);
+          shield.setVisible(true);
+        }
+      } else if (shield) {
+        shield.setVisible(false);
+      }
+    }
+
+    // Remove defunct enemy sprites
+    for (const [id, sprite] of this.enemySprites) {
+      if (!activeEnemyIds.has(id)) {
+        sprite.destroy();
+        this.enemySprites.delete(id);
+        const shield = this.enemyShieldSprites.get(id);
+        if (shield) {
+          shield.destroy();
+          this.enemyShieldSprites.delete(id);
+        }
+      }
+    }
+
+    // 5. Update All Bullets (P1 + Enemies)
+    const activeBulletIds = new Set<string>();
+    for (const b of state.bullets) {
+      activeBulletIds.add(b.id);
+      let bSprite = this.bulletSprites.get(b.id);
+      const bTex = b.ownerType === 'enemy' ? 'bullet_enemy' : 'bullet';
+
+      if (!bSprite) {
+        bSprite = this.add.image(b.x, b.y, bTex);
+        bSprite.setOrigin(0, 0);
+        bSprite.setDisplaySize(4, 4);
+        bSprite.setDepth(15);
+        this.bulletSprites.set(b.id, bSprite);
+      } else {
+        bSprite.setPosition(b.x, b.y);
+      }
+    }
+
+    // Remove destroyed bullet sprites
+    for (const [id, sprite] of this.bulletSprites) {
+      if (!activeBulletIds.has(id)) {
+        sprite.destroy();
+        this.bulletSprites.delete(id);
+      }
+    }
+
+    // 6. Update Dynamic Terrain (Bricks & Base)
     this.syncDynamicTerrain(state);
 
-    // 6. Report state to React
+    // 7. Report state to React
     if (this.onStateCallback) {
       this.onStateCallback(state);
     }
@@ -193,7 +282,6 @@ export class BattleScene extends Phaser.Scene {
     const y = r * 16;
 
     if (mask === SUB_TILE_MASKS.ALL) {
-      // Full brick
       const img = this.add.image(x, y, 'tile_1');
       img.setOrigin(0, 0);
       img.setDisplaySize(16, 16);
@@ -202,7 +290,6 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
 
-    // Container of surviving sub-tiles
     const container = this.add.container(x, y);
     container.setDepth(1);
 
@@ -246,7 +333,6 @@ export class BattleScene extends Phaser.Scene {
       const spriteKey = `brick_${r}_${c}`;
       const existing = this.terrainSprites.get(spriteKey);
 
-      // If mask is 0 but sprite exists, destroy it
       if (mask === 0 && existing) {
         existing.destroy();
         this.terrainSprites.delete(spriteKey);
