@@ -171,92 +171,136 @@ export function generateTileTextures(scene: Phaser.Scene): void {
   // - base_center (col 6): golden eagle head & crest / star
   // - base_right (col 7): right wing of the golden eagle base / bunker
   // - base_single (generic 16x16 fallback)
+  // 9. BASE TILES (16x16 each)
+  // Single Eagle Architecture:
+  // - Col 6: ONLY ONE central Golden Eagle emblem (tile_9_center / tile_eagle_center)
+  // - Col 5: Left protective bunker rampart (tile_9_left / bunker_flank_left, NO eagle)
+  // - Col 7: Right protective bunker rampart (tile_9_right / bunker_flank_right, NO eagle)
+  // - Ruined states: tile_eagle_ruined (Col 6) and bunker_flank_ruined (Col 5 & 7)
+
+  // Left Bunker Rampart (Col 5) - Reinforced fortress concrete and steel plating (NO eagle)
   if (!scene.textures.exists('tile_9_left')) {
     const canvas = scene.textures.createCanvas('tile_9_left', 16, 16);
     if (canvas) {
       const ctx = canvas.getContext();
-      ctx.fillStyle = '#000000';
+      ctx.fillStyle = '#0a0a0a';
       ctx.fillRect(0, 0, 16, 16);
 
-      // Base bunker frame
-      ctx.fillStyle = '#854d0e';
+      // Heavy armored bunker foundation
+      ctx.fillStyle = '#3f3f46'; // Slate concrete
       ctx.fillRect(1, 1, 15, 14);
 
-      // Left wing of golden eagle
-      ctx.fillStyle = '#facc15';
-      ctx.fillRect(6, 3, 10, 10);
-      ctx.fillRect(3, 5, 6, 6);
-      ctx.fillRect(1, 7, 4, 4);
+      // Steel armor plating trim
+      ctx.fillStyle = '#52525b';
+      ctx.fillRect(2, 2, 13, 3);
+      ctx.fillRect(2, 6, 13, 8);
 
-      // Feathers / details
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(6, 4, 8, 1);
-      ctx.fillRect(3, 6, 4, 1);
+      // Slits & rivets
+      ctx.fillStyle = '#18181b';
+      ctx.fillRect(4, 7, 8, 2); // Bunker observation slit
+      ctx.fillRect(3, 3, 2, 1); // Rivets
+      ctx.fillRect(11, 3, 2, 1);
+      ctx.fillRect(3, 11, 2, 1);
+      ctx.fillRect(11, 11, 2, 1);
 
-      ctx.fillStyle = '#713f12';
-      ctx.fillRect(6, 8, 9, 1);
-      ctx.fillRect(4, 10, 6, 1);
+      // Chamfer highlight
+      ctx.fillStyle = '#71717a';
+      ctx.fillRect(1, 1, 15, 1);
+      ctx.fillRect(1, 1, 1, 14);
+
       canvas.refresh();
     }
   }
 
+  // Central Golden Eagle Emblem (Col 6) - The ONLY Golden Eagle in the game!
   if (!scene.textures.exists('tile_9_center')) {
     const canvas = scene.textures.createCanvas('tile_9_center', 16, 16);
     if (canvas) {
       const ctx = canvas.getContext();
-      ctx.fillStyle = '#000000';
+      ctx.fillStyle = '#0a0a0a';
       ctx.fillRect(0, 0, 16, 16);
 
-      // Base bunker center
-      ctx.fillStyle = '#854d0e';
+      // Bunker foundation frame
+      ctx.fillStyle = '#78350f';
       ctx.fillRect(0, 1, 16, 14);
 
-      // Golden Eagle Head & Body
-      ctx.fillStyle = '#facc15';
-      ctx.fillRect(2, 2, 12, 12);
+      // Golden Eagle Wings & Body (magnificent wingspan within the emblem)
+      ctx.fillStyle = '#eab308'; // Bright Gold
+      ctx.fillRect(1, 2, 14, 12);
 
-      // Eagle white crown / beak
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(5, 3, 6, 3);
-      ctx.fillStyle = '#fb923c'; // Beak
-      ctx.fillRect(7, 5, 2, 2);
+      // Wing feathers
+      ctx.fillStyle = '#fde047'; // Light Gold
+      ctx.fillRect(2, 3, 3, 4);
+      ctx.fillRect(11, 3, 3, 4);
+      ctx.fillRect(1, 5, 2, 3);
+      ctx.fillRect(13, 5, 2, 3);
 
-      // Center Star / Crest
-      ctx.fillStyle = '#dc2626';
-      ctx.fillRect(6, 8, 4, 4);
+      // Eagle White Crown & Head
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(7, 9, 2, 2);
+      ctx.fillRect(6, 2, 4, 4);
+
+      // Eagle Beak
+      ctx.fillStyle = '#ea580c';
+      ctx.fillRect(7, 4, 2, 2);
+
+      // Central Imperial Emblem Star
+      ctx.fillStyle = '#dc2626'; // Red star shield
+      ctx.fillRect(5, 7, 6, 6);
+      ctx.fillStyle = '#fef08a'; // Gold star core
+      ctx.fillRect(7, 8, 2, 4);
+      ctx.fillRect(6, 9, 4, 2);
+
       canvas.refresh();
     }
   }
 
+  // Right Bunker Rampart (Col 7) - Symmetrical reinforced fortress concrete (NO eagle)
   if (!scene.textures.exists('tile_9_right')) {
     const canvas = scene.textures.createCanvas('tile_9_right', 16, 16);
     if (canvas) {
       const ctx = canvas.getContext();
-      ctx.fillStyle = '#000000';
+      ctx.fillStyle = '#0a0a0a';
       ctx.fillRect(0, 0, 16, 16);
 
-      // Base bunker frame
-      ctx.fillStyle = '#854d0e';
+      // Heavy armored bunker foundation
+      ctx.fillStyle = '#3f3f46';
       ctx.fillRect(0, 1, 15, 14);
 
-      // Right wing of golden eagle
-      ctx.fillStyle = '#facc15';
-      ctx.fillRect(0, 3, 10, 10);
-      ctx.fillRect(7, 5, 6, 6);
-      ctx.fillRect(11, 7, 4, 4);
+      // Steel armor plating trim
+      ctx.fillStyle = '#52525b';
+      ctx.fillRect(1, 2, 13, 3);
+      ctx.fillRect(1, 6, 13, 8);
 
-      // Feathers / details
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(2, 4, 8, 1);
-      ctx.fillRect(9, 6, 4, 1);
+      // Slits & rivets
+      ctx.fillStyle = '#18181b';
+      ctx.fillRect(4, 7, 8, 2); // Bunker observation slit
+      ctx.fillRect(3, 3, 2, 1); // Rivets
+      ctx.fillRect(11, 3, 2, 1);
+      ctx.fillRect(3, 11, 2, 1);
+      ctx.fillRect(11, 11, 2, 1);
 
-      ctx.fillStyle = '#713f12';
-      ctx.fillRect(1, 8, 9, 1);
-      ctx.fillRect(6, 10, 6, 1);
+      // Chamfer highlight
+      ctx.fillStyle = '#71717a';
+      ctx.fillRect(0, 1, 15, 1);
+      ctx.fillRect(14, 1, 1, 14);
+
       canvas.refresh();
     }
+  }
+
+  // Create semantic aliases for clarity
+  if (!scene.textures.exists('tile_eagle_center')) {
+    // Mirror tile_9_center
+    const img = scene.textures.get('tile_9_center');
+    if (img) (scene.textures as any).addCanvas?.('tile_eagle_center', (img.getSourceImage() as any));
+  }
+  if (!scene.textures.exists('bunker_flank_left')) {
+    const img = scene.textures.get('tile_9_left');
+    if (img) (scene.textures as any).addCanvas?.('bunker_flank_left', (img.getSourceImage() as any));
+  }
+  if (!scene.textures.exists('bunker_flank_right')) {
+    const img = scene.textures.get('tile_9_right');
+    if (img) (scene.textures as any).addCanvas?.('bunker_flank_right', (img.getSourceImage() as any));
   }
 
   // Generic fallback for any other BASE cell
@@ -266,7 +310,7 @@ export function generateTileTextures(scene: Phaser.Scene): void {
       const ctx = canvas.getContext();
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, 16, 16);
-      ctx.fillStyle = '#facc15';
+      ctx.fillStyle = '#eab308';
       ctx.fillRect(2, 2, 12, 12);
       ctx.fillStyle = '#dc2626';
       ctx.fillRect(5, 5, 6, 6);
@@ -274,7 +318,7 @@ export function generateTileTextures(scene: Phaser.Scene): void {
     }
   }
 
-  // 10. RUINED BASE (16x16 pixel) - Rubble and destroyed flag
+  // 10. RUINED BASE (16x16 pixel) - Central destroyed eagle rubble
   if (!scene.textures.exists('tile_9_ruined')) {
     const canvas = scene.textures.createCanvas('tile_9_ruined', 16, 16);
     if (canvas) {
@@ -283,18 +327,47 @@ export function generateTileTextures(scene: Phaser.Scene): void {
       ctx.fillRect(0, 0, 16, 16);
 
       // Charred rubble
+      ctx.fillStyle = '#262626';
+      ctx.fillRect(1, 4, 14, 11);
       ctx.fillStyle = '#404040';
-      ctx.fillRect(2, 6, 12, 9);
-      ctx.fillStyle = '#737373';
-      ctx.fillRect(4, 8, 8, 5);
+      ctx.fillRect(3, 7, 10, 6);
 
-      // Skull / ruins symbol
-      ctx.fillStyle = '#e5e5e5';
+      // Broken golden crown shards
+      ctx.fillStyle = '#854d0e';
+      ctx.fillRect(3, 9, 3, 2);
+      ctx.fillRect(10, 8, 3, 2);
+
+      // Charred ruins skull
+      ctx.fillStyle = '#a3a3a3';
       ctx.fillRect(6, 4, 4, 3);
       ctx.fillRect(5, 7, 6, 3);
       ctx.fillStyle = '#000000';
       ctx.fillRect(6, 8, 1, 1);
       ctx.fillRect(9, 8, 1, 1);
+      canvas.refresh();
+    }
+  }
+
+  // Ruined Bunker Flanks (Cols 5 & 7) - Cracked concrete and charred rebar rubble
+  if (!scene.textures.exists('bunker_flank_ruined')) {
+    const canvas = scene.textures.createCanvas('bunker_flank_ruined', 16, 16);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, 16, 16);
+
+      // Cracked concrete rubble
+      ctx.fillStyle = '#262626';
+      ctx.fillRect(1, 5, 14, 10);
+      ctx.fillStyle = '#52525b';
+      ctx.fillRect(2, 8, 5, 5);
+      ctx.fillRect(9, 7, 5, 6);
+
+      // Rebar steel exposed
+      ctx.fillStyle = '#71717a';
+      ctx.fillRect(4, 3, 1, 6);
+      ctx.fillRect(11, 4, 1, 5);
+      ctx.fillRect(7, 10, 2, 2);
       canvas.refresh();
     }
   }

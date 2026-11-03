@@ -18,11 +18,13 @@ import {
   type ActiveDirection,
 } from './components/TouchControls.tsx';
 import { RotateGuideModal } from './components/RotateGuideModal.tsx';
+import { FullscreenGuideModal } from './components/FullscreenGuideModal.tsx';
 import { DevToolsDrawer } from './components/DevToolsDrawer.tsx';
 import { STAGE_1_MAP, MAP_DIMENSIONS } from './core/constants.ts';
 import { validateStageMap } from './core/mapValidator.ts';
 import { GameEngine } from './core/gameEngine.ts';
 import { useOrientation } from './hooks/useOrientation.ts';
+import { useFullscreen } from './hooks/useFullscreen.ts';
 import type { GameCoreState, InputState } from './core/types.ts';
 import type { SceneTileHoverInfo } from './game/scenes/StageViewerScene.ts';
 import {
@@ -38,6 +40,8 @@ import {
   Shield,
   Layers,
   Monitor,
+  Maximize,
+  Minimize,
 } from 'lucide-react';
 
 export default function App() {
@@ -55,6 +59,14 @@ export default function App() {
 
   // Orientation & Responsive hook
   const { isLandscape, requestLandscape, showRotateGuide, dismissGuide } = useOrientation();
+
+  // Fullscreen hook for mobile & cross-platform
+  const {
+    isFullscreen,
+    toggleFullscreen,
+    showFullscreenGuide,
+    dismissGuide: dismissFsGuide,
+  } = useFullscreen();
 
   // Collapsible Menu & Developer Tools state
   const [isMenuExpanded, setIsMenuExpanded] = useState<boolean>(false);
@@ -166,17 +178,34 @@ export default function App() {
     }
   }, [isPaused]);
 
+  // Listen for Space / Enter to start game when in MENU state
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (gameState?.matchState === 'MENU') {
+        if (e.code === 'Space' || e.code === 'Enter') {
+          e.preventDefault();
+          handleRestart();
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [gameState?.matchState, handleRestart]);
+
   const isGameOverModalOpen = Boolean(
-    gameState && (gameState.isGameOver || gameState.matchState === 'GAME_OVER')
+    gameState && gameState.matchState === 'GAME_OVER'
   );
   const isStageClearModalOpen = Boolean(
-    gameState && (gameState.isStageClear || gameState.matchState === 'STAGE_CLEAR')
+    gameState && gameState.matchState === 'STAGE_CLEAR'
   );
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
       {/* Fallback Screen Orientation Guide Modal */}
       <RotateGuideModal isOpen={showRotateGuide} onClose={dismissGuide} />
+
+      {/* Fallback Fullscreen API Guide Modal (iOS Safari & Restricted Browsers) */}
+      <FullscreenGuideModal isOpen={showFullscreenGuide} onClose={dismissFsGuide} />
 
       {/* Developer & QA Test Suite Drawer */}
       <DevToolsDrawer
@@ -227,6 +256,16 @@ export default function App() {
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={toggleFullscreen}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
+                title={isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}
+              >
+                {isFullscreen ? <Minimize className="w-3 h-3 text-amber-400" /> : <Maximize className="w-3 h-3 text-amber-400" />}
+                <span className="hidden sm:inline">{isFullscreen ? 'Thu nhỏ' : 'Toàn MH'}</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={isPaused ? handleResume : handlePause}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold shadow"
               >
@@ -241,15 +280,15 @@ export default function App() {
                 title="Bảng Kiểm thử & QA"
               >
                 <Wrench className="w-3 h-3 text-amber-400" />
-                <span className="hidden sm:inline">QA (60 Tests)</span>
+                <span className="hidden sm:inline">QA (75 Tests)</span>
               </button>
             </div>
           </header>
 
-          {/* Landscape Main 3-Column Combat View */}
-          <main className="flex-1 flex flex-row items-center justify-between w-full h-[calc(100vh-40px)] px-4 sm:px-8 py-2 overflow-hidden">
-            {/* Left Column: Modern Virtual Joystick */}
-            <div className="flex items-center justify-center shrink-0 w-38 h-38">
+          {/* Landscape Main 3-Column Combat View (Balanced & Centered) */}
+          <main className="flex-1 flex flex-row items-center w-full h-[calc(100dvh-40px)] px-2 sm:px-6 py-1 overflow-hidden">
+            {/* Left Column: Virtual Joystick Centered in left zone */}
+            <div className="flex-1 flex items-center justify-center h-full min-w-[140px]">
               <VirtualJoystick
                 activeDirection={landscapeDirection}
                 onDirectionChange={handleLandscapeDirectionChange}
@@ -260,18 +299,41 @@ export default function App() {
               />
             </div>
 
-            {/* Center Column: Game Canvas 1:1 Aspect Ratio (Perfect Square) */}
-            <div className="flex-1 flex items-center justify-center h-full max-h-[calc(100vh-48px)] aspect-square overflow-hidden p-1">
+            {/* Center Column: Game Canvas 1:1 Aspect Ratio (Perfect Square) Centered */}
+            <div className="flex-none flex items-center justify-center h-full max-h-[calc(100dvh-48px)] aspect-square overflow-hidden p-1 relative">
               <PhaserGame
                 mode="battle"
                 engine={gameEngine}
                 onStateUpdate={setGameState}
                 onPause={handlePause}
               />
+
+              {/* In MENU state: Overlay allowing immediate match start */}
+              {gameState?.matchState === 'MENU' && (
+                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20 rounded-xl">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center font-black text-black text-sm mb-2 shadow-lg">
+                    BT
+                  </div>
+                  <h2 className="text-base font-black text-white tracking-wider mb-1">
+                    BANTANK ONLINE
+                  </h2>
+                  <p className="text-[11px] text-neutral-400 mb-3">
+                    Chiến dịch Solo • 30 Xe Địch • 1 Căn Cứ Đại Bàng
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleRestart}
+                    className="py-2 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-lg shadow-amber-500/30 transition-transform active:scale-95 flex items-center gap-1.5"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-black" />
+                    <span>BẮT ĐẦU TRẬN ĐẤU</span>
+                  </button>
+                </div>
+              )}
             </div>
 
-            {/* Right Column: Virtual Shoot Action Button */}
-            <div className="flex items-center justify-center shrink-0 w-38 h-38">
+            {/* Right Column: Virtual Shoot Action Button Centered in right zone */}
+            <div className="flex-1 flex items-center justify-center h-full min-w-[140px]">
               <VirtualShootButton
                 isShooting={landscapeShooting}
                 onShootChange={handleLandscapeShootChange}
@@ -307,6 +369,17 @@ export default function App() {
 
               {/* Header Right Actions */}
               <div className="flex items-center gap-1.5 text-xs">
+                {/* Fullscreen API Toggle Button */}
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 hover:border-amber-500 font-semibold transition-all active:scale-95 shadow"
+                  title={isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}
+                >
+                  {isFullscreen ? <Minimize className="w-3.5 h-3.5 text-amber-400" /> : <Maximize className="w-3.5 h-3.5 text-amber-400" />}
+                  <span className="text-xs hidden sm:inline">{isFullscreen ? 'Thu nhỏ' : 'Toàn MH'}</span>
+                </button>
+
                 {/* Screen Orientation Rotate Button (Mobile/Tablet) */}
                 <button
                   type="button"
@@ -327,7 +400,7 @@ export default function App() {
                   <Wrench className="w-3.5 h-3.5 text-amber-400" />
                   <span className="hidden sm:inline">Kiểm thử</span>
                   <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
-                    60 Tests
+                    75 Tests
                   </span>
                 </button>
 
@@ -347,6 +420,13 @@ export default function App() {
             {isMenuExpanded && (
               <div className="mt-2.5 pt-2 border-t border-neutral-800 flex flex-wrap items-center justify-between gap-2 sm:hidden text-xs animate-fade-in">
                 <button
+                  onClick={toggleFullscreen}
+                  className="flex items-center gap-1.5 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-200 font-semibold text-xs"
+                >
+                  {isFullscreen ? <Minimize className="w-3.5 h-3.5 text-amber-400" /> : <Maximize className="w-3.5 h-3.5 text-amber-400" />}
+                  <span>{isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}</span>
+                </button>
+                <button
                   onClick={() => {
                     setIsDevDrawerOpen(true);
                     setIsMenuExpanded(false);
@@ -354,7 +434,7 @@ export default function App() {
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-200 font-semibold"
                 >
                   <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Mở bảng 60 Tests Tự Động</span>
+                  <span>Bảng 75 Tests Tự Động</span>
                 </button>
                 <button
                   onClick={() => setShowTouchControls((v) => !v)}
@@ -413,13 +493,36 @@ export default function App() {
                 </div>
 
                 {/* Canvas Container: Prominently enlarged on PC up to 728px square */}
-                <div className="p-3 sm:p-5 lg:p-6 bg-neutral-950/80 flex items-center justify-center min-h-[380px] sm:min-h-[500px] lg:min-h-[640px] xl:min-h-[720px]">
+                <div className="p-3 sm:p-5 lg:p-6 bg-neutral-950/80 flex items-center justify-center min-h-[380px] sm:min-h-[500px] lg:min-h-[640px] xl:min-h-[720px] relative">
                   <PhaserGame
                     mode="battle"
                     engine={gameEngine}
                     onStateUpdate={setGameState}
                     onPause={handlePause}
                   />
+
+                  {/* In MENU state: Overlay allowing immediate match start */}
+                  {gameState?.matchState === 'MENU' && (
+                    <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-20 rounded-xl">
+                      <div className="w-14 h-14 rounded-2xl bg-amber-500 flex items-center justify-center font-black text-black text-xl mb-3 shadow-xl shadow-amber-500/20">
+                        BT
+                      </div>
+                      <h2 className="text-xl sm:text-2xl font-black text-white tracking-wider mb-1.5">
+                        BANTANK ONLINE
+                      </h2>
+                      <p className="text-xs sm:text-sm text-neutral-400 mb-5 max-w-sm">
+                        Chiến dịch Solo • 30 Xe Địch • 1 Đại Bàng Hoàng Gia • Tốc độ 60Hz Chuẩn Xác
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleRestart}
+                        className="py-3 px-8 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-sm shadow-xl shadow-amber-500/30 transition-transform active:scale-95 flex items-center gap-2.5"
+                      >
+                        <Play className="w-4 h-4 fill-black" />
+                        <span>BẮT ĐẦU TRẬN ĐẤU (SPACE / ENTER)</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* Viewport Footer */}
@@ -472,11 +575,11 @@ export default function App() {
                     <span className="font-bold text-white">Bảng Kiểm Thử & QA</span>
                   </div>
                   <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
-                    60/60 PASS
+                    75/75 PASS
                   </span>
                 </div>
                 <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  Đã kiểm toán và tích hợp toàn bộ 60 kiểm thử tự động (M1, M2, M3, M4, Sửa lỗi, UI Polish & Virtual Joystick) trong ngăn kéo QA riêng biệt.
+                  Đã kiểm toán và tích hợp toàn bộ 75 kiểm thử tự động (M1, M2, M3, M4, Sửa lỗi, UI Polish, Joystick & 5 Nhóm Gameplay/UI Polish) trong ngăn kéo QA riêng biệt.
                 </p>
                 <button
                   type="button"

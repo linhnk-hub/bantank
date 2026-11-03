@@ -27,6 +27,7 @@ export class BattleScene extends Phaser.Scene {
     row: number;
     col: number;
     normalTexKey: string;
+    ruinedTexKey: string;
   }> = [];
   private lastStageId: number = -1;
   private lastTickCount: number = -1;
@@ -155,12 +156,29 @@ export class BattleScene extends Phaser.Scene {
         this.p1Sprite.setVisible(true);
 
         const hasShield = state.p1.isShielded || state.p1State.shieldTimer > 0;
-        if (this.p1ShieldSprite) {
-          this.p1ShieldSprite.setPosition(state.p1.x - 1, state.p1.y - 1);
-          this.p1ShieldSprite.setVisible(hasShield);
+        if (hasShield) {
+          // Visual pulse/flash (alpha oscillation & glowing aura) on the tank sprite
+          // When paused, shieldTimer freezes, so pulse/flash freezes automatically
+          const pulsePhase = Math.floor(state.p1State.shieldTimer * 10) % 2 === 0;
+          const tankAlpha = pulsePhase ? 0.7 : 1.0;
+          const auraAlpha = pulsePhase ? 0.95 : 0.45;
+
+          this.p1Sprite.setAlpha(tankAlpha);
+
+          if (this.p1ShieldSprite) {
+            this.p1ShieldSprite.setPosition(state.p1.x - 1, state.p1.y - 1);
+            this.p1ShieldSprite.setVisible(true);
+            this.p1ShieldSprite.setAlpha(auraAlpha);
+          }
+        } else {
+          this.p1Sprite.setAlpha(1.0);
+          if (this.p1ShieldSprite) {
+            this.p1ShieldSprite.setVisible(false);
+          }
         }
       } else {
         this.p1Sprite.setVisible(false);
+        this.p1Sprite.setAlpha(1.0);
         if (this.p1ShieldSprite) this.p1ShieldSprite.setVisible(false);
       }
     }
@@ -275,11 +293,17 @@ export class BattleScene extends Phaser.Scene {
         }
 
         if (tileType === TILE_TYPES.BASE) {
-          let normalTexKey = 'tile_9_center';
-          if (r === 12 && c === 5) normalTexKey = 'tile_9_left';
-          else if (r === 12 && c === 7) normalTexKey = 'tile_9_right';
+          let normalTexKey = 'tile_9_center'; // Central Golden Eagle
+          let ruinedTexKey = 'tile_9_ruined';  // Ruined Central Eagle
+          if (r === 12 && c === 5) {
+            normalTexKey = 'tile_9_left';      // Left Bunker Rampart (NO eagle)
+            ruinedTexKey = 'bunker_flank_ruined';
+          } else if (r === 12 && c === 7) {
+            normalTexKey = 'tile_9_right';     // Right Bunker Rampart (NO eagle)
+            ruinedTexKey = 'bunker_flank_ruined';
+          }
 
-          const texKey = terrain.isBaseDestroyed ? 'tile_9_ruined' : normalTexKey;
+          const texKey = terrain.isBaseDestroyed ? ruinedTexKey : normalTexKey;
 
           const baseImg = this.add.image(x, y, texKey);
           baseImg.setOrigin(0, 0);
@@ -291,6 +315,7 @@ export class BattleScene extends Phaser.Scene {
             row: r,
             col: c,
             normalTexKey,
+            ruinedTexKey,
           });
           continue;
         }
@@ -364,8 +389,9 @@ export class BattleScene extends Phaser.Scene {
     // Check base ruins: switch to ruined if destroyed, restore intact if not destroyed
     if (terrain.isBaseDestroyed) {
       for (const item of this.baseSprites) {
-        if (item.sprite.active && item.sprite.texture.key !== 'tile_9_ruined') {
-          item.sprite.setTexture('tile_9_ruined');
+        const targetRuined = item.ruinedTexKey || 'tile_9_ruined';
+        if (item.sprite.active && item.sprite.texture.key !== targetRuined) {
+          item.sprite.setTexture(targetRuined);
         }
       }
     } else {

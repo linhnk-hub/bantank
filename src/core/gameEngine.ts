@@ -201,8 +201,17 @@ export class GameEngine {
     this.isPaused = true;
     this.accumulatorMs = 0;
     this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
+    this.state.isGameOver = false;
+    this.state.isStageClear = false;
+    this.state.gameOverReason = null;
+    this.state.bullets = [];
+    this.state.bullet = null;
     this.state.matchState = MATCH_STATES.MENU;
     this.matchStateMachine.transitionTo(MATCH_STATES.MENU, true);
+  }
+
+  public startMatch(): void {
+    this.restartStage();
   }
 
   public advanceToNextStage(): boolean {

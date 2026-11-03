@@ -252,26 +252,28 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
   );
 
   return (
-    <div className="w-full flex items-center justify-between select-none touch-none py-2 px-3 bg-neutral-950/80 rounded-xl border border-neutral-800">
-      {/* Left: Virtual Joystick (or D-Pad fallback) */}
-      {controlType === 'joystick' ? (
-        <VirtualJoystick
-          activeDirection={activeDirection}
-          onDirectionChange={handleDirectionChange}
-          size={136}
-          knobSize={50}
-          deadZone={14}
-          disabled={isPaused}
-        />
-      ) : (
-        <VirtualDPad
-          activeDirection={activeDirection}
-          onDirectionChange={handleDirectionChange}
-        />
-      )}
+    <div className="w-full grid grid-cols-3 items-center justify-items-center select-none touch-none py-3 px-2 bg-neutral-950/80 rounded-xl border border-neutral-800 shadow-inner">
+      {/* Left Column: Virtual Joystick Centered */}
+      <div className="w-full flex items-center justify-center">
+        {controlType === 'joystick' ? (
+          <VirtualJoystick
+            activeDirection={activeDirection}
+            onDirectionChange={handleDirectionChange}
+            size={136}
+            knobSize={50}
+            deadZone={14}
+            disabled={isPaused}
+          />
+        ) : (
+          <VirtualDPad
+            activeDirection={activeDirection}
+            onDirectionChange={handleDirectionChange}
+          />
+        )}
+      </div>
 
-      {/* Center: Pause Button */}
-      <div className="flex flex-col items-center gap-1 shrink-0">
+      {/* Center Column: Pause Button Centered */}
+      <div className="w-full flex flex-col items-center justify-center gap-1 shrink-0">
         <button
           type="button"
           onClick={onPauseClick}
@@ -285,11 +287,13 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
         </span>
       </div>
 
-      {/* Right: Shoot Action Button (20x20 = 80px touch target) */}
-      <VirtualShootButton
-        isShooting={isShooting}
-        onShootChange={handleShootChange}
-      />
+      {/* Right Column: Shoot Action Button Centered */}
+      <div className="w-full flex items-center justify-center">
+        <VirtualShootButton
+          isShooting={isShooting}
+          onShootChange={handleShootChange}
+        />
+      </div>
     </div>
   );
 };
