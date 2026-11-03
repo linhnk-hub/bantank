@@ -397,6 +397,9 @@ export function generateTileTextures(scene: Phaser.Scene): void {
 
   // 15. BRICK 8x8 SUB-TILES
   generateBrickSubTileTextures(scene);
+
+  // 16. EXPLOSION & HIT SPARK EFFECTS
+  generateExplosionTextures(scene);
 }
 
 function generateTankTextures(scene: Phaser.Scene): void {
@@ -855,5 +858,102 @@ function generateEnemyBulletTexture(scene: Phaser.Scene): void {
   ctx.fillStyle = '#fef08a'; // White-yellow core
   ctx.fillRect(1, 1, 2, 2);
   canvas.refresh();
+}
+
+function generateExplosionTextures(scene: Phaser.Scene): void {
+  // 1. Small Hit Spark (8x8) for non-lethal impact
+  if (!scene.textures.exists('hit_spark')) {
+    const canvas = scene.textures.createCanvas('hit_spark', 8, 8);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      ctx.clearRect(0, 0, 8, 8);
+      ctx.fillStyle = '#ea580c';
+      ctx.fillRect(3, 1, 2, 6);
+      ctx.fillRect(1, 3, 6, 2);
+      ctx.fillStyle = '#fef08a';
+      ctx.fillRect(3, 3, 2, 2);
+      canvas.refresh();
+    }
+  }
+
+  // 2. Explosion Frame 1 (16x16) - Initial flash
+  if (!scene.textures.exists('explosion_1')) {
+    const canvas = scene.textures.createCanvas('explosion_1', 16, 16);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      ctx.clearRect(0, 0, 16, 16);
+      ctx.fillStyle = '#ea580c';
+      ctx.beginPath();
+      ctx.arc(8, 8, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fde047';
+      ctx.beginPath();
+      ctx.arc(8, 8, 3, 0, Math.PI * 2);
+      ctx.fill();
+      canvas.refresh();
+    }
+  }
+
+  // 3. Explosion Frame 2 (24x24) - Expanding fireball
+  if (!scene.textures.exists('explosion_2')) {
+    const canvas = scene.textures.createCanvas('explosion_2', 24, 24);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      ctx.clearRect(0, 0, 24, 24);
+      ctx.fillStyle = '#dc2626';
+      ctx.beginPath();
+      ctx.arc(12, 12, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#f97316';
+      ctx.beginPath();
+      ctx.arc(12, 12, 6, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fef08a';
+      ctx.beginPath();
+      ctx.arc(12, 12, 3, 0, Math.PI * 2);
+      ctx.fill();
+      canvas.refresh();
+    }
+  }
+
+  // 4. Explosion Frame 3 (32x32) - Maximum blast & smoke
+  if (!scene.textures.exists('explosion_3')) {
+    const canvas = scene.textures.createCanvas('explosion_3', 32, 32);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      ctx.clearRect(0, 0, 32, 32);
+      ctx.fillStyle = '#404040';
+      ctx.beginPath();
+      ctx.arc(16, 16, 13, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#ea580c';
+      ctx.beginPath();
+      ctx.arc(16, 16, 9, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fde047';
+      ctx.beginPath();
+      ctx.arc(16, 16, 5, 0, Math.PI * 2);
+      ctx.fill();
+      canvas.refresh();
+    }
+  }
+
+  // 5. Explosion Frame 4 (24x24) - Dissipating smoke
+  if (!scene.textures.exists('explosion_4')) {
+    const canvas = scene.textures.createCanvas('explosion_4', 24, 24);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      ctx.clearRect(0, 0, 24, 24);
+      ctx.fillStyle = '#262626';
+      ctx.beginPath();
+      ctx.arc(12, 12, 8, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#737373';
+      ctx.beginPath();
+      ctx.arc(12, 12, 4, 0, Math.PI * 2);
+      ctx.fill();
+      canvas.refresh();
+    }
+  }
 }
 

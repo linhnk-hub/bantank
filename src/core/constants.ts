@@ -17,7 +17,7 @@ export const MAP_DIMENSIONS = {
  * Stage 1 map matrix officially provided by project owner:
  * 13 rows x 13 columns
  * 0 = EMPTY, 1 = BRICK, 2 = STEEL, 3 = WATER, 4 = GRASS, 5 = ICE, 9 = BASE
- * Preserves exact 3 BASE cells at row 12 [cols 5, 6, 7].
+ * Preserves single central Eagle at row 12, col 6 protected by brick walls at col 5 and col 7.
  */
 export const STAGE_1_MAP: StageMapMatrix = [
   [0,0,0,0,0,0,0,0,0,0,0,0,0],
@@ -32,7 +32,7 @@ export const STAGE_1_MAP: StageMapMatrix = [
   [1,1,0,1,1,1,0,1,1,1,0,1,1],
   [0,0,0,0,0,0,0,0,0,0,0,0,0],
   [0,1,1,0,1,1,1,1,1,0,1,1,0],
-  [0,1,1,0,1,9,9,9,1,0,1,1,0]
+  [0,1,1,0,1,1,9,1,1,0,1,1,0]
 ];
 
 export const TILE_METADATA: Record<number, {

@@ -410,10 +410,10 @@ export function runTC11(): TestCaseResult {
  */
 export function runTC12(): TestCaseResult {
   const fixtureTerrain = createRuntimeTerrainState();
-  fixtureTerrain.currentMap[11][5] = TILE_TYPES.EMPTY; // Clear protecting brick to test direct bullet hit on Base
+  fixtureTerrain.currentMap[11][6] = TILE_TYPES.EMPTY; // Clear protecting brick to test direct bullet hit on Base (Eagle at [12, 6])
 
   const tank = createP1Tank();
-  tank.x = 80;
+  tank.x = 96;
   tank.y = 160;
   tank.direction = 'DOWN';
 

@@ -594,14 +594,14 @@ export function runM313(): TestCaseResult {
   const engine = new GameEngine(undefined, undefined, false);
   const state = engine.getState();
 
-  // Clear brick protecting base at (11, 5) so bullet hits Base directly
-  state.terrain.currentMap[11][5] = TILE_TYPES.EMPTY;
+  // Clear brick protecting base at (11, 6) so bullet hits Base directly at (12, 6)
+  state.terrain.currentMap[11][6] = TILE_TYPES.EMPTY;
 
   const enemyBullet = {
     id: 'base_killer',
     ownerId: 'enemy_bot',
     ownerType: 'enemy' as const,
-    x: 80,
+    x: 96,
     y: 190,
     direction: 'DOWN' as Direction,
     speed: 160,

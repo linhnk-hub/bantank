@@ -20,6 +20,7 @@ interface PhaserGameProps {
   // Props for Milestone 2 battle
   engine?: GameEngine;
   onStateUpdate?: (state: GameCoreState) => void;
+  onFpsUpdate?: (fps: number) => void;
   onPause?: () => void;
 }
 
@@ -30,6 +31,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   onTileHover,
   engine,
   onStateUpdate,
+  onFpsUpdate,
   onPause,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,6 +56,9 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       battleSceneRef.current = battleScene;
       if (onStateUpdate) {
         battleScene.setStateCallback(onStateUpdate);
+      }
+      if (onFpsUpdate) {
+        battleScene.setFpsCallback(onFpsUpdate);
       }
       if (onPause) {
         battleScene.setPauseCallback(onPause);
@@ -125,12 +130,19 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     }
   }, [onStateUpdate]);
 
+  // Sync fps callback (Battle mode)
+  useEffect(() => {
+    if (battleSceneRef.current && onFpsUpdate) {
+      battleSceneRef.current.setFpsCallback(onFpsUpdate);
+    }
+  }, [onFpsUpdate]);
+
   return (
     <div className="relative flex items-center justify-center w-full h-full select-none overflow-hidden">
-      {/* Crisp pixel scaling container: strictly aspect-square 1:1, responsive max-h and max-w up to 3.5x (728px) */}
+      {/* Crisp pixel scaling container: strictly aspect-square 1:1 with crisp pixel scaling */}
       <div
         ref={containerRef}
-        className="w-full max-w-[min(calc(100vh-130px),728px,100%)] aspect-square rounded-xl border-2 sm:border-4 border-neutral-700 shadow-2xl overflow-hidden bg-black flex items-center justify-center"
+        className="w-full h-full max-w-full max-h-full aspect-square rounded-xl border-2 sm:border-4 border-neutral-700 shadow-2xl overflow-hidden bg-black flex items-center justify-center"
         style={{
           imageRendering: 'pixelated',
         }}

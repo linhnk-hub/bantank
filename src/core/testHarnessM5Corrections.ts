@@ -267,9 +267,8 @@ export function runAllM5CorrectionTests(): TestResult[] {
   // 12. TC-CORR-12: Duy nhất 1 biểu tượng Golden Eagle tại Row 12, Col 6
   record(
     'TC-CORR-12',
-    'Chỉ có DUY NHẤT 1 biểu tượng Golden Eagle tại trung tâm (Row 12, Col 6)',
+    'Chỉ có DUY NHẤT 1 căn cứ Eagle tại trung tâm (Row 12, Col 6)',
     () => {
-      // Row 12 has 3 base cells at col 5, 6, 7
       const centerCol = 6;
       const leftCol = 5;
       const rightCol = 7;
@@ -277,24 +276,23 @@ export function runAllM5CorrectionTests(): TestResult[] {
       if (STAGE_1_MAP[12][centerCol] !== TILE_TYPES.BASE) {
         throw new Error('Ô trung tâm (12, 6) không phải TILE_TYPES.BASE');
       }
-      if (STAGE_1_MAP[12][leftCol] !== TILE_TYPES.BASE || STAGE_1_MAP[12][rightCol] !== TILE_TYPES.BASE) {
-        throw new Error('Hai ô bảo vệ cánh không phải TILE_TYPES.BASE');
+      if (STAGE_1_MAP[12][leftCol] !== TILE_TYPES.BRICK || STAGE_1_MAP[12][rightCol] !== TILE_TYPES.BRICK) {
+        throw new Error('Hai ô bảo vệ cánh [12, 5] và [12, 7] phải là TILE_TYPES.BRICK');
       }
     }
   );
 
-  // 13. TC-CORR-13: Ô cánh Col 5 và Col 7 là tường thành công sự bunker (không có Eagle)
+  // 13. TC-CORR-13: Ô cánh Col 5 và Col 7 là tường gạch bảo vệ tiêu chuẩn (bị phá hủy theo sub-tile)
   record(
     'TC-CORR-13',
-    'Ô cánh Col 5 và Col 7 là công sự bunker bảo vệ, không chứa biểu tượng đại bàng',
+    'Ô cánh Col 5 và Col 7 là tường gạch bảo vệ (không phải Base, bị phá hủy sub-tile khi trúng đạn)',
     () => {
-      // Verified through texture mapping:
-      // Col 5 -> bunker_flank_left (reinforced concrete and steel plating)
-      // Col 7 -> bunker_flank_right (symmetrical reinforced concrete and steel plating)
-      // Col 6 -> tile_eagle_center (the only Eagle emblem)
-      const isEagleCenterOnly = true;
-      if (!isEagleCenterOnly) {
-        throw new Error('Ô cánh vẫn chứa hình đại bàng');
+      const terrain = createRuntimeTerrainState(STAGE_1_MAP);
+      if (terrain.currentMap[12][5] !== TILE_TYPES.BRICK || terrain.currentMap[12][7] !== TILE_TYPES.BRICK) {
+        throw new Error('Ô cánh không phải gạch');
+      }
+      if (terrain.brickSubTiles['12_5'] !== 15 || terrain.brickSubTiles['12_7'] !== 15) {
+        throw new Error('Mặt nạ sub-tile của gạch cánh chưa được khởi tạo đầy đủ 15 (0b1111)');
       }
     }
   );

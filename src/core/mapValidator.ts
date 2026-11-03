@@ -71,21 +71,26 @@ export function validateStageMap(matrix: StageMapMatrix): MapValidationResult {
     }
   }
 
-  // Validate the 3 consecutive BASE cells requirement
+  // Validate single central Eagle at [row 12, col 6] protected by brick walls at [row 12, col 5] and [row 12, col 7]
   const baseCount = tileCounts[TILE_TYPES.BASE] || 0;
-  const hasThreeBaseCells = (
-    baseCount === 3 &&
-    baseCoordinates.length === 3 &&
-    baseCoordinates.every(coord => coord.row === 12) &&
-    baseCoordinates.some(coord => coord.col === 5) &&
-    baseCoordinates.some(coord => coord.col === 6) &&
-    baseCoordinates.some(coord => coord.col === 7)
+  const hasCentralEagle = (
+    baseCount === 1 &&
+    baseCoordinates.length === 1 &&
+    baseCoordinates[0].row === 12 &&
+    baseCoordinates[0].col === 6
   );
+  const hasFlankingBricks = (
+    matrix[12]?.[5] === TILE_TYPES.BRICK &&
+    matrix[12]?.[7] === TILE_TYPES.BRICK
+  );
+  const hasThreeBaseCells = hasCentralEagle && hasFlankingBricks;
 
-  if (baseCount !== 3) {
-    errors.push(`Số ô BASE không khớp: tìm thấy ${baseCount} ô (kỳ vọng đúng 3 ô)`);
-  } else if (!hasThreeBaseCells) {
-    errors.push('3 ô BASE không nằm ở vị trí liên tiếp [hàng 12, cột 5, 6, 7]');
+  if (baseCount !== 1) {
+    errors.push(`Số ô BASE không khớp: tìm thấy ${baseCount} ô (kỳ vọng đúng 1 ô Eagle duy nhất tại [12, 6])`);
+  } else if (!hasCentralEagle) {
+    errors.push('Ô BASE Eagle không nằm ở vị trí trung tâm [hàng 12, cột 6]');
+  } else if (!hasFlankingBricks) {
+    errors.push('Hai ô bảo vệ [hàng 12, cột 5] và [hàng 12, cột 7] phải là tường gạch BRICK');
   }
 
   // Check if Stage 1 contains any unintroduced tile types (WATER, GRASS, ICE)

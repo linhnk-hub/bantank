@@ -27,6 +27,7 @@ import {
 import { MATCH_STATES, MatchStateMachine, type MatchState } from './matchState.ts';
 import { StageManager, type StageDefinition } from './stageManager.ts';
 import { ScoreManager } from './scoreManager.ts';
+import type { CombatEvent, CombatEventType } from './types.ts';
 
 export class GameEngine {
   private state: GameCoreState;
@@ -38,6 +39,7 @@ export class GameEngine {
   private stageManager: StageManager;
   private scoreManager: ScoreManager;
   private matchStateMachine: MatchStateMachine;
+  private combatEvents: CombatEvent[] = [];
   private externalInput: InputState = {
     up: false,
     down: false,
@@ -45,6 +47,22 @@ export class GameEngine {
     right: false,
     shoot: false,
   };
+
+  public popCombatEvents(): CombatEvent[] {
+    const events = [...this.combatEvents];
+    this.combatEvents = [];
+    return events;
+  }
+
+  private emitCombatEvent(type: CombatEventType, x: number, y: number): void {
+    this.combatEvents.push({
+      id: `evt_${this.state.tickCount}_${Math.random().toString(36).substring(2, 7)}`,
+      type,
+      x,
+      y,
+      createdAtTick: this.state.tickCount,
+    });
+  }
 
   constructor(
     customTerrain?: RuntimeTerrainState,
@@ -162,6 +180,7 @@ export class GameEngine {
     this.lastShootState = false;
     this.isPaused = false;
     this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
+    this.combatEvents = [];
     this.enemyManager.reset(stage.enemyQueue);
     this.scoreManager.resetRun();
 
@@ -511,6 +530,10 @@ export class GameEngine {
             this.state.score = this.scoreManager.getTotalScore();
             this.state.highScore = this.scoreManager.getHighScore();
             this.state.defeatedCounts = this.scoreManager.getStageStats();
+            this.emitCombatEvent('TANK_EXPLOSION', enemy.x, enemy.y);
+          } else {
+            // Hit but not destroyed: emit impact spark at hit location
+            this.emitCombatEvent('HIT_SPARK', pb.x, pb.y);
           }
           break; // Bullet hits only one tank
         }
@@ -542,7 +565,8 @@ export class GameEngine {
           continue;
         }
 
-        // If P1 is NOT shielded: P1 dies!
+        // If P1 is NOT shielded: P1 dies with explosion!
+        this.emitCombatEvent('TANK_EXPLOSION', this.state.p1.x, this.state.p1.y);
         this.state.p1State.lives -= 1;
         this.state.p1State.isDead = true;
         this.state.p1.isAlive = false;
@@ -582,6 +606,7 @@ export class GameEngine {
 
     // 10. Check Base destroyed state
     if (this.state.terrain.isBaseDestroyed && !this.state.isGameOver) {
+      this.emitCombatEvent('BASE_EXPLOSION', 96, 192); // Eagle center at (96, 192)
       this.state.isGameOver = true;
       this.state.gameOverReason = 'Căn cứ đã bị phá hủy! Game Over.';
       this.state.matchState = MATCH_STATES.GAME_OVER;

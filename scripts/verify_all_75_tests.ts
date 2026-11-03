@@ -11,8 +11,9 @@ import { runAllBugTestCases as runM4Bugs } from '../src/core/testHarnessM4Bugs.t
 import { runAllUIPolishTests as runUIPolish } from '../src/core/testHarnessM4UIPolish.ts';
 import { runAllJoystickTests as runJoystick } from '../src/core/testHarnessM4Joystick.ts';
 import { runAllM5CorrectionTests as runM5Corrections } from '../src/core/testHarnessM5Corrections.ts';
+import { runAllM6Tests as runM6 } from '../src/core/testHarnessM6.ts';
 
-console.log('--- RUNNING FULL 75-TEST AUTOMATED SUITE ---');
+console.log('--- RUNNING FULL 98-TEST AUTOMATED SUITE ---');
 
 const m2Results = runM2();
 const m3Results = runM3();
@@ -22,6 +23,7 @@ const bugResults = runM4Bugs();
 const uiPolishResults = runUIPolish();
 const joystickResults = runJoystick();
 const m5CorrectionsResults = runM5Corrections();
+const m6Results = runM6();
 
 const allSuites = [
   { name: 'M2 Physics & Tank (12 Tests)', results: m2Results },
@@ -32,6 +34,7 @@ const allSuites = [
   { name: 'M4 UI Polish Cross-Platform (4 Tests)', results: uiPolishResults },
   { name: 'Virtual Joystick & PC Scale (6 Tests)', results: joystickResults },
   { name: 'M5 UI Polish & Gameplay Corrections (15 Tests)', results: m5CorrectionsResults },
+  { name: 'M6 Gameplay & Responsive Corrections (23 Tests)', results: m6Results },
 ];
 
 let totalTests = 0;

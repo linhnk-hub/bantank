@@ -232,3 +232,17 @@ export interface GameCoreState {
   matchState: 'MENU' | 'STAGE_START' | 'PLAYING' | 'PAUSED' | 'STAGE_CLEAR' | 'GAME_OVER' | 'SUMMARY_STATS';
 }
 
+/* ====================================================================
+   COMBAT VISUAL EFFECTS TYPES
+==================================================================== */
+
+export type CombatEventType = 'HIT_SPARK' | 'TANK_EXPLOSION' | 'BASE_EXPLOSION';
+
+export interface CombatEvent {
+  id: string;
+  type: CombatEventType;
+  x: number;
+  y: number;
+  createdAtTick: number;
+}
+

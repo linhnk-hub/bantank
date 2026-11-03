@@ -14,6 +14,14 @@ import {
 import { GameEngine } from '../../core/gameEngine.ts';
 import { generateTileTextures } from '../textureGenerator.ts';
 
+interface ActiveVisualEffect {
+  id: string;
+  type: string;
+  sprite: Phaser.GameObjects.Image;
+  elapsedMs: number;
+  totalDurationMs: number;
+}
+
 export class BattleScene extends Phaser.Scene {
   private engine: GameEngine;
   private p1Sprite?: Phaser.GameObjects.Image;
@@ -21,6 +29,7 @@ export class BattleScene extends Phaser.Scene {
   private enemySprites: Map<string, Phaser.GameObjects.Image> = new Map();
   private enemyShieldSprites: Map<string, Phaser.GameObjects.Image> = new Map();
   private bulletSprites: Map<string, Phaser.GameObjects.Image> = new Map();
+  private visualEffects: ActiveVisualEffect[] = [];
   private terrainSprites: Map<string, Phaser.GameObjects.GameObject> = new Map();
   private baseSprites: Array<{
     sprite: Phaser.GameObjects.Image;
@@ -32,6 +41,9 @@ export class BattleScene extends Phaser.Scene {
   private lastStageId: number = -1;
   private lastTickCount: number = -1;
   private onStateCallback?: (state: GameCoreState) => void;
+  private onFpsCallback?: (fps: number) => void;
+  private fpsAccumulatorMs = 0;
+  private fpsFrameCount = 0;
 
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd?: {
@@ -62,6 +74,10 @@ export class BattleScene extends Phaser.Scene {
 
   public setStateCallback(cb: (state: GameCoreState) => void): void {
     this.onStateCallback = cb;
+  }
+
+  public setFpsCallback(cb: (fps: number) => void): void {
+    this.onFpsCallback = cb;
   }
 
   public setPauseCallback(cb: () => void): void {
@@ -117,6 +133,16 @@ export class BattleScene extends Phaser.Scene {
       (this.keyEsc && Phaser.Input.Keyboard.JustDown(this.keyEsc))
     ) {
       this.onPauseCallback?.();
+    }
+
+    // 0. Update FPS measurement (reported every ~500ms)
+    this.fpsAccumulatorMs += delta;
+    this.fpsFrameCount++;
+    if (this.fpsAccumulatorMs >= 500) {
+      const calculatedFps = Math.max(1, Math.round((this.fpsFrameCount * 1000) / this.fpsAccumulatorMs));
+      this.onFpsCallback?.(calculatedFps);
+      this.fpsAccumulatorMs = 0;
+      this.fpsFrameCount = 0;
     }
 
     // 1. Read Input (merged keyboard + touch/external controls)
@@ -205,10 +231,15 @@ export class BattleScene extends Phaser.Scene {
         }
       }
 
-      // Enemy spawn shield
+      // Enemy spawn shield with blinking aura
       let shield = this.enemyShieldSprites.get(enemy.id);
       const isShielded = enemy.isShielded || enemy.spawnShieldTimer > 0;
       if (isShielded) {
+        const pulsePhase = Math.floor(enemy.spawnShieldTimer * 12) % 2 === 0;
+        const tankAlpha = pulsePhase ? 0.75 : 1.0;
+        const auraAlpha = pulsePhase ? 0.9 : 0.4;
+        sprite.setAlpha(tankAlpha);
+
         if (!shield) {
           shield = this.add.image(enemy.x - 1, enemy.y - 1, 'shield_aura');
           shield.setOrigin(0, 0);
@@ -219,8 +250,12 @@ export class BattleScene extends Phaser.Scene {
           shield.setPosition(enemy.x - 1, enemy.y - 1);
           shield.setVisible(true);
         }
-      } else if (shield) {
-        shield.setVisible(false);
+        shield.setAlpha(auraAlpha);
+      } else {
+        sprite.setAlpha(1.0);
+        if (shield) {
+          shield.setVisible(false);
+        }
       }
     }
 
@@ -263,16 +298,108 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
-    // 6. Update Dynamic Terrain (Bricks & Base)
+    // 6. Spawn Visual Effects from Combat Events
+    const newEvents = this.engine.popCombatEvents();
+    for (const ev of newEvents) {
+      if (ev.type === 'HIT_SPARK') {
+        const spark = this.add.image(ev.x, ev.y, 'hit_spark');
+        spark.setOrigin(0.5, 0.5);
+        spark.setDisplaySize(8, 8);
+        spark.setDepth(25);
+        this.visualEffects.push({
+          id: ev.id,
+          type: ev.type,
+          sprite: spark,
+          elapsedMs: 0,
+          totalDurationMs: 150,
+        });
+      } else if (ev.type === 'TANK_EXPLOSION') {
+        const exp = this.add.image(ev.x, ev.y, 'explosion_1');
+        exp.setOrigin(0.5, 0.5);
+        exp.setDisplaySize(16, 16);
+        exp.setDepth(26);
+        this.visualEffects.push({
+          id: ev.id,
+          type: ev.type,
+          sprite: exp,
+          elapsedMs: 0,
+          totalDurationMs: 700, // Exactly 0.7s according to M3/M4 spec
+        });
+      } else if (ev.type === 'BASE_EXPLOSION') {
+        const exp = this.add.image(ev.x, ev.y, 'explosion_2');
+        exp.setOrigin(0.5, 0.5);
+        exp.setDisplaySize(24, 24);
+        exp.setDepth(27);
+        this.visualEffects.push({
+          id: ev.id,
+          type: ev.type,
+          sprite: exp,
+          elapsedMs: 0,
+          totalDurationMs: 800,
+        });
+      }
+    }
+
+    // 7. Update Active Visual Effects (frozen when PAUSED)
+    if (state.matchState !== 'PAUSED') {
+      const remainingEffects: ActiveVisualEffect[] = [];
+      for (const eff of this.visualEffects) {
+        eff.elapsedMs += delta;
+        if (eff.elapsedMs >= eff.totalDurationMs) {
+          eff.sprite.destroy();
+        } else {
+          remainingEffects.push(eff);
+          if (eff.type === 'TANK_EXPLOSION') {
+            const progress = eff.elapsedMs / eff.totalDurationMs;
+            if (progress < 0.25) {
+              eff.sprite.setTexture('explosion_1');
+              eff.sprite.setDisplaySize(16, 16);
+            } else if (progress < 0.55) {
+              eff.sprite.setTexture('explosion_2');
+              eff.sprite.setDisplaySize(24, 24);
+            } else if (progress < 0.8) {
+              eff.sprite.setTexture('explosion_3');
+              eff.sprite.setDisplaySize(32, 32);
+            } else {
+              eff.sprite.setTexture('explosion_4');
+              eff.sprite.setDisplaySize(24, 24);
+            }
+          } else if (eff.type === 'BASE_EXPLOSION') {
+            const progress = eff.elapsedMs / eff.totalDurationMs;
+            if (progress < 0.3) {
+              eff.sprite.setTexture('explosion_2');
+              eff.sprite.setDisplaySize(24, 24);
+            } else if (progress < 0.7) {
+              eff.sprite.setTexture('explosion_3');
+              eff.sprite.setDisplaySize(32, 32);
+            } else {
+              eff.sprite.setTexture('explosion_4');
+              eff.sprite.setDisplaySize(24, 24);
+            }
+          } else if (eff.type === 'HIT_SPARK') {
+            eff.sprite.setAlpha(Math.max(0, 1.0 - eff.elapsedMs / eff.totalDurationMs));
+          }
+        }
+      }
+      this.visualEffects = remainingEffects;
+    }
+
+    // 8. Update Dynamic Terrain (Bricks & Base)
     this.syncDynamicTerrain(state);
 
-    // 7. Report state to React
+    // 9. Report state to React
     if (this.onStateCallback) {
       this.onStateCallback(state);
     }
   }
 
   public refreshAllTerrain(): void {
+    // Clean up existing visual effects
+    for (const eff of this.visualEffects) {
+      eff.sprite.destroy();
+    }
+    this.visualEffects = [];
+
     // Clean up existing sprites
     this.terrainSprites.forEach((obj) => obj.destroy());
     this.terrainSprites.clear();
@@ -293,16 +420,8 @@ export class BattleScene extends Phaser.Scene {
         }
 
         if (tileType === TILE_TYPES.BASE) {
-          let normalTexKey = 'tile_9_center'; // Central Golden Eagle
-          let ruinedTexKey = 'tile_9_ruined';  // Ruined Central Eagle
-          if (r === 12 && c === 5) {
-            normalTexKey = 'tile_9_left';      // Left Bunker Rampart (NO eagle)
-            ruinedTexKey = 'bunker_flank_ruined';
-          } else if (r === 12 && c === 7) {
-            normalTexKey = 'tile_9_right';     // Right Bunker Rampart (NO eagle)
-            ruinedTexKey = 'bunker_flank_ruined';
-          }
-
+          const normalTexKey = 'tile_9_center'; // Central Golden Eagle
+          const ruinedTexKey = 'tile_9_ruined';  // Ruined Central Eagle
           const texKey = terrain.isBaseDestroyed ? ruinedTexKey : normalTexKey;
 
           const baseImg = this.add.image(x, y, texKey);

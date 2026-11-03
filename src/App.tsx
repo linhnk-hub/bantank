@@ -49,12 +49,34 @@ export default function App() {
   const [gameEngine, setGameEngine] = useState<GameEngine>(() => new GameEngine());
   const [gameState, setGameState] = useState<GameCoreState | null>(null);
   const [isPaused, setIsPaused] = useState<boolean>(false);
+  const [fps, setFps] = useState<number>(60);
+
+  // Desktop PC detection: screen width >= 1024px with fine pointer (mouse/trackpad)
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return window.innerWidth >= 1024 && window.matchMedia('(pointer: fine)').matches;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 1024 && window.matchMedia('(pointer: fine)').matches);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Performance FPS Color Coding: Green >=55, Yellow 30-54, Red <30
+  const getFpsBadgeStyle = (val: number) => {
+    if (val >= 55) return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40';
+    if (val >= 30) return 'bg-amber-500/20 text-amber-400 border-amber-500/40';
+    return 'bg-rose-500/20 text-rose-400 border-rose-500/40';
+  };
 
   // On desktop PC with fine mouse pointer, default touch controls to hidden to maximize canvas size
   const [showTouchControls, setShowTouchControls] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
-    const isDesktop = window.innerWidth >= 1024 && window.matchMedia('(pointer: fine)').matches;
-    return !isDesktop;
+    const desktop = window.innerWidth >= 1024 && window.matchMedia('(pointer: fine)').matches;
+    return !desktop;
   });
 
   // Orientation & Responsive hook
@@ -221,13 +243,13 @@ export default function App() {
           - Right: Virtual Shoot Button (80px target)
           - Top: Slim HUD (Score, Lives, Stage, Pause)
          ========================================================================= */}
-      {isLandscape ? (
+      {(!isDesktop && isLandscape) ? (
         <div className="flex-1 flex flex-col h-screen w-screen overflow-hidden safe-area-inset">
           {/* Slim Landscape Top HUD */}
-          <header className="h-10 bg-neutral-950/95 border-b border-neutral-800 px-4 flex items-center justify-between text-xs shrink-0 z-30">
+          <header className="h-9 bg-neutral-950/95 border-b border-neutral-800 px-3 flex items-center justify-between text-xs shrink-0 z-30">
             {/* Left: Brand & Stage */}
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded bg-amber-500 flex items-center justify-center font-black text-black text-xs shadow">
+              <div className="w-5 h-5 rounded bg-amber-500 flex items-center justify-center font-black text-black text-[11px] shadow">
                 BT
               </div>
               <span className="font-extrabold text-white tracking-wide text-xs">
@@ -236,9 +258,15 @@ export default function App() {
               <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
             </div>
 
-            {/* Center: Live Match Metrics */}
-            <div className="flex items-center gap-4 text-xs font-mono">
-              <div className="flex items-center gap-1.5 text-amber-400">
+            {/* Center: Live Match Metrics + Performance Status Bar */}
+            <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono">
+              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${getFpsBadgeStyle(fps)}`}>
+                FPS: {fps}
+              </span>
+              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold border bg-neutral-900 border-neutral-700 text-neutral-400">
+                PING: --
+              </span>
+              <div className="flex items-center gap-1 text-amber-400">
                 <Trophy className="w-3.5 h-3.5" />
                 <span className="font-bold">{gameState?.score ?? 0}</span>
               </div>
@@ -253,7 +281,7 @@ export default function App() {
             </div>
 
             {/* Right: Quick Action Buttons */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <button
                 type="button"
                 onClick={toggleFullscreen}
@@ -280,31 +308,32 @@ export default function App() {
                 title="Bảng Kiểm thử & QA"
               >
                 <Wrench className="w-3 h-3 text-amber-400" />
-                <span className="hidden sm:inline">QA (75 Tests)</span>
+                <span className="hidden sm:inline">QA (98 Tests)</span>
               </button>
             </div>
           </header>
 
           {/* Landscape Main 3-Column Combat View (Balanced & Centered) */}
-          <main className="flex-1 flex flex-row items-center w-full h-[calc(100dvh-40px)] px-2 sm:px-6 py-1 overflow-hidden">
+          <main className="flex-1 flex flex-row items-center w-full h-[calc(100dvh-36px)] px-2 sm:px-6 py-0 overflow-hidden">
             {/* Left Column: Virtual Joystick Centered in left zone */}
-            <div className="flex-1 flex items-center justify-center h-full min-w-[140px]">
+            <div className="flex-1 flex items-center justify-center h-full min-w-[120px]">
               <VirtualJoystick
                 activeDirection={landscapeDirection}
                 onDirectionChange={handleLandscapeDirectionChange}
-                size={144}
-                knobSize={52}
+                size={140}
+                knobSize={50}
                 deadZone={14}
                 disabled={isPaused}
               />
             </div>
 
             {/* Center Column: Game Canvas 1:1 Aspect Ratio (Perfect Square) Centered */}
-            <div className="flex-none flex items-center justify-center h-full max-h-[calc(100dvh-48px)] aspect-square overflow-hidden p-1 relative">
+            <div className="flex-none flex items-center justify-center h-full max-h-[calc(100dvh-36px)] aspect-square overflow-hidden p-0 relative">
               <PhaserGame
                 mode="battle"
                 engine={gameEngine}
                 onStateUpdate={setGameState}
+                onFpsUpdate={setFps}
                 onPause={handlePause}
               />
 
@@ -400,7 +429,7 @@ export default function App() {
                   <Wrench className="w-3.5 h-3.5 text-amber-400" />
                   <span className="hidden sm:inline">Kiểm thử</span>
                   <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
-                    75 Tests
+                    98 Tests
                   </span>
                 </button>
 
@@ -434,7 +463,7 @@ export default function App() {
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-200 font-semibold"
                 >
                   <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Bảng 75 Tests Tự Động</span>
+                  <span>Bảng 98 Tests Tự Động</span>
                 </button>
                 <button
                   onClick={() => setShowTouchControls((v) => !v)}
@@ -453,10 +482,17 @@ export default function App() {
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
                 {/* Viewport Header */}
                 <div className="bg-neutral-950 px-4 py-2.5 border-b border-neutral-800 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2.5">
                     <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
                     <span className="font-semibold text-neutral-200">
                       Battle Scene — {gameState?.currentStageName || 'Stage 1'} {isPaused ? '(PAUSED)' : ''}
+                    </span>
+                    {/* Live FPS & PING Performance Badges */}
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${getFpsBadgeStyle(fps)}`}>
+                      FPS: {fps}
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold border bg-neutral-900 border-neutral-700 text-neutral-400" title="Chế độ Solo Stage 1 - Offline">
+                      PING: --
                     </span>
                   </div>
 
@@ -492,14 +528,17 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Canvas Container: Prominently enlarged on PC up to 728px square */}
+                {/* Canvas Container: Prominently enlarged on PC up to 832px square (crisp integer scale) */}
                 <div className="p-3 sm:p-5 lg:p-6 bg-neutral-950/80 flex items-center justify-center min-h-[380px] sm:min-h-[500px] lg:min-h-[640px] xl:min-h-[720px] relative">
-                  <PhaserGame
-                    mode="battle"
-                    engine={gameEngine}
-                    onStateUpdate={setGameState}
-                    onPause={handlePause}
-                  />
+                  <div className="w-full max-w-[min(calc(100vh-140px),832px)] aspect-square flex items-center justify-center">
+                    <PhaserGame
+                      mode="battle"
+                      engine={gameEngine}
+                      onStateUpdate={setGameState}
+                      onFpsUpdate={setFps}
+                      onPause={handlePause}
+                    />
+                  </div>
 
                   {/* In MENU state: Overlay allowing immediate match start */}
                   {gameState?.matchState === 'MENU' && (
@@ -575,11 +614,11 @@ export default function App() {
                     <span className="font-bold text-white">Bảng Kiểm Thử & QA</span>
                   </div>
                   <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
-                    75/75 PASS
+                    98/98 PASS
                   </span>
                 </div>
                 <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  Đã kiểm toán và tích hợp toàn bộ 75 kiểm thử tự động (M1, M2, M3, M4, Sửa lỗi, UI Polish, Joystick & 5 Nhóm Gameplay/UI Polish) trong ngăn kéo QA riêng biệt.
+                  Đã kiểm toán và tích hợp toàn bộ 98 kiểm thử tự động (M1, M2, M3, M4, Sửa lỗi, UI Polish, Joystick, 5 Nhóm Gameplay & 6 Nhóm M6 PC Scale/Gameplay Corrections) trong ngăn kéo QA riêng biệt.
                 </p>
                 <button
                   type="button"
