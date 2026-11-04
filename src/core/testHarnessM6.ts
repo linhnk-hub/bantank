@@ -624,17 +624,17 @@ export function runAllM6Tests(): TestCaseM6Result[] {
       if (!explosionEvent) {
         throw new Error('Không phát sinh sự kiện nổ TANK_EXPLOSION khi xe địch bị tiêu diệt');
       }
-      if (engine.getState().score !== scoreBefore + 100) {
-        throw new Error(`Điểm số không tăng đúng 100 điểm, nhận: ${engine.getState().score - scoreBefore}`);
+      if (engine.getState().score !== scoreBefore + 1) {
+        throw new Error(`Điểm số không tăng đúng 1 XP, nhận: ${engine.getState().score - scoreBefore}`);
       }
 
       // Step again to verify score is NOT awarded twice
       engine.stepTick(emptyInput);
-      if (engine.getState().score !== scoreBefore + 100) {
+      if (engine.getState().score !== scoreBefore + 1) {
         throw new Error('Điểm số bị cộng nhiều lần cho 1 xe địch');
       }
     },
-    'TANK_EXPLOSION phát sinh, score +100 đúng 1 lần',
+    'TANK_EXPLOSION phát sinh, score +1 XP đúng 1 lần',
     'Hoạt cảnh nổ 0.7s chuẩn xác, bảo đảm tính công bằng tuyệt đối của điểm số'
   );
 

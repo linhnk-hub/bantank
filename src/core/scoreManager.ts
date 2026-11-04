@@ -3,13 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { type EnemyType } from './types.ts';
+import { type EnemyType, type PlayerEconomyState, type EconomyConversionInterface } from './types.ts';
 
 export const SCORE_VALUES: Record<EnemyType, number> = {
-  BASIC: 100,
-  FAST: 200,
-  POWER: 300,
-  ARMOR: 400,
+  BASIC: 1,
+  FAST: 2,
+  POWER: 3,
+  ARMOR: 5, // Note: Armor is 5 XP, not 4 XP
 };
 
 export const HIGH_SCORE_STORAGE_KEY = 'bantank_high_score';
@@ -31,10 +31,11 @@ export interface MatchScoreSnapshot {
   cumulativeStats: EnemyDefeatStats;
 }
 
-export class ScoreManager {
-  private currentStageScore: number = 0;
-  private carryOverScore: number = 0; // Score from previous stages in current run
-  private highScore: number = 0;
+export class ScoreManager implements EconomyConversionInterface {
+  private currentStageScore: number = 0; // Total stage XP
+  private carryOverScore: number = 0; // Cumulative XP from previous stages in current run
+  private highScore: number = 0; // High XP record
+  private xuBalance: number = 0; // Independent currency balance (zero auto-conversion)
   private defeatedEnemiesThisStage: Map<string, EnemyType> = new Map();
   private cumulativeStats: Record<EnemyType, number> = {
     BASIC: 0,
@@ -147,6 +148,51 @@ export class ScoreManager {
 
   public getHighScore(): number {
     return this.highScore;
+  }
+
+  /**
+   * Alias for getTotalScore() reflecting the battle XP system.
+   */
+  public getTotalXp(): number {
+    return this.getTotalScore();
+  }
+
+  /**
+   * Currency (Xu) balance.
+   * STRICT SEPARATION: XP gains never automatically increment or affect Xu balance!
+   */
+  public getXuBalance(): number {
+    return this.xuBalance;
+  }
+
+  /**
+   * Returns decoupled player economy snapshot.
+   */
+  public getEconomyState(): PlayerEconomyState {
+    return {
+      totalXp: this.getTotalXp(),
+      xuBalance: this.xuBalance,
+    };
+  }
+
+  /**
+   * Conversion validation stub.
+   * Auto-conversion is strictly prohibited; manual conversion is inactive by default.
+   */
+  public canConvertXpToXu(_xpAmount: number): boolean {
+    return false; // Dormant: no auto or unauthorized conversion
+  }
+
+  /**
+   * Future intentional manual conversion interface.
+   * Inactive by default in current gameplay loop.
+   */
+  public convertXpToXuManual(_xpAmount: number): { success: boolean; convertedXu: number; remainingXp: number } {
+    return {
+      success: false,
+      convertedXu: 0,
+      remainingXp: this.getTotalXp(),
+    };
   }
 
   public getStageStats(): EnemyDefeatStats {

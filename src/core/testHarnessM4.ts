@@ -250,7 +250,7 @@ export function runAllM4Tests(): TestCaseM4Result[] {
     const sm = new ScoreManager('test_bantank_score_temp');
     sm.resetRun();
 
-    // Tiêu diệt: 2 Basic (2x100), 1 Fast (1x200), 1 Power (1x300), 1 Armor (1x400) = 1100 điểm
+    // Tiêu diệt: 2 Basic (2x1 XP), 1 Fast (1x2 XP), 1 Power (1x3 XP), 1 Armor (1x5 XP) = 12 XP
     sm.recordEnemyDefeated('e1', 'BASIC');
     sm.recordEnemyDefeated('e2', 'BASIC');
     sm.recordEnemyDefeated('e3', 'FAST');
@@ -263,7 +263,7 @@ export function runAllM4Tests(): TestCaseM4Result[] {
     const stats = sm.getStageStats();
     const totalScore = sm.getTotalScore();
 
-    const expectedScore = 2 * 100 + 1 * 200 + 1 * 300 + 1 * 400; // 1100
+    const expectedScore = 2 * 1 + 1 * 2 + 1 * 3 + 1 * 5; // 12 XP
     const passed =
       totalScore === expectedScore &&
       stats.BASIC === 2 &&
@@ -276,10 +276,10 @@ export function runAllM4Tests(): TestCaseM4Result[] {
     results.push({
       id: 'TC-M4-07',
       name: 'Thống Kê Bậc Xe & Tính Điểm Không Bị Trùng Lặp',
-      description: 'Tính đúng 100/200/300/400 điểm, thống kê chi tiết theo loại xe, chặn ghi nhận trùng ID',
+      description: 'Tính đúng 1/2/3/5 XP, thống kê chi tiết theo loại xe, chặn ghi nhận trùng ID',
       passed,
       details: passed
-        ? `Điểm chuẩn: ${totalScore}đ (kỳ vọng 1100đ). Thống kê: Basic=2, Fast=1, Power=1, Armor=1. Chặn trùng ID: ${!dupResult}.`
+        ? `Điểm chuẩn: ${totalScore} XP (kỳ vọng 12 XP). Thống kê: Basic=2, Fast=1, Power=1, Armor=1. Chặn trùng ID: ${!dupResult}.`
         : `Sai lệch: totalScore=${totalScore}, stats=${JSON.stringify(stats)}`,
       metrics: {
         totalScore,
@@ -299,12 +299,12 @@ export function runAllM4Tests(): TestCaseM4Result[] {
     const sm = new ScoreManager(testKey);
     sm.resetRun();
 
-    // Ghi điểm lớn
-    sm.recordEnemyDefeated('t1', 'ARMOR'); // 400
-    sm.recordEnemyDefeated('t2', 'ARMOR'); // 400
+    // Ghi điểm lớn: 2 xe Armor (2 x 5 = 10 XP)
+    sm.recordEnemyDefeated('t1', 'ARMOR'); // 5 XP
+    sm.recordEnemyDefeated('t2', 'ARMOR'); // 5 XP
     sm.checkAndUpdateHighScore();
 
-    const hs1 = sm.getHighScore(); // 800
+    const hs1 = sm.getHighScore(); // 10 XP
 
     // Đọc từ instance mới cùng storage key
     const sm2 = new ScoreManager(testKey);
@@ -312,13 +312,13 @@ export function runAllM4Tests(): TestCaseM4Result[] {
 
     // Thử reset với chuỗi sai -> phải bị từ chối
     const rejectedReset = sm2.resetAllDataWithConfirmation('SAI_MAT_KHAU');
-    const hsStill800 = sm2.getHighScore() === 800;
+    const hsStill10 = sm2.getHighScore() === 10;
 
     // Reset với chuỗi đúng -> thành công
     const validReset = sm2.resetAllDataWithConfirmation('XAC_NHAN_XOA_KY_LUC');
     const hsNow0 = sm2.getHighScore() === 0;
 
-    const passed = hs1 === 800 && loadedHs === 800 && !rejectedReset && hsStill800 && validReset && hsNow0;
+    const passed = hs1 === 10 && loadedHs === 10 && !rejectedReset && hsStill10 && validReset && hsNow0;
 
     results.push({
       id: 'TC-M4-08',

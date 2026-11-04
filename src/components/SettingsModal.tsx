@@ -22,8 +22,6 @@ import { SoundManager, type AudioSettings } from '../core/audio.ts';
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  targetFps: 30 | 60;
-  onFpsChange: (fps: 30 | 60) => void;
   difficulty: 'DEFAULT' | 'EXTREME';
   onDifficultyChange: (diff: 'DEFAULT' | 'EXTREME') => void;
 }
@@ -31,8 +29,6 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
-  targetFps,
-  onFpsChange,
   difficulty,
   onDifficultyChange,
 }) => {
@@ -67,11 +63,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     soundManager.updateSettings(updated);
   };
 
-  const testAudio = (type: 'p1_shoot' | 'enemy_shoot' | 'tank_exp' | 'base_exp') => {
+  const testAudio = (type: 'p1_shoot' | 'enemy_shoot' | 'tank_exp' | 'p1_exp' | 'base_exp') => {
     soundManager.unlock();
     if (type === 'p1_shoot') soundManager.playP1Shoot();
     else if (type === 'enemy_shoot') soundManager.playEnemyShoot();
     else if (type === 'tank_exp') soundManager.playEnemyExplosion();
+    else if (type === 'p1_exp') soundManager.playP1Explosion();
     else if (type === 'base_exp') soundManager.playBaseExplosion();
   };
 
@@ -89,7 +86,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Cài Đặt & Tùy Chọn Trận Đấu
               </h2>
               <p className="text-[11px] text-neutral-400">
-                FPS Render • Độ khó Cực khó • Âm thanh Arcade 8-bit
+                Khóa chuẩn 60 FPS • Độ khó AI Cực khó • Âm thanh Arcade 8-bit
               </p>
             </div>
           </div>
@@ -107,54 +104,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Settings Body */}
         <div className="p-4 sm:p-5 overflow-y-auto space-y-5 text-xs scrollbar-thin">
           {/* =========================================================================
-              SECTION 1: FPS RENDER LIMIT (30 vs 60 FPS)
-             ========================================================================= */}
-          <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-3.5 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-neutral-200">
-                <Gauge className="w-4 h-4 text-sky-400" />
-                <span>Giới Hạn FPS Render (So sánh độ mượt)</span>
-              </div>
-              <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-sky-500/20 text-sky-300 font-bold border border-sky-500/30">
-                Hiện tại: {targetFps} FPS
-              </span>
-            </div>
-
-            <p className="text-[11px] text-neutral-400 leading-relaxed">
-              Physics Core luôn chạy cố định 60Hz. Khi chọn 30 FPS, chỉ giảm số khung hình render để người chơi so sánh trực quan; tốc độ tank và đạn giữ nguyên 100%.
-            </p>
-
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => onFpsChange(60)}
-                className={`py-2 px-3 rounded-lg border text-left flex flex-col gap-0.5 transition-all ${
-                  targetFps === 60
-                    ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold shadow-md'
-                    : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:bg-neutral-800'
-                }`}
-              >
-                <span className="font-extrabold text-xs">60 FPS (Mặc định)</span>
-                <span className="text-[10px] text-neutral-400">Siêu mượt, chuẩn arcade cổ điển</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onFpsChange(30)}
-                className={`py-2 px-3 rounded-lg border text-left flex flex-col gap-0.5 transition-all ${
-                  targetFps === 30
-                    ? 'bg-amber-500/20 border-amber-500 text-amber-300 font-bold shadow-md'
-                    : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:bg-neutral-800'
-                }`}
-              >
-                <span className="font-extrabold text-xs">30 FPS (So sánh)</span>
-                <span className="text-[10px] text-neutral-400">Tiết kiệm pin, vật lý giữ 60Hz</span>
-              </button>
-            </div>
-          </section>
-
-          {/* =========================================================================
-              SECTION 2: DIFFICULTY (DEFAULT 80PX vs EXTREME WHOLE MAP)
+              SECTION 1: DIFFICULTY (DEFAULT 80PX vs EXTREME WHOLE MAP)
              ========================================================================= */}
           <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-3.5 space-y-2.5">
             <div className="flex items-center justify-between">
@@ -297,7 +247,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <span className="text-[10px] text-neutral-400 block font-semibold">
                 Nghe thử các hiệu ứng âm thanh arcade:
               </span>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
                 <button
                   type="button"
                   onClick={() => testAudio('p1_shoot')}
@@ -311,6 +261,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   className="px-2 py-1.5 rounded bg-neutral-900 border border-neutral-800 hover:border-amber-500 text-neutral-300 text-[10px] font-semibold active:scale-95"
                 >
                   Địch Bắn
+                </button>
+                <button
+                  type="button"
+                  onClick={() => testAudio('p1_exp')}
+                  className="px-2 py-1.5 rounded bg-neutral-900 border border-neutral-800 hover:border-amber-500 text-amber-300 text-[10px] font-bold active:scale-95"
+                >
+                  P1 Nổ
                 </button>
                 <button
                   type="button"

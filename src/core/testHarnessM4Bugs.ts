@@ -363,9 +363,9 @@ export function runBug04(): BugTestCaseResult {
 
   const shieldExpired = enemy1.spawnShieldTimer === 0 && enemy1.isShielded === false;
 
-  // Hit Enemy 1 after shield expiration -> takes damage and dies (Basic has 1 hp, awards 100 score)
+  // Hit Enemy 1 after shield expiration -> takes damage and dies (Basic has 1 hp, awards 1 XP)
   const hit2 = manager.damageEnemy(enemy1.id);
-  const damageWorked = hit2.destroyed === true && hit2.score === 100;
+  const damageWorked = hit2.destroyed === true && hit2.score === 1;
 
   // Verify P1 respawn shield is intact at 3.0s
   const p1ShieldTimer = engine.getState().p1State.shieldTimer;

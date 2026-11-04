@@ -147,28 +147,28 @@ export const ENEMY_CONFIG = {
     BASIC: {
       speed: 60,
       hp: 1,
-      score: 100,
+      score: 1, // 1 XP
       aimTime: 0.35,
       shootCooldown: 1.5,
     },
     FAST: {
       speed: 90,
       hp: 1,
-      score: 200,
+      score: 2, // 2 XP
       aimTime: 0.15,
       shootCooldown: 1.2,
     },
     POWER: {
       speed: 60,
       hp: 2,
-      score: 300,
+      score: 3, // 3 XP
       aimTime: 0.55,
       shootCooldown: 2.0,
     },
     ARMOR: {
       speed: 45,
       hp: 4,
-      score: 400,
+      score: 5, // 5 XP (Armor is 5 XP, not 4 XP)
       aimTime: 0.65,
       shootCooldown: 2.5,
     },

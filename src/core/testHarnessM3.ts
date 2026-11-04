@@ -154,10 +154,10 @@ export function runM303(): TestCaseResult {
 export function runM304(): TestCaseResult {
   const specs = ENEMY_CONFIG.SPECS;
 
-  const basicOk = specs.BASIC.speed === 60 && specs.BASIC.hp === 1 && specs.BASIC.score === 100;
-  const fastOk = specs.FAST.speed === 90 && specs.FAST.hp === 1 && specs.FAST.score === 200;
-  const powerOk = specs.POWER.speed === 60 && specs.POWER.hp === 2 && specs.POWER.score === 300;
-  const armorOk = specs.ARMOR.speed === 45 && specs.ARMOR.hp === 4 && specs.ARMOR.score === 400;
+  const basicOk = specs.BASIC.speed === 60 && specs.BASIC.hp === 1 && specs.BASIC.score === 1;
+  const fastOk = specs.FAST.speed === 90 && specs.FAST.hp === 1 && specs.FAST.score === 2;
+  const powerOk = specs.POWER.speed === 60 && specs.POWER.hp === 2 && specs.POWER.score === 3;
+  const armorOk = specs.ARMOR.speed === 45 && specs.ARMOR.hp === 4 && specs.ARMOR.score === 5;
 
   const passed = basicOk && fastOk && powerOk && armorOk;
 
@@ -165,9 +165,9 @@ export function runM304(): TestCaseResult {
     id: 'M3-04',
     name: 'Enemy Specs (Speed, HP, Score)',
     passed,
-    expected: 'Basic(60/1/100), Fast(90/1/200), Power(60/2/300), Armor(45/4/400)',
+    expected: 'Basic(60/1/1 XP), Fast(90/1/2 XP), Power(60/2/3 XP), Armor(45/4/5 XP)',
     actual: `Basic:${basicOk}, Fast:${fastOk}, Power:${powerOk}, Armor:${armorOk}`,
-    details: 'Xác minh bảng thông số tốc độ, máu và điểm số của từng loại xe tăng địch.',
+    details: 'Xác minh bảng thông số tốc độ, máu và điểm số XP của từng loại xe tăng địch.',
   };
 }
 
@@ -517,16 +517,16 @@ export function runM311(): TestCaseResult {
     !h2.destroyed &&
     !h3.destroyed &&
     h4.destroyed &&
-    h4.score === 400 &&
+    h4.score === 5 &&
     armor.hp === 0;
 
   return {
     id: 'M3-11',
     name: 'Damage & Score Attribution',
     passed,
-    expected: 'Hits 1-3 alive, Hit 4 destroyed with +400 score',
+    expected: 'Hits 1-3 alive, Hit 4 destroyed with +5 XP score',
     actual: `H1:${h1.destroyed}, H2:${h2.destroyed}, H3:${h3.destroyed}, H4:${h4.destroyed}, Score=${h4.score}`,
-    details: 'Xe Armor nhận 4 phát đạn mới nổ và cộng đúng 400 điểm khi bị tiêu diệt hoàn toàn.',
+    details: 'Xe Armor nhận 4 phát đạn mới nổ và cộng đúng 5 XP khi bị tiêu diệt hoàn toàn.',
   };
 }
 

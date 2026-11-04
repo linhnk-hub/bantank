@@ -161,11 +161,11 @@ export const TestHarnessM6FinalPlusPanel: React.FC = () => {
           <div className="flex items-center gap-2">
             <Sparkles className="w-4 h-4 text-amber-400" />
             <h3 className="font-extrabold text-sm text-white">
-              MILESTONE 6 FINAL+ – PORTRAIT, FPS 30/60, EXTREME AI, AUDIO & ROYAL EAGLE (21 TESTS)
+              M6 FINAL+ CORRECTION – KHÓA 60 FPS, ÂM THANH P1 NỔ, ĐIỂM XP & TÁCH BẠCH XU (26 TESTS)
             </h3>
           </div>
           <p className="text-xs text-neutral-400 mt-1">
-            Kiểm toán 5 hạng mục mới: Bố cục Portrait đưa controls sát dưới Canvas (khoảng đệm lớn tránh Safari), Tùy chọn 30/60 FPS giữ nguyên Physics 60Hz, Độ khó Cực khó phát hiện toàn bản đồ, Hệ thống âm thanh 8-bit Web Audio và Biểu tượng Đại Bàng Hoàng Gia mới.
+            Kiểm toán toàn diện: Bỏ tùy chọn FPS (khóa cứng 60 FPS 60Hz physics), Âm thanh P1 nổ độc quyền (P1_EXPLOSION) tuân thủ match lifecycle, Bảng điểm XP mới (1, 2, 3, 5 XP với Armor = 5 XP), Tách bạch hoàn toàn XP và Xu (zero auto-conversion), và Biểu tượng Đại Bàng Hoàng Gia 16×16px tại [12, 6].
           </p>
         </div>
 

@@ -46,13 +46,13 @@ export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy, onPa
 
           <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-neutral-950 border border-neutral-800">
             <Trophy className="w-4 h-4 text-amber-400" />
-            <span className="text-neutral-400 font-mono">ĐIỂM:</span>
-            <span className="text-amber-400 font-black font-mono text-sm">{state.score}</span>
+            <span className="text-neutral-400 font-mono">XP:</span>
+            <span className="text-amber-400 font-black font-mono text-sm">{state.score} XP</span>
           </div>
 
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-neutral-950 border border-neutral-800 text-[11px]">
-            <span className="text-neutral-500 font-mono">HIGH:</span>
-            <span className="text-neutral-300 font-bold font-mono">{state.highScore}</span>
+            <span className="text-neutral-500 font-mono">HIGH XP:</span>
+            <span className="text-neutral-300 font-bold font-mono">{state.highScore} XP</span>
           </div>
 
           <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-neutral-950 border border-neutral-800">

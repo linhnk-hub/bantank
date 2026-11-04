@@ -48,14 +48,14 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
           {/* Score & Record Display */}
           <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-center space-y-1">
-            <div className="text-[11px] text-neutral-400 font-medium">TỔNG ĐIỂM TRẬN NÀY</div>
+            <div className="text-[11px] text-neutral-400 font-medium">TỔNG XP TRẬN NÀY</div>
             <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400 tracking-tight">
-              {state.score.toLocaleString()}
+              {state.score.toLocaleString()} XP
             </div>
             <div className="flex items-center justify-center gap-1.5 pt-0.5 text-[11px] sm:text-xs">
               <Trophy className="w-3.5 h-3.5 text-amber-500" />
-              <span className="text-neutral-400">Kỷ lục High Score:</span>
-              <span className="font-mono font-bold text-neutral-200">{state.highScore.toLocaleString()}</span>
+              <span className="text-neutral-400">Kỷ lục High XP:</span>
+              <span className="font-mono font-bold text-neutral-200">{state.highScore.toLocaleString()} XP</span>
               {isNewRecord && (
                 <span className="px-1.5 py-0.2 rounded bg-amber-500 text-black font-extrabold text-[10px] animate-pulse">
                   KỶ LỤC MỚI!
@@ -75,33 +75,33 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               <div className="flex items-center justify-between text-neutral-300">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-neutral-400" />
-                  Xe Basic (100đ):
+                  Xe Basic (1 XP):
                 </span>
-                <span>{counts.BASIC} xe = {counts.BASIC * 100}đ</span>
+                <span>{counts.BASIC} xe = {counts.BASIC * 1} XP</span>
               </div>
 
               <div className="flex items-center justify-between text-neutral-300">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-sky-400" />
-                  Xe Fast (200đ):
+                  Xe Fast (2 XP):
                 </span>
-                <span>{counts.FAST} xe = {counts.FAST * 200}đ</span>
+                <span>{counts.FAST} xe = {counts.FAST * 2} XP</span>
               </div>
 
               <div className="flex items-center justify-between text-neutral-300">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-red-400" />
-                  Xe Power (300đ):
+                  Xe Power (3 XP):
                 </span>
-                <span>{counts.POWER} xe = {counts.POWER * 300}đ</span>
+                <span>{counts.POWER} xe = {counts.POWER * 3} XP</span>
               </div>
 
               <div className="flex items-center justify-between text-neutral-300">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  Xe Armor (400đ):
+                  Xe Armor (5 XP):
                 </span>
-                <span>{counts.ARMOR} xe = {counts.ARMOR * 400}đ</span>
+                <span>{counts.ARMOR} xe = {counts.ARMOR * 5} XP</span>
               </div>
 
               <div className="pt-1.5 border-t border-neutral-800/80 flex items-center justify-between font-bold text-amber-400">

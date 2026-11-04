@@ -43,7 +43,7 @@ const allSuites = [
   { name: 'M6 Gameplay & Responsive Corrections (23 Tests)', results: m6Results },
   { name: 'M6 Round 2 Responsive, Eagle & Explosions (18 Tests)', results: m6Round2Results },
   { name: 'M6 Final UI, Respawn & Continuous Fire (24 Tests)', results: m6FinalResults },
-  { name: 'M6 Final+ Portrait, FPS, Difficulty, Audio & Eagle (21 Tests)', results: m6FinalPlusResults },
+  { name: 'M6 Final+ Locked 60 FPS, P1 Explosion Audio, XP & Xu Decoupling (26 Tests)', results: m6FinalPlusResults },
 ];
 
 let totalTests = 0;

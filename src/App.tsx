@@ -54,7 +54,6 @@ export default function App() {
   const [gameState, setGameState] = useState<GameCoreState | null>(null);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [fps, setFps] = useState<number>(60);
-  const [targetFps, setTargetFps] = useState<30 | 60>(60);
   const [difficulty, setDifficulty] = useState<'DEFAULT' | 'EXTREME'>('DEFAULT');
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
@@ -274,8 +273,6 @@ export default function App() {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        targetFps={targetFps}
-        onFpsChange={setTargetFps}
         difficulty={difficulty}
         onDifficultyChange={handleDifficultyChange}
       />
@@ -312,7 +309,7 @@ export default function App() {
               </span>
               <div className="flex items-center gap-1 text-amber-400">
                 <Trophy className="w-3.5 h-3.5" />
-                <span className="font-bold">{gameState?.score ?? 0}</span>
+                <span className="font-bold">{gameState?.score ?? 0} XP</span>
               </div>
               <div className="flex items-center gap-1 text-rose-400 font-bold">
                 <Heart className="w-3.5 h-3.5 fill-rose-500" />
@@ -404,7 +401,6 @@ export default function App() {
                 onFpsUpdate={setFps}
                 onPause={handlePause}
                 canvasSizePx={layout.canvasSizePx}
-                fpsLimit={targetFps}
               />
 
               {/* In MENU state: Overlay allowing immediate match start */}
@@ -479,7 +475,7 @@ export default function App() {
               </span>
               <div className="flex items-center gap-1 text-amber-400">
                 <Trophy className="w-3.5 h-3.5" />
-                <span className="font-bold">{gameState?.score ?? 0}</span>
+                <span className="font-bold">{gameState?.score ?? 0} XP</span>
               </div>
               <div className="flex items-center gap-1 text-rose-400 font-bold">
                 <Heart className="w-3.5 h-3.5 fill-rose-500" />
@@ -551,7 +547,6 @@ export default function App() {
                 onFpsUpdate={setFps}
                 onPause={handlePause}
                 canvasSizePx={layout.canvasSizePx}
-                fpsLimit={targetFps}
               />
 
               {/* In MENU state: Overlay allowing immediate match start */}
@@ -782,7 +777,6 @@ export default function App() {
                       onFpsUpdate={setFps}
                       onPause={handlePause}
                       canvasSizePx={layout.canvasSizePx}
-                      fpsLimit={targetFps}
                     />
                   </div>
 

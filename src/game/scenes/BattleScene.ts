@@ -86,13 +86,19 @@ export class BattleScene extends Phaser.Scene {
     this.onPauseCallback = cb;
   }
 
-  public setFpsLimit(limit: number): void {
+  public setFpsLimit(_limit: number = 60): void {
     if (this.game && this.game.loop) {
-      this.game.loop.setFPSLimit(limit === 60 ? 0 : limit);
+      // Enforce locked 60 FPS limit (never use 0 which means unlimited FPS)
+      this.game.loop.setFPSLimit(60);
     }
   }
 
   create(): void {
+    // 0. Enforce locked 60 FPS in Phaser main loop
+    if (this.game && this.game.loop) {
+      this.game.loop.setFPSLimit(60);
+    }
+
     // 1. Generate all textures (tiles, tank, bullet, enemies, ruined base)
     generateTileTextures(this);
 
@@ -317,7 +323,10 @@ export class BattleScene extends Phaser.Scene {
     // 6. Spawn Visual Effects from Combat Events & Trigger Audio
     const newEvents = this.engine.popCombatEvents();
     for (const ev of newEvents) {
-      SoundManager.getInstance().handleCombatEvent(ev);
+      SoundManager.getInstance().handleCombatEvent(ev, {
+        isPaused: state.matchState === 'PAUSED',
+        isGameOver: state.matchState === 'GAME_OVER',
+      });
       if (ev.type === 'HIT_SPARK') {
         const clampedX = Math.max(4, Math.min(MAP_DIMENSIONS.TOTAL_WIDTH_PX - 4, ev.x));
         const clampedY = Math.max(4, Math.min(MAP_DIMENSIONS.TOTAL_HEIGHT_PX - 4, ev.y));
@@ -332,14 +341,14 @@ export class BattleScene extends Phaser.Scene {
           elapsedMs: 0,
           totalDurationMs: 150,
         });
-      } else if (ev.type === 'TANK_EXPLOSION') {
+      } else if (ev.type === 'TANK_EXPLOSION' || ev.type === 'P1_EXPLOSION') {
         // Tank explosion max size 32x32 -> clamp center within [16, 192] so it stays 100% inside Canvas
         const clampedX = Math.max(16, Math.min(MAP_DIMENSIONS.TOTAL_WIDTH_PX - 16, ev.x));
         const clampedY = Math.max(16, Math.min(MAP_DIMENSIONS.TOTAL_HEIGHT_PX - 16, ev.y));
         const exp = this.add.image(clampedX, clampedY, 'explosion_1');
         exp.setOrigin(0.5, 0.5);
         exp.setDisplaySize(16, 16);
-        exp.setDepth(26);
+        exp.setDepth(ev.type === 'P1_EXPLOSION' ? 28 : 26);
         this.visualEffects.push({
           id: ev.id,
           type: ev.type,
@@ -374,7 +383,7 @@ export class BattleScene extends Phaser.Scene {
           eff.sprite.destroy();
         } else {
           remainingEffects.push(eff);
-          if (eff.type === 'TANK_EXPLOSION') {
+          if (eff.type === 'TANK_EXPLOSION' || eff.type === 'P1_EXPLOSION') {
             const progress = eff.elapsedMs / eff.totalDurationMs;
             if (progress < 0.25) {
               eff.sprite.setTexture('explosion_1');

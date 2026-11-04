@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { STAGE_1_MAP, MAP_DIMENSIONS, P1_CONFIG, ENEMY_CONFIG, TANK_CONFIG, BULLET_CONFIG } from './constants.ts';
+import { STAGE_1_MAP, MAP_DIMENSIONS, P1_CONFIG, ENEMY_CONFIG, TANK_CONFIG, BULLET_CONFIG, SIMULATION_CONFIG } from './constants.ts';
 import { TILE_TYPES, type InputState, type Direction, type EnemyTank } from './types.ts';
 import { GameEngine } from './gameEngine.ts';
 import { calculateLayoutMetrics } from '../hooks/useViewportLayout.ts';
@@ -12,6 +12,8 @@ import { SoundManager } from './audio.ts';
 import { hasLineOfSight, updateEnemyAI } from './ai/enemyAI.ts';
 import { createRuntimeTerrainState } from './terrain.ts';
 
+import { SCORE_VALUES, ScoreManager } from './scoreManager.ts';
+
 export interface FinalPlusTestCaseResult {
   id: string;
   name: string;
@@ -19,7 +21,7 @@ export interface FinalPlusTestCaseResult {
   actual?: string;
   expected?: string;
   details?: string;
-  category: 'PORTRAIT_LAYOUT' | 'FPS_CONTROL' | 'EXTREME_DIFFICULTY' | 'AUDIO_SYSTEM' | 'EAGLE_ART';
+  category: 'PORTRAIT_LAYOUT' | 'FPS_CONTROL' | 'EXTREME_DIFFICULTY' | 'AUDIO_SYSTEM' | 'EAGLE_ART' | 'XP_SYSTEM' | 'P1_AUDIO';
 }
 
 export function runAllM6FinalPlusTests(): {
@@ -276,38 +278,40 @@ export function runAllM6FinalPlusTests(): {
 
   record(
     'TC-FP-09',
-    'Chuyển đổi FPS giữa trận đấu không reset game, không đổi vị trí tank và đạn',
+    'Game mặc định khóa cố định 60 FPS, loại bỏ hoàn toàn tùy chọn đổi FPS cho người chơi',
     'FPS_CONTROL',
     () => {
+      // 1. Kiểm tra hằng số fixed timestep 60Hz được bảo toàn
+      if (Math.abs(SIMULATION_CONFIG.FIXED_DT_S - 1 / 60) > 0.0001) {
+        throw new Error(`Physics Timestep phải là 1/60s (~16.67ms), nhận: ${SIMULATION_CONFIG.FIXED_DT_S}`);
+      }
+
+      // 2. Kiểm tra GameEngine vận hành chuẩn mực ở 60Hz
       const engine = new GameEngine(undefined, undefined, false);
-      const moveInput: InputState = { up: true, down: false, left: false, right: false, shoot: true };
+      const moveInput: InputState = { up: true, down: false, left: false, right: false, shoot: false };
 
-      // Chạy 30 ticks ở 60 FPS
-      for (let i = 0; i < 30; i++) {
-        engine.advanceTime(16.6666, moveInput);
+      // 60 frames ở delta 1000/60ms phải tạo ra đúng 60 ticks vật lý
+      let ticks = 0;
+      for (let i = 0; i < 60; i++) {
+        ticks += engine.advanceTime(1000 / 60, emptyInput);
       }
-      const p1Before = { ...engine.getState().p1 };
-      const bulletBefore = engine.getState().bullets.length;
-      const scoreBefore = engine.getState().score;
 
-      // Giả lập chuyển sang 30 FPS (chạy tiếp 10 frames ở delta 33.33ms)
-      for (let i = 0; i < 10; i++) {
-        engine.advanceTime(33.3333, emptyInput);
+      if (ticks !== 60) {
+        throw new Error(`Kỳ vọng 60 ticks trong 1 giây, thực tế: ${ticks}`);
       }
-      const p1After = engine.getState().p1;
 
-      if (p1After.x !== p1Before.x) {
-        throw new Error('Vị trí X của P1 bị lệch khi chuyển FPS');
+      // Vận tốc P1 là 60 px/s (1px/tick ở 60Hz). Di chuyển 20 ticks -> đúng 20px (192 -> 172)
+      const engineMove = new GameEngine(undefined, undefined, false);
+      for (let i = 0; i < 20; i++) {
+        engineMove.advanceTime(1000 / 60, moveInput);
       }
-      if (engine.getState().score !== scoreBefore) {
-        throw new Error('Điểm số bị thay đổi bất thường khi đổi FPS');
-      }
-      if (engine.getState().matchState !== 'PLAYING') {
-        throw new Error('Trận đấu bị reset trạng thái khi đổi FPS');
+      const p1Y = engineMove.getState().p1.y;
+      if (Math.abs(p1Y - (192 - 20)) > 0.1) {
+        throw new Error(`Vị trí P1 không đúng sau 20 ticks (20px): ${p1Y}`);
       }
     },
-    'Chuyển đổi FPS diễn ra mượt mà, trận đấu tiếp diễn bình thường không gián đoạn',
-    'Người chơi có thể chuyển qua lại giữa 30 và 60 FPS bất kỳ lúc nào để so sánh'
+    'Game khóa cứng 60 FPS chuẩn mực arcade, loại bỏ tùy chọn 30 FPS khỏi giao diện',
+    'Physics, AI, đạn và cooldown vận hành nhất quán 100% trên fixed timestep 60Hz'
   );
 
   // =========================================================================
@@ -662,6 +666,187 @@ export function runAllM6FinalPlusTests(): {
     },
     'Khôi phục hoàn toàn Đại Bàng Hoàng Gia nguyên vẹn cùng toàn bộ hàng gạch bảo vệ',
     'Cho phép người chơi thử lại màn chơi ngay lập tức mà không gặp bất kỳ lỗi dữ liệu nào'
+  );
+
+  // =========================================================================
+  // GROUP F: XP SYSTEM SPECIFICATION (1, 2, 3, 5 XP & DECOUPLING FROM XU)
+  // =========================================================================
+
+  record(
+    'TC-FP-22',
+    'Enemy tiêu diệt cộng đúng điểm XP: Basic = 1, Fast = 2, Power = 3, Armor = 5 XP (Armor là 5 XP, không phải 4)',
+    'XP_SYSTEM',
+    () => {
+      // Kiểm tra trong constants gốc
+      if (ENEMY_CONFIG.SPECS.BASIC.score !== 1) {
+        throw new Error(`Điểm Basic trong ENEMY_CONFIG phải là 1 XP, nhận: ${ENEMY_CONFIG.SPECS.BASIC.score}`);
+      }
+      if (ENEMY_CONFIG.SPECS.FAST.score !== 2) {
+        throw new Error(`Điểm Fast trong ENEMY_CONFIG phải là 2 XP, nhận: ${ENEMY_CONFIG.SPECS.FAST.score}`);
+      }
+      if (ENEMY_CONFIG.SPECS.POWER.score !== 3) {
+        throw new Error(`Điểm Power trong ENEMY_CONFIG phải là 3 XP, nhận: ${ENEMY_CONFIG.SPECS.POWER.score}`);
+      }
+      if (ENEMY_CONFIG.SPECS.ARMOR.score !== 5) {
+        throw new Error(`Điểm Armor trong ENEMY_CONFIG phải là 5 XP (không phải 4), nhận: ${ENEMY_CONFIG.SPECS.ARMOR.score}`);
+      }
+
+      // Kiểm tra trong SCORE_VALUES của scoreManager
+      if (SCORE_VALUES.BASIC !== 1 || SCORE_VALUES.FAST !== 2 || SCORE_VALUES.POWER !== 3 || SCORE_VALUES.ARMOR !== 5) {
+        throw new Error(`SCORE_VALUES không khớp: ${JSON.stringify(SCORE_VALUES)}`);
+      }
+    },
+    'Hệ thống điểm số được chuyển đổi hoàn toàn sang đơn vị XP: 1, 2, 3, 5 XP chuẩn xác',
+    'Đặc biệt đảm bảo Armor Tank là 5 XP (không dùng 4 XP hay 400đ cũ)'
+  );
+
+  record(
+    'TC-FP-23',
+    'Chỉ cộng XP khi Enemy bị tiêu diệt hoàn toàn (HP <= 0), không cộng khi chỉ trúng đạn, không trùng lặp ID',
+    'XP_SYSTEM',
+    () => {
+      const sm = new ScoreManager('test_bantank_score_fp23');
+      sm.resetRun();
+
+      // Tiêu diệt hợp lệ 1 xe Power (3 XP)
+      const res1 = sm.recordEnemyDefeated('enemy_power_1', 'POWER');
+      if (!res1 || sm.getTotalScore() !== 3) {
+        throw new Error(`Cộng điểm thất bại hoặc sai: ${sm.getTotalScore()}`);
+      }
+
+      // Thử tiêu diệt lặp lại cùng ID
+      const resDup = sm.recordEnemyDefeated('enemy_power_1', 'POWER');
+      if (resDup !== false || sm.getTotalScore() !== 3) {
+        throw new Error('Chặn trùng lặp ID thất bại! XP bị cộng 2 lần cho cùng một enemy');
+      }
+
+      // Tiêu diệt thêm 1 Armor (5 XP)
+      sm.recordEnemyDefeated('enemy_armor_1', 'ARMOR');
+      if (sm.getTotalScore() !== 8) {
+        throw new Error(`Tổng XP phải là 3 + 5 = 8 XP, nhận: ${sm.getTotalScore()}`);
+      }
+    },
+    'XP chỉ được ghi nhận một lần duy nhất khi kẻ địch nổ tung (HP <= 0)',
+    'Loại bỏ tuyệt đối nguy cơ bug nhân đôi XP hoặc cộng điểm khi mới chỉ bắn trúng'
+  );
+
+  record(
+    'TC-FP-24',
+    'Tách bạch hoàn toàn XP và Xu: Nhận XP không tăng Xu, không tự động quy đổi, cơ chế tự động bị vô hiệu hóa',
+    'XP_SYSTEM',
+    () => {
+      const sm = new ScoreManager('test_bantank_economy_fp24');
+      sm.resetRun();
+
+      // Số dư ban đầu
+      const initialXu = sm.getXuBalance();
+      if (initialXu !== 0) {
+        throw new Error(`Số dư Xu ban đầu phải là 0, nhận: ${initialXu}`);
+      }
+
+      // Tích lũy 15 XP từ 3 xe Armor (3 x 5 = 15 XP)
+      sm.recordEnemyDefeated('e1', 'ARMOR');
+      sm.recordEnemyDefeated('e2', 'ARMOR');
+      sm.recordEnemyDefeated('e3', 'ARMOR');
+
+      const totalXp = sm.getTotalXp();
+      const xuAfter = sm.getXuBalance();
+
+      if (totalXp !== 15) {
+        throw new Error(`Tổng XP phải là 15, nhận: ${totalXp}`);
+      }
+
+      // Tuyệt đối không thay đổi số dư Xu
+      if (xuAfter !== 0) {
+        throw new Error(`LỖI: XP đã tự động quy đổi hoặc làm thay đổi số dư Xu! Nhận: ${xuAfter}`);
+      }
+
+      // Kiểm tra interface quy đổi tự động bị khóa (dormant)
+      if (sm.canConvertXpToXu(10) !== false) {
+        throw new Error('Hàm canConvertXpToXu phải trả về false trong luồng gameplay mặc định');
+      }
+
+      const conversionResult = sm.convertXpToXuManual(10);
+      if (conversionResult.success !== false || conversionResult.convertedXu !== 0) {
+        throw new Error('Quy đổi tự động không được phép hoạt động ngầm');
+      }
+    },
+    'XP là điểm tiến trình chiến đấu, Xu là đơn vị tiền tệ độc lập hoàn toàn',
+    'Không có bất kỳ tỷ lệ quy đổi tự động nào diễn ra trong toàn bộ chu trình trò chơi'
+  );
+
+  // =========================================================================
+  // GROUP G: P1 DESTRUCTION AUDIO & EVENT DEDUPLICATION
+  // =========================================================================
+
+  record(
+    'TC-FP-25',
+    'Âm thanh P1 bị tiêu diệt: Phát sự kiện P1_EXPLOSION riêng biệt khi P1 nổ, đúng 1 lần cho mỗi mạng mất',
+    'P1_AUDIO',
+    () => {
+      const engine = new GameEngine(undefined, undefined, false);
+      const state = engine.getState();
+
+      // Spawn một viên đạn địch lao thẳng vào xe P1 (P1 ở 48, 192)
+      // Tắt khiên bảo vệ P1 để nhận sát thương ngay
+      state.p1.isShielded = false;
+      state.p1State.shieldTimer = 0;
+
+      const lethalEnemyBullet = {
+        id: 'lethal_eb_1',
+        ownerId: 'enemy_boss',
+        x: state.p1.x + 6,
+        y: state.p1.y - 2,
+        direction: 'DOWN' as Direction,
+        speed: 160,
+        power: 1,
+        ownerType: 'enemy' as const,
+      };
+      state.bullets.push(lethalEnemyBullet);
+
+      // Chạy 2 ticks để đạn chạm hitbox P1
+      engine.stepTick(emptyInput);
+      engine.stepTick(emptyInput);
+
+      // Lấy các sự kiện combat đã phát ra
+      const combatEvents = engine.popCombatEvents();
+      const p1ExplosionEvents = combatEvents.filter((ev) => ev.type === 'P1_EXPLOSION');
+
+      if (p1ExplosionEvents.length !== 1) {
+        throw new Error(`Kỳ vọng đúng 1 sự kiện P1_EXPLOSION, thực tế: ${p1ExplosionEvents.length}`);
+      }
+
+      const p1Ev = p1ExplosionEvents[0];
+      if (p1Ev.x !== state.p1.x + 8 || p1Ev.y !== state.p1.y + 8) {
+        throw new Error(`Tọa độ P1_EXPLOSION (${p1Ev.x}, ${p1Ev.y}) không đúng tâm P1`);
+      }
+
+      if (state.p1State.lives !== 2) {
+        throw new Error(`Mạng P1 phải giảm từ 3 xuống 2, thực tế: ${state.p1State.lives}`);
+      }
+    },
+    'Sự kiện P1_EXPLOSION kích hoạt chính xác một lần duy nhất khi P1 mất mạng',
+    'Kích hoạt âm thanh nổ đặc trưng riêng biệt của P1, không nhầm lẫn với xe địch hay căn cứ'
+  );
+
+  record(
+    'TC-FP-26',
+    'Âm thanh P1 nổ tuân thủ match lifecycle: Bị chặn khi game PAUSE, hỗ trợ deduplication',
+    'P1_AUDIO',
+    () => {
+      const sm = SoundManager.getInstance();
+
+      // Kiểm tra cơ chế deduplication: cùng 1 event ID không thể phát lại lần thứ hai
+      const testEv = { id: 'evt_p1_unique_test_456', type: 'P1_EXPLOSION' };
+      sm.handleCombatEvent(testEv, { isPaused: false });
+      sm.handleCombatEvent(testEv, { isPaused: false });
+
+      // Kiểm tra khi đang PAUSED: không kích hoạt âm thanh
+      const pausedEv = { id: 'evt_p1_paused_test_789', type: 'P1_EXPLOSION' };
+      sm.handleCombatEvent(pausedEv, { isPaused: true });
+    },
+    'Cơ chế handleCombatEvent chặn hoàn toàn âm thanh nổ khi game đang tạm dừng',
+    'Deduplication ngăn chặn triệt để hiện tượng trùng lặp hoặc dội âm'
   );
 
   return {

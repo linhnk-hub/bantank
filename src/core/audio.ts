@@ -300,6 +300,72 @@ export class SoundManager {
   }
 
   /**
+   * Dedicated P1 Player Tank Explosion:
+   * Distinct synthesized retro explosion: high-transient crack, descending distorted tone (240Hz -> 40Hz, 380ms),
+   * low sub-bass impact, and crunch noise burst.
+   * Distinct from regular enemy explosion (240ms) and base explosion (600ms).
+   */
+  public playP1Explosion(): void {
+    if (!this.settings.sfxEnabled || !this.ctx || !this.sfxGain || !this.noiseBuffer) return;
+    try {
+      const now = this.ctx.currentTime;
+
+      // 1. Noise burst with sweeping lowpass filter
+      const noise = this.ctx.createBufferSource();
+      noise.buffer = this.noiseBuffer;
+
+      const filter = this.ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(1000, now);
+      filter.frequency.exponentialRampToValueAtTime(50, now + 0.36);
+
+      const noiseGain = this.ctx.createGain();
+      noiseGain.gain.setValueAtTime(0.55, now);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + 0.38);
+
+      // 2. Descending distorted tonal pulse (authentic 8-bit crash)
+      const tonal = this.ctx.createOscillator();
+      tonal.type = 'sawtooth';
+      tonal.frequency.setValueAtTime(240, now);
+      tonal.frequency.exponentialRampToValueAtTime(40, now + 0.35);
+
+      const tonalGain = this.ctx.createGain();
+      tonalGain.gain.setValueAtTime(0.45, now);
+      tonalGain.gain.exponentialRampToValueAtTime(0.001, now + 0.36);
+
+      // 3. Deep sub-bass thud (triangle 110Hz -> 25Hz)
+      const sub = this.ctx.createOscillator();
+      sub.type = 'triangle';
+      sub.frequency.setValueAtTime(110, now);
+      sub.frequency.exponentialRampToValueAtTime(25, now + 0.32);
+
+      const subGain = this.ctx.createGain();
+      subGain.gain.setValueAtTime(0.5, now);
+      subGain.gain.exponentialRampToValueAtTime(0.001, now + 0.35);
+
+      noise.connect(filter);
+      filter.connect(noiseGain);
+      noiseGain.connect(this.sfxGain);
+
+      tonal.connect(tonalGain);
+      tonalGain.connect(this.sfxGain);
+
+      sub.connect(subGain);
+      subGain.connect(this.sfxGain);
+
+      noise.start(now);
+      tonal.start(now);
+      sub.start(now);
+
+      noise.stop(now + 0.4);
+      tonal.stop(now + 0.4);
+      sub.stop(now + 0.4);
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
    * 4. Base / Eagle Shatter: deep, massive multi-stage explosion (600ms)
    * Distinctly heavier and longer than regular enemy explosion.
    */
@@ -547,10 +613,14 @@ export class SoundManager {
 
   /**
    * Process combat events with automatic deduplication.
+   * Respects match lifecycle: does NOT play SFX when game is paused or game is over.
    */
-  public handleCombatEvent(event: { id: string; type: string }): void {
+  public handleCombatEvent(
+    event: { id: string; type: string },
+    options?: { isPaused?: boolean; isGameOver?: boolean }
+  ): void {
     if (this.processedEventIds.has(event.id)) {
-      return; // Deduplicated!
+      return; // Deduplicated! Exactly once per event ID.
     }
     this.processedEventIds.add(event.id);
 
@@ -560,8 +630,17 @@ export class SoundManager {
       this.processedEventIds = new Set(arr.slice(100));
     }
 
-    if (event.type === 'TANK_EXPLOSION') {
-      this.playEnemyExplosion();
+    // Do not trigger combat SFX when paused
+    if (options?.isPaused) {
+      return;
+    }
+
+    if (event.type === 'P1_EXPLOSION') {
+      this.playP1Explosion();
+    } else if (event.type === 'TANK_EXPLOSION') {
+      if (!options?.isGameOver) {
+        this.playEnemyExplosion();
+      }
     } else if (event.type === 'BASE_EXPLOSION') {
       this.playBaseExplosion();
     }

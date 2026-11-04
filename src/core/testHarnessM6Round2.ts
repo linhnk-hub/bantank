@@ -218,6 +218,9 @@ export function runAllM6Round2Tests(): {
       const state = engine.getState();
 
       let explosionPos: { x: number; y: number } | null = null;
+      engine.on('P1_EXPLOSION', (payload: any) => {
+        explosionPos = { x: payload.x, y: payload.y };
+      });
       engine.on('TANK_EXPLOSION', (payload: any) => {
         explosionPos = { x: payload.x, y: payload.y };
       });

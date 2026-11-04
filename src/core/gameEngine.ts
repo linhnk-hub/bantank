@@ -653,8 +653,8 @@ export class GameEngine {
           continue;
         }
 
-        // If P1 is NOT shielded: P1 dies with explosion!
-        this.emitCombatEvent('TANK_EXPLOSION', this.state.p1.x + 8, this.state.p1.y + 8);
+        // If P1 is NOT shielded: P1 dies with dedicated P1_EXPLOSION!
+        this.emitCombatEvent('P1_EXPLOSION', this.state.p1.x + 8, this.state.p1.y + 8);
         this.state.p1State.lives -= 1;
         this.state.p1State.isDead = true;
         this.state.p1.isAlive = false;

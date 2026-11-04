@@ -235,10 +235,10 @@ export interface GameCoreState {
 }
 
 /* ====================================================================
-   COMBAT VISUAL EFFECTS TYPES
+   COMBAT VISUAL EFFECTS & AUDIO TYPES
 ==================================================================== */
 
-export type CombatEventType = 'HIT_SPARK' | 'TANK_EXPLOSION' | 'BASE_EXPLOSION';
+export type CombatEventType = 'HIT_SPARK' | 'TANK_EXPLOSION' | 'BASE_EXPLOSION' | 'P1_EXPLOSION';
 
 export interface CombatEvent {
   id: string;
@@ -246,6 +246,26 @@ export interface CombatEvent {
   x: number;
   y: number;
   createdAtTick: number;
+}
+
+/* ====================================================================
+   ECONOMY SEPARATION: XP (PROGRESSION) VS XU (CURRENCY)
+   Strict guarantee: XP and Xu are 100% decoupled in gameplay loops.
+   No automatic conversion or exchange rate exists.
+==================================================================== */
+
+export interface PlayerEconomyState {
+  totalXp: number;
+  xuBalance: number;
+}
+
+export interface EconomyConversionInterface {
+  /**
+   * Dormant manual conversion interface reserved for future intentional actions.
+   * STRICT GUARANTEE: Never executed automatically during gameplay.
+   */
+  canConvertXpToXu: (xpAmount: number) => boolean;
+  convertXpToXuManual?: (xpAmount: number) => { success: boolean; convertedXu: number; remainingXp: number };
 }
 
 export interface TestCaseResult {

@@ -82,6 +82,11 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
       },
+      fps: {
+        target: 60,
+        limit: 60,
+        forceSetTimeOut: false,
+      },
       scene: [activeScene],
     };
 
