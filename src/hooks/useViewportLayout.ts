@@ -42,21 +42,21 @@ export function calculateLayoutMetrics(
     rightControlWidthPx = 0;
   } else if (isLandscape) {
     // Landscape Mode (Phone or iPad/Tablet)
-    const headerH = isTablet ? 38 : 36;
-    const availH = Math.max(208, h - headerH - 8);
+    // Sized to 98% of available height after top HUD (36px) to maximize square canvas area
+    const availH = Math.floor((h - 36) * 0.98);
 
     if (isTablet) {
-      // iPad in landscape: controls need 150px each, canvas takes remaining square
-      leftControlWidthPx = 150;
-      rightControlWidthPx = 150;
-      const availW = w - (leftControlWidthPx + rightControlWidthPx);
+      // iPad in landscape: controls need 150px each, canvas takes remaining square up to 716px
+      leftControlWidthPx = Math.floor((w - availH) / 2);
+      rightControlWidthPx = leftControlWidthPx;
+      const availW = w - (140 + 140);
       canvasSizePx = Math.floor(Math.min(availH, availW));
     } else {
-      // Phone in landscape: controls need ~130px each, canvas takes maximum vertical height
-      leftControlWidthPx = Math.max(110, Math.floor((w - availH) / 2));
-      rightControlWidthPx = leftControlWidthPx;
+      // Phone in landscape: canvas takes maximized vertical square (346px on 390h)
       const availW = Math.max(208, w - 240);
       canvasSizePx = Math.floor(Math.min(availH, availW));
+      leftControlWidthPx = Math.max(140, Math.floor((w - canvasSizePx) / 2));
+      rightControlWidthPx = leftControlWidthPx;
     }
   } else {
     // Portrait Mode (Phone or iPad/Tablet)
@@ -65,7 +65,8 @@ export function calculateLayoutMetrics(
       const availH = h - 280;
       canvasSizePx = Math.floor(Math.min(availW, availH, 728));
     } else {
-      const headerH = 38;
+      const headerH = 36;
+      // Reserve controls height + safe area bottom buffer (160px)
       const controlsH = 160;
       const availH = Math.max(208, h - headerH - controlsH - 16);
       const availW = Math.max(208, w - 16);
@@ -110,7 +111,11 @@ export function useViewportLayout(): ViewportLayoutState {
     }
     const hasFinePointer = window.matchMedia('(pointer: fine)').matches;
     const maxTouchPoints = navigator.maxTouchPoints || 0;
-    return calculateLayoutMetrics(window.innerWidth, window.innerHeight, hasFinePointer, maxTouchPoints);
+    // Use window.visualViewport if available for Safari toolbar accounting
+    const vv = window.visualViewport;
+    const w = vv ? Math.round(vv.width) : window.innerWidth;
+    const h = vv ? Math.round(vv.height) : window.innerHeight;
+    return calculateLayoutMetrics(w, h, hasFinePointer, maxTouchPoints);
   }, []);
 
   const [layout, setLayout] = useState<ViewportLayoutState>(getMetrics);
@@ -123,13 +128,25 @@ export function useViewportLayout(): ViewportLayoutState {
     window.addEventListener('resize', handleUpdate, { passive: true });
     window.addEventListener('orientationchange', handleUpdate, { passive: true });
 
-    // In case mobile browser expands URL bar or address bar
-    const timer = setTimeout(handleUpdate, 150);
+    const vv = window.visualViewport;
+    if (vv) {
+      vv.addEventListener('resize', handleUpdate, { passive: true });
+      vv.addEventListener('scroll', handleUpdate, { passive: true });
+    }
+
+    // In case mobile browser dynamically expands or collapses URL/toolbar
+    const timer1 = setTimeout(handleUpdate, 100);
+    const timer2 = setTimeout(handleUpdate, 300);
 
     return () => {
       window.removeEventListener('resize', handleUpdate);
       window.removeEventListener('orientationchange', handleUpdate);
-      clearTimeout(timer);
+      if (vv) {
+        vv.removeEventListener('resize', handleUpdate);
+        vv.removeEventListener('scroll', handleUpdate);
+      }
+      clearTimeout(timer1);
+      clearTimeout(timer2);
     };
   }, [getMetrics]);
 

@@ -10,6 +10,7 @@ import {
   type TankStructure,
   type RuntimeTerrainState,
   type BulletStructure,
+  type AABB,
 } from './types.ts';
 import {
   getTankHitbox,
@@ -21,12 +22,15 @@ import {
 import { updateEnemyAI } from './ai/enemyAI.ts';
 import { spawnBullet } from './bullet.ts';
 import { EnemyCoordinator } from './ai/coordinator.ts';
+import { findPathAStar } from './ai/pathfinding.ts';
 
 export class EnemyManager {
   private queue: EnemyType[] = [];
   private activeEnemies: EnemyTank[] = [];
   private spawnIndex: number = 0;
   private spawnCooldown: number = 1.0;
+  private spawnRetryTimer: number = 0;
+  private spawnPointOccupiedTimers: number[] = [0, 0, 0];
   private nextEnemyId: number = 1;
   private coordinator: EnemyCoordinator;
 
@@ -40,6 +44,8 @@ export class EnemyManager {
     this.activeEnemies = [];
     this.spawnIndex = 0;
     this.spawnCooldown = 1.0;
+    this.spawnRetryTimer = 0;
+    this.spawnPointOccupiedTimers = [0, 0, 0];
     this.nextEnemyId = 1;
     this.coordinator.reset();
   }
@@ -60,17 +66,23 @@ export class EnemyManager {
     return this.coordinator;
   }
 
+  public getSpawnOccupiedTimers(): number[] {
+    return [...this.spawnPointOccupiedTimers];
+  }
+
   /**
    * Spawns an enemy if conditions are met:
    * - queue is not empty
    * - active enemies < MAX_ACTIVE (5)
    * - spawn location has no other tank, no bullet, and no impassable terrain
-   * If blocked: DOES NOT discard or shift from queue; waits and retries.
+   * If blocked by tank: does NOT discard from queue; retries every 100ms.
+   * If occupied >= 2.0s: orders occupying enemy to find a valid path to vacate.
    */
   public trySpawnEnemy(
     terrain: RuntimeTerrainState,
     allTanks: Array<{ id: string; x: number; y: number; isAlive: boolean }>,
-    activeBullets: BulletStructure[] = []
+    activeBullets: BulletStructure[] = [],
+    dt: number = 0.01667
   ): EnemyTank | null {
     if (this.queue.length === 0) return null;
     if (this.activeEnemies.length >= ENEMY_CONFIG.MAX_ACTIVE) return null;
@@ -87,7 +99,15 @@ export class EnemyManager {
     // 2. Check for tank collision
     const hasTankConflict = checkTankVsTanks('spawn_probe', spawnBox, allTanks);
     if (hasTankConflict) {
-      return null; // Obstructed by another tank -> wait, queue preserved
+      // Obstructed by another tank -> increment occupancy timer and wait
+      this.spawnPointOccupiedTimers[this.spawnIndex] =
+        (this.spawnPointOccupiedTimers[this.spawnIndex] || 0) + dt;
+
+      // If occupied for >= 2.0s, order occupying enemy tank to vacate
+      if (this.spawnPointOccupiedTimers[this.spawnIndex] >= 2.0) {
+        this.triggerEnemySpawnAvoidance(spawnBox, terrain, allTanks);
+      }
+      return null; // Queue strictly preserved
     }
 
     // 3. Check for flying bullets in spawn box
@@ -97,6 +117,9 @@ export class EnemyManager {
         return null; // Flying bullet danger -> wait, queue preserved
       }
     }
+
+    // Clear occupancy timer on successful check
+    this.spawnPointOccupiedTimers[this.spawnIndex] = 0;
 
     // Safe to spawn! Cycle spawn index
     this.spawnIndex = (this.spawnIndex + 1) % ENEMY_CONFIG.SPAWN_POINTS.length;
@@ -142,6 +165,48 @@ export class EnemyManager {
   }
 
   /**
+   * If an enemy is occupying an enemy spawn point for >= 2.0s,
+   * find nearest valid path to vacate using standard physics/A*.
+   */
+  public triggerEnemySpawnAvoidance(
+    spawnBox: AABB,
+    terrain: RuntimeTerrainState,
+    allTanks: Array<{ id: string; x: number; y: number; isAlive: boolean }>
+  ): void {
+    const occupyingEnemies = this.activeEnemies.filter(
+      (e) => e.isAlive && intersectAABB(getTankHitbox(e.x, e.y), spawnBox)
+    );
+
+    for (const enemy of occupyingEnemies) {
+      // Possible escape points (move down or side away from row 0)
+      const escapeCandidates = [
+        { x: enemy.x, y: Math.min(TANK_CONFIG.MAX_Y, enemy.y + 32) },
+        { x: Math.min(TANK_CONFIG.MAX_X, enemy.x + 32), y: enemy.y },
+        { x: Math.max(0, enemy.x - 32), y: enemy.y },
+        { x: enemy.x, y: Math.min(TANK_CONFIG.MAX_Y, enemy.y + 48) },
+      ];
+
+      const otherTanks = allTanks.filter((t) => t.id !== enemy.id);
+
+      for (const cand of escapeCandidates) {
+        const candBox = getTankHitbox(cand.x, cand.y);
+        const terr = checkHitboxVsTerrain(candBox, terrain, { forBullet: false });
+        const tank = checkTankVsTanks(enemy.id, candBox, otherTanks);
+        if (!terr.collides && !tank) {
+          const path = findPathAStar(enemy, cand, terrain, otherTanks, enemy.id);
+          if (path.length > 0) {
+            enemy.path = path;
+            enemy.targetPos = cand;
+            enemy.dirHoldTimer = 0;
+            enemy.aiState = 'PATROL';
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Updates all active enemies: coordination, AI, movement, and shooting decisions.
    */
   public update(
@@ -151,13 +216,19 @@ export class EnemyManager {
     terrain: RuntimeTerrainState,
     bullets: BulletStructure[]
   ): BulletStructure[] {
-    // 1. Spawning with minimum 1.0s interval
-    this.spawnCooldown -= dt;
-    if (this.spawnCooldown <= 0) {
-      const allTanks = [p1, ...this.activeEnemies];
-      const spawned = this.trySpawnEnemy(terrain, allTanks, bullets);
-      if (spawned) {
-        this.spawnCooldown = ENEMY_CONFIG.SPAWN_INTERVAL_S;
+    // 1. Spawning with minimum 1.0s interval between successful spawns, retrying every 100ms if blocked
+    if (this.spawnCooldown > 0) {
+      this.spawnCooldown -= dt;
+    } else {
+      this.spawnRetryTimer -= dt;
+      if (this.spawnRetryTimer <= 0) {
+        this.spawnRetryTimer = 0.1; // Check every 100ms
+        const allTanks = [p1, ...this.activeEnemies];
+        const spawned = this.trySpawnEnemy(terrain, allTanks, bullets, dt);
+        if (spawned) {
+          this.spawnCooldown = ENEMY_CONFIG.SPAWN_INTERVAL_S;
+          this.spawnRetryTimer = 0;
+        }
       }
     }
 

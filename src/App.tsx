@@ -249,10 +249,10 @@ export default function App() {
          ========================================================================= */}
       {(!isDesktop && layout.isLandscape) ? (
         <div className="flex-1 flex flex-col h-screen w-screen overflow-hidden safe-area-inset">
-          {/* Slim Landscape Top HUD */}
-          <header className="h-9 bg-neutral-950/95 border-b border-neutral-800 px-3 flex items-center justify-between text-xs shrink-0 z-30">
+          {/* Slim Landscape Top HUD (32px) */}
+          <header className="h-8 bg-neutral-950/95 border-b border-neutral-800 px-2 sm:px-3 flex items-center justify-between text-xs shrink-0 z-30">
             {/* Left: Brand & Stage */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <div className="w-5 h-5 rounded bg-amber-500 flex items-center justify-center font-black text-black text-[11px] shadow">
                 BT
               </div>
@@ -289,7 +289,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={toggleFullscreen}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
                 title={isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}
               >
                 {isFullscreen ? <Minimize className="w-3 h-3 text-amber-400" /> : <Maximize className="w-3 h-3 text-amber-400" />}
@@ -299,7 +299,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={isPaused ? handleResume : handlePause}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold shadow"
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold shadow"
               >
                 {isPaused ? <Play className="w-3 h-3 fill-white" /> : <Pause className="w-3 h-3 fill-white" />}
                 <span>{isPaused ? 'Tiếp tục' : 'Tạm dừng'}</span>
@@ -308,36 +308,36 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsDevDrawerOpen(true)}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
                 title="Bảng Kiểm thử & QA"
               >
                 <Wrench className="w-3 h-3 text-amber-400" />
-                <span className="hidden sm:inline">QA (115 Tests)</span>
+                <span className="hidden sm:inline">QA</span>
               </button>
             </div>
           </header>
 
-          {/* Landscape Main 3-Column Combat View (Balanced & Centered with Explicit Canvas Pixel Scaling) */}
-          <main className="flex-1 flex flex-row items-center justify-center w-full h-[calc(100dvh-36px)] px-2 sm:px-4 py-0 overflow-hidden">
+          {/* Landscape Main 3-Column Combat View (Prioritizing Canvas Area with Compact Controls) */}
+          <main className="flex-1 flex flex-row items-center justify-center w-full h-[calc(100dvh-32px)] px-1 sm:px-2 py-0 overflow-hidden">
             {/* Left Column: Virtual Joystick Centered in left zone */}
             <div
               style={{
                 width: `${layout.leftControlWidthPx}px`,
-                minWidth: `${Math.min(100, layout.leftControlWidthPx)}px`,
+                minWidth: '90px',
               }}
               className="flex-1 flex items-center justify-center h-full"
             >
               <VirtualJoystick
                 activeDirection={landscapeDirection}
                 onDirectionChange={handleLandscapeDirectionChange}
-                size={layout.isTabletOrDesktop ? 160 : 130}
-                knobSize={layout.isTabletOrDesktop ? 56 : 46}
-                deadZone={14}
+                size={layout.isTabletOrDesktop ? 130 : 100}
+                knobSize={layout.isTabletOrDesktop ? 46 : 36}
+                deadZone={12}
                 disabled={isPaused}
               />
             </div>
 
-            {/* Center Column: Game Canvas 1:1 Aspect Ratio (Explicit Pixel Sized & Resized Instantly) */}
+            {/* Center Column: Game Canvas Maximized 1:1 Aspect Ratio (No thick border, no clipping) */}
             <div
               style={{
                 width: `${layout.canvasSizePx}px`,
@@ -358,12 +358,12 @@ export default function App() {
 
               {/* In MENU state: Overlay allowing immediate match start */}
               {gameState?.matchState === 'MENU' && (
-                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20 rounded-xl">
+                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20 rounded-sm">
                   <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center font-black text-black text-sm mb-2 shadow-lg">
                     BT
                   </div>
                   <h2 className="text-base font-black text-white tracking-wider mb-1">
-                    BANTANK ONLINE
+                    BẮN TANK ONLINE
                   </h2>
                   <p className="text-[11px] text-amber-300 font-mono font-bold mb-3">
                     STAGE 1 • 30 Xe Địch • 1 Đại Bàng Hoàng Gia
@@ -384,14 +384,14 @@ export default function App() {
             <div
               style={{
                 width: `${layout.rightControlWidthPx}px`,
-                minWidth: `${Math.min(100, layout.rightControlWidthPx)}px`,
+                minWidth: '90px',
               }}
               className="flex-1 flex items-center justify-center h-full"
             >
               <VirtualShootButton
                 isShooting={landscapeShooting}
                 onShootChange={handleLandscapeShootChange}
-                size={layout.isTabletOrDesktop ? 96 : 76}
+                size={layout.isTabletOrDesktop ? 76 : 64}
               />
             </div>
           </main>
@@ -499,7 +499,7 @@ export default function App() {
                     BT
                   </div>
                   <h2 className="text-base font-black text-white tracking-wider mb-1">
-                    BANTANK ONLINE
+                    BẮN TANK ONLINE
                   </h2>
                   <p className="text-[11px] text-amber-300 font-mono font-bold mb-3">
                     STAGE 1 • 30 Xe Địch • 1 Căn Cứ Đại Bàng
@@ -517,8 +517,13 @@ export default function App() {
             </div>
           </main>
 
-          {/* Bottom Area: Centered Touch Controls with Symmetric Flex Layout */}
-          <footer className="w-full shrink-0 px-2 pb-1 flex justify-center">
+          {/* Bottom Area: Centered Touch Controls with Symmetric Flex Layout elevated above Safari toolbar */}
+          <footer
+            style={{
+              paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))',
+            }}
+            className="w-full shrink-0 px-2 pt-1 flex justify-center z-20"
+          >
             <div
               style={{
                 width: `${layout.canvasSizePx}px`,
@@ -550,7 +555,7 @@ export default function App() {
                 </div>
                 <div>
                   <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
-                    BanTank Online
+                    Bắn Tank Online
                     <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 font-medium">
                       M4 Solo
                     </span>
@@ -594,7 +599,7 @@ export default function App() {
                   <Wrench className="w-3.5 h-3.5 text-amber-400" />
                   <span className="hidden sm:inline">Kiểm thử</span>
                   <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
-                    115 Tests
+                    140 Tests
                   </span>
                 </button>
 
@@ -628,7 +633,7 @@ export default function App() {
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-200 font-semibold"
                 >
                   <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Bảng 115 Tests Tự Động</span>
+                  <span>Bảng 140 Tests Tự Động</span>
                 </button>
                 <button
                   onClick={() => setShowTouchControls((v) => !v)}
@@ -713,7 +718,7 @@ export default function App() {
                         BT
                       </div>
                       <h2 className="text-xl sm:text-2xl font-black text-white tracking-wider mb-1.5">
-                        BANTANK ONLINE
+                        BẮN TANK ONLINE
                       </h2>
                       <p className="text-xs sm:text-sm text-neutral-400 mb-5 max-w-sm">
                         Chiến dịch Solo • 30 Xe Địch • 1 Đại Bàng Hoàng Gia • Tốc độ 60Hz Chuẩn Xác

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { SIMULATION_CONFIG, P1_CONFIG, ENEMY_CONFIG } from './constants.ts';
+import { SIMULATION_CONFIG, P1_CONFIG, ENEMY_CONFIG, TANK_CONFIG } from './constants.ts';
 import {
   type GameCoreState,
   type InputState,
@@ -12,6 +12,7 @@ import {
   type BulletStructure,
   type EnemyType,
   type EnemyTank,
+  type AABB,
 } from './types.ts';
 import { createRuntimeTerrainState } from './terrain.ts';
 import { createP1Tank, updateTankMovement } from './tank.ts';
@@ -20,10 +21,12 @@ import { EnemyManager } from './enemyManager.ts';
 import {
   checkBulletVsBullet,
   checkTankVsTanks,
+  checkHitboxVsTerrain,
   getBulletHitbox,
   getTankHitbox,
   intersectAABB,
 } from './physics.ts';
+import { findPathAStar } from './ai/pathfinding.ts';
 import { MATCH_STATES, MatchStateMachine, type MatchState } from './matchState.ts';
 import { StageManager, type StageDefinition } from './stageManager.ts';
 import { ScoreManager } from './scoreManager.ts';
@@ -387,6 +390,44 @@ export class GameEngine {
   }
 
   /**
+   * If an enemy is occupying P1's fixed spawn point (48, 192) for >= 2.0s,
+   * command the occupying enemy to find a valid path to vacate using standard physics/A*.
+   * Never teleports, pushes through walls, or alters physics.
+   */
+  public triggerSpawnAvoidance(spawnBox: AABB): void {
+    const occupyingEnemies = this.state.enemies.filter(
+      (e) => e.isAlive && intersectAABB(getTankHitbox(e.x, e.y), spawnBox)
+    );
+
+    for (const enemy of occupyingEnemies) {
+      const escapeCandidates = [
+        { x: enemy.x, y: Math.max(0, enemy.y - 32) },
+        { x: Math.min(TANK_CONFIG.MAX_X, enemy.x + 32), y: enemy.y },
+        { x: Math.max(0, enemy.x - 32), y: enemy.y },
+        { x: enemy.x, y: Math.min(TANK_CONFIG.MAX_Y, enemy.y + 32) },
+      ];
+
+      const otherTanks = [this.state.p1, ...this.state.enemies.filter((other) => other.id !== enemy.id)];
+
+      for (const cand of escapeCandidates) {
+        const candBox = getTankHitbox(cand.x, cand.y);
+        const terrColl = checkHitboxVsTerrain(candBox, this.state.terrain, { forBullet: false });
+        const tankColl = checkTankVsTanks(enemy.id, candBox, otherTanks);
+        if (!terrColl.collides && !tankColl) {
+          const path = findPathAStar(enemy, cand, this.state.terrain, otherTanks, enemy.id);
+          if (path.length > 0) {
+            enemy.path = path;
+            enemy.targetPos = cand;
+            enemy.dirHoldTimer = 0;
+            enemy.aiState = 'PATROL';
+            break;
+          }
+        }
+      }
+    }
+  }
+
+  /**
    * Executes exactly one deterministic simulation tick (dt = 1/60s).
    */
   public stepTick(input: InputState): void {
@@ -423,16 +464,22 @@ export class GameEngine {
 
         if (isOccupied) {
           // Wait and re-check every 100ms; NEVER shift spawn coordinates
+          this.state.p1State.occupiedDuration = (this.state.p1State.occupiedDuration || 0) + dt;
           this.state.p1State.waitingForClearSpawn = true;
           this.state.p1State.spawnCheckTimer = (this.state.p1State.spawnCheckTimer || 0.1) - dt;
           if (this.state.p1State.spawnCheckTimer <= 0) {
             this.state.p1State.spawnCheckTimer = 0.1;
+            // If enemy occupies P1 spawn continuously for >= 2.0s, order occupying enemy to vacate
+            if (this.state.p1State.occupiedDuration >= 2.0) {
+              this.triggerSpawnAvoidance(spawnBox);
+            }
           }
         } else {
           // Clear to spawn at fixed (48, 192)
           this.state.p1State.isDead = false;
           this.state.p1State.waitingForClearSpawn = false;
           this.state.p1State.spawnCheckTimer = 0;
+          this.state.p1State.occupiedDuration = 0;
           this.state.p1State.shieldTimer = P1_CONFIG.RESPAWN_SHIELD_S;
           this.state.p1.x = P1_CONFIG.SPAWN_X;
           this.state.p1.y = P1_CONFIG.SPAWN_Y;
@@ -448,17 +495,15 @@ export class GameEngine {
       this.state.p1.isShielded = this.state.p1State.shieldTimer > 0;
     }
 
-    // 2. P1 Tank Movement & Shooting
+    // 2. P1 Tank Movement & Continuous Shooting
     if (this.state.p1.isAlive && !this.state.p1State.isDead) {
       updateTankMovement(this.state.p1, input, this.state.terrain, this.state.enemies);
 
-      const shootTriggered = input.shoot && !this.lastShootState;
-      this.lastShootState = input.shoot;
-
+      // Continuous fire: if shoot button is held down and no P1 bullet is active, immediately fire!
       const p1HasBullet = this.state.bullets.some(
         (b) => b.ownerId === this.state.p1.id || b.ownerType === 'player'
       );
-      if (shootTriggered && !p1HasBullet) {
+      if (input.shoot && !p1HasBullet) {
         const newBullet = spawnBullet(this.state.p1, null);
         if (newBullet) {
           newBullet.ownerType = 'player';
@@ -466,6 +511,7 @@ export class GameEngine {
           this.state.bullet = newBullet;
         }
       }
+      this.lastShootState = input.shoot;
     } else {
       this.lastShootState = input.shoot;
     }
@@ -627,8 +673,10 @@ export class GameEngine {
       ) ?? null;
 
     // 9. Sync active enemies list
-    this.state.enemies = this.enemyManager.getActiveEnemies();
-    this.state.enemyQueue = this.enemyManager.getQueue();
+    if (this.enableEnemies) {
+      this.state.enemies = this.enemyManager.getActiveEnemies();
+      this.state.enemyQueue = this.enemyManager.getQueue();
+    }
 
     // 10. Check Base destroyed state
     if (this.state.terrain.isBaseDestroyed && !this.state.isGameOver) {

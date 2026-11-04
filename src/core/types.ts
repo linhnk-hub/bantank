@@ -198,6 +198,7 @@ export interface P1PlayerState {
   shieldTimer: number; // 3.0s protection upon spawn/respawn
   waitingForClearSpawn: boolean; // True if spawn point (48, 192) is occupied
   spawnCheckTimer: number; // Re-check every 100ms when waiting
+  occupiedDuration?: number; // Continuous seconds the spawn point has been occupied
 }
 
 /* ====================================================================

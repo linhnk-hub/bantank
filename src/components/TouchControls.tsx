@@ -159,12 +159,34 @@ export interface VirtualShootButtonProps {
 export const VirtualShootButton: React.FC<VirtualShootButtonProps> = ({
   isShooting,
   onShootChange,
-  size,
+  size = 76,
 }) => {
+  const isCompact = size < 70;
+  const iconSize = isCompact ? 20 : 26;
+
+  // Global pointerup fallback in case pointerup fired outside captured target
+  useEffect(() => {
+    const handleGlobalPointerUp = () => {
+      if (isShooting) {
+        onShootChange(false);
+      }
+    };
+    window.addEventListener('pointerup', handleGlobalPointerUp);
+    window.addEventListener('pointercancel', handleGlobalPointerUp);
+    return () => {
+      window.removeEventListener('pointerup', handleGlobalPointerUp);
+      window.removeEventListener('pointercancel', handleGlobalPointerUp);
+    };
+  }, [isShooting, onShootChange]);
+
   return (
     <div className="flex flex-col items-center gap-1 select-none touch-none shrink-0">
       <button
         type="button"
+        style={{
+          width: `${size}px`,
+          height: `${size}px`,
+        }}
         onPointerDown={(e) => {
           e.preventDefault();
           try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
@@ -180,17 +202,19 @@ export const VirtualShootButton: React.FC<VirtualShootButtonProps> = ({
           try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
           onShootChange(false);
         }}
-        className={`w-20 h-20 rounded-full flex flex-col items-center justify-center gap-1 transition-all shadow-xl active:scale-95 ${
+        className={`rounded-full flex flex-col items-center justify-center gap-0.5 transition-all shadow-xl active:scale-95 ${
           isShooting
             ? 'bg-red-500 text-white shadow-red-500/40 scale-95 border-2 border-red-300'
             : 'bg-red-600 hover:bg-red-500 text-white shadow-red-600/30 border-2 border-red-400'
         }`}
         aria-label="Bắn đạn"
       >
-        <Crosshair className="w-7 h-7" />
-        <span className="text-[10px] font-black tracking-widest uppercase">BẮN</span>
+        <Crosshair style={{ width: `${iconSize}px`, height: `${iconSize}px` }} />
+        <span className={`${isCompact ? 'text-[9px]' : 'text-[10px]'} font-black tracking-widest uppercase`}>
+          BẮN
+        </span>
       </button>
-      <span className="text-[10px] text-neutral-500 font-mono">SPACE / J</span>
+      {!isCompact && <span className="text-[10px] text-neutral-500 font-mono">SPACE / J</span>}
     </div>
   );
 };
@@ -215,7 +239,7 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
   const activeDirRef = useRef<ActiveDirection>(null);
   const isShootingRef = useRef<boolean>(false);
 
-  // When paused, immediately release all inputs
+  // When paused or window blurs, immediately release all inputs
   useEffect(() => {
     if (isPaused) {
       activeDirRef.current = null;
@@ -225,6 +249,18 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
       onInputChange({ up: false, down: false, left: false, right: false, shoot: false });
     }
   }, [isPaused, onInputChange]);
+
+  useEffect(() => {
+    const handleBlur = () => {
+      activeDirRef.current = null;
+      isShootingRef.current = false;
+      setActiveDirection(null);
+      setIsShooting(false);
+      onInputChange({ up: false, down: false, left: false, right: false, shoot: false });
+    };
+    window.addEventListener('blur', handleBlur);
+    return () => window.removeEventListener('blur', handleBlur);
+  }, [onInputChange]);
 
   const handleDirectionChange = useCallback(
     (dir: ActiveDirection) => {
