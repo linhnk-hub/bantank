@@ -1,1 +1,14 @@
 @import "tailwindcss";
+
+/* Force Phaser canvas to strictly fill its 1:1 container with crisp pixel-art scaling */
+.game-canvas-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  display: block !important;
+  margin: 0 auto !important;
+  image-rendering: pixelated !important;
+  image-rendering: -moz-crisp-edges !important;
+  image-rendering: crisp-edges !important;
+}

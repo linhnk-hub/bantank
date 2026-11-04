@@ -16,7 +16,9 @@ import {
   ShieldCheck,
   CheckCircle2,
   Navigation,
+  Gauge,
 } from 'lucide-react';
+import { TestHarnessSpeedLayoutPanel } from './TestHarnessSpeedLayoutPanel.tsx';
 import { TestHarnessM6FinalPlusPanel } from './TestHarnessM6FinalPlusPanel.tsx';
 import { TestHarnessM6FinalPanel } from './TestHarnessM6FinalPanel.tsx';
 import { TestHarnessM6Round2Panel } from './TestHarnessM6Round2Panel.tsx';
@@ -34,6 +36,7 @@ import { TerrainLegend } from './TerrainLegend.tsx';
 import type { MapValidationResult } from '../core/types.ts';
 
 export type DevTabId =
+  | 'speed_layout'
   | 'm6_final_plus'
   | 'm6_final'
   | 'm6_round2'
@@ -59,7 +62,7 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
   onClose,
   validation,
 }) => {
-  const [activeDevTab, setActiveDevTab] = useState<DevTabId>('m6_final_plus');
+  const [activeDevTab, setActiveDevTab] = useState<DevTabId>('speed_layout');
 
   if (!isOpen) return null;
 
@@ -76,11 +79,11 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
               <h2 className="text-sm font-extrabold text-white flex items-center gap-2">
                 Bắn Tank Online — Bảng Điều Khiển Kiểm Thử & QA
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 font-bold">
-                  <CheckCircle2 className="w-3 h-3" /> 161/161 PASS
+                  <CheckCircle2 className="w-3 h-3" /> 180/180 PASS
                 </span>
               </h2>
               <p className="text-[11px] text-neutral-400">
-                Toàn bộ 161 bài kiểm thử tự động M1–M6, Portrait Layout, FPS 30/60, Độ khó Cực khó, Âm thanh 8-bit & Đại Bàng Hoàng Gia
+                Toàn bộ 180 bài kiểm thử: Tốc độ 60Hz (10s = 600 ticks), Responsive Canvas tối đa, M1–M6, Portrait Layout & Eagle Base
               </p>
             </div>
           </div>
@@ -98,6 +101,18 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
         {/* Tab Navigation Strip */}
         <div className="bg-neutral-950/80 px-4 py-2 border-b border-neutral-800 flex items-center gap-1.5 overflow-x-auto text-xs shrink-0 scrollbar-thin">
           <button
+            onClick={() => setActiveDevTab('speed_layout')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'speed_layout'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Gauge className="w-3.5 h-3.5" />
+            <span>Tốc Độ & Layout (14 Tests)</span>
+          </button>
+
+          <button
             onClick={() => setActiveDevTab('m6_final_plus')}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
               activeDevTab === 'm6_final_plus'
@@ -106,7 +121,7 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
             }`}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>M6 Final+ (21 Tests)</span>
+            <span>M6 Final+ (26 Tests)</span>
           </button>
 
           <button
@@ -256,6 +271,7 @@ export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
 
         {/* Tab Content Container */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {activeDevTab === 'speed_layout' && <TestHarnessSpeedLayoutPanel />}
           {activeDevTab === 'm6_final_plus' && <TestHarnessM6FinalPlusPanel />}
           {activeDevTab === 'm6_final' && <TestHarnessM6FinalPanel />}
           {activeDevTab === 'm6_round2' && <TestHarnessM6Round2Panel />}

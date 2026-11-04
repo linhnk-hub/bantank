@@ -46,11 +46,11 @@ export function calculateLayoutMetrics(
     const availH = Math.floor((h - 36) * 0.98);
 
     if (isTablet) {
-      // iPad in landscape: controls need 150px each, canvas takes remaining square up to 716px
-      leftControlWidthPx = Math.floor((w - availH) / 2);
-      rightControlWidthPx = leftControlWidthPx;
+      // iPad in landscape: controls need 140px each, canvas takes remaining square up to ~717px
       const availW = w - (140 + 140);
       canvasSizePx = Math.floor(Math.min(availH, availW));
+      leftControlWidthPx = Math.floor((w - canvasSizePx) / 2);
+      rightControlWidthPx = leftControlWidthPx;
     } else {
       // Phone in landscape: canvas takes maximized vertical square (346px on 390h)
       const availW = Math.max(208, w - 240);
@@ -65,10 +65,10 @@ export function calculateLayoutMetrics(
       const availH = h - 280;
       canvasSizePx = Math.floor(Math.min(availW, availH, 728));
     } else {
-      const headerH = 36;
-      // Reserve controls height + safe area bottom buffer (160px)
-      const controlsH = 160;
-      const availH = Math.max(208, h - headerH - controlsH - 16);
+      // Phone portrait:
+      // Reserve: header (36px) + separation (28px) + controls (140px) + safe bottom (28px) = 232px
+      const reservedH = 232;
+      const availH = Math.max(208, h - reservedH);
       const availW = Math.max(208, w - 16);
       canvasSizePx = Math.floor(Math.min(availH, availW));
     }

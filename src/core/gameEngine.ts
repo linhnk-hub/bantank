@@ -35,6 +35,7 @@ import type { CombatEvent, CombatEventType } from './types.ts';
 export class GameEngine {
   private state: GameCoreState;
   private accumulatorMs: number = 0;
+  private justResumed: boolean = false;
   private isPaused: boolean = false;
   private lastShootState: boolean = false;
   private enemyManager: EnemyManager;
@@ -191,6 +192,8 @@ export class GameEngine {
       const trans = this.matchStateMachine.transitionTo(MATCH_STATES.PAUSED);
       if (trans.success) {
         this.isPaused = true;
+        this.accumulatorMs = 0;
+        this.justResumed = false;
         this.state.matchState = MATCH_STATES.PAUSED;
         // Clear inputs upon pausing
         this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
@@ -206,6 +209,7 @@ export class GameEngine {
       if (trans.success) {
         this.isPaused = false;
         this.accumulatorMs = 0; // Essential: reset backlog so no time-jump occurs
+        this.justResumed = true;
         this.state.matchState = MATCH_STATES.PLAYING;
         return true;
       }
@@ -216,6 +220,7 @@ export class GameEngine {
   public restartStage(): void {
     const stage = this.stageManager.getCurrentStage();
     this.accumulatorMs = 0;
+    this.justResumed = true;
     this.lastShootState = false;
     this.isPaused = false;
     this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
@@ -378,11 +383,13 @@ export class GameEngine {
    * Never backlogs or simulates sleep time.
    */
   public handleVisibilityChange(isVisible: boolean): void {
+    this.accumulatorMs = 0; // Always discard backlog on tab switch
     if (!isVisible) {
       this.isPaused = true;
+      this.justResumed = false;
     } else {
       this.isPaused = false;
-      this.accumulatorMs = 0; // Discard sleep backlog
+      this.justResumed = true; // Prevents any catch-up frame burst upon returning
       this.state.diagnosticLog = 'Resumed from background tab: accumulator reset';
     }
   }
@@ -734,13 +741,23 @@ export class GameEngine {
       return 0;
     }
 
-    this.state.stageElapsedSeconds += deltaMs / 1000;
-    this.accumulatorMs += deltaMs;
+    // Discard any lingering backlog or massive delta immediately upon resuming or tab switch
+    if (this.justResumed) {
+      this.justResumed = false;
+      this.accumulatorMs = 0;
+      deltaMs = Math.min(deltaMs, SIMULATION_CONFIG.FIXED_DT_MS);
+    }
 
-    // Frame lag clamp: prevent spiral of death
+    // Clamp incoming frame delta (max 50ms = 3 ticks) to prevent hyperspeed catch-up jumps
+    const clampedDeltaMs = Math.max(0, Math.min(deltaMs, SIMULATION_CONFIG.MAX_FRAME_DELTA_MS));
+
+    this.state.stageElapsedSeconds += clampedDeltaMs / 1000;
+    this.accumulatorMs += clampedDeltaMs;
+
+    // Accumulator backlog clamp: strictly never more than 50ms backlog (~3 ticks)
     if (this.accumulatorMs > SIMULATION_CONFIG.MAX_ACCUMULATOR_MS) {
       this.accumulatorMs = SIMULATION_CONFIG.MAX_ACCUMULATOR_MS;
-      this.state.diagnosticLog = 'Simulation backlog clamped at 250ms';
+      this.state.diagnosticLog = 'Simulation backlog clamped';
     }
 
     let ticksRun = 0;

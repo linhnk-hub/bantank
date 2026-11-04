@@ -119,8 +119,9 @@ export const BULLET_CONFIG = {
 export const SIMULATION_CONFIG = {
   FIXED_DT_S: 1 / 60,
   FIXED_DT_MS: 1000 / 60, // ~16.6667 ms
-  MAX_TICKS_PER_FRAME: 8,
-  MAX_ACCUMULATOR_MS: 250,
+  MAX_FRAME_DELTA_MS: 50, // Clamps incoming frame delta (max 3 ticks equivalent)
+  MAX_TICKS_PER_FRAME: 3, // Strictly maximum 3 ticks per frame (prevents hyperspeed bursts)
+  MAX_ACCUMULATOR_MS: 50, // Maximum backlog (~3 ticks) preventing lag catch-up surges
   SUB_TILE_SIZE: 8,
 } as const;
 

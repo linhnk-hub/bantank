@@ -182,8 +182,9 @@ export class BattleScene extends Phaser.Scene {
       ),
     };
 
-    // 2. Advance GameCore Simulation with Fixed Timestep 60Hz
-    this.engine.advanceTime(delta, input);
+    // 2. Advance GameCore Simulation with Fixed Timestep 60Hz (clamp delta <= 50ms)
+    const safeDelta = Math.max(0, Math.min(delta, 50));
+    this.engine.advanceTime(safeDelta, input);
     const state = this.engine.getState();
 
     // Check if stage was restarted or stage was changed

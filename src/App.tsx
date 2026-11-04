@@ -573,13 +573,14 @@ export default function App() {
               )}
             </main>
 
-            {/* Controls Cluster: Placed directly below Canvas, eliminating excess gap */}
+            {/* Controls Cluster: Separated 28px below Canvas (24–32px specification) */}
             <div
               style={{
                 width: `${layout.canvasSizePx}px`,
                 maxWidth: '440px',
+                marginTop: '28px',
               }}
-              className="w-full shrink-0 mx-auto mt-2 sm:mt-3 z-20 flex justify-center"
+              className="w-full shrink-0 mx-auto z-20 flex justify-center"
             >
               <TouchControls
                 onInputChange={handleTouchInput}
@@ -589,10 +590,10 @@ export default function App() {
               />
             </div>
 
-            {/* Safe Bottom Buffer: absorbs remaining viewport space, keeping controls high above Safari bar */}
+            {/* Safe Bottom Buffer: absorbs remaining viewport space, keeping controls safely above Safari bar */}
             <div
               style={{
-                minHeight: 'max(24px, env(safe-area-inset-bottom, 24px))',
+                minHeight: 'max(28px, env(safe-area-inset-bottom, 28px))',
               }}
               className="flex-1 w-full"
             />
