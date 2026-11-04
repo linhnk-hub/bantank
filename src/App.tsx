@@ -20,6 +20,8 @@ import {
 import { RotateGuideModal } from './components/RotateGuideModal.tsx';
 import { FullscreenGuideModal } from './components/FullscreenGuideModal.tsx';
 import { DevToolsDrawer } from './components/DevToolsDrawer.tsx';
+import { SettingsModal } from './components/SettingsModal.tsx';
+import { SoundManager } from './core/audio.ts';
 import { STAGE_1_MAP, MAP_DIMENSIONS } from './core/constants.ts';
 import { validateStageMap } from './core/mapValidator.ts';
 import { GameEngine } from './core/gameEngine.ts';
@@ -43,6 +45,7 @@ import {
   Monitor,
   Maximize,
   Minimize,
+  Settings,
 } from 'lucide-react';
 
 export default function App() {
@@ -51,6 +54,9 @@ export default function App() {
   const [gameState, setGameState] = useState<GameCoreState | null>(null);
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [fps, setFps] = useState<number>(60);
+  const [targetFps, setTargetFps] = useState<30 | 60>(60);
+  const [difficulty, setDifficulty] = useState<'DEFAULT' | 'EXTREME'>('DEFAULT');
+  const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
 
   // Desktop PC detection: screen width >= 1024px with fine pointer (mouse/trackpad)
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
@@ -64,6 +70,21 @@ export default function App() {
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  // Safe browser autoplay unlock for Web Audio API
+  useEffect(() => {
+    const unlockAudio = () => {
+      SoundManager.getInstance().unlock();
+    };
+    window.addEventListener('pointerdown', unlockAudio, { passive: true });
+    window.addEventListener('keydown', unlockAudio, { passive: true });
+    window.addEventListener('touchstart', unlockAudio, { passive: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('keydown', unlockAudio);
+      window.removeEventListener('touchstart', unlockAudio);
+    };
   }, []);
 
   // Performance FPS Color Coding: Green >=55, Yellow 30-54, Red <30
@@ -154,6 +175,15 @@ export default function App() {
     setGameState({ ...gameEngine.getState() });
   }, [gameEngine]);
 
+  const handleDifficultyChange = useCallback(
+    (diff: 'DEFAULT' | 'EXTREME') => {
+      setDifficulty(diff);
+      gameEngine.setDifficulty(diff);
+      setGameState({ ...gameEngine.getState() });
+    },
+    [gameEngine]
+  );
+
   // Handle touch inputs from either Portrait or Landscape virtual controls
   const handleTouchInput = useCallback(
     (input: Partial<InputState>) => {
@@ -240,6 +270,16 @@ export default function App() {
         validation={validation}
       />
 
+      {/* Settings & Audio Modal */}
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        targetFps={targetFps}
+        onFpsChange={setTargetFps}
+        difficulty={difficulty}
+        onDifficultyChange={handleDifficultyChange}
+      />
+
       {/* =========================================================================
           LANDSCAPE MODE (Mobile / Tablet 3-Column Ergonomic Layout)
           - Left: Virtual Joystick (smooth 4-way dominant axis)
@@ -307,6 +347,16 @@ export default function App() {
 
               <button
                 type="button"
+                onClick={() => setIsSettingsOpen(true)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
+                title="Cài đặt & Âm thanh"
+              >
+                <Settings className="w-3 h-3 text-amber-400" />
+                <span className="hidden sm:inline">Cài đặt</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setIsDevDrawerOpen(true)}
                 className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
                 title="Bảng Kiểm thử & QA"
@@ -354,6 +404,7 @@ export default function App() {
                 onFpsUpdate={setFps}
                 onPause={handlePause}
                 canvasSizePx={layout.canvasSizePx}
+                fpsLimit={targetFps}
               />
 
               {/* In MENU state: Overlay allowing immediate match start */}
@@ -398,13 +449,13 @@ export default function App() {
         </div>
       ) : !isDesktop ? (
         /* =========================================================================
-            MOBILE / TABLET PORTRAIT MODE (Dedicated 100dvh Centered Layout)
+            MOBILE / TABLET PORTRAIT MODE (Dedicated 100dvh Top-to-Bottom Stack)
             - Top: Slim HUD (Brand, STAGE 1, FPS, PING: --, Score, Lives, Quick Actions)
-            - Center: Game Canvas (Strictly 1:1, centered horizontally & vertically, no overflow)
-            - Bottom: Touch Controls (Centered with symmetric flex layout, no left skew)
-            - 100dvh: Zero vertical scrolling during combat!
+            - Center: Game Canvas (Strictly 1:1, placed directly below HUD)
+            - Below Canvas: Touch Controls (Centered with symmetric flex layout)
+            - Bottom: Safe Area Buffer (Absorbs leftover space, keeping controls high above Safari bar)
            ========================================================================= */
-        <div className="flex-1 flex flex-col h-[100dvh] w-screen overflow-hidden safe-area-inset justify-between py-1 bg-neutral-950">
+        <div className="flex-1 flex flex-col h-[100dvh] max-h-[100dvh] w-screen overflow-hidden safe-area-inset bg-neutral-950">
           {/* Slim Portrait Top HUD */}
           <header className="h-9 bg-neutral-950/95 border-b border-neutral-800 px-3 flex items-center justify-between text-xs shrink-0 z-30">
             {/* Left: Brand & Stage */}
@@ -462,6 +513,15 @@ export default function App() {
 
               <button
                 type="button"
+                onClick={() => setIsSettingsOpen(true)}
+                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300"
+                title="Cài đặt & Âm thanh"
+              >
+                <Settings className="w-3.5 h-3.5 text-amber-400" />
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setIsDevDrawerOpen(true)}
                 className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-[10px] font-semibold"
                 title="Bảng Kiểm thử & QA"
@@ -472,16 +532,17 @@ export default function App() {
             </div>
           </header>
 
-          {/* Center Column: Game Canvas Strictly Sized & Centered (1:1 Square, No Overflow, No Cut) */}
-          <main className="flex-1 flex items-center justify-center p-1 overflow-hidden">
-            <div
+          {/* Main Content Stack: HUD -> Canvas -> Controls -> Safe Bottom Spacer */}
+          <div className="flex-1 flex flex-col items-center justify-start w-full overflow-hidden px-2 pt-1 pb-1">
+            {/* Game Canvas Strictly Sized & Centered (1:1 Square, placed directly below HUD) */}
+            <main
               style={{
                 width: `${layout.canvasSizePx}px`,
                 height: `${layout.canvasSizePx}px`,
                 maxWidth: `${layout.canvasSizePx}px`,
                 maxHeight: `${layout.canvasSizePx}px`,
               }}
-              className="flex-none flex items-center justify-center overflow-hidden relative mx-auto rounded-xl border border-neutral-800 bg-black shadow-2xl"
+              className="shrink-0 flex items-center justify-center overflow-hidden relative mx-auto rounded-xl border border-neutral-800 bg-black shadow-2xl mt-0.5 sm:mt-1"
             >
               <PhaserGame
                 mode="battle"
@@ -490,6 +551,7 @@ export default function App() {
                 onFpsUpdate={setFps}
                 onPause={handlePause}
                 canvasSizePx={layout.canvasSizePx}
+                fpsLimit={targetFps}
               />
 
               {/* In MENU state: Overlay allowing immediate match start */}
@@ -502,7 +564,7 @@ export default function App() {
                     BẮN TANK ONLINE
                   </h2>
                   <p className="text-[11px] text-amber-300 font-mono font-bold mb-3">
-                    STAGE 1 • 30 Xe Địch • 1 Căn Cứ Đại Bàng
+                    STAGE 1 • 30 Xe Địch • 1 Đại Bàng Hoàng Gia
                   </p>
                   <button
                     type="button"
@@ -514,22 +576,15 @@ export default function App() {
                   </button>
                 </div>
               )}
-            </div>
-          </main>
+            </main>
 
-          {/* Bottom Area: Centered Touch Controls with Symmetric Flex Layout elevated above Safari toolbar */}
-          <footer
-            style={{
-              paddingBottom: 'max(16px, env(safe-area-inset-bottom, 16px))',
-            }}
-            className="w-full shrink-0 px-2 pt-1 flex justify-center z-20"
-          >
+            {/* Controls Cluster: Placed directly below Canvas, eliminating excess gap */}
             <div
               style={{
                 width: `${layout.canvasSizePx}px`,
                 maxWidth: '440px',
               }}
-              className="w-full mx-auto"
+              className="w-full shrink-0 mx-auto mt-2 sm:mt-3 z-20 flex justify-center"
             >
               <TouchControls
                 onInputChange={handleTouchInput}
@@ -538,7 +593,15 @@ export default function App() {
                 controlType="joystick"
               />
             </div>
-          </footer>
+
+            {/* Safe Bottom Buffer: absorbs remaining viewport space, keeping controls high above Safari bar */}
+            <div
+              style={{
+                minHeight: 'max(24px, env(safe-area-inset-bottom, 24px))',
+              }}
+              className="flex-1 w-full"
+            />
+          </div>
         </div>
       ) : (
         /* =========================================================================
@@ -590,6 +653,17 @@ export default function App() {
                   <span className="text-xs hidden sm:inline">Xoay ngang</span>
                 </button>
 
+                {/* Settings & Audio Modal Button */}
+                <button
+                  type="button"
+                  onClick={() => setIsSettingsOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow"
+                  title="Cài đặt FPS, Độ khó & Âm thanh"
+                >
+                  <Settings className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">Cài đặt</span>
+                </button>
+
                 {/* Developer Tools Drawer Button */}
                 <button
                   type="button"
@@ -599,7 +673,7 @@ export default function App() {
                   <Wrench className="w-3.5 h-3.5 text-amber-400" />
                   <span className="hidden sm:inline">Kiểm thử</span>
                   <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
-                    140 Tests
+                    161 Tests
                   </span>
                 </button>
 
@@ -633,7 +707,7 @@ export default function App() {
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-200 font-semibold"
                 >
                   <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Bảng 140 Tests Tự Động</span>
+                  <span>Bảng 161 Tests Tự Động</span>
                 </button>
                 <button
                   onClick={() => setShowTouchControls((v) => !v)}
@@ -708,6 +782,7 @@ export default function App() {
                       onFpsUpdate={setFps}
                       onPause={handlePause}
                       canvasSizePx={layout.canvasSizePx}
+                      fpsLimit={targetFps}
                     />
                   </div>
 
@@ -813,6 +888,7 @@ export default function App() {
         onResume={handleResume}
         onRestart={handleRestart}
         onQuitToMenu={handleQuitToMenu}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
 
       <GameOverModal

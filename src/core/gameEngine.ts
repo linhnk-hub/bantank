@@ -44,6 +44,7 @@ export class GameEngine {
   private matchStateMachine: MatchStateMachine;
   private combatEvents: CombatEvent[] = [];
   private eventListeners: Map<string, Set<(payload: any) => void>> = new Map();
+  private difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT';
   private externalInput: InputState = {
     up: false,
     down: false,
@@ -136,8 +137,18 @@ export class GameEngine {
       isStageClear: false,
       gameOverReason: null,
       diagnosticLog: null,
+      difficulty: this.difficulty,
       matchState: MATCH_STATES.PLAYING,
     };
+  }
+
+  public getDifficulty(): 'DEFAULT' | 'EXTREME' {
+    return this.difficulty;
+  }
+
+  public setDifficulty(diff: 'DEFAULT' | 'EXTREME'): void {
+    this.difficulty = diff;
+    this.state.difficulty = diff;
   }
 
   public getState(): Readonly<GameCoreState> {
@@ -306,6 +317,7 @@ export class GameEngine {
       isStageClear: false,
       gameOverReason: null,
       diagnosticLog: null,
+      difficulty: this.difficulty,
       matchState: MATCH_STATES.PLAYING,
     };
     this.matchStateMachine.transitionTo(MATCH_STATES.PLAYING, true);
@@ -355,6 +367,7 @@ export class GameEngine {
       isStageClear: false,
       gameOverReason: null,
       diagnosticLog: null,
+      difficulty: this.difficulty,
       matchState: MATCH_STATES.PLAYING,
     };
   }
@@ -509,6 +522,7 @@ export class GameEngine {
           newBullet.ownerType = 'player';
           this.state.bullets.push(newBullet);
           this.state.bullet = newBullet;
+          this.emit('P1_SHOOT', newBullet);
         }
       }
       this.lastShootState = input.shoot;
@@ -525,11 +539,13 @@ export class GameEngine {
         this.state.p1,
         p1IsDead,
         this.state.terrain,
-        this.state.bullets
+        this.state.bullets,
+        this.difficulty
       );
 
       for (const eb of newEnemyBullets) {
         this.state.bullets.push(eb);
+        this.emit('ENEMY_SHOOT', eb);
       }
       this.state.enemies = this.enemyManager.getActiveEnemies();
       this.state.enemyQueue = this.enemyManager.getQueue();

@@ -4,13 +4,14 @@
  */
 
 import React, { useState } from 'react';
-import { Play, RotateCcw, LogOut, AlertTriangle } from 'lucide-react';
+import { Play, RotateCcw, LogOut, AlertTriangle, Settings } from 'lucide-react';
 
 interface PauseModalProps {
   isOpen: boolean;
   onResume: () => void;
   onRestart: () => void;
   onQuitToMenu: () => void;
+  onOpenSettings?: () => void;
 }
 
 export const PauseModal: React.FC<PauseModalProps> = ({
@@ -18,6 +19,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
   onResume,
   onRestart,
   onQuitToMenu,
+  onOpenSettings,
 }) => {
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
 
@@ -49,6 +51,17 @@ export const PauseModal: React.FC<PauseModalProps> = ({
                 <Play className="w-4 h-4 fill-black" />
                 <span>TIẾP TỤC</span>
               </button>
+
+              {onOpenSettings && (
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  className="w-full flex items-center justify-center gap-2 py-2 sm:py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs transition-colors border border-neutral-700 active:scale-95"
+                >
+                  <Settings className="w-4 h-4 text-amber-400" />
+                  <span>CÀI ĐẶT & ÂM THANH</span>
+                </button>
+              )}
 
               <button
                 type="button"

@@ -230,6 +230,7 @@ export interface GameCoreState {
   isStageClear: boolean;
   gameOverReason: string | null;
   diagnosticLog: string | null;
+  difficulty?: 'DEFAULT' | 'EXTREME';
   matchState: 'MENU' | 'STAGE_START' | 'PLAYING' | 'PAUSED' | 'STAGE_CLEAR' | 'GAME_OVER' | 'SUMMARY_STATS';
 }
 

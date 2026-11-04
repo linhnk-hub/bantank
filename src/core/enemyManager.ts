@@ -214,7 +214,8 @@ export class EnemyManager {
     p1: TankStructure,
     p1IsDead: boolean,
     terrain: RuntimeTerrainState,
-    bullets: BulletStructure[]
+    bullets: BulletStructure[],
+    difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT'
   ): BulletStructure[] {
     // 1. Spawning with minimum 1.0s interval between successful spawns, retrying every 100ms if blocked
     if (this.spawnCooldown > 0) {
@@ -250,7 +251,8 @@ export class EnemyManager {
         p1IsDead,
         terrain,
         dt,
-        otherTanks
+        otherTanks,
+        difficulty
       );
 
       // Handle Direction & Movement

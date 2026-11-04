@@ -14,8 +14,9 @@ import { runAllM5CorrectionTests as runM5Corrections } from '../src/core/testHar
 import { runAllM6Tests as runM6 } from '../src/core/testHarnessM6.ts';
 import { runAllM6Round2Tests as runM6Round2 } from '../src/core/testHarnessM6Round2.ts';
 import { runAllM6FinalTests as runM6Final } from '../src/core/testHarnessM6Final.ts';
+import { runAllM6FinalPlusTests as runM6FinalPlus } from '../src/core/testHarnessM6FinalPlus.ts';
 
-console.log('--- RUNNING FULL 140-TEST AUTOMATED SUITE ---');
+console.log('--- RUNNING FULL AUTOMATED REGRESSION SUITE ---');
 
 const m2Results = runM2();
 const m3Results = runM3();
@@ -28,6 +29,7 @@ const m5CorrectionsResults = runM5Corrections();
 const m6Results = runM6();
 const m6Round2Results = runM6Round2().results;
 const m6FinalResults = runM6Final().results;
+const m6FinalPlusResults = runM6FinalPlus().results;
 
 const allSuites = [
   { name: 'M2 Physics & Tank (12 Tests)', results: m2Results },
@@ -41,6 +43,7 @@ const allSuites = [
   { name: 'M6 Gameplay & Responsive Corrections (23 Tests)', results: m6Results },
   { name: 'M6 Round 2 Responsive, Eagle & Explosions (18 Tests)', results: m6Round2Results },
   { name: 'M6 Final UI, Respawn & Continuous Fire (24 Tests)', results: m6FinalResults },
+  { name: 'M6 Final+ Portrait, FPS, Difficulty, Audio & Eagle (21 Tests)', results: m6FinalPlusResults },
 ];
 
 let totalTests = 0;

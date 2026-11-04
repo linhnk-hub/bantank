@@ -13,6 +13,7 @@ import {
 } from '../../core/types.ts';
 import { GameEngine } from '../../core/gameEngine.ts';
 import { generateTileTextures } from '../textureGenerator.ts';
+import { SoundManager } from '../../core/audio.ts';
 
 interface ActiveVisualEffect {
   id: string;
@@ -40,6 +41,7 @@ export class BattleScene extends Phaser.Scene {
   }> = [];
   private lastStageId: number = -1;
   private lastTickCount: number = -1;
+  private lastMatchState: string = '';
   private onStateCallback?: (state: GameCoreState) => void;
   private onFpsCallback?: (fps: number) => void;
   private fpsAccumulatorMs = 0;
@@ -84,6 +86,12 @@ export class BattleScene extends Phaser.Scene {
     this.onPauseCallback = cb;
   }
 
+  public setFpsLimit(limit: number): void {
+    if (this.game && this.game.loop) {
+      this.game.loop.setFPSLimit(limit === 60 ? 0 : limit);
+    }
+  }
+
   create(): void {
     // 1. Generate all textures (tiles, tank, bullet, enemies, ruined base)
     generateTileTextures(this);
@@ -124,6 +132,14 @@ export class BattleScene extends Phaser.Scene {
       this.keyP = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
       this.keyEsc = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
     }
+
+    // 7. Subscribe to engine audio events
+    this.engine.on('P1_SHOOT', () => {
+      SoundManager.getInstance().playP1Shoot();
+    });
+    this.engine.on('ENEMY_SHOOT', () => {
+      SoundManager.getInstance().playEnemyShoot();
+    });
   }
 
   update(_time: number, delta: number): void {
@@ -298,9 +314,10 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
-    // 6. Spawn Visual Effects from Combat Events
+    // 6. Spawn Visual Effects from Combat Events & Trigger Audio
     const newEvents = this.engine.popCombatEvents();
     for (const ev of newEvents) {
+      SoundManager.getInstance().handleCombatEvent(ev);
       if (ev.type === 'HIT_SPARK') {
         const clampedX = Math.max(4, Math.min(MAP_DIMENSIONS.TOTAL_WIDTH_PX - 4, ev.x));
         const clampedY = Math.max(4, Math.min(MAP_DIMENSIONS.TOTAL_HEIGHT_PX - 4, ev.y));
@@ -552,6 +569,22 @@ export class BattleScene extends Phaser.Scene {
           this.renderBrickTile(r, c, mask);
         }
       }
+    }
+
+    // Audio match state change handling (pause/resume/gameover/stageclear)
+    if (this.lastMatchState !== state.matchState) {
+      if (state.matchState === 'PAUSED') {
+        SoundManager.getInstance().pauseBgm();
+      } else if (state.matchState === 'PLAYING') {
+        SoundManager.getInstance().resumeBgm();
+      } else if (state.matchState === 'STAGE_CLEAR') {
+        SoundManager.getInstance().stopBgm();
+        SoundManager.getInstance().playStageClear();
+      } else if (state.matchState === 'GAME_OVER') {
+        SoundManager.getInstance().stopBgm();
+        SoundManager.getInstance().playGameOver();
+      }
+      this.lastMatchState = state.matchState;
     }
   }
 }

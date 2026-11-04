@@ -231,7 +231,8 @@ export function updateEnemyAI(
   p1IsDead: boolean,
   terrain: RuntimeTerrainState,
   dt: number,
-  otherTanks?: Array<{ id: string; x: number; y: number }>
+  otherTanks?: Array<{ id: string; x: number; y: number }>,
+  difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT'
 ): { shouldShoot: boolean; targetDir: Direction | null } {
   if (!enemy.isAlive) {
     return { shouldShoot: false, targetDir: null };
@@ -257,11 +258,13 @@ export function updateEnemyAI(
     enemy.leadEvalTimer = Math.max(0, enemy.leadEvalTimer - dt);
   }
 
-  // 1. Line of Sight Check to P1 (Exact 80px radius per M3 spec)
-  // Per Point A: Enemy CAN see and target shielded P1! Only dead P1 is ignored.
+  // 1. Line of Sight Check to P1
+  // DEFAULT: exact 80px radius per M3 spec.
+  // EXTREME: whole map coverage (9999px), but still blocked by BRICK & STEEL!
+  const detectionRadius = difficulty === 'EXTREME' ? 9999 : AI_CONFIG.DETECTION_RADIUS_PX;
   const p1Detected =
     !p1IsDead &&
-    hasLineOfSight(enemy.x, enemy.y, p1.x, p1.y, terrain, AI_CONFIG.DETECTION_RADIUS_PX);
+    hasLineOfSight(enemy.x, enemy.y, p1.x, p1.y, terrain, detectionRadius);
 
   // 2. State Machine Transitions
   if (p1Detected) {

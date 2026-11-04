@@ -23,6 +23,7 @@ interface PhaserGameProps {
   onFpsUpdate?: (fps: number) => void;
   onPause?: () => void;
   canvasSizePx?: number;
+  fpsLimit?: 30 | 60;
 }
 
 export const PhaserGame: React.FC<PhaserGameProps> = ({
@@ -35,6 +36,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   onFpsUpdate,
   onPause,
   canvasSizePx,
+  fpsLimit = 60,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -138,6 +140,13 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       battleSceneRef.current.setFpsCallback(onFpsUpdate);
     }
   }, [onFpsUpdate]);
+
+  // Sync FPS Limit setting (30 FPS vs 60 FPS)
+  useEffect(() => {
+    if (battleSceneRef.current && fpsLimit !== undefined) {
+      battleSceneRef.current.setFpsLimit(fpsLimit);
+    }
+  }, [fpsLimit]);
 
   // Instantly recalculate & refresh Phaser scale on canvasSizePx or orientation update
   useEffect(() => {
