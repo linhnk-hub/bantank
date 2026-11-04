@@ -37,6 +37,12 @@ export class GameEngine {
   private accumulatorMs: number = 0;
   private justResumed: boolean = false;
   private isPaused: boolean = false;
+  private totalRealElapsedMs: number = 0;
+  private totalDroppedMs: number = 0;
+  private tpsAccumulatorMs: number = 0;
+  private tpsTicksThisWindow: number = 0;
+  private recentTps: number = 60;
+  private reportedRenderFps: number = 60;
   private lastShootState: boolean = false;
   private enemyManager: EnemyManager;
   private enableEnemies: boolean;
@@ -221,6 +227,11 @@ export class GameEngine {
     const stage = this.stageManager.getCurrentStage();
     this.accumulatorMs = 0;
     this.justResumed = true;
+    this.totalRealElapsedMs = 0;
+    this.totalDroppedMs = 0;
+    this.tpsAccumulatorMs = 0;
+    this.tpsTicksThisWindow = 0;
+    this.recentTps = 60;
     this.lastShootState = false;
     this.isPaused = false;
     this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
@@ -751,11 +762,18 @@ export class GameEngine {
     // Clamp incoming frame delta (max 50ms = 3 ticks) to prevent hyperspeed catch-up jumps
     const clampedDeltaMs = Math.max(0, Math.min(deltaMs, SIMULATION_CONFIG.MAX_FRAME_DELTA_MS));
 
+    // Track timing telemetry
+    this.totalRealElapsedMs += deltaMs;
+    const droppedMs = Math.max(0, deltaMs - clampedDeltaMs);
+    this.totalDroppedMs += droppedMs;
+
     this.state.stageElapsedSeconds += clampedDeltaMs / 1000;
     this.accumulatorMs += clampedDeltaMs;
 
     // Accumulator backlog clamp: strictly never more than 50ms backlog (~3 ticks)
     if (this.accumulatorMs > SIMULATION_CONFIG.MAX_ACCUMULATOR_MS) {
+      const excess = this.accumulatorMs - SIMULATION_CONFIG.MAX_ACCUMULATOR_MS;
+      this.totalDroppedMs += excess;
       this.accumulatorMs = SIMULATION_CONFIG.MAX_ACCUMULATOR_MS;
       this.state.diagnosticLog = 'Simulation backlog clamped';
     }
@@ -770,6 +788,39 @@ export class GameEngine {
       ticksRun++;
     }
 
+    // Measure live Simulation Ticks Per Second (TPS) over 500ms sliding windows
+    this.tpsAccumulatorMs += deltaMs;
+    this.tpsTicksThisWindow += ticksRun;
+    if (this.tpsAccumulatorMs >= 500) {
+      this.recentTps = Math.round((this.tpsTicksThisWindow * 1000) / this.tpsAccumulatorMs);
+      this.tpsAccumulatorMs = 0;
+      this.tpsTicksThisWindow = 0;
+    }
+
     return ticksRun;
+  }
+
+  public getTimingTelemetry(): {
+    renderFps: number;
+    simulationTps: number;
+    actualTicks: number;
+    realElapsedSeconds: number;
+    simulatedSeconds: number;
+    droppedSeconds: number;
+    accumulatorMs: number;
+  } {
+    return {
+      renderFps: this.reportedRenderFps,
+      simulationTps: this.recentTps,
+      actualTicks: this.state.tickCount,
+      realElapsedSeconds: Number((this.totalRealElapsedMs / 1000).toFixed(3)),
+      simulatedSeconds: Number((this.state.tickCount * SIMULATION_CONFIG.FIXED_DT_S).toFixed(3)),
+      droppedSeconds: Number((this.totalDroppedMs / 1000).toFixed(3)),
+      accumulatorMs: Number(this.accumulatorMs.toFixed(2)),
+    };
+  }
+
+  public setReportedRenderFps(fps: number): void {
+    this.reportedRenderFps = fps;
   }
 }

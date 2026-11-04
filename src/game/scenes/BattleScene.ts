@@ -163,6 +163,7 @@ export class BattleScene extends Phaser.Scene {
     if (this.fpsAccumulatorMs >= 500) {
       const calculatedFps = Math.max(1, Math.round((this.fpsFrameCount * 1000) / this.fpsAccumulatorMs));
       this.onFpsCallback?.(calculatedFps);
+      this.engine.setReportedRenderFps(calculatedFps);
       this.fpsAccumulatorMs = 0;
       this.fpsFrameCount = 0;
     }
