@@ -82,23 +82,20 @@ export class BattleScene extends Phaser.Scene {
     this.onFpsCallback = cb;
   }
 
+  private renderedBrickMasks: Map<string, number> = new Map();
+  private hudSyncAccumulatorMs: number = 0;
+  private lastHudSignature: string = '';
+
   public setPauseCallback(cb: () => void): void {
     this.onPauseCallback = cb;
   }
 
   public setFpsLimit(_limit: number = 60): void {
-    if (this.game && this.game.loop) {
-      // Enforce locked 60 FPS limit (never use 0 which means unlimited FPS)
-      this.game.loop.setFPSLimit(60);
-    }
+    // Keep native requestAnimationFrame loop (fpsLimit = 0 in Phaser TimeStep)
+    // to prevent stepLimitFPS from skipping frames on 60Hz displays.
   }
 
   create(): void {
-    // 0. Enforce locked 60 FPS in Phaser main loop
-    if (this.game && this.game.loop) {
-      this.game.loop.setFPSLimit(60);
-    }
-
     // 1. Generate all textures (tiles, tank, bullet, enemies, ruined base)
     generateTileTextures(this);
 
@@ -157,8 +154,14 @@ export class BattleScene extends Phaser.Scene {
       this.onPauseCallback?.();
     }
 
-    // 0. Update FPS measurement (reported every ~500ms)
-    this.fpsAccumulatorMs += delta;
+    // 0. Read true unsmoothed frame delta from Phaser loop
+    const rawDelta =
+      this.game && this.game.loop && this.game.loop.rawDelta > 0
+        ? this.game.loop.rawDelta
+        : delta;
+
+    // Update FPS measurement (reported every ~500ms)
+    this.fpsAccumulatorMs += rawDelta;
     this.fpsFrameCount++;
     if (this.fpsAccumulatorMs >= 500) {
       const calculatedFps = Math.max(1, Math.round((this.fpsFrameCount * 1000) / this.fpsAccumulatorMs));
@@ -183,9 +186,8 @@ export class BattleScene extends Phaser.Scene {
       ),
     };
 
-    // 2. Advance GameCore Simulation with Fixed Timestep 60Hz (clamp delta <= 50ms)
-    const safeDelta = Math.max(0, Math.min(delta, 50));
-    this.engine.advanceTime(safeDelta, input);
+    // 2. Advance GameCore Simulation with Fixed Timestep 60Hz
+    this.engine.advanceTime(rawDelta, input);
     const state = this.engine.getState();
 
     // Check if stage was restarted or stage was changed
@@ -427,9 +429,15 @@ export class BattleScene extends Phaser.Scene {
     // 8. Update Dynamic Terrain (Bricks & Base)
     this.syncDynamicTerrain(state);
 
-    // 9. Report state to React
+    // 9. Report state to React (immediately on key HUD state change or every ~100ms)
     if (this.onStateCallback) {
-      this.onStateCallback(state);
+      this.hudSyncAccumulatorMs += rawDelta;
+      const sig = `${state.matchState}|${state.score}|${state.p1State.lives}|${state.p1State.isDead}|${state.totalDefeatedEnemies}|${state.enemyQueue.length}|${state.enemies.length}|${state.isGameOver}|${state.isStageClear}|${state.terrain.isBaseDestroyed}`;
+      if (sig !== this.lastHudSignature || this.hudSyncAccumulatorMs >= 100) {
+        this.lastHudSignature = sig;
+        this.hudSyncAccumulatorMs = 0;
+        this.onStateCallback({ ...state });
+      }
     }
   }
 
@@ -443,6 +451,7 @@ export class BattleScene extends Phaser.Scene {
     // Clean up existing sprites
     this.terrainSprites.forEach((obj) => obj.destroy());
     this.terrainSprites.clear();
+    this.renderedBrickMasks.clear();
     this.baseSprites = [];
 
     const state = this.engine.getState();
@@ -480,7 +489,9 @@ export class BattleScene extends Phaser.Scene {
         }
 
         if (tileType === TILE_TYPES.BRICK) {
-          this.renderBrickTile(r, c, terrain.brickSubTiles[`${r}_${c}`] ?? SUB_TILE_MASKS.ALL);
+          const initialMask = terrain.brickSubTiles[`${r}_${c}`] ?? SUB_TILE_MASKS.ALL;
+          this.renderBrickTile(r, c, initialMask);
+          this.renderedBrickMasks.set(`${r}_${c}`, initialMask);
           continue;
         }
 
@@ -561,11 +572,17 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
-    // Sync any modified brick tiles in real time
-    for (const [key, mask] of Object.entries(terrain.brickSubTiles)) {
-      const [rStr, cStr] = key.split('_');
-      const r = parseInt(rStr, 10);
-      const c = parseInt(cStr, 10);
+    // Sync only modified brick tiles (fast Map lookup avoids per-frame string splitting)
+    const subTiles = terrain.brickSubTiles;
+    for (const key in subTiles) {
+      const mask = subTiles[key];
+      const prevMask = this.renderedBrickMasks.get(key);
+      if (prevMask === mask) continue;
+
+      this.renderedBrickMasks.set(key, mask);
+      const sepIdx = key.indexOf('_');
+      const r = parseInt(key.slice(0, sepIdx), 10);
+      const c = parseInt(key.slice(sepIdx + 1), 10);
       const spriteKey = `brick_${r}_${c}`;
       const existing = this.terrainSprites.get(spriteKey);
 
@@ -575,10 +592,7 @@ export class BattleScene extends Phaser.Scene {
           this.terrainSprites.delete(spriteKey);
         }
       } else {
-        const renderedMask = (existing as any)?.renderedMask;
-        if (!existing || renderedMask !== mask) {
-          this.renderBrickTile(r, c, mask);
-        }
+        this.renderBrickTile(r, c, mask);
       }
     }
 

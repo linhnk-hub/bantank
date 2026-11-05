@@ -770,21 +770,32 @@ export class GameEngine {
     this.state.stageElapsedSeconds += clampedDeltaMs / 1000;
     this.accumulatorMs += clampedDeltaMs;
 
-    // Accumulator backlog clamp: strictly never more than 50ms backlog (~3 ticks)
-    if (this.accumulatorMs > SIMULATION_CONFIG.MAX_ACCUMULATOR_MS) {
-      const excess = this.accumulatorMs - SIMULATION_CONFIG.MAX_ACCUMULATOR_MS;
+    // Accumulator backlog clamp: strictly never more than 3 ticks (~50ms) backlog
+    // Note: 3 * (1000 / 60) in IEEE-754 float is 50.00000000000001ms; allow 1e-4 epsilon on normal frames
+    // so 3 full ticks are not truncated to 2 ticks by floating-point rounding.
+    const isMassiveSpike = deltaMs > SIMULATION_CONFIG.MAX_FRAME_DELTA_MS;
+    const maxAcc = isMassiveSpike
+      ? SIMULATION_CONFIG.MAX_ACCUMULATOR_MS
+      : SIMULATION_CONFIG.MAX_ACCUMULATOR_MS + 1e-4;
+
+    if (this.accumulatorMs > maxAcc) {
+      const excess = this.accumulatorMs - maxAcc;
       this.totalDroppedMs += excess;
-      this.accumulatorMs = SIMULATION_CONFIG.MAX_ACCUMULATOR_MS;
+      this.accumulatorMs = maxAcc;
       this.state.diagnosticLog = 'Simulation backlog clamped';
     }
 
+    const tickThreshold = isMassiveSpike
+      ? SIMULATION_CONFIG.FIXED_DT_MS
+      : SIMULATION_CONFIG.FIXED_DT_MS - 1e-6;
+
     let ticksRun = 0;
     while (
-      this.accumulatorMs >= SIMULATION_CONFIG.FIXED_DT_MS &&
+      this.accumulatorMs >= tickThreshold &&
       ticksRun < SIMULATION_CONFIG.MAX_TICKS_PER_FRAME
     ) {
       this.stepTick(input);
-      this.accumulatorMs -= SIMULATION_CONFIG.FIXED_DT_MS;
+      this.accumulatorMs = Math.max(0, this.accumulatorMs - SIMULATION_CONFIG.FIXED_DT_MS);
       ticksRun++;
     }
 

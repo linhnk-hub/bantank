@@ -16,6 +16,7 @@ import {
   getTankHitbox,
   checkHitboxVsTerrain,
   checkTankVsTanks,
+  trySafeGridSnap,
   getBulletHitbox,
   intersectAABB,
 } from './physics.ts';
@@ -233,8 +234,8 @@ export class EnemyManager {
       }
     }
 
-    // 2. Coordinator update (groups enemies and assigns flank vectors every 0.5s)
-    this.coordinator.update(dt, this.activeEnemies);
+    // 2. Coordinator update (groups enemies and assigns validated tactical approach vectors every 0.5s)
+    this.coordinator.update(dt, this.activeEnemies, terrain, p1);
 
     const newBullets: BulletStructure[] = [];
 
@@ -242,7 +243,9 @@ export class EnemyManager {
     for (const enemy of this.activeEnemies) {
       if (!enemy.isAlive) continue;
 
-      const otherTanks = [p1, ...this.activeEnemies.filter((e) => e.id !== enemy.id)];
+      const otherEnemies = this.activeEnemies.filter((e) => e.id !== enemy.id);
+      const otherTanks = [p1, ...otherEnemies];
+      const enemyHasBullet = bullets.some((b) => b.ownerId === enemy.id);
 
       // AI Decision (P1 can be targeted and shot even when shielded; only dead P1 is ignored)
       const aiDecision = updateEnemyAI(
@@ -257,7 +260,23 @@ export class EnemyManager {
 
       // Handle Direction & Movement
       if (aiDecision.targetDir) {
-        enemy.direction = aiDecision.targetDir;
+        const prevDir = enemy.direction;
+        const requestedDir = aiDecision.targetDir;
+
+        // Safe grid alignment when turning or slightly off-grid (<= 4px)
+        const snapResult = trySafeGridSnap(enemy.x, enemy.y, prevDir, requestedDir, terrain);
+        if (
+          snapResult.success &&
+          (snapResult.snappedX !== enemy.x || snapResult.snappedY !== enemy.y)
+        ) {
+          const snappedBox = getTankHitbox(snapResult.snappedX, snapResult.snappedY);
+          if (!checkTankVsTanks(enemy.id, snappedBox, otherTanks)) {
+            enemy.x = snapResult.snappedX;
+            enemy.y = snapResult.snappedY;
+          }
+        }
+
+        enemy.direction = requestedDir;
 
         const step = enemy.speed * dt; // pixel step (fixed 60Hz: 1px/tick at 60px/s)
         let nextX = enemy.x;
@@ -284,27 +303,45 @@ export class EnemyManager {
           enemy.y = nextY;
           enemy.consecutiveBlockCount = 0;
         } else {
-          // Blocked: clear current path and immediately allow replanning
-          enemy.path = [];
-          enemy.dirHoldTimer = 0;
-          enemy.pathCooldown = 0;
-          enemy.consecutiveBlockCount = (enemy.consecutiveBlockCount || 0) + 1;
+          const hitOtherEnemy = checkTankVsTanks(enemy.id, nextBox, otherEnemies);
+          const readyToShoot = enemy.shootCooldown <= 0 && enemy.spawnShieldTimer <= 0 && !enemyHasBullet;
+          const facingBrick = isFacingBrickObstacle(enemy, terrain);
+          const isAimingAtTarget =
+            !hitOtherEnemy &&
+            readyToShoot &&
+            ((enemy.aimTimer || 0) > 0 && (enemy.debugLog?.isAligned ?? false));
 
-          // If blocked for >= 2 frames, immediately turn into an unobstructed direction
-          if (enemy.consecutiveBlockCount >= 2) {
-            const goal = enemy.targetPos ?? { x: 96, y: 192 };
-            const openDir = pickBestOpenDirection(enemy, terrain, otherTanks, goal);
-            if (openDir) {
-              enemy.direction = openDir;
-              enemy.consecutiveBlockCount = 0;
+          // If blocked by a destructible brick wall on its path, allow blasting through when ready
+          if (!hitOtherEnemy && facingBrick && readyToShoot) {
+            aiDecision.shouldShoot = true;
+          }
+
+          if (hitOtherEnemy || (!isAimingAtTarget && !(facingBrick && readyToShoot))) {
+            enemy.path = [];
+            enemy.consecutiveBlockCount = (enemy.consecutiveBlockCount || 0) + 1;
+
+            // If blocked by another enemy or blocked for >= 2 frames, turn into an unobstructed corridor and hold
+            if (hitOtherEnemy || enemy.consecutiveBlockCount >= 2) {
+              const goal = enemy.targetPos ?? { x: 96, y: 192 };
+              const openDir = pickBestOpenDirection(enemy, terrain, otherTanks, goal);
+              if (openDir) {
+                enemy.direction = openDir;
+                enemy.dirHoldTimer = 0.6;
+                enemy.pathCooldown = 0.6;
+                enemy.consecutiveBlockCount = 0;
+              }
             }
           }
         }
       }
 
       // STUCK DETECTION & RECOVERY:
-      // An enemy is legitimately allowed to stand still ONLY while aiming at an aligned target
-      const isLegitAiming = (enemy.aimTimer || 0) > 0 && (enemy.debugLog?.isAligned ?? false);
+      // An enemy is legitimately allowed to stand still ONLY while actively aiming at an aligned target with a ready shot
+      const isLegitAiming =
+        (enemy.aimTimer || 0) > 0 &&
+        (enemy.debugLog?.isAligned ?? false) &&
+        enemy.shootCooldown <= 0 &&
+        !enemyHasBullet;
       const prevPos = enemy.lastStuckPos ?? { x: enemy.x, y: enemy.y };
       const distFromLastPos = Math.hypot(enemy.x - prevPos.x, enemy.y - prevPos.y);
 
@@ -317,21 +354,26 @@ export class EnemyManager {
 
       // If stuck for >= 0.75 seconds, trigger unstuck resolution
       if ((enemy.stuckTimer || 0) >= 0.75) {
-        enemy.path = [];
-        enemy.pathCooldown = 0;
-        enemy.dirHoldTimer = 0;
-        enemy.flankOffset = undefined;
-
-        const goal = enemy.targetPos ?? { x: 96, y: 192 };
-        const openDir = pickBestOpenDirection(enemy, terrain, otherTanks, goal);
-        if (openDir) {
-          enemy.direction = openDir;
+        // First check if facing a destructible brick tile and ready to shoot
+        if (
+          isFacingBrickObstacle(enemy, terrain) &&
+          enemy.shootCooldown <= 0 &&
+          enemy.spawnShieldTimer <= 0 &&
+          !enemyHasBullet
+        ) {
+          aiDecision.shouldShoot = true;
         } else {
-          // If all 4 directions blocked, check if facing a destructible brick tile to blast open
-          if (isFacingBrickObstacle(enemy, terrain)) {
-            if (enemy.shootCooldown <= 0 && enemy.spawnShieldTimer <= 0) {
-              aiDecision.shouldShoot = true;
-            }
+          enemy.path = [];
+          enemy.flankOffset = undefined;
+          enemy.assignedApproachPos = undefined;
+          enemy.cachedDestination = undefined;
+
+          const goal = enemy.targetPos ?? { x: 96, y: 192 };
+          const openDir = pickBestOpenDirection(enemy, terrain, otherTanks, goal);
+          if (openDir) {
+            enemy.direction = openDir;
+            enemy.dirHoldTimer = 0.6;
+            enemy.pathCooldown = 0.4;
           }
         }
         enemy.stuckTimer = 0;
@@ -339,7 +381,6 @@ export class EnemyManager {
       }
 
       // Handle Shooting (Only when no active bullet from this enemy in flight!)
-      const enemyHasBullet = bullets.some((b) => b.ownerId === enemy.id);
       if (enemy.debugLog) {
         enemy.debugLog.hasActiveBullet = enemyHasBullet;
       }

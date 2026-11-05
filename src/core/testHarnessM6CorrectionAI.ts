@@ -6,13 +6,15 @@
 import { GameEngine } from './gameEngine.ts';
 import { SoundManager } from './audio.ts';
 import { MusicManager, PIXABAY_TARGET_TRACK_SPEC } from './musicManager.ts';
-import { STAGE_1_MAP } from './constants.ts';
+import { STAGE_1_MAP, ENEMY_CONFIG } from './constants.ts';
 import {
   pickBestOpenDirection,
   isFacingBrickObstacle,
   selectPatrolDirection,
   updateEnemyAI,
 } from './ai/enemyAI.ts';
+import { EnemyCoordinator } from './ai/coordinator.ts';
+import { findPathAStar, isTileWalkable } from './ai/pathfinding.ts';
 import { type EnemyTank, type TankStructure, TILE_TYPES } from './types.ts';
 import { createRuntimeTerrainState } from './terrain.ts';
 import { getTankHitbox, checkHitboxVsTerrain, checkTankVsTanks } from './physics.ts';
@@ -551,6 +553,463 @@ export function runAllM6CorrectionAITests(): {
       name: 'Anti-overlap BGM on Pause/Resume/Stage switch & Stage 1 Eagle Base preserved',
       passed: pausedNoOverlap && noSimultaneousOverlap && eagleBaseIntact,
       details: `Active custom BGM sources=${activeSources} (max 1); Stage 1 [12,6]=BASE, [12,5]&[12,7]=BRICK.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-LAG-AI-01: 120s Continuous Performance Test (7,200 ticks, 5 active enemies, bullets)
+  // =========================================================================
+  {
+    const engine = new GameEngine();
+    const blankInput = { up: false, down: false, left: false, right: false, shoot: false };
+    const state = engine.getState() as unknown as {
+      p1State: { lives: number; shieldTimer: number };
+      p1: { isShielded: boolean };
+      isGameOver: boolean;
+      terrain: { currentMap: number[][] };
+    };
+    state.p1State.lives = 999;
+
+    const frameTimesMs: number[] = [];
+    for (let f = 0; f < 7200; f++) {
+      state.p1State.shieldTimer = 999;
+      state.p1.isShielded = true;
+      // Keep Eagle intact for continuous 120s combat stress test
+      state.terrain.currentMap[12][6] = TILE_TYPES.BASE;
+      state.isGameOver = false;
+
+      const t0 = performance.now();
+      engine.advanceTime(1000 / 60, blankInput);
+      const t1 = performance.now();
+      frameTimesMs.push(t1 - t0);
+    }
+
+    const diag = engine.getTimingTelemetry();
+    const avgFrameMs = frameTimesMs.reduce((a, b) => a + b, 0) / frameTimesMs.length;
+    const maxFrameMs = Math.max(...frameTimesMs);
+    const passed =
+      diag.actualTicks === 7200 &&
+      diag.droppedSeconds === 0 &&
+      Math.abs(diag.simulatedSeconds - 120.0) < 0.05 &&
+      avgFrameMs < 2.0;
+
+    results.push({
+      id: 'TC-LAG-AI-01',
+      name: '120s continuous simulation (7,200 ticks) with 5 enemies & bullets at 60Hz',
+      passed,
+      details: `7,200/7,200 ticks (${diag.simulatedSeconds.toFixed(1)}s, TPS=${diag.simulationTps}), dropped=${diag.droppedSeconds}s, avgStep=${avgFrameMs.toFixed(3)}ms, maxStep=${maxFrameMs.toFixed(2)}ms.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-LAG-AI-02: Natural rAF Jitter & 3-Tick Catchup Precision (No IEEE-754 Truncation)
+  // =========================================================================
+  {
+    const engine = new GameEngine();
+    const blankInput = { up: false, down: false, left: false, right: false, shoot: false };
+    // 3 * (1000 / 60) = 50.00000000000001 in IEEE-754 floating point; must execute 3 ticks with 0 dropped
+    const ticks3 = engine.advanceTime(3 * (1000 / 60), blankInput);
+    const droppedAfter3 = engine.getTimingTelemetry().droppedSeconds;
+    // Huge 1000ms spike still clamps to 2 ticks
+    const ticksSpike = engine.advanceTime(1000, blankInput);
+
+    results.push({
+      id: 'TC-LAG-AI-02',
+      name: '3-tick catchup executes without IEEE-754 truncation while clamping 1000ms spikes',
+      passed: ticks3 === 3 && droppedAfter3 === 0 && ticksSpike === 2,
+      details: `3*(1000/60)ms -> ${ticks3} ticks (dropped=${droppedAfter3}s); 1000ms spike -> clamped to ${ticksSpike} ticks.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-LAG-AI-03: Pause/Resume & Tab Switch Timing Stability
+  // =========================================================================
+  {
+    const engine = new GameEngine();
+    const blankInput = { up: false, down: false, left: false, right: false, shoot: false };
+    engine.advanceTime(1000 / 60, blankInput);
+    engine.pause();
+    const ticksWhilePaused = engine.advanceTime(5000, blankInput);
+    engine.resume();
+    // First frame after resume / tab switch with 2500ms background delta must clamp to 1 tick
+    const ticksOnResume = engine.advanceTime(2500, blankInput);
+
+    results.push({
+      id: 'TC-LAG-AI-03',
+      name: 'Pause/Resume and tab switch prevent accumulator time-jump lag',
+      passed: ticksWhilePaused === 0 && ticksOnResume === 1,
+      details: `Paused 5000ms -> ${ticksWhilePaused} ticks; Resume with 2500ms delta -> ${ticksOnResume} tick.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-LAG-AI-04: Mandatory Scenario 1 — P1 Stationary at Spawn with 5 Active Enemies
+  // =========================================================================
+  {
+    const engine = new GameEngine();
+    const blankInput = { up: false, down: false, left: false, right: false, shoot: false };
+    const state = engine.getState() as unknown as {
+      p1State: { lives: number; shieldTimer: number };
+      p1: { x: number; y: number; isShielded: boolean };
+      enemies: EnemyTank[];
+      isGameOver: boolean;
+      terrain: { currentMap: number[][] };
+    };
+    state.p1State.lives = 99;
+
+    const spawnOrigin = new Map<string, { x: number; y: number }>();
+    const maxDisplacement = new Map<string, number>();
+    const visitedTilesPerEnemy = new Map<string, Set<string>>();
+
+    for (let tick = 1; tick <= 1200; tick++) {
+      state.p1State.shieldTimer = 999;
+      state.p1.isShielded = true;
+      state.terrain.currentMap[12][6] = TILE_TYPES.BASE;
+      state.isGameOver = false;
+      engine.stepTick(blankInput);
+
+      for (const e of state.enemies) {
+        if (!spawnOrigin.has(e.id)) {
+          spawnOrigin.set(e.id, { x: e.x, y: e.y });
+          maxDisplacement.set(e.id, 0);
+          visitedTilesPerEnemy.set(e.id, new Set());
+        }
+        const orig = spawnOrigin.get(e.id)!;
+        const disp = Math.hypot(e.x - orig.x, e.y - orig.y);
+        if (disp > (maxDisplacement.get(e.id) ?? 0)) {
+          maxDisplacement.set(e.id, disp);
+        }
+        visitedTilesPerEnemy.get(e.id)!.add(`${Math.round(e.x / 16)},${Math.round(e.y / 16)}`);
+      }
+    }
+
+    const trackedIds = Array.from(spawnOrigin.keys()).slice(0, 5);
+    const all5Spawned = trackedIds.length === 5;
+    const all5MovedFar = trackedIds.every((id) => (maxDisplacement.get(id) ?? 0) >= 64);
+    const all5TraversedMultipleTiles = trackedIds.every(
+      (id) => (visitedTilesPerEnemy.get(id)?.size ?? 0) >= 5
+    );
+    // Verify the 5 enemies are not converged at a single coordinate at t=20s
+    const activeCoords = new Set(
+      state.enemies.map((e) => `${Math.round(e.x / 16)},${Math.round(e.y / 16)}`)
+    );
+    const dispersed = activeCoords.size >= 4;
+
+    results.push({
+      id: 'TC-LAG-AI-04',
+      name: 'Stationary P1 with 5 enemies: all 5 move >=64px across >=5 tiles and disperse',
+      passed: all5Spawned && all5MovedFar && all5TraversedMultipleTiles && dispersed,
+      details: `5 enemies max displacements: [${trackedIds.map((id) => Math.round(maxDisplacement.get(id) ?? 0) + 'px').join(', ')}]; distinct tile positions at t=20s: ${activeCoords.size}.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-LAG-AI-05: Coordinator Dispersal & Walkable Approach Position Validation
+  // =========================================================================
+  {
+    const terrain = createRuntimeTerrainState(STAGE_1_MAP);
+    const coord = new EnemyCoordinator();
+    const p1: TankStructure = {
+      id: 'p1',
+      x: 48,
+      y: 192,
+      direction: 'UP',
+      speed: 60,
+      type: 'player',
+      tier: 1,
+      isAlive: true,
+      isShielded: false,
+    };
+    const mockEnemies: EnemyTank[] = [0, 1, 2, 3, 4].map((i) => ({
+      id: `coord_e_${i}`,
+      type: 'enemy',
+      tier: 1,
+      isShielded: false,
+      enemyType: 'BASIC',
+      x: (i * 32) % 192,
+      y: 64,
+      direction: 'DOWN',
+      speed: 60,
+      isAlive: true,
+      hp: 1,
+      maxHp: 1,
+      scoreValue: 100,
+      aiState: 'PATROL',
+      targetPos: i < 3 ? { x: 48, y: 192 } : { x: 96, y: 192 },
+      lastKnownP1Pos: null,
+      lostTargetTimer: 0,
+      searchTimer: 0,
+      path: [],
+      pathCooldown: 0,
+      shootCooldown: 0,
+      aimTimer: 0,
+      aimTime: 0.35,
+      directionHistory: [],
+      dirHoldTimer: 0,
+      leadPos: null,
+      leadEvalTimer: 0,
+      lastP1Direction: null,
+      spawnShieldTimer: 0,
+    }));
+
+    coord.update(0.6, mockEnemies, terrain, p1);
+    const allWalkable = mockEnemies.every((e) => {
+      if (!e.assignedApproachPos) return false;
+      const c = Math.round(e.assignedApproachPos.x / 16);
+      const r = Math.round(e.assignedApproachPos.y / 16);
+      return isTileWalkable(c, r, terrain);
+    });
+    const uniqueApproaches = new Set(
+      mockEnemies.map((e) => `${e.assignedApproachPos?.x},${e.assignedApproachPos?.y}`)
+    );
+
+    results.push({
+      id: 'TC-LAG-AI-05',
+      name: 'EnemyCoordinator assigns walkable approach slots and never targets inside walls',
+      passed: allWalkable && uniqueApproaches.size >= 4,
+      details: `All 5 assigned approach slots walkable=${allWalkable}; unique approach slots=${uniqueApproaches.size}/5.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-LAG-AI-06: A* Returns Empty Path (Never [startNode] Tether) When Goal Unreachable
+  // =========================================================================
+  {
+    const terrain = createRuntimeTerrainState(STAGE_1_MAP);
+    // Eagle [12,6] (96,192) is completely walled off by intact bricks [11..12, 4..8]
+    // From (80, 160) [10,5], [10,5] is already one of the closest reachable tiles to (96, 192)
+    const pathFromClosest = findPathAStar({ x: 80, y: 160 }, { x: 96, y: 192 }, terrain, [], 'self');
+    const noSelfTether = !pathFromClosest.some((p) => p.x === 80 && p.y === 160);
+
+    results.push({
+      id: 'TC-LAG-AI-06',
+      name: 'findPathAStar never returns [startNode] self-tether when goal is walled off',
+      passed: noSelfTether,
+      details: `Path from (80,160) to walled Eagle (96,192) length=${pathFromClosest.length}, contains self-tether=${!noSelfTether}.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-LAG-AI-07: Mandatory Scenario 2 — Moving P1 Detected -> Enemy Enters CHASE
+  // =========================================================================
+  {
+    const terrain = createRuntimeTerrainState(STAGE_1_MAP);
+    // Open vertical lane in Stage 1: [10,3] (48,160) -> [11,3] (48,176) -> [12,3] (48,192)
+    const p1Moving: TankStructure = {
+      id: 'p1',
+      x: 48,
+      y: 192,
+      direction: 'UP',
+      speed: 60,
+      type: 'player',
+      tier: 1,
+      isAlive: true,
+      isShielded: false,
+    };
+    const watcher: EnemyTank = {
+      id: 'watcher_1',
+      type: 'enemy',
+      tier: 1,
+      isShielded: false,
+      enemyType: 'BASIC',
+      x: 48,
+      y: 160,
+      direction: 'DOWN',
+      speed: 60,
+      isAlive: true,
+      hp: 1,
+      maxHp: 1,
+      scoreValue: 100,
+      aiState: 'PATROL',
+      targetPos: null,
+      lastKnownP1Pos: null,
+      lostTargetTimer: 0,
+      searchTimer: 0,
+      path: [],
+      pathCooldown: 0,
+      shootCooldown: 0,
+      aimTimer: 0,
+      aimTime: 0.35,
+      directionHistory: [],
+      dirHoldTimer: 0,
+      leadPos: null,
+      leadEvalTimer: 0,
+      lastP1Direction: null,
+      spawnShieldTimer: 0,
+    };
+
+    updateEnemyAI(watcher, p1Moving, false, terrain, 1 / 60, [p1Moving]);
+    const enteredChase = watcher.aiState === 'CHASE' && watcher.lastKnownP1Pos !== null;
+
+    results.push({
+      id: 'TC-LAG-AI-07',
+      name: 'Enemy detects moving P1 within LoS and immediately enters CHASE state',
+      passed: enteredChase,
+      details: `Enemy at (48,160) detected P1 at (48,192) -> aiState=${watcher.aiState}, leadPos=(${watcher.leadPos?.x},${watcher.leadPos?.y}).`,
+    });
+  }
+
+  // =========================================================================
+  // TC-LAG-AI-08: Mandatory Scenario 3 — P1 Breaks LoS -> CHASE -> SEARCH -> PATROL
+  // =========================================================================
+  {
+    const terrain = createRuntimeTerrainState(STAGE_1_MAP);
+    const p1Hidden: TankStructure = {
+      id: 'p1',
+      x: 192,
+      y: 192,
+      direction: 'LEFT',
+      speed: 60,
+      type: 'player',
+      tier: 1,
+      isAlive: true,
+      isShielded: false,
+    };
+    const chaser: EnemyTank = {
+      id: 'chaser_1',
+      type: 'enemy',
+      tier: 1,
+      isShielded: false,
+      enemyType: 'BASIC',
+      x: 0,
+      y: 0,
+      direction: 'DOWN',
+      speed: 60,
+      isAlive: true,
+      hp: 1,
+      maxHp: 1,
+      scoreValue: 100,
+      aiState: 'CHASE',
+      targetPos: { x: 48, y: 64 },
+      lastKnownP1Pos: { x: 48, y: 64 },
+      lostTargetTimer: 0,
+      searchTimer: 3.0,
+      path: [],
+      pathCooldown: 0,
+      shootCooldown: 0,
+      aimTimer: 0,
+      aimTime: 0.35,
+      directionHistory: [],
+      dirHoldTimer: 0,
+      leadPos: null,
+      leadEvalTimer: 0,
+      lastP1Direction: null,
+      spawnShieldTimer: 0,
+    };
+
+    // Once lostTargetTimer reaches <= 0, next AI tick transitions CHASE -> SEARCH
+    updateEnemyAI(chaser, p1Hidden, false, terrain, 1 / 60, [p1Hidden]);
+    const stateAfterLostHold = chaser.aiState;
+    // Step 3.1s -> searchTimer expires -> transitions back to PATROL
+    updateEnemyAI(chaser, p1Hidden, false, terrain, 3.1, [p1Hidden]);
+    const stateAfterSearch = chaser.aiState;
+
+    results.push({
+      id: 'TC-LAG-AI-08',
+      name: 'When P1 breaks LoS, Enemy transitions CHASE -> SEARCH -> PATROL',
+      passed: stateAfterLostHold === 'SEARCH' && stateAfterSearch === 'PATROL',
+      details: `After lostTargetTimer: ${stateAfterLostHold}; after searchTimer: ${stateAfterSearch}.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-LAG-AI-09: Mandatory Scenario 4 — Multiple Enemies in Narrow Corridor Detour Without Deadlock
+  // =========================================================================
+  {
+    const engine = new GameEngine();
+    const em = engine.getEnemyManager();
+    const state = engine.getState();
+    em.reset(['BASIC', 'BASIC']);
+    engine.spawnEnemyImmediate();
+    engine.spawnEnemyImmediate();
+
+    const [e1, e2] = state.enemies;
+    // Place e1 and e2 facing each other in the narrow row-8 corridor (y=128)
+    e1.x = 64;
+    e1.y = 128;
+    e1.direction = 'RIGHT';
+    e2.x = 80;
+    e2.y = 128;
+    e2.direction = 'LEFT';
+
+    for (let t = 0; t < 180; t++) {
+      engine.stepTick({ up: false, down: false, left: false, right: false, shoot: false });
+    }
+
+    const distMoved1 = Math.hypot(e1.x - 64, e1.y - 128);
+    const distMoved2 = Math.hypot(e2.x - 80, e2.y - 128);
+    const noOverlap = !checkTankVsTanks(e1.id, getTankHitbox(e1.x, e1.y), [e2]);
+
+    results.push({
+      id: 'TC-LAG-AI-09',
+      name: 'Multiple enemies meeting in narrow corridor separate and detour without deadlock',
+      passed: noOverlap && (distMoved1 >= 16 || distMoved2 >= 16),
+      details: `After 3s corridor encounter: e1 moved ${Math.round(distMoved1)}px to (${Math.round(e1.x)},${Math.round(e1.y)}), e2 moved ${Math.round(distMoved2)}px to (${Math.round(e2.x)},${Math.round(e2.y)}), overlap=${!noOverlap}.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-LAG-AI-10: Mandatory Scenario 5 — Enemies Handle BRICK, STEEL, and WATER Obstacles
+  // =========================================================================
+  {
+    const customMap = STAGE_1_MAP.map((r) => [...r]);
+    // Place WATER at [4, 3] and STEEL at [4, 5]
+    customMap[4][3] = TILE_TYPES.WATER;
+    customMap[4][5] = TILE_TYPES.STEEL;
+    const terrain = createRuntimeTerrainState(customMap);
+
+    const waterBlocked = !isTileWalkable(3, 4, terrain);
+    const steelBlocked = !isTileWalkable(5, 4, terrain);
+    // Path around WATER at [4, 3] (48, 64) from (48, 48) to (48, 80)
+    const detourPath = findPathAStar({ x: 48, y: 48 }, { x: 48, y: 80 }, terrain, [], 'e_test');
+    const avoidsWaterTile = !detourPath.some((p) => p.x === 48 && p.y === 64);
+
+    results.push({
+      id: 'TC-LAG-AI-10',
+      name: 'Enemy AI respects BRICK, STEEL, and WATER obstacles and routes around impassable tiles',
+      passed: waterBlocked && steelBlocked && detourPath.length > 0 && avoidsWaterTile,
+      details: `WATER blocked=${waterBlocked}, STEEL blocked=${steelBlocked}, detour waypoints=${detourPath.length} (avoids [4,3]=${avoidsWaterTile}).`,
+    });
+  }
+
+  // =========================================================================
+  // TC-LAG-AI-11: Mandatory Scenario 6 — All 4 Enemy Types (BASIC, FAST, POWER, ARMOR) Verified
+  // =========================================================================
+  {
+    const specs = ENEMY_CONFIG.SPECS;
+    const basicOk = specs.BASIC.speed === 60 && specs.BASIC.hp === 1;
+    const fastOk = specs.FAST.speed === 90 && specs.FAST.hp === 1;
+    const powerOk = specs.POWER.speed === 60 && specs.POWER.hp === 2;
+    const armorOk = specs.ARMOR.speed === 45 && specs.ARMOR.hp === 4;
+
+    results.push({
+      id: 'TC-LAG-AI-11',
+      name: 'All 4 Enemy types (BASIC, FAST, POWER, ARMOR) preserve exact M3 speeds and HP',
+      passed: basicOk && fastOk && powerOk && armorOk,
+      details: `BASIC=${specs.BASIC.speed}px/s(HP ${specs.BASIC.hp}), FAST=${specs.FAST.speed}px/s(HP ${specs.FAST.hp}), POWER=${specs.POWER.speed}px/s(HP ${specs.POWER.hp}), ARMOR=${specs.ARMOR.speed}px/s(HP ${specs.ARMOR.hp}).`,
+    });
+  }
+
+  // =========================================================================
+  // TC-LAG-AI-12: Mandatory Scenario 7 — Stage 1 Total 30 Enemies & Max 5 Concurrent
+  // =========================================================================
+  {
+    const engine = new GameEngine();
+    const blankInput = { up: false, down: false, left: false, right: false, shoot: false };
+    const totalInStage1 = ENEMY_CONFIG.QUEUE.length === 30;
+    let peakActive = 0;
+    for (let t = 0; t < 600; t++) {
+      engine.stepTick(blankInput);
+      const count = engine.getState().enemies.length;
+      if (count > peakActive) peakActive = count;
+    }
+    const maxConcurrentOk = peakActive === 5 && ENEMY_CONFIG.MAX_ACTIVE === 5;
+
+    results.push({
+      id: 'TC-LAG-AI-12',
+      name: 'Stage 1 strictly enforces 30 total enemies and max 5 concurrent active tanks',
+      passed: totalInStage1 && maxConcurrentOk,
+      details: `Stage 1 total=${ENEMY_CONFIG.QUEUE.length}, max concurrent active=${peakActive}/${ENEMY_CONFIG.MAX_ACTIVE}.`,
     });
   }
 

@@ -177,6 +177,12 @@ export function findPathAStar(
     }
   }
 
+  // If target is a different tile and A* could not advance beyond startNode, return []
+  // Returning [startNode] tethers the tank to its current tile and causes oscillation!
+  if ((startC !== targetC || startR !== targetR) && bestNode.c === startC && bestNode.r === startR) {
+    return [];
+  }
+
   // Reconstruct path from bestNode
   const path: Array<{ x: number; y: number }> = [];
   let curr: PathNode | null = bestNode;

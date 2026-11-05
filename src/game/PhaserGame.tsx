@@ -84,7 +84,6 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       },
       fps: {
         target: 60,
-        limit: 60,
         forceSetTimeOut: false,
       },
       scene: [activeScene],

@@ -13,11 +13,44 @@ import {
 } from '../types.ts';
 import { getBrickMask } from '../terrain.ts';
 import { getTankHitbox, checkHitboxVsTerrain, checkTankVsTanks } from '../physics.ts';
-import { findPathAStar } from './pathfinding.ts';
+import { findPathAStar, isTileWalkable } from './pathfinding.ts';
 import { scoreAndSelectTarget } from './targetScoring.ts';
 import { defaultPRNG } from '../utils/prng.ts';
 
 const ALL_DIRECTIONS: readonly Direction[] = ['UP', 'DOWN', 'LEFT', 'RIGHT'] as const;
+
+export function getOppositeDirection(dir: Direction): Direction {
+  if (dir === 'UP') return 'DOWN';
+  if (dir === 'DOWN') return 'UP';
+  if (dir === 'LEFT') return 'RIGHT';
+  return 'LEFT';
+}
+
+function getNextTileKey(x: number, y: number, dir: Direction): string {
+  let c = Math.round(x / 16);
+  let r = Math.round(y / 16);
+  if (dir === 'UP') r -= 1;
+  else if (dir === 'DOWN') r += 1;
+  else if (dir === 'LEFT') c -= 1;
+  else if (dir === 'RIGHT') c += 1;
+  return `${r}_${c}`;
+}
+
+export function recordVisitedTile(enemy: EnemyTank): void {
+  const c = Math.round(enemy.x / 16);
+  const r = Math.round(enemy.y / 16);
+  const key = `${r}_${c}`;
+  if (!enemy.recentTiles) {
+    enemy.recentTiles = [key];
+    return;
+  }
+  if (enemy.recentTiles[enemy.recentTiles.length - 1] !== key) {
+    enemy.recentTiles.push(key);
+    if (enemy.recentTiles.length > 6) {
+      enemy.recentTiles.shift();
+    }
+  }
+}
 
 /**
  * Checks if there is a direct line of sight between two pixel coordinates.
@@ -148,29 +181,65 @@ export function canMoveInDirection(
   dir: Direction,
   terrain: RuntimeTerrainState,
   otherTanks?: Array<{ id: string; x: number; y: number }>,
-  probeStep: number = 2
+  probeStep: number = 4
 ): boolean {
-  let testX = enemy.x;
-  let testY = enemy.y;
+  let baseX = enemy.x;
+  let baseY = enemy.y;
 
-  if (dir === 'UP') testY -= probeStep;
-  else if (dir === 'DOWN') testY += probeStep;
-  else if (dir === 'LEFT') testX -= probeStep;
-  else if (dir === 'RIGHT') testX += probeStep;
-
-  if (testX < 0 || testX > TANK_CONFIG.MAX_X || testY < 0 || testY > TANK_CONFIG.MAX_Y) {
-    return false;
+  // Apply safe perpendicular grid snap (<= 4px) matching trySafeGridSnap
+  if (dir === 'LEFT' || dir === 'RIGHT') {
+    const snappedY = Math.round(baseY / 16) * 16;
+    if (Math.abs(baseY - snappedY) > 0 && Math.abs(baseY - snappedY) <= TANK_CONFIG.SNAP_THRESHOLD) {
+      const snapBox = getTankHitbox(baseX, snappedY);
+      if (
+        !checkHitboxVsTerrain(snapBox, terrain, { forBullet: false }).collides &&
+        !checkTankVsTanks(enemy.id, snapBox, otherTanks)
+      ) {
+        baseY = snappedY;
+      }
+    }
+  } else {
+    const snappedX = Math.round(baseX / 16) * 16;
+    if (Math.abs(baseX - snappedX) > 0 && Math.abs(baseX - snappedX) <= TANK_CONFIG.SNAP_THRESHOLD) {
+      const snapBox = getTankHitbox(snappedX, baseY);
+      if (
+        !checkHitboxVsTerrain(snapBox, terrain, { forBullet: false }).collides &&
+        !checkTankVsTanks(enemy.id, snapBox, otherTanks)
+      ) {
+        baseX = snappedX;
+      }
+    }
   }
 
-  const testBox = getTankHitbox(testX, testY);
-  const terrainColl = checkHitboxVsTerrain(testBox, terrain, { forBullet: false });
-  const tankColl = checkTankVsTanks(enemy.id, testBox, otherTanks);
+  const stepsToCheck = probeStep > 1 ? [1, probeStep] : [1];
+  for (const step of stepsToCheck) {
+    let testX = baseX;
+    let testY = baseY;
 
-  return !terrainColl.collides && !tankColl;
+    if (dir === 'UP') testY -= step;
+    else if (dir === 'DOWN') testY += step;
+    else if (dir === 'LEFT') testX -= step;
+    else if (dir === 'RIGHT') testX += step;
+
+    if (testX < 0 || testX > TANK_CONFIG.MAX_X || testY < 0 || testY > TANK_CONFIG.MAX_Y) {
+      return false;
+    }
+
+    const testBox = getTankHitbox(testX, testY);
+    const terrainColl = checkHitboxVsTerrain(testBox, terrain, { forBullet: false });
+    const tankColl = checkTankVsTanks(enemy.id, testBox, otherTanks);
+
+    if (terrainColl.collides || tankColl) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 /**
- * Finds all physically open directions for an enemy tank, ordered by goal proximity.
+ * Finds all physically open directions for an enemy tank, ordered by goal proximity,
+ * direction continuity, and anti-oscillation tile history.
  */
 export function pickBestOpenDirection(
   enemy: EnemyTank,
@@ -180,15 +249,14 @@ export function pickBestOpenDirection(
 ): Direction | null {
   const openDirs: Direction[] = [];
   for (const dir of ALL_DIRECTIONS) {
-    if (canMoveInDirection(enemy, dir, terrain, otherTanks, 3)) {
+    if (canMoveInDirection(enemy, dir, terrain, otherTanks, 4)) {
       openDirs.push(dir);
     }
   }
 
   if (openDirs.length === 0) {
-    // Retry with minimal 1px probe step
     for (const dir of ALL_DIRECTIONS) {
-      if (canMoveInDirection(enemy, dir, terrain, otherTanks, 1)) {
+      if (canMoveInDirection(enemy, dir, terrain, otherTanks, 2)) {
         openDirs.push(dir);
       }
     }
@@ -196,21 +264,45 @@ export function pickBestOpenDirection(
 
   if (openDirs.length === 0) return null;
 
-  // Rank open directions by distance to targetPos
+  const oppositeDir = getOppositeDirection(enemy.direction);
+  const recent = enemy.recentTiles ?? [];
+  const prevTileKey = recent.length >= 2 ? recent[recent.length - 2] : null;
+  const currentDist = Math.hypot(targetPos.x - enemy.x, targetPos.y - enemy.y);
+
   let bestDir = openDirs[0];
-  let bestDist = Infinity;
+  let bestScore = -Infinity;
 
   for (const dir of openDirs) {
     let nx = enemy.x;
     let ny = enemy.y;
-    if (dir === 'UP') ny -= 4;
-    else if (dir === 'DOWN') ny += 4;
-    else if (dir === 'LEFT') nx -= 4;
-    else if (dir === 'RIGHT') nx += 4;
+    if (dir === 'UP') ny -= 16;
+    else if (dir === 'DOWN') ny += 16;
+    else if (dir === 'LEFT') nx -= 16;
+    else if (dir === 'RIGHT') nx += 16;
 
-    const d = Math.hypot(targetPos.x - nx, targetPos.y - ny);
-    if (d < bestDist) {
-      bestDist = d;
+    const nextDist = Math.hypot(targetPos.x - nx, targetPos.y - ny);
+    let score = (currentDist - nextDist) * 2.5;
+
+    // Continuity bonus: keep moving forward along corridor if open
+    if (dir === enemy.direction) {
+      score += 25;
+    }
+
+    // Anti-reversal penalty: avoid 180-degree flip unless it is the only open direction
+    if (dir === oppositeDir && openDirs.length > 1) {
+      score -= 65;
+    }
+
+    // Anti-loop penalty: avoid stepping back into recently visited tiles
+    const nextTileKey = getNextTileKey(enemy.x, enemy.y, dir);
+    if (prevTileKey && nextTileKey === prevTileKey && openDirs.length > 1) {
+      score -= 55;
+    } else if (recent.includes(nextTileKey) && openDirs.length > 1) {
+      score -= 25;
+    }
+
+    if (score > bestScore) {
+      bestScore = score;
       bestDir = dir;
     }
   }
@@ -222,6 +314,7 @@ export function pickBestOpenDirection(
  * Chooses the next patrol direction using:
  * - Goal progress bias (towards Base Eagle [96, 192] or P1)
  * - History of last 4 directions (Least Recently Used priority)
+ * - Anti-oscillation penalty against immediate 180° tile backtracking
  * - Deterministic PRNG for tie-breaking
  * - Minimum hold time of 0.5s unless blocked
  */
@@ -231,12 +324,20 @@ export function selectPatrolDirection(
   otherTanks?: Array<{ id: string; x: number; y: number }>,
   goalPos: { x: number; y: number } = { x: 96, y: 192 }
 ): Direction {
-  // Test which cardinal directions are physically open
+  // Test which cardinal directions have >= 4px of corridor clearance
   const validDirections: Direction[] = [];
 
   for (const dir of ALL_DIRECTIONS) {
-    if (canMoveInDirection(enemy, dir, terrain, otherTanks, 2)) {
+    if (canMoveInDirection(enemy, dir, terrain, otherTanks, 4)) {
       validDirections.push(dir);
+    }
+  }
+
+  if (validDirections.length === 0) {
+    for (const dir of ALL_DIRECTIONS) {
+      if (canMoveInDirection(enemy, dir, terrain, otherTanks, 2)) {
+        validDirections.push(dir);
+      }
     }
   }
 
@@ -245,10 +346,10 @@ export function selectPatrolDirection(
     return enemy.direction;
   }
 
-  // Calculate score for each valid direction:
-  // - Goal progress bonus: +40 points if moving closer to goal (Base Eagle or P1)
-  // - LRU score: recent directions get lower score
   const history = enemy.directionHistory ?? [];
+  const recent = enemy.recentTiles ?? [];
+  const prevTileKey = recent.length >= 2 ? recent[recent.length - 2] : null;
+  const oppositeDir = getOppositeDirection(enemy.direction);
   const currentDist = Math.hypot(goalPos.x - enemy.x, goalPos.y - enemy.y);
 
   let bestScore = -Infinity;
@@ -268,7 +369,20 @@ export function selectPatrolDirection(
     const lastIndex = history.lastIndexOf(dir);
     const lruScore = lastIndex === -1 ? 50 : (history.length - lastIndex) * 10;
 
-    const totalScore = progressBonus + lruScore;
+    let loopPenalty = 0;
+    if (validDirections.length > 1 && recent.length >= 2) {
+      const nextTileKey = getNextTileKey(enemy.x, enemy.y, dir);
+      if (prevTileKey && nextTileKey === prevTileKey) {
+        loopPenalty -= 45;
+      } else if (recent.includes(nextTileKey)) {
+        loopPenalty -= 20;
+      }
+      if (dir === oppositeDir) {
+        loopPenalty -= 30;
+      }
+    }
+
+    const totalScore = progressBonus + lruScore + loopPenalty;
 
     if (totalScore > bestScore) {
       bestScore = totalScore;
@@ -295,13 +409,49 @@ export function selectPatrolDirection(
 }
 
 /**
+ * Computes the cardinal direction to reach a waypoint, automatically aligning
+ * the perpendicular axis first if the primary axis is obstructed by a tile corner.
+ */
+function getNavigableWaypointDirection(
+  enemy: EnemyTank,
+  waypoint: { x: number; y: number },
+  terrain: RuntimeTerrainState,
+  otherTanks?: Array<{ id: string; x: number; y: number }>
+): Direction {
+  const dx = waypoint.x - enemy.x;
+  const dy = waypoint.y - enemy.y;
+
+  const horizDir: Direction | null = Math.abs(dx) > 0.5 ? (dx > 0 ? 'RIGHT' : 'LEFT') : null;
+  const vertDir: Direction | null = Math.abs(dy) > 0.5 ? (dy > 0 ? 'DOWN' : 'UP') : null;
+
+  const primaryDir = Math.abs(dx) > Math.abs(dy)
+    ? (horizDir ?? vertDir ?? enemy.direction)
+    : (vertDir ?? horizDir ?? enemy.direction);
+  const secondaryDir = primaryDir === horizDir ? vertDir : horizDir;
+
+  const primaryProbe = Math.max(1, Math.min(4, Math.floor(Math.max(Math.abs(dx), Math.abs(dy)))));
+  if (canMoveInDirection(enemy, primaryDir, terrain, otherTanks, primaryProbe)) {
+    return primaryDir;
+  }
+
+  if (secondaryDir) {
+    const secProbe = Math.max(1, Math.min(4, Math.floor(Math.min(Math.abs(dx), Math.abs(dy)) || 1)));
+    if (canMoveInDirection(enemy, secondaryDir, terrain, otherTanks, secProbe)) {
+      return secondaryDir;
+    }
+  }
+
+  return primaryDir;
+}
+
+/**
  * Updates AI State Machine (PATROL, CHASE, SEARCH) for one enemy tank.
  * Integrates:
  * - Line of sight (P1 detected even if shielded, ignored only if dead)
  * - Aim timer & <= 4px bore alignment
  * - Lead prediction with 100ms re-evaluation and cancel on P1 turn
  * - Multi-criteria target scoring and type tendencies
- * - LRU-driven deterministic Patrol
+ * - LRU-driven deterministic Patrol & Anti-Oscillation
  */
 export function updateEnemyAI(
   enemy: EnemyTank,
@@ -315,6 +465,9 @@ export function updateEnemyAI(
   if (!enemy.isAlive) {
     return { shouldShoot: false, targetDir: null };
   }
+
+  // Record current grid tile in recentTiles history
+  recordVisitedTile(enemy);
 
   // Decrease timers
   if (enemy.spawnShieldTimer > 0) {
@@ -357,6 +510,8 @@ export function updateEnemyAI(
       enemy.lastKnownP1Pos = null;
       enemy.lostTargetTimer = 0;
       enemy.searchTimer = 0;
+      enemy.cachedTarget = 'eagle';
+      enemy.cachedDestination = { x: 96, y: 192 };
     } else if (enemy.aiState === 'CHASE') {
       if (enemy.lostTargetTimer > 0) {
         enemy.lostTargetTimer -= dt;
@@ -399,7 +554,6 @@ export function updateEnemyAI(
 
   if (enemy.aiState === 'CHASE') {
     selectedTarget = 'p1';
-    // Lead prediction destination if available, otherwise direct P1
     destination = enemy.leadPos ?? { x: p1.x, y: p1.y };
     enemy.targetPos = destination;
   } else if (enemy.aiState === 'SEARCH' && enemy.lastKnownP1Pos) {
@@ -407,26 +561,37 @@ export function updateEnemyAI(
     destination = enemy.lastKnownP1Pos;
     enemy.targetPos = destination;
   } else {
-    // PATROL state: use multi-criteria target scoring (Point B)
-    scoringResult = scoreAndSelectTarget(enemy, p1, p1IsDead, terrain, otherTanks);
-    selectedTarget = scoringResult.selectedTarget;
-    destination = scoringResult.destination;
+    // PATROL state: throttle multi-criteria target scoring to pathCooldown intervals
+    // to avoid running redundant A* searches 60 times/sec per enemy
+    if (enemy.pathCooldown <= 0 || !enemy.cachedDestination || !enemy.cachedTarget || p1IsDead) {
+      scoringResult = scoreAndSelectTarget(enemy, p1, p1IsDead, terrain, otherTanks);
+      enemy.cachedTarget = scoringResult.selectedTarget;
+      enemy.cachedDestination = scoringResult.destination;
+    }
+    selectedTarget = enemy.cachedTarget;
+    destination = selectedTarget === 'p1' && !p1IsDead ? { x: p1.x, y: p1.y } : { x: 96, y: 192 };
     enemy.targetPos = destination;
   }
 
-  // Adjust destination with coordinator flanking offset (Point E) if assigned
-  if (enemy.flankOffset) {
-    destination = {
-      x: Math.max(0, Math.min(TANK_CONFIG.MAX_X, destination.x + enemy.flankOffset.x)),
-      y: Math.max(0, Math.min(TANK_CONFIG.MAX_Y, destination.y + enemy.flankOffset.y)),
-    };
+  // Compute validated navigation destination (applying coordinator approach slot or walkable flank offset)
+  let navDestination = destination;
+  if (enemy.assignedApproachPos && enemy.aiState === 'PATROL') {
+    navDestination = enemy.assignedApproachPos;
+  } else if (enemy.flankOffset && (enemy.flankOffset.x !== 0 || enemy.flankOffset.y !== 0)) {
+    const candX = Math.max(0, Math.min(TANK_CONFIG.MAX_X, destination.x + enemy.flankOffset.x));
+    const candY = Math.max(0, Math.min(TANK_CONFIG.MAX_Y, destination.y + enemy.flankOffset.y));
+    const candC = Math.round(candX / 16);
+    const candR = Math.round(candY / 16);
+    if (isTileWalkable(candC, candR, terrain)) {
+      navDestination = { x: candX, y: candY };
+    }
   }
 
-  // 5. A* Pathfinding (Throttled or triggered on empty path)
-  if (enemy.pathCooldown <= 0 || enemy.path.length === 0) {
+  // 5. A* Pathfinding (Throttled by pathCooldown)
+  if (enemy.pathCooldown <= 0) {
     enemy.path = findPathAStar(
       { x: enemy.x, y: enemy.y },
-      destination,
+      navDestination,
       terrain,
       otherTanks,
       enemy.id
@@ -445,46 +610,32 @@ export function updateEnemyAI(
       enemy.path.shift();
       if (enemy.path.length > 0) {
         const nextWp2 = enemy.path[0];
-        targetDir = getCardinalDirection(enemy.x, enemy.y, nextWp2.x, nextWp2.y);
+        targetDir = getNavigableWaypointDirection(enemy, nextWp2, terrain, otherTanks);
       }
     } else {
-      targetDir = getCardinalDirection(enemy.x, enemy.y, nextWaypoint.x, nextWaypoint.y);
+      targetDir = getNavigableWaypointDirection(enemy, nextWaypoint, terrain, otherTanks);
     }
+  } else if (enemy.dirHoldTimer > 0 && canMoveInDirection(enemy, enemy.direction, terrain, otherTanks, 4)) {
+    // Hold active detour/patrol direction until dirHoldTimer expires or corridor is blocked
+    targetDir = enemy.direction;
   } else if (enemy.aiState === 'PATROL') {
-    // In PATROL without A* path, use LRU direction holding with destination bias
-    if (enemy.dirHoldTimer <= 0) {
-      targetDir = selectPatrolDirection(enemy, terrain, otherTanks, destination);
-    } else {
-      targetDir = enemy.direction;
-    }
+    targetDir = selectPatrolDirection(enemy, terrain, otherTanks, navDestination);
   }
 
   // Active Fallback: Ensure active enemies never freeze with targetDir === null
   if (!targetDir) {
-    if (enemy.aiState === 'CHASE' || enemy.aiState === 'SEARCH') {
-      const primaryDir = getCardinalDirection(enemy.x, enemy.y, destination.x, destination.y);
-      if (canMoveInDirection(enemy, primaryDir, terrain, otherTanks)) {
-        targetDir = primaryDir;
+    if (enemy.dirHoldTimer > 0 && canMoveInDirection(enemy, enemy.direction, terrain, otherTanks, 4)) {
+      targetDir = enemy.direction;
+    } else if (enemy.aiState === 'CHASE' || enemy.aiState === 'SEARCH') {
+      const alignedDir = getNavigableWaypointDirection(enemy, navDestination, terrain, otherTanks);
+      if (canMoveInDirection(enemy, alignedDir, terrain, otherTanks, 4)) {
+        targetDir = alignedDir;
+        enemy.dirHoldTimer = 0.4;
       } else {
-        const dx = destination.x - enemy.x;
-        const dy = destination.y - enemy.y;
-        const secondaryDir: Direction | null =
-          (primaryDir === 'UP' || primaryDir === 'DOWN')
-            ? (dx > 0 ? 'RIGHT' : (dx < 0 ? 'LEFT' : null))
-            : (dy > 0 ? 'DOWN' : (dy < 0 ? 'UP' : null));
-        if (secondaryDir && canMoveInDirection(enemy, secondaryDir, terrain, otherTanks)) {
-          targetDir = secondaryDir;
-        } else {
-          targetDir = selectPatrolDirection(enemy, terrain, otherTanks, destination);
-        }
+        targetDir = selectPatrolDirection(enemy, terrain, otherTanks, navDestination);
       }
     } else {
-      // PATROL fallback
-      if (canMoveInDirection(enemy, enemy.direction, terrain, otherTanks) && enemy.dirHoldTimer > 0) {
-        targetDir = enemy.direction;
-      } else {
-        targetDir = selectPatrolDirection(enemy, terrain, otherTanks, destination);
-      }
+      targetDir = selectPatrolDirection(enemy, terrain, otherTanks, navDestination);
     }
   }
 
@@ -492,15 +643,28 @@ export function updateEnemyAI(
   let shouldShoot = false;
   let isAligned = false;
 
+  // Check if another enemy tank is directly blocking the barrel in front of this enemy
+  const otherEnemyTanks = otherTanks?.filter((t) => t.id !== 'p1' && t.id !== enemy.id) ?? [];
+  let blockedByFriendlyTank = false;
+  if (otherEnemyTanks.length > 0 && targetDir) {
+    let probeX = enemy.x;
+    let probeY = enemy.y;
+    if (targetDir === 'UP') probeY -= 4;
+    else if (targetDir === 'DOWN') probeY += 4;
+    else if (targetDir === 'LEFT') probeX -= 4;
+    else if (targetDir === 'RIGHT') probeX += 4;
+    blockedByFriendlyTank = checkTankVsTanks(enemy.id, getTankHitbox(probeX, probeY), otherEnemyTanks);
+  }
+
   // Check alignment with P1 (direct or predicted lead)
-  if (!p1IsDead) {
+  if (!p1IsDead && !blockedByFriendlyTank) {
     const directAligned = isAlignedWithTarget(enemy, p1.x, p1.y, AI_CONFIG.ALIGNMENT_TOLERANCE_PX);
     const leadAligned = enemy.leadPos
       ? isAlignedWithTarget(enemy, enemy.leadPos.x, enemy.leadPos.y, AI_CONFIG.ALIGNMENT_TOLERANCE_PX)
       : false;
 
     if (directAligned || leadAligned) {
-      if (hasLineOfSight(enemy.x, enemy.y, p1.x, p1.y, terrain, AI_CONFIG.DETECTION_RADIUS_PX)) {
+      if (hasLineOfSight(enemy.x, enemy.y, p1.x, p1.y, terrain, detectionRadius)) {
         isAligned = true;
       }
     }

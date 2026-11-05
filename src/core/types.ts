@@ -191,6 +191,10 @@ export interface EnemyTank extends TankStructure {
   stuckTimer?: number; // Continuous seconds without significant position change (< 1.0px)
   lastStuckPos?: { x: number; y: number }; // Last recorded position for stuck check
   consecutiveBlockCount?: number; // Count of blocked steps in current direction
+  recentTiles?: string[]; // Last 6 distinct grid cells ("r_c") visited to prevent oscillation loops
+  cachedTarget?: 'p1' | 'eagle'; // Cached target selection between pathCooldown intervals
+  cachedDestination?: { x: number; y: number }; // Cached destination between pathCooldown intervals
+  assignedApproachPos?: { x: number; y: number }; // Walkable tactical approach position assigned by EnemyCoordinator
   debugLog?: EnemyDebugLog;
 }
 
