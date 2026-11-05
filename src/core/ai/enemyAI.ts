@@ -141,7 +141,86 @@ export function calculateLeadPosition(
 }
 
 /**
+ * Tests whether a direction is physically unobstructed for an enemy tank.
+ */
+export function canMoveInDirection(
+  enemy: EnemyTank,
+  dir: Direction,
+  terrain: RuntimeTerrainState,
+  otherTanks?: Array<{ id: string; x: number; y: number }>,
+  probeStep: number = 2
+): boolean {
+  let testX = enemy.x;
+  let testY = enemy.y;
+
+  if (dir === 'UP') testY -= probeStep;
+  else if (dir === 'DOWN') testY += probeStep;
+  else if (dir === 'LEFT') testX -= probeStep;
+  else if (dir === 'RIGHT') testX += probeStep;
+
+  if (testX < 0 || testX > TANK_CONFIG.MAX_X || testY < 0 || testY > TANK_CONFIG.MAX_Y) {
+    return false;
+  }
+
+  const testBox = getTankHitbox(testX, testY);
+  const terrainColl = checkHitboxVsTerrain(testBox, terrain, { forBullet: false });
+  const tankColl = checkTankVsTanks(enemy.id, testBox, otherTanks);
+
+  return !terrainColl.collides && !tankColl;
+}
+
+/**
+ * Finds all physically open directions for an enemy tank, ordered by goal proximity.
+ */
+export function pickBestOpenDirection(
+  enemy: EnemyTank,
+  terrain: RuntimeTerrainState,
+  otherTanks?: Array<{ id: string; x: number; y: number }>,
+  targetPos: { x: number; y: number } = { x: 96, y: 192 }
+): Direction | null {
+  const openDirs: Direction[] = [];
+  for (const dir of ALL_DIRECTIONS) {
+    if (canMoveInDirection(enemy, dir, terrain, otherTanks, 3)) {
+      openDirs.push(dir);
+    }
+  }
+
+  if (openDirs.length === 0) {
+    // Retry with minimal 1px probe step
+    for (const dir of ALL_DIRECTIONS) {
+      if (canMoveInDirection(enemy, dir, terrain, otherTanks, 1)) {
+        openDirs.push(dir);
+      }
+    }
+  }
+
+  if (openDirs.length === 0) return null;
+
+  // Rank open directions by distance to targetPos
+  let bestDir = openDirs[0];
+  let bestDist = Infinity;
+
+  for (const dir of openDirs) {
+    let nx = enemy.x;
+    let ny = enemy.y;
+    if (dir === 'UP') ny -= 4;
+    else if (dir === 'DOWN') ny += 4;
+    else if (dir === 'LEFT') nx -= 4;
+    else if (dir === 'RIGHT') nx += 4;
+
+    const d = Math.hypot(targetPos.x - nx, targetPos.y - ny);
+    if (d < bestDist) {
+      bestDist = d;
+      bestDir = dir;
+    }
+  }
+
+  return bestDir;
+}
+
+/**
  * Chooses the next patrol direction using:
+ * - Goal progress bias (towards Base Eagle [96, 192] or P1)
  * - History of last 4 directions (Least Recently Used priority)
  * - Deterministic PRNG for tie-breaking
  * - Minimum hold time of 0.5s unless blocked
@@ -149,30 +228,14 @@ export function calculateLeadPosition(
 export function selectPatrolDirection(
   enemy: EnemyTank,
   terrain: RuntimeTerrainState,
-  otherTanks?: Array<{ id: string; x: number; y: number }>
+  otherTanks?: Array<{ id: string; x: number; y: number }>,
+  goalPos: { x: number; y: number } = { x: 96, y: 192 }
 ): Direction {
-  // Test which cardinal directions are physically open for 1 step
+  // Test which cardinal directions are physically open
   const validDirections: Direction[] = [];
 
   for (const dir of ALL_DIRECTIONS) {
-    let testX = enemy.x;
-    let testY = enemy.y;
-    const testStep = 2; // small test probe
-
-    if (dir === 'UP') testY -= testStep;
-    else if (dir === 'DOWN') testY += testStep;
-    else if (dir === 'LEFT') testX -= testStep;
-    else if (dir === 'RIGHT') testX += testStep;
-
-    if (testX < 0 || testX > TANK_CONFIG.MAX_X || testY < 0 || testY > TANK_CONFIG.MAX_Y) {
-      continue;
-    }
-
-    const testBox = getTankHitbox(testX, testY);
-    const terrainColl = checkHitboxVsTerrain(testBox, terrain, { forBullet: false });
-    const tankColl = checkTankVsTanks(enemy.id, testBox, otherTanks);
-
-    if (!terrainColl.collides && !tankColl) {
+    if (canMoveInDirection(enemy, dir, terrain, otherTanks, 2)) {
       validDirections.push(dir);
     }
   }
@@ -182,20 +245,35 @@ export function selectPatrolDirection(
     return enemy.direction;
   }
 
-  // Calculate LRU score for each valid direction
-  // A direction not in history gets highest score (100)
-  // A direction recently used gets lower score based on how far back it was used
+  // Calculate score for each valid direction:
+  // - Goal progress bonus: +40 points if moving closer to goal (Base Eagle or P1)
+  // - LRU score: recent directions get lower score
   const history = enemy.directionHistory ?? [];
-  let bestScore = -1;
+  const currentDist = Math.hypot(goalPos.x - enemy.x, goalPos.y - enemy.y);
+
+  let bestScore = -Infinity;
   let bestDirs: Direction[] = [];
 
   for (const dir of validDirections) {
+    let nx = enemy.x;
+    let ny = enemy.y;
+    if (dir === 'UP') ny -= 4;
+    else if (dir === 'DOWN') ny += 4;
+    else if (dir === 'LEFT') nx -= 4;
+    else if (dir === 'RIGHT') nx += 4;
+
+    const nextDist = Math.hypot(goalPos.x - nx, goalPos.y - ny);
+    const progressBonus = nextDist < currentDist ? 40 : 0;
+
     const lastIndex = history.lastIndexOf(dir);
-    const score = lastIndex === -1 ? 100 : history.length - lastIndex;
-    if (score > bestScore) {
-      bestScore = score;
+    const lruScore = lastIndex === -1 ? 50 : (history.length - lastIndex) * 10;
+
+    const totalScore = progressBonus + lruScore;
+
+    if (totalScore > bestScore) {
+      bestScore = totalScore;
       bestDirs = [dir];
-    } else if (score === bestScore) {
+    } else if (totalScore === bestScore) {
       bestDirs.push(dir);
     }
   }
@@ -373,11 +451,40 @@ export function updateEnemyAI(
       targetDir = getCardinalDirection(enemy.x, enemy.y, nextWaypoint.x, nextWaypoint.y);
     }
   } else if (enemy.aiState === 'PATROL') {
-    // In PATROL without A* path, use LRU direction holding
+    // In PATROL without A* path, use LRU direction holding with destination bias
     if (enemy.dirHoldTimer <= 0) {
-      targetDir = selectPatrolDirection(enemy, terrain, otherTanks);
+      targetDir = selectPatrolDirection(enemy, terrain, otherTanks, destination);
     } else {
       targetDir = enemy.direction;
+    }
+  }
+
+  // Active Fallback: Ensure active enemies never freeze with targetDir === null
+  if (!targetDir) {
+    if (enemy.aiState === 'CHASE' || enemy.aiState === 'SEARCH') {
+      const primaryDir = getCardinalDirection(enemy.x, enemy.y, destination.x, destination.y);
+      if (canMoveInDirection(enemy, primaryDir, terrain, otherTanks)) {
+        targetDir = primaryDir;
+      } else {
+        const dx = destination.x - enemy.x;
+        const dy = destination.y - enemy.y;
+        const secondaryDir: Direction | null =
+          (primaryDir === 'UP' || primaryDir === 'DOWN')
+            ? (dx > 0 ? 'RIGHT' : (dx < 0 ? 'LEFT' : null))
+            : (dy > 0 ? 'DOWN' : (dy < 0 ? 'UP' : null));
+        if (secondaryDir && canMoveInDirection(enemy, secondaryDir, terrain, otherTanks)) {
+          targetDir = secondaryDir;
+        } else {
+          targetDir = selectPatrolDirection(enemy, terrain, otherTanks, destination);
+        }
+      }
+    } else {
+      // PATROL fallback
+      if (canMoveInDirection(enemy, enemy.direction, terrain, otherTanks) && enemy.dirHoldTimer > 0) {
+        targetDir = enemy.direction;
+      } else {
+        targetDir = selectPatrolDirection(enemy, terrain, otherTanks, destination);
+      }
     }
   }
 
@@ -468,7 +575,7 @@ function getCardinalDirection(fromX: number, fromY: number, toX: number, toY: nu
   }
 }
 
-function isFacingBrickObstacle(enemy: EnemyTank, terrain: RuntimeTerrainState): boolean {
+export function isFacingBrickObstacle(enemy: EnemyTank, terrain: RuntimeTerrainState): boolean {
   let probeCol = Math.round(enemy.x / 16);
   let probeRow = Math.round(enemy.y / 16);
 
@@ -479,5 +586,7 @@ function isFacingBrickObstacle(enemy: EnemyTank, terrain: RuntimeTerrainState): 
 
   if (probeRow < 0 || probeRow >= 13 || probeCol < 0 || probeCol >= 13) return false;
 
-  return terrain.currentMap[probeRow][probeCol] === TILE_TYPES.BRICK;
+  if (terrain.currentMap[probeRow][probeCol] !== TILE_TYPES.BRICK) return false;
+  const mask = getBrickMask(terrain, probeRow, probeCol);
+  return mask > 0;
 }

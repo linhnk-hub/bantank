@@ -188,6 +188,9 @@ export interface EnemyTank extends TankStructure {
   lastP1Direction: Direction | null;
   flankOffset?: { x: number; y: number }; // Assigned approach vector by Coordinator
   spawnShieldTimer: number; // 1.0s invulnerability at spawn
+  stuckTimer?: number; // Continuous seconds without significant position change (< 1.0px)
+  lastStuckPos?: { x: number; y: number }; // Last recorded position for stuck check
+  consecutiveBlockCount?: number; // Count of blocked steps in current direction
   debugLog?: EnemyDebugLog;
 }
 

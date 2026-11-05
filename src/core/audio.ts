@@ -480,7 +480,7 @@ export class SoundManager {
   }
 
   // =========================================================================
-  // BGM SYNTHESIZER (Original 8-bit Military Arcade Theme)
+  // BGM SYNTHESIZER (Original 8-bit Military Arcade Theme - Default Fallback)
   // =========================================================================
 
   private melodyNotes: number[] = [

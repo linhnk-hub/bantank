@@ -17,11 +17,11 @@ import {
   VirtualShootButton,
   type ActiveDirection,
 } from './components/TouchControls.tsx';
-import { RotateGuideModal } from './components/RotateGuideModal.tsx';
 import { FullscreenGuideModal } from './components/FullscreenGuideModal.tsx';
 import { DevToolsDrawer } from './components/DevToolsDrawer.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
 import { SoundManager } from './core/audio.ts';
+import { MusicManager } from './core/musicManager.ts';
 import { STAGE_1_MAP, MAP_DIMENSIONS } from './core/constants.ts';
 import { validateStageMap } from './core/mapValidator.ts';
 import { GameEngine } from './core/gameEngine.ts';
@@ -86,13 +86,6 @@ export default function App() {
     };
   }, []);
 
-  // Performance FPS Color Coding: Green >=55, Yellow 30-54, Red <30
-  const getFpsBadgeStyle = (val: number) => {
-    if (val >= 55) return 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40';
-    if (val >= 30) return 'bg-amber-500/20 text-amber-400 border-amber-500/40';
-    return 'bg-rose-500/20 text-rose-400 border-rose-500/40';
-  };
-
   // On desktop PC with fine mouse pointer, default touch controls to hidden to maximize canvas size
   const [showTouchControls, setShowTouchControls] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
@@ -100,8 +93,8 @@ export default function App() {
     return !desktop;
   });
 
-  // Orientation & Responsive hook
-  const { isLandscape, requestLandscape, showRotateGuide, dismissGuide } = useOrientation();
+  // Passive orientation detection hook (responds to physical OS rotation only)
+  useOrientation();
 
   // Fullscreen hook for mobile & cross-platform
   const {
@@ -134,24 +127,29 @@ export default function App() {
   const handlePause = useCallback(() => {
     gameEngine.pause();
     setIsPaused(true);
+    MusicManager.getInstance().pause();
     setGameState({ ...gameEngine.getState() });
   }, [gameEngine]);
 
   const handleResume = useCallback(() => {
     gameEngine.resume();
     setIsPaused(false);
+    MusicManager.getInstance().resume();
     setGameState({ ...gameEngine.getState() });
   }, [gameEngine]);
 
   const handleRestart = useCallback(() => {
     gameEngine.restartStage();
     setIsPaused(false);
-    setGameState({ ...gameEngine.getState() });
+    const st = gameEngine.getState();
+    MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
+    setGameState({ ...st });
   }, [gameEngine]);
 
   const handleQuitToMenu = useCallback(() => {
     gameEngine.quitToMenu();
     setIsPaused(false);
+    MusicManager.getInstance().pause();
     setGameState({ ...gameEngine.getState() });
   }, [gameEngine]);
 
@@ -160,13 +158,17 @@ export default function App() {
       gameEngine.restartStage();
     }
     setIsPaused(false);
-    setGameState({ ...gameEngine.getState() });
+    const st = gameEngine.getState();
+    MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
+    setGameState({ ...st });
   }, [gameEngine]);
 
   const handleResetGame = useCallback(() => {
     gameEngine.restartStage();
     setIsPaused(false);
-    setGameState({ ...gameEngine.getState() });
+    const st = gameEngine.getState();
+    MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
+    setGameState({ ...st });
   }, [gameEngine]);
 
   const handleSpawnNextEnemy = useCallback(() => {
@@ -256,9 +258,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
-      {/* Fallback Screen Orientation Guide Modal */}
-      <RotateGuideModal isOpen={showRotateGuide} onClose={dismissGuide} />
-
       {/* Fallback Fullscreen API Guide Modal (iOS Safari & Restricted Browsers) */}
       <FullscreenGuideModal isOpen={showFullscreenGuide} onClose={dismissFsGuide} />
 
@@ -299,11 +298,8 @@ export default function App() {
               <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
             </div>
 
-            {/* Center: Live Match Metrics + Performance Status Bar */}
+            {/* Center: Live Match Metrics */}
             <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono">
-              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${getFpsBadgeStyle(fps)}`}>
-                FPS: {fps}
-              </span>
               <span className="px-1.5 py-0.2 rounded text-[10px] font-bold border bg-neutral-900 border-neutral-700 text-neutral-400">
                 PING: --
               </span>
@@ -467,9 +463,6 @@ export default function App() {
 
             {/* Center: Live Match Metrics */}
             <div className="flex items-center gap-2 text-xs font-mono">
-              <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold border ${getFpsBadgeStyle(fps)}`}>
-                FPS: {fps}
-              </span>
               <span className="px-1.5 py-0.2 rounded text-[10px] font-bold border bg-neutral-900 border-neutral-700 text-neutral-400" title="Chế độ Solo Stage 1 - Offline">
                 PING: --
               </span>
@@ -496,15 +489,6 @@ export default function App() {
                 title={isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}
               >
                 {isFullscreen ? <Minimize className="w-3.5 h-3.5 text-amber-400" /> : <Maximize className="w-3.5 h-3.5 text-amber-400" />}
-              </button>
-
-              <button
-                type="button"
-                onClick={requestLandscape}
-                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-amber-400"
-                title="Chuyển sang xoay ngang màn hình"
-              >
-                <Smartphone className="w-3.5 h-3.5" />
               </button>
 
               <button
@@ -638,23 +622,12 @@ export default function App() {
                   <span className="text-xs hidden sm:inline">{isFullscreen ? 'Thu nhỏ' : 'Toàn MH'}</span>
                 </button>
 
-                {/* Screen Orientation Rotate Button (Mobile/Tablet) */}
-                <button
-                  type="button"
-                  onClick={requestLandscape}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-amber-400 border border-amber-500/30 font-semibold transition-all active:scale-95 shadow"
-                  title="Chuyển sang chế độ xoay ngang màn hình"
-                >
-                  <Smartphone className="w-3.5 h-3.5" />
-                  <span className="text-xs hidden sm:inline">Xoay ngang</span>
-                </button>
-
                 {/* Settings & Audio Modal Button */}
                 <button
                   type="button"
                   onClick={() => setIsSettingsOpen(true)}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow"
-                  title="Cài đặt FPS, Độ khó & Âm thanh"
+                  title="Cài đặt Độ khó & Âm thanh"
                 >
                   <Settings className="w-3.5 h-3.5 text-amber-400" />
                   <span className="hidden sm:inline">Cài đặt</span>
@@ -726,10 +699,6 @@ export default function App() {
                     <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
                     <span className="font-semibold text-amber-400 font-mono">
                       STAGE 1 {isPaused ? '(PAUSED)' : ''}
-                    </span>
-                    {/* Live FPS & PING Performance Badges */}
-                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${getFpsBadgeStyle(fps)}`}>
-                      FPS: {fps}
                     </span>
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold border bg-neutral-900 border-neutral-700 text-neutral-400" title="Chế độ Solo Stage 1 - Offline">
                       PING: --

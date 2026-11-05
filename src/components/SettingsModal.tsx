@@ -18,6 +18,8 @@ import {
   Sliders,
 } from 'lucide-react';
 import { SoundManager, type AudioSettings } from '../core/audio.ts';
+import { MusicManager } from '../core/musicManager.ts';
+import { MusicAdminPanel } from './MusicAdminPanel.tsx';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -33,7 +35,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onDifficultyChange,
 }) => {
   const soundManager = SoundManager.getInstance();
+  const musicManager = MusicManager.getInstance();
   const [audioSettings, setAudioSettings] = useState<AudioSettings>(() => soundManager.getSettings());
+  const [showMusicAdmin, setShowMusicAdmin] = useState<boolean>(false);
 
   if (!isOpen) return null;
 
@@ -42,6 +46,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const updated = { ...audioSettings, bgmEnabled: !audioSettings.bgmEnabled };
     setAudioSettings(updated);
     soundManager.updateSettings(updated);
+    musicManager.onVolumeOrToggleChanged();
   };
 
   const handleSfxToggle = () => {
@@ -55,6 +60,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const updated = { ...audioSettings, bgmVolume: val };
     setAudioSettings(updated);
     soundManager.updateSettings(updated);
+    musicManager.onVolumeOrToggleChanged();
   };
 
   const handleSfxVolChange = (val: number) => {
@@ -74,7 +80,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in select-none">
-      <div className="bg-neutral-900 border border-neutral-700 rounded-2xl w-full max-w-lg max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden">
+      <div className="bg-neutral-900 border border-neutral-700 rounded-2xl w-full max-w-2xl max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
         <div className="bg-neutral-950 px-4 py-3 border-b border-neutral-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
@@ -86,7 +92,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Cài Đặt & Tùy Chọn Trận Đấu
               </h2>
               <p className="text-[11px] text-neutral-400">
-                Khóa chuẩn 60 FPS • Độ khó AI Cực khó • Âm thanh Arcade 8-bit
+                Độ khó AI • Âm thanh Chiến đấu Arcade 8-bit • Quản lý Nhạc nền (BGM)
               </p>
             </div>
           </div>
@@ -155,7 +161,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </section>
 
           {/* =========================================================================
-              SECTION 3: ARCADE SOUND SYSTEM (WEB AUDIO 8-BIT)
+              SECTION 2: ARCADE SOUND SYSTEM (WEB AUDIO 8-BIT)
              ========================================================================= */}
           <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-3.5 space-y-3.5">
             <div className="flex items-center justify-between">
@@ -163,7 +169,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <Music className="w-4 h-4 text-amber-400" />
                 <span>Âm Thanh Arcade 8-Bit (Web Audio API)</span>
               </div>
-              <span className="text-[10px] text-neutral-400 font-mono">Bản quyền mở 100%</span>
+              <span className="text-[10px] text-neutral-400 font-mono">BGM & SFX Độc Lập</span>
             </div>
 
             {/* BGM Toggle & Slider */}
@@ -285,7 +291,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Toggle Super Admin Music Management Panel */}
+            <div className="pt-2 border-t border-neutral-800 flex items-center justify-between">
+              <span className="text-[11px] text-amber-300 font-bold">
+                Quản trị & Upload Thư viện Nhạc nền (Super Admin)
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowMusicAdmin((v) => !v)}
+                className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-[11px] transition-all"
+              >
+                {showMusicAdmin ? 'Thu gọn Quản lý Nhạc' : 'Mở Quản lý & Upload Nhạc'}
+              </button>
+            </div>
           </section>
+
+          {showMusicAdmin && <MusicAdminPanel />}
         </div>
 
         {/* Footer */}
