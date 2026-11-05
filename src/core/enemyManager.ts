@@ -306,10 +306,35 @@ export class EnemyManager {
           const hitOtherEnemy = checkTankVsTanks(enemy.id, nextBox, otherEnemies);
           const readyToShoot = enemy.shootCooldown <= 0 && enemy.spawnShieldTimer <= 0 && !enemyHasBullet;
           const facingBrick = isFacingBrickObstacle(enemy, terrain);
-          const isAimingAtTarget =
+
+          const alignedWithP1 =
+            !p1IsDead &&
+            (enemy.debugLog?.losToP1 ?? false) &&
+            ((Math.abs(enemy.x - p1.x) <= 4 &&
+              ((p1.y > enemy.y && enemy.direction === 'DOWN') ||
+                (p1.y < enemy.y && enemy.direction === 'UP'))) ||
+              (Math.abs(enemy.y - p1.y) <= 4 &&
+                ((p1.x > enemy.x && enemy.direction === 'RIGHT') ||
+                  (p1.x < enemy.x && enemy.direction === 'LEFT'))));
+
+          const alignedWithEagleSiege =
+            Math.hypot(96 - enemy.x, 192 - enemy.y) <= 48 &&
+            ((Math.abs(enemy.x - 96) <= 4 && enemy.direction === 'DOWN') ||
+              (Math.abs(enemy.y - 192) <= 4 &&
+                ((enemy.x < 96 && enemy.direction === 'RIGHT') ||
+                  (enemy.x > 96 && enemy.direction === 'LEFT'))));
+
+          const isEngagingCombatTarget =
             !hitOtherEnemy &&
-            readyToShoot &&
-            ((enemy.aimTimer || 0) > 0 && (enemy.debugLog?.isAligned ?? false));
+            (enemy.debugLog?.isAligned ?? false) &&
+            (alignedWithP1 || alignedWithEagleSiege);
+
+          const isAimingAtTarget =
+            isEngagingCombatTarget ||
+            (!hitOtherEnemy &&
+              readyToShoot &&
+              (enemy.aimTimer || 0) > 0 &&
+              (enemy.debugLog?.isAligned ?? false));
 
           // If blocked by a destructible brick wall on its path, allow blasting through when ready
           if (!hitOtherEnemy && facingBrick && readyToShoot) {
@@ -336,12 +361,29 @@ export class EnemyManager {
       }
 
       // STUCK DETECTION & RECOVERY:
-      // An enemy is legitimately allowed to stand still ONLY while actively aiming at an aligned target with a ready shot
+      // An enemy is legitimately allowed to stand still while engaging an aligned combat target (P1/Eagle)
+      // or actively aiming with a ready shot
+      const otherEnemiesForStuck = this.activeEnemies.filter((e) => e.id !== enemy.id);
+      const alignedWithP1ForStuck =
+        !p1IsDead &&
+        (enemy.debugLog?.losToP1 ?? false) &&
+        ((Math.abs(enemy.x - p1.x) <= 4 &&
+          ((p1.y > enemy.y && enemy.direction === 'DOWN') ||
+            (p1.y < enemy.y && enemy.direction === 'UP'))) ||
+          (Math.abs(enemy.y - p1.y) <= 4 &&
+            ((p1.x > enemy.x && enemy.direction === 'RIGHT') ||
+              (p1.x < enemy.x && enemy.direction === 'LEFT'))));
+      const alignedWithEagleForStuck =
+        Math.hypot(96 - enemy.x, 192 - enemy.y) <= 48 &&
+        ((Math.abs(enemy.x - 96) <= 4 && enemy.direction === 'DOWN') ||
+          (Math.abs(enemy.y - 192) <= 4 &&
+            ((enemy.x < 96 && enemy.direction === 'RIGHT') ||
+              (enemy.x > 96 && enemy.direction === 'LEFT'))));
       const isLegitAiming =
-        (enemy.aimTimer || 0) > 0 &&
         (enemy.debugLog?.isAligned ?? false) &&
-        enemy.shootCooldown <= 0 &&
-        !enemyHasBullet;
+        ((alignedWithP1ForStuck || alignedWithEagleForStuck) ||
+          ((enemy.aimTimer || 0) > 0 && enemy.shootCooldown <= 0 && !enemyHasBullet)) &&
+        !checkTankVsTanks(enemy.id, getTankHitbox(enemy.x, enemy.y), otherEnemiesForStuck);
       const prevPos = enemy.lastStuckPos ?? { x: enemy.x, y: enemy.y };
       const distFromLastPos = Math.hypot(enemy.x - prevPos.x, enemy.y - prevPos.y);
 

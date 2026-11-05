@@ -1013,6 +1013,172 @@ export function runAllM6CorrectionAITests(): {
     });
   }
 
+  // =========================================================================
+  // TC-VER-01: Scenario A — Normal 3 Lives Stationary P1 & Immediate Game Over Halt
+  // =========================================================================
+  {
+    const engineA = new GameEngine();
+    const blankInput = { up: false, down: false, left: false, right: false, shoot: false };
+    const stateA = engineA.getState() as unknown as {
+      isGameOver: boolean;
+      gameOverReason: string | null;
+      p1State: { lives: number };
+      enemies: EnemyTank[];
+      bullets: Array<{ id: string }>;
+      terrain: { currentMap: number[][] };
+    };
+
+    let gameOverTick = -1;
+    let snapshotAtGameOver = '';
+    for (let tick = 1; tick <= 1500; tick++) {
+      // Keep Eagle protected so Scenario A specifically tests P1 losing all 3 lives
+      stateA.terrain.currentMap[11][6] = TILE_TYPES.STEEL;
+      engineA.stepTick(blankInput);
+      if (stateA.isGameOver && gameOverTick === -1) {
+        gameOverTick = tick;
+        snapshotAtGameOver = JSON.stringify(
+          stateA.enemies.map((e) => ({ id: e.id, x: e.x, y: e.y, dir: e.direction, state: e.aiState }))
+        );
+        break;
+      }
+    }
+
+    // Advance 300 more ticks (5.0s) after Game Over and verify 0 movement, 0 bullets, 0 AI changes
+    for (let extra = 0; extra < 300; extra++) {
+      engineA.stepTick(blankInput);
+    }
+    const snapshotAfter5s = JSON.stringify(
+      stateA.enemies.map((e) => ({ id: e.id, x: e.x, y: e.y, dir: e.direction, state: e.aiState }))
+    );
+
+    const passed =
+      gameOverTick > 0 &&
+      stateA.isGameOver &&
+      stateA.p1State.lives === 0 &&
+      snapshotAtGameOver === snapshotAfter5s &&
+      stateA.bullets.length === 0;
+
+    results.push({
+      id: 'TC-VER-01',
+      name: 'Scenario A: Normal 3-lives P1 triggers Game Over on 3rd death and halts all AI/movement/bullets',
+      passed,
+      details: `Game Over at tick=${gameOverTick} (${(gameOverTick / 60).toFixed(2)}s), lives=${stateA.p1State.lives}, frozenAfter5s=${snapshotAtGameOver === snapshotAfter5s}, bullets=${stateA.bullets.length}.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-VER-02: Scenario B — 60s Continuous Stationary P1 (Test-Only Invulnerability)
+  // =========================================================================
+  {
+    const engineB = new GameEngine();
+    const blankInput = { up: false, down: false, left: false, right: false, shoot: false };
+    const stateB = engineB.getState() as unknown as {
+      isGameOver: boolean;
+      p1State: { shieldTimer: number };
+      p1: { isShielded: boolean };
+      enemies: EnemyTank[];
+      terrain: { currentMap: number[][] };
+    };
+
+    const checkpoints: Record<number, number> = {};
+    for (let tick = 1; tick <= 3600; tick++) {
+      stateB.p1State.shieldTimer = 999;
+      stateB.p1.isShielded = true;
+      stateB.terrain.currentMap[12][6] = TILE_TYPES.BASE;
+      stateB.isGameOver = false;
+      engineB.stepTick(blankInput);
+
+      if ([300, 600, 900, 1200, 1800, 2700, 3600].includes(tick)) {
+        checkpoints[tick / 60] = stateB.enemies.length;
+      }
+    }
+
+    const allCheckpointsRecorded =
+      checkpoints[5] >= 4 &&
+      checkpoints[10] === 5 &&
+      checkpoints[15] === 5 &&
+      checkpoints[20] === 5 &&
+      checkpoints[30] === 5 &&
+      checkpoints[45] === 5 &&
+      checkpoints[60] === 5;
+
+    results.push({
+      id: 'TC-VER-02',
+      name: 'Scenario B: 60s test-only invulnerable P1 records all 5 enemies at 5,10,15,20,30,45,60s',
+      passed: allCheckpointsRecorded,
+      details: `Active enemies at checkpoints: 5s=${checkpoints[5]}, 10s=${checkpoints[10]}, 15s=${checkpoints[15]}, 20s=${checkpoints[20]}, 30s=${checkpoints[30]}, 45s=${checkpoints[45]}, 60s=${checkpoints[60]}.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-VER-03: Enemy 1 Legitimate Combat Aim Hold vs Non-Aligned Oscillation Prevention
+  // =========================================================================
+  {
+    const engine = new GameEngine();
+    const blankInput = { up: false, down: false, left: false, right: false, shoot: false };
+    const state = engine.getState() as unknown as {
+      isGameOver: boolean;
+      p1State: { shieldTimer: number };
+      p1: { isShielded: boolean };
+      enemies: EnemyTank[];
+      terrain: { currentMap: number[][] };
+    };
+
+    let e1DirectionChangesAfterEngagement = 0;
+    let lastE1Dir = '';
+    for (let tick = 1; tick <= 1800; tick++) {
+      state.p1State.shieldTimer = 999;
+      state.p1.isShielded = true;
+      state.terrain.currentMap[12][6] = TILE_TYPES.BASE;
+      state.isGameOver = false;
+      engine.stepTick(blankInput);
+
+      const e1 = state.enemies.find((e) => e.id === 'enemy_1_BASIC');
+      if (e1) {
+        if (tick === 300) {
+          lastE1Dir = e1.direction;
+        } else if (tick > 300 && e1.direction !== lastE1Dir) {
+          e1DirectionChangesAfterEngagement++;
+          lastE1Dir = e1.direction;
+        }
+      }
+    }
+
+    const e1Final = state.enemies.find((e) => e.id === 'enemy_1_BASIC');
+    const holdsAimWithoutFlipping =
+      e1Final !== undefined &&
+      e1Final.direction === 'DOWN' &&
+      (e1Final.debugLog?.isAligned ?? false) &&
+      e1DirectionChangesAfterEngagement === 0;
+
+    results.push({
+      id: 'TC-VER-03',
+      name: 'Enemy 1 holds legitimate combat aim on P1 without UP/DOWN direction-flipping loop',
+      passed: holdsAimWithoutFlipping,
+      details: `From t=5s..30s at (48,178): dir=${e1Final?.direction}, isAligned=${e1Final?.debugLog?.isAligned}, reversalsAfterEngagement=${e1DirectionChangesAfterEngagement}.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-VER-04: Phaser 4.2.1 RawDelta & Tab Visibility / Spike Handling
+  // =========================================================================
+  {
+    const engine = new GameEngine();
+    const blankInput = { up: false, down: false, left: false, right: false, shoot: false };
+    // Simulate tab hidden -> 10s elapsed while hidden -> tab visible -> first frame
+    engine.handleVisibilityChange(false);
+    const ticksWhileHidden = engine.advanceTime(10000, blankInput);
+    engine.handleVisibilityChange(true);
+    const ticksFirstVisibleFrame = engine.advanceTime(16.6667, blankInput);
+
+    results.push({
+      id: 'TC-VER-04',
+      name: 'Tab visibility switch discards background delta and resumes cleanly at 1 tick/frame',
+      passed: ticksWhileHidden === 0 && ticksFirstVisibleFrame === 1,
+      details: `Hidden 10000ms -> ${ticksWhileHidden} ticks; Visible 16.67ms -> ${ticksFirstVisibleFrame} tick.`,
+    });
+  }
+
   const passed = results.filter((r) => r.passed).length;
   const failed = results.filter((r) => !r.passed).length;
 

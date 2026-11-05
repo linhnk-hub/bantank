@@ -506,6 +506,18 @@ export function updateEnemyAI(
   } else {
     if (p1IsDead) {
       // Per Point A: When P1 is dead, immediately switch target to Eagle/Base
+      if (
+        enemy.assignedApproachPos &&
+        Math.hypot(enemy.assignedApproachPos.x - p1.x, enemy.assignedApproachPos.y - p1.y) <= 16
+      ) {
+        enemy.assignedApproachPos = undefined;
+        enemy.path = [];
+        enemy.pathCooldown = 0;
+      }
+      if (enemy.aiState === 'CHASE' || enemy.aiState === 'SEARCH') {
+        enemy.path = [];
+        enemy.pathCooldown = 0;
+      }
       enemy.aiState = 'PATROL';
       enemy.lastKnownP1Pos = null;
       enemy.lostTargetTimer = 0;
@@ -573,10 +585,35 @@ export function updateEnemyAI(
     enemy.targetPos = destination;
   }
 
+  const otherEnemyTanks = otherTanks?.filter((t) => t.id !== 'p1' && t.id !== enemy.id) ?? [];
+  const p1CardinalDir = getCardinalDirection(enemy.x, enemy.y, p1.x, p1.y);
+  let probeToP1X = enemy.x;
+  let probeToP1Y = enemy.y;
+  if (p1CardinalDir === 'UP') probeToP1Y -= 4;
+  else if (p1CardinalDir === 'DOWN') probeToP1Y += 4;
+  else if (p1CardinalDir === 'LEFT') probeToP1X -= 4;
+  else if (p1CardinalDir === 'RIGHT') probeToP1X += 4;
+  const friendlyBlockingP1 =
+    otherEnemyTanks.length > 0 &&
+    checkTankVsTanks(enemy.id, getTankHitbox(probeToP1X, probeToP1Y), otherEnemyTanks);
+  const hasDirectAlignedShotOnP1 =
+    p1Detected &&
+    !friendlyBlockingP1 &&
+    (Math.abs(enemy.x - p1.x) <= AI_CONFIG.ALIGNMENT_TOLERANCE_PX ||
+      Math.abs(enemy.y - p1.y) <= AI_CONFIG.ALIGNMENT_TOLERANCE_PX);
+
   // Compute validated navigation destination (applying coordinator approach slot or walkable flank offset)
   let navDestination = destination;
-  if (enemy.assignedApproachPos && enemy.aiState === 'PATROL') {
-    navDestination = enemy.assignedApproachPos;
+  if (enemy.assignedApproachPos && !hasDirectAlignedShotOnP1) {
+    const distToApproach = Math.hypot(
+      enemy.x - enemy.assignedApproachPos.x,
+      enemy.y - enemy.assignedApproachPos.y
+    );
+    if (distToApproach <= 8) {
+      enemy.assignedApproachPos = undefined;
+    } else {
+      navDestination = enemy.assignedApproachPos;
+    }
   } else if (enemy.flankOffset && (enemy.flankOffset.x !== 0 || enemy.flankOffset.y !== 0)) {
     const candX = Math.max(0, Math.min(TANK_CONFIG.MAX_X, destination.x + enemy.flankOffset.x));
     const candY = Math.max(0, Math.min(TANK_CONFIG.MAX_Y, destination.y + enemy.flankOffset.y));
@@ -586,6 +623,13 @@ export function updateEnemyAI(
       navDestination = { x: candX, y: candY };
     }
   }
+
+  // Check if enemy is in direct Eagle siege alignment (within 36px of Eagle [96, 192] along x=96 or y=192)
+  const inEagleSiegeLane =
+    !hasDirectAlignedShotOnP1 &&
+    Math.hypot(96 - enemy.x, 192 - enemy.y) <= 36 &&
+    ((Math.abs(enemy.x - 96) <= AI_CONFIG.ALIGNMENT_TOLERANCE_PX && enemy.y < 192) ||
+      (Math.abs(enemy.y - 192) <= AI_CONFIG.ALIGNMENT_TOLERANCE_PX && Math.abs(enemy.x - 96) > 8));
 
   // 5. A* Pathfinding (Throttled by pathCooldown)
   if (enemy.pathCooldown <= 0) {
@@ -601,25 +645,42 @@ export function updateEnemyAI(
 
   // 6. Determine Desired Movement Direction
   let targetDir: Direction | null = null;
-  if (enemy.path.length > 0) {
-    const nextWaypoint = enemy.path[0];
-    const dx = nextWaypoint.x - enemy.x;
-    const dy = nextWaypoint.y - enemy.y;
-
-    if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) {
-      enemy.path.shift();
-      if (enemy.path.length > 0) {
-        const nextWp2 = enemy.path[0];
-        targetDir = getNavigableWaypointDirection(enemy, nextWp2, terrain, otherTanks);
-      }
-    } else {
-      targetDir = getNavigableWaypointDirection(enemy, nextWaypoint, terrain, otherTanks);
+  if (inEagleSiegeLane) {
+    const eagleDir = getCardinalDirection(enemy.x, enemy.y, 96, 192);
+    let siegeProbeX = enemy.x;
+    let siegeProbeY = enemy.y;
+    if (eagleDir === 'DOWN') siegeProbeY += 4;
+    else if (eagleDir === 'LEFT') siegeProbeX -= 4;
+    else if (eagleDir === 'RIGHT') siegeProbeX += 4;
+    const friendlyBlockingEagle =
+      otherEnemyTanks.length > 0 &&
+      checkTankVsTanks(enemy.id, getTankHitbox(siegeProbeX, siegeProbeY), otherEnemyTanks);
+    if (!friendlyBlockingEagle) {
+      targetDir = eagleDir;
     }
-  } else if (enemy.dirHoldTimer > 0 && canMoveInDirection(enemy, enemy.direction, terrain, otherTanks, 4)) {
-    // Hold active detour/patrol direction until dirHoldTimer expires or corridor is blocked
-    targetDir = enemy.direction;
-  } else if (enemy.aiState === 'PATROL') {
-    targetDir = selectPatrolDirection(enemy, terrain, otherTanks, navDestination);
+  }
+
+  if (!targetDir) {
+    if (enemy.path.length > 0) {
+      const nextWaypoint = enemy.path[0];
+      const dx = nextWaypoint.x - enemy.x;
+      const dy = nextWaypoint.y - enemy.y;
+
+      if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1) {
+        enemy.path.shift();
+        if (enemy.path.length > 0) {
+          const nextWp2 = enemy.path[0];
+          targetDir = getNavigableWaypointDirection(enemy, nextWp2, terrain, otherTanks);
+        }
+      } else {
+        targetDir = getNavigableWaypointDirection(enemy, nextWaypoint, terrain, otherTanks);
+      }
+    } else if (enemy.dirHoldTimer > 0 && canMoveInDirection(enemy, enemy.direction, terrain, otherTanks, 4)) {
+      // Hold active detour/patrol direction until dirHoldTimer expires or corridor is blocked
+      targetDir = enemy.direction;
+    } else if (enemy.aiState === 'PATROL') {
+      targetDir = selectPatrolDirection(enemy, terrain, otherTanks, navDestination);
+    }
   }
 
   // Active Fallback: Ensure active enemies never freeze with targetDir === null
@@ -644,7 +705,6 @@ export function updateEnemyAI(
   let isAligned = false;
 
   // Check if another enemy tank is directly blocking the barrel in front of this enemy
-  const otherEnemyTanks = otherTanks?.filter((t) => t.id !== 'p1' && t.id !== enemy.id) ?? [];
   let blockedByFriendlyTank = false;
   if (otherEnemyTanks.length > 0 && targetDir) {
     let probeX = enemy.x;
@@ -671,12 +731,12 @@ export function updateEnemyAI(
   }
 
   // Check alignment with Base
-  if (!isAligned && isAlignedWithTarget(enemy, 96, 192, AI_CONFIG.ALIGNMENT_TOLERANCE_PX)) {
+  if (!isAligned && !blockedByFriendlyTank && isAlignedWithTarget(enemy, 96, 192, AI_CONFIG.ALIGNMENT_TOLERANCE_PX)) {
     isAligned = true;
   }
 
   // Check alignment with Brick obstacle directly in front
-  if (!isAligned && isFacingBrickObstacle(enemy, terrain)) {
+  if (!isAligned && !blockedByFriendlyTank && isFacingBrickObstacle(enemy, terrain)) {
     isAligned = true;
   }
 
@@ -740,6 +800,21 @@ function getCardinalDirection(fromX: number, fromY: number, toX: number, toY: nu
 }
 
 export function isFacingBrickObstacle(enemy: EnemyTank, terrain: RuntimeTerrainState): boolean {
+  // 1. Sub-tile accurate front-bumper probe (catches half-destroyed brick tiles at y=170 etc.)
+  for (const step of [2, 4]) {
+    let px = enemy.x;
+    let py = enemy.y;
+    if (enemy.direction === 'UP') py -= step;
+    else if (enemy.direction === 'DOWN') py += step;
+    else if (enemy.direction === 'LEFT') px -= step;
+    else if (enemy.direction === 'RIGHT') px += step;
+    const hit = checkHitboxVsTerrain(getTankHitbox(px, py), terrain, { forBullet: false });
+    if (hit.collides && hit.hitTile?.type === TILE_TYPES.BRICK && (hit.hitTile.mask ?? 0) > 0) {
+      return true;
+    }
+  }
+
+  // 2. Grid-level adjacent tile check
   let probeCol = Math.round(enemy.x / 16);
   let probeRow = Math.round(enemy.y / 16);
 

@@ -16,29 +16,34 @@ const FLANK_SLOTS: Array<{ x: number; y: number }> = [
 ];
 
 /**
- * Candidate tactical approach points around Eagle Base (96, 192) on Stage 1:
- * Covers top-center, top-west, top-east, west corridor, and east corridor.
+ * Candidate tactical approach & circuit points around Eagle Base (96, 192) and Stage 1 corridors:
+ * Combines direct Eagle siege lanes with full-map flanking patrol waypoints.
  */
 const EAGLE_TACTICAL_SLOTS: Array<{ x: number; y: number }> = [
-  { x: 96, y: 160 },  // Top-center above Eagle brick wall [10, 6]
-  { x: 144, y: 176 }, // East flank corridor [11, 9]
+  { x: 96, y: 160 },  // Top-center siege lane above Eagle brick wall [10, 6]
+  { x: 144, y: 192 }, // Bottom-east siege lane facing Eagle brick wall [12, 9]
   { x: 48, y: 176 },  // West flank corridor [11, 3]
-  { x: 80, y: 160 },  // Top-west above Eagle brick wall [10, 5]
-  { x: 112, y: 160 }, // Top-east above Eagle brick wall [10, 7]
-  { x: 144, y: 192 }, // Bottom-east flank [12, 9]
+  { x: 144, y: 128 }, // Mid-east corridor intersection [8, 9]
+  { x: 32, y: 128 },  // Mid-west corridor intersection [8, 2]
   { x: 0, y: 160 },   // Far-west corridor [10, 0]
   { x: 192, y: 160 }, // Far-east corridor [10, 12]
+  { x: 96, y: 96 },   // Central upper crossroads [6, 6]
+  { x: 32, y: 48 },   // North-west patrol waypoint [3, 2]
+  { x: 160, y: 48 },  // North-east patrol waypoint [3, 10]
 ];
 
 export class EnemyCoordinator {
   private updateTimer: number = 0;
+  private cycleCounter: number = 0;
 
   constructor() {
     this.updateTimer = 0;
+    this.cycleCounter = 0;
   }
 
   public reset(): void {
     this.updateTimer = 0;
+    this.cycleCounter = 0;
   }
 
   /**
@@ -57,6 +62,7 @@ export class EnemyCoordinator {
       return;
     }
     this.updateTimer = AI_CONFIG.COORDINATOR_UPDATE_INTERVAL_S;
+    this.cycleCounter++;
 
     const aliveEnemies = enemies.filter((e) => e.isAlive);
     if (aliveEnemies.length <= 1) {
@@ -98,45 +104,44 @@ export class EnemyCoordinator {
     const p1X = p1 ? Math.round(p1.x / 16) * 16 : 48;
     const p1Y = p1 ? Math.round(p1.y / 16) * 16 : 192;
 
-    // Generate P1 tactical approach candidates (North, West, East, South + flanking corridors)
+    // Generate P1 tactical approach candidates (direct + wide flanking corridors)
     const p1Candidates: Array<{ x: number; y: number }> = [
       { x: p1X, y: p1Y },
-      { x: p1X, y: Math.max(0, p1Y - 32) },
-      { x: Math.max(0, p1X - 48), y: Math.max(0, p1Y - 32) },
-      { x: Math.min(TANK_CONFIG.MAX_X, p1X + 48), y: Math.max(0, p1Y - 32) },
-      { x: Math.max(0, p1X - 32), y: p1Y },
-      { x: Math.min(TANK_CONFIG.MAX_X, p1X + 32), y: p1Y },
       { x: 96, y: 160 },
-      { x: 144, y: 160 },
-      { x: 0, y: 160 },
+      { x: 144, y: 192 },
       { x: 32, y: 128 },
-      { x: 96, y: 128 },
-      { x: 160, y: 128 },
+      { x: 144, y: 128 },
+      { x: 0, y: 160 },
+      { x: 192, y: 160 },
+      { x: 96, y: 96 },
+      { x: 32, y: 48 },
+      { x: 160, y: 48 },
     ];
 
-    // Sort enemies deterministically by ID for stable slot assignment (prevents slot swapping)
+    // Sort enemies deterministically by ID for stable slot assignment
     const sortedEnemies = [...aliveEnemies].sort((a, b) => a.id.localeCompare(b.id));
     let p1DirectCount = 0;
 
-    for (const enemy of sortedEnemies) {
+    for (let idx = 0; idx < sortedEnemies.length; idx++) {
+      const enemy = sortedEnemies[idx];
       const baseTarget = enemy.targetPos ?? { x: 96, y: 192 };
       const isTargetingEagle =
         Math.abs(baseTarget.x - 96) <= 16 && Math.abs(baseTarget.y - 192) <= 16;
 
-      // Limit max 2 enemies directly entering P1's narrow lane simultaneously;
-      // additional enemies flank via Eagle/Central/East lanes to encircle
-      const forceEagleOrFlank = !isTargetingEagle && p1DirectCount >= 2;
+      // Limit max 1 enemy directly entering P1's narrow spawn pocket at a time;
+      // other enemies flank across Eagle/Central/East/North corridors
+      const forceEagleOrFlank = !isTargetingEagle && p1DirectCount >= 1;
       if (!isTargetingEagle && !forceEagleOrFlank) {
         p1DirectCount++;
       }
 
-      const pool = isTargetingEagle || forceEagleOrFlank
+      const rawPool = isTargetingEagle || forceEagleOrFlank
         ? [...EAGLE_TACTICAL_SLOTS, ...p1Candidates]
         : [...p1Candidates, ...EAGLE_TACTICAL_SLOTS];
 
       let chosenSlot: { x: number; y: number } | undefined;
 
-      // First check if keeping current assignedApproachPos is still valid and unoccupied
+      // Keep current assignedApproachPos while the enemy is still travelling toward it (> 16px away)
       if (enemy.assignedApproachPos) {
         const curC = Math.round(enemy.assignedApproachPos.x / 16);
         const curR = Math.round(enemy.assignedApproachPos.y / 16);
@@ -145,36 +150,63 @@ export class EnemyCoordinator {
           enemy.x - enemy.assignedApproachPos.x,
           enemy.y - enemy.assignedApproachPos.y
         );
-        // If enemy hasn't reached its assigned approach waypoint yet (> 8px away) and it's walkable & free
+        const isExactP1Slot =
+          Boolean(p1 && p1.isAlive) &&
+          curC === Math.round(p1!.x / 16) &&
+          curR === Math.round(p1!.y / 16);
         if (
-          distToAssigned > 8 &&
+          (distToAssigned > 16 || isExactP1Slot) &&
           !occupiedKeys.has(curKey) &&
-          isTileWalkable(curC, curR, terrain)
+          (isExactP1Slot || isTileWalkable(curC, curR, terrain))
         ) {
           chosenSlot = enemy.assignedApproachPos;
           occupiedKeys.add(curKey);
         }
       }
 
+      if (!chosenSlot && !isTargetingEagle && !forceEagleOrFlank && p1 && p1.isAlive) {
+        const p1Key = `${Math.round(p1Y / 16)}_${Math.round(p1X / 16)}`;
+        if (!occupiedKeys.has(p1Key)) {
+          chosenSlot = { x: p1X, y: p1Y };
+          occupiedKeys.add(p1Key);
+        }
+      }
+
       if (!chosenSlot) {
-        for (const cand of pool) {
-          const cx = Math.max(0, Math.min(TANK_CONFIG.MAX_X, Math.round(cand.x / 16) * 16));
-          const cy = Math.max(0, Math.min(TANK_CONFIG.MAX_Y, Math.round(cand.y / 16) * 16));
-          const cc = Math.round(cx / 16);
-          const cr = Math.round(cy / 16);
-          const key = `${cr}_${cc}`;
+        const recent = enemy.recentTiles ?? [];
+        const offset = (idx * 2 + this.cycleCounter) % rawPool.length;
 
-          if (occupiedKeys.has(key)) continue;
+        for (let pass = 0; pass < 2 && !chosenSlot; pass++) {
+          for (let i = 0; i < rawPool.length; i++) {
+            const cand = rawPool[(i + offset) % rawPool.length];
+            const cx = Math.max(0, Math.min(TANK_CONFIG.MAX_X, Math.round(cand.x / 16) * 16));
+            const cy = Math.max(0, Math.min(TANK_CONFIG.MAX_Y, Math.round(cand.y / 16) * 16));
+            const cc = Math.round(cx / 16);
+            const cr = Math.round(cy / 16);
+            const key = `${cr}_${cc}`;
+            const tileKey = `${cc},${cr}`;
 
-          // Allow exact P1 tile for the primary chaser, otherwise require walkable tile
-          const isExactP1 = p1 && cc === Math.round(p1.x / 16) && cr === Math.round(p1.y / 16);
-          if (!isExactP1 && !isTileWalkable(cc, cr, terrain)) {
-            continue;
+            if (occupiedKeys.has(key)) continue;
+
+            const isExactP1 =
+              Boolean(p1 && p1.isAlive) &&
+              cc === Math.round(p1!.x / 16) &&
+              cr === Math.round(p1!.y / 16) &&
+              idx === 0;
+            if (!isExactP1 && !isTileWalkable(cc, cr, terrain)) {
+              continue;
+            }
+
+            const distFromEnemy = Math.hypot(enemy.x - cx, enemy.y - cy);
+            // In pass 0, pick a waypoint at least 32px away that wasn't just visited so the tank actively patrols
+            if (pass === 0 && !isExactP1 && (distFromEnemy < 32 || recent.includes(tileKey))) {
+              continue;
+            }
+
+            chosenSlot = { x: cx, y: cy };
+            occupiedKeys.add(key);
+            break;
           }
-
-          chosenSlot = { x: cx, y: cy };
-          occupiedKeys.add(key);
-          break;
         }
       }
 

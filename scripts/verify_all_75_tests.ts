@@ -49,7 +49,7 @@ const allSuites = [
   { name: 'M6 Final UI, Respawn & Continuous Fire (24 Tests)', results: m6FinalResults },
   { name: 'M6 Final+ Locked 60 FPS, P1 Explosion Audio, XP & Xu Decoupling (26 Tests)', results: m6FinalPlusResults },
   { name: 'Game Speed, Real-Time Timing & Responsive Layout (14 Tests)', results: speedAndLayoutResults },
-  { name: 'M6 AI Dispersal, Lag Fix, No FPS/Rotate UI & MusicManager Admin (24 Tests)', results: m6AICorrResults },
+  { name: 'M6 AI Dispersal, Lag Fix, No FPS/Rotate UI & MusicManager Admin (28 Tests)', results: m6AICorrResults },
 ];
 
 let totalTests = 0;
