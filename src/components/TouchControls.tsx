@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Crosshair, Pause } from 'lucide-react';
 import { VirtualJoystick } from './VirtualJoystick.tsx';
 import type { InputState } from '../core/types.ts';
+import { SessionManager } from '../core/sessionManager.ts';
 
 export type ActiveDirection = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null;
 
@@ -164,6 +165,16 @@ export const VirtualShootButton: React.FC<VirtualShootButtonProps> = ({
   const isCompact = size < 70;
   const iconSize = isCompact ? 20 : 26;
 
+  // Active continuous shoot activity recorder
+  useEffect(() => {
+    if (!isShooting) return;
+    SessionManager.getInstance().recordUserActivity();
+    const interval = setInterval(() => {
+      SessionManager.getInstance().recordUserActivity();
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [isShooting]);
+
   // Global pointerup fallback in case pointerup fired outside captured target
   useEffect(() => {
     const handleGlobalPointerUp = () => {
@@ -189,6 +200,7 @@ export const VirtualShootButton: React.FC<VirtualShootButtonProps> = ({
         }}
         onPointerDown={(e) => {
           e.preventDefault();
+          SessionManager.getInstance().recordUserActivity();
           try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
           onShootChange(true);
         }}

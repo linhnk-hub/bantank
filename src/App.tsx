@@ -30,6 +30,8 @@ import { useFullscreen } from './hooks/useFullscreen.ts';
 import { useViewportLayout } from './hooks/useViewportLayout.ts';
 import type { GameCoreState, InputState } from './core/types.ts';
 import type { SceneTileHoverInfo } from './game/scenes/StageViewerScene.ts';
+import { AuthSessionBanner } from './components/AuthSessionBanner.tsx';
+import { SessionManager } from './core/sessionManager.ts';
 import {
   RotateCcw,
   Pause,
@@ -56,6 +58,7 @@ export default function App() {
   const [fps, setFps] = useState<number>(60);
   const [difficulty, setDifficulty] = useState<'DEFAULT' | 'EXTREME'>('DEFAULT');
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [isMatchAllowed, setIsMatchAllowed] = useState<boolean>(false);
 
   // Desktop PC detection: screen width >= 1024px with fine pointer (mouse/trackpad)
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
@@ -131,6 +134,12 @@ export default function App() {
     setGameState({ ...gameEngine.getState() });
   }, [gameEngine]);
 
+  useEffect(() => {
+    SessionManager.getInstance().setOnPauseGame(() => {
+      handlePause();
+    });
+  }, [handlePause]);
+
   const handleResume = useCallback(() => {
     gameEngine.resume();
     setIsPaused(false);
@@ -188,6 +197,7 @@ export default function App() {
   // Handle touch inputs from either Portrait or Landscape virtual controls
   const handleTouchInput = useCallback(
     (input: Partial<InputState>) => {
+      SessionManager.getInstance().recordUserActivity();
       gameEngine.setExternalInput(input);
     },
     [gameEngine]
@@ -196,6 +206,7 @@ export default function App() {
   // Landscape specific multi-touch handlers with independent release
   const handleLandscapeDirectionChange = useCallback(
     (dir: ActiveDirection) => {
+      SessionManager.getInstance().recordUserActivity();
       landscapeDirRef.current = dir;
       setLandscapeDirection(dir);
       gameEngine.setExternalInput({
@@ -210,6 +221,7 @@ export default function App() {
 
   const handleLandscapeShootChange = useCallback(
     (shooting: boolean) => {
+      SessionManager.getInstance().recordUserActivity();
       setLandscapeShooting(shooting);
       // Releasing or pressing shoot NEVER cancels active movement direction
       gameEngine.setExternalInput({
@@ -275,6 +287,9 @@ export default function App() {
         difficulty={difficulty}
         onDifficultyChange={handleDifficultyChange}
       />
+
+      {/* M7.1: Firebase Authentication & Single-Device Session Header Banner */}
+      <AuthSessionBanner onStartMatchAllowedChange={setIsMatchAllowed} />
 
       {/* =========================================================================
           LANDSCAPE MODE (Mobile / Tablet 3-Column Ergonomic Layout)
@@ -413,11 +428,16 @@ export default function App() {
                   </p>
                   <button
                     type="button"
-                    onClick={handleRestart}
-                    className="py-2 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-lg shadow-amber-500/30 transition-transform active:scale-95 flex items-center gap-1.5"
+                    onClick={isMatchAllowed ? handleRestart : undefined}
+                    disabled={!isMatchAllowed}
+                    className={`py-2 px-5 rounded-xl font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 ${
+                      isMatchAllowed
+                        ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/30 cursor-pointer'
+                        : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
+                    }`}
                   >
-                    <Play className="w-3.5 h-3.5 fill-black" />
-                    <span>BẮT ĐẦU TRẬN ĐẤU</span>
+                    <Play className={`w-3.5 h-3.5 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
+                    <span>{isMatchAllowed ? 'BẮT ĐẦU TRẬN ĐẤU' : 'ĐĂNG NHẬP GMAIL ĐỂ BẮT ĐẦU'}</span>
                   </button>
                 </div>
               )}
@@ -547,11 +567,16 @@ export default function App() {
                   </p>
                   <button
                     type="button"
-                    onClick={handleRestart}
-                    className="py-2 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-lg shadow-amber-500/30 transition-transform active:scale-95 flex items-center gap-1.5"
+                    onClick={isMatchAllowed ? handleRestart : undefined}
+                    disabled={!isMatchAllowed}
+                    className={`py-2 px-5 rounded-xl font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 ${
+                      isMatchAllowed
+                        ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/30 cursor-pointer'
+                        : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
+                    }`}
                   >
-                    <Play className="w-3.5 h-3.5 fill-black" />
-                    <span>BẮT ĐẦU TRẬN ĐẤU</span>
+                    <Play className={`w-3.5 h-3.5 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
+                    <span>{isMatchAllowed ? 'BẮT ĐẦU TRẬN ĐẤU' : 'ĐĂNG NHẬP GMAIL ĐỂ BẮT ĐẦU'}</span>
                   </button>
                 </div>
               )}
@@ -764,11 +789,16 @@ export default function App() {
                       </p>
                       <button
                         type="button"
-                        onClick={handleRestart}
-                        className="py-3 px-8 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-sm shadow-xl shadow-amber-500/30 transition-transform active:scale-95 flex items-center gap-2.5"
+                        onClick={isMatchAllowed ? handleRestart : undefined}
+                        disabled={!isMatchAllowed}
+                        className={`py-3 px-8 rounded-xl font-extrabold text-sm shadow-xl transition-transform active:scale-95 flex items-center gap-2.5 ${
+                          isMatchAllowed
+                            ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/30 cursor-pointer'
+                            : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
+                        }`}
                       >
-                        <Play className="w-4 h-4 fill-black" />
-                        <span>BẮT ĐẦU TRẬN ĐẤU (SPACE / ENTER)</span>
+                        <Play className={`w-4 h-4 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
+                        <span>{isMatchAllowed ? 'BẮT ĐẦU TRẬN ĐẤU (SPACE / ENTER)' : 'ĐĂNG NHẬP GMAIL ĐỂ BẮT ĐẦU'}</span>
                       </button>
                     </div>
                   )}

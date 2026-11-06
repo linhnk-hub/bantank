@@ -175,32 +175,13 @@ export const MusicAdminPanel: React.FC = () => {
           </p>
         </div>
 
-        {/* Role Selector for RBAC Verification */}
-        <div className="flex items-center gap-1.5 bg-neutral-900 p-1 rounded-lg border border-neutral-800 shrink-0">
-          <button
-            type="button"
-            onClick={() => handleRoleSwitch('SUPER_ADMIN')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold transition-all ${
-              isSuperAdmin
-                ? 'bg-amber-500 text-black shadow'
-                : 'text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            <ShieldCheck className="w-3 h-3" />
-            <span>Super Admin</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => handleRoleSwitch('PLAYER')}
-            className={`flex items-center gap-1 px-2.5 py-1 rounded text-[10px] font-bold transition-all ${
-              !isSuperAdmin
-                ? 'bg-sky-500 text-black shadow'
-                : 'text-neutral-400 hover:text-neutral-200'
-            }`}
-          >
-            <Lock className="w-3 h-3" />
-            <span>Người Chơi (Chỉ Nghe)</span>
-          </button>
+        {/* Role Indicator (Server-enforced in M7) */}
+        <div className="flex items-center gap-1.5 bg-neutral-900 px-2.5 py-1 rounded-lg border border-neutral-800 shrink-0 text-[10px] font-bold">
+          <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
+          <span className="text-neutral-300">Vai trò:</span>
+          <span className={isSuperAdmin ? 'text-amber-400 font-extrabold' : 'text-sky-400'}>
+            {isSuperAdmin ? 'Super Admin' : 'Người chơi'}
+          </span>
         </div>
       </div>
 

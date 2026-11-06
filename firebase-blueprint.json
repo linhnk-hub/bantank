@@ -1,0 +1,97 @@
+{
+  "entities": {
+    "UserSession": {
+      "title": "UserSession",
+      "description": "Khóa phiên đơn thiết bị (Single-Device Session Lock) với heartbeat 150s và timeout 900s.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "description": "Firebase Auth UID của người chơi (bất biến, khớp ID tài liệu)",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "sessionId": {
+          "type": "string",
+          "description": "Mã phiên UUID v4 sinh ngẫu nhiên mới cho mỗi lần đăng nhập hợp lệ",
+          "minLength": 16,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "deviceId": {
+          "type": "string",
+          "description": "Mã định danh trình duyệt UUID v4 lưu trong localStorage/IndexedDB",
+          "minLength": 16,
+          "maxLength": 64,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "isActive": {
+          "type": "boolean",
+          "description": "Trạng thái phiên đang hoạt động (true) hoặc đã đăng xuất (false)"
+        },
+        "userAgentSummary": {
+          "type": "string",
+          "description": "Mô tả ngắn gọn trình duyệt/hệ điều hành tối đa 120 ký tự",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "loginAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Thời điểm bắt đầu phiên theo request.time"
+        },
+        "lastActiveAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Thời điểm heartbeat gần nhất theo request.time"
+        }
+      },
+      "required": [
+        "uid",
+        "sessionId",
+        "deviceId",
+        "isActive",
+        "userAgentSummary",
+        "loginAt",
+        "lastActiveAt"
+      ]
+    },
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Hồ sơ người chơi BanTank Online (khóa ghi trong M7.1).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "totalXp": { "type": "number" },
+        "xuBalance": { "type": "number" },
+        "rankLevel": { "type": "number" }
+      },
+      "required": ["uid", "totalXp", "xuBalance", "rankLevel"]
+    },
+    "AdminRecord": {
+      "title": "AdminRecord",
+      "description": "Danh sách Super Admin (khóa ghi tuyệt đối trong M7.1).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "role": { "type": "string", "enum": ["SUPER_ADMIN"] }
+      },
+      "required": ["uid", "role"]
+    }
+  },
+  "firestore": {
+    "/user_sessions/{uid}": {
+      "schema": { "$ref": "#/entities/UserSession" },
+      "description": "Lưu trữ khóa phiên đơn thiết bị theo UID."
+    },
+    "/users/{uid}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Hồ sơ người chơi (khóa ghi trong M7.1)."
+    },
+    "/admins/{uid}": {
+      "schema": { "$ref": "#/entities/AdminRecord" },
+      "description": "Bảng quyền Super Admin chỉ đọc từ Client, cấm Client ghi."
+    }
+  }
+}

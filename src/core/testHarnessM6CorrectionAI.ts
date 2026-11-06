@@ -15,7 +15,7 @@ import {
 } from './ai/enemyAI.ts';
 import { EnemyCoordinator } from './ai/coordinator.ts';
 import { findPathAStar, isTileWalkable } from './ai/pathfinding.ts';
-import { type EnemyTank, type TankStructure, TILE_TYPES } from './types.ts';
+import { type EnemyTank, type EnemyType, type TankStructure, TILE_TYPES } from './types.ts';
 import { createRuntimeTerrainState } from './terrain.ts';
 import { getTankHitbox, checkHitboxVsTerrain, checkTankVsTanks } from './physics.ts';
 import { calculateLayoutMetrics } from '../hooks/useViewportLayout.ts';
@@ -1176,6 +1176,217 @@ export function runAllM6CorrectionAITests(): {
       name: 'Tab visibility switch discards background delta and resumes cleanly at 1 tick/frame',
       passed: ticksWhileHidden === 0 && ticksFirstVisibleFrame === 1,
       details: `Hidden 10000ms -> ${ticksWhileHidden} ticks; Visible 16.67ms -> ${ticksFirstVisibleFrame} tick.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-VER-05: 60s Stationary P1 with Mixed Formation [BASIC, BASIC, FAST, BASIC, POWER]
+  // =========================================================================
+  {
+    const mixedQueue: EnemyType[] = [
+      'BASIC',
+      'BASIC',
+      'FAST',
+      'BASIC',
+      'POWER',
+      ...Array(12).fill('BASIC'),
+      ...Array(6).fill('FAST'),
+      ...Array(4).fill('POWER'),
+      ...Array(3).fill('ARMOR'),
+    ];
+    const engineMix = new GameEngine(undefined, undefined, true, mixedQueue);
+    const blankInput = { up: false, down: false, left: false, right: false, shoot: false };
+    const stateMix = engineMix.getState() as unknown as {
+      isGameOver: boolean;
+      p1State: { shieldTimer: number };
+      p1: { isShielded: boolean };
+      enemies: EnemyTank[];
+      terrain: { currentMap: number[][] };
+    };
+
+    const tilesVisited = new Map<string, Set<string>>();
+    const maxConsecutiveIdleWithoutTarget = new Map<string, number>();
+    const curConsecutiveIdle = new Map<string, number>();
+    const prevPos = new Map<string, { x: number; y: number }>();
+
+    for (let tick = 1; tick <= 3600; tick++) {
+      stateMix.p1State.shieldTimer = 999;
+      stateMix.p1.isShielded = true;
+      stateMix.terrain.currentMap[12][6] = TILE_TYPES.BASE;
+      stateMix.isGameOver = false;
+      engineMix.stepTick(blankInput);
+
+      for (const e of stateMix.enemies) {
+        if (!tilesVisited.has(e.id)) {
+          tilesVisited.set(e.id, new Set());
+          prevPos.set(e.id, { x: e.x, y: e.y });
+          curConsecutiveIdle.set(e.id, 0);
+          maxConsecutiveIdleWithoutTarget.set(e.id, 0);
+        } else {
+          const prev = prevPos.get(e.id)!;
+          const moved = Math.hypot(e.x - prev.x, e.y - prev.y) > 0.01;
+          prevPos.set(e.id, { x: e.x, y: e.y });
+          const engagingP1 =
+            e.debugLog?.selectedTarget === 'p1' &&
+            e.debugLog?.losToP1 &&
+            e.debugLog?.isAligned;
+          const engagingEagle =
+            Math.hypot(96 - e.x, 192 - e.y) <= 48 && e.debugLog?.isAligned;
+          const aimingBrick = (e.aimTimer || 0) > 0;
+          if (!moved && !engagingP1 && !engagingEagle && !aimingBrick) {
+            const c = (curConsecutiveIdle.get(e.id) || 0) + 1;
+            curConsecutiveIdle.set(e.id, c);
+            if (c > (maxConsecutiveIdleWithoutTarget.get(e.id) || 0)) {
+              maxConsecutiveIdleWithoutTarget.set(e.id, c);
+            }
+          } else {
+            curConsecutiveIdle.set(e.id, 0);
+          }
+        }
+        tilesVisited.get(e.id)!.add(`${Math.round(e.x / 16)},${Math.round(e.y / 16)}`);
+      }
+    }
+
+    const eFast = stateMix.enemies.find((e) => e.id === 'enemy_3_FAST');
+    const ePower = stateMix.enemies.find((e) => e.id === 'enemy_5_POWER');
+    const specsValid =
+      eFast !== undefined &&
+      eFast.speed === 90 &&
+      eFast.hp === 1 &&
+      eFast.aimTime === 0.15 &&
+      ePower !== undefined &&
+      ePower.speed === 60 &&
+      ePower.hp === 2 &&
+      ePower.aimTime === 0.55;
+    const allDispersed = Array.from(tilesVisited.values()).every((s) => s.size >= 15);
+    const noIdleStall = Array.from(maxConsecutiveIdleWithoutTarget.values()).every((c) => c <= 2);
+
+    results.push({
+      id: 'TC-VER-05',
+      name: '60s stationary P1 with mixed [BASIC, BASIC, FAST, BASIC, POWER] formation disperses and preserves Fast/Power specs',
+      passed: stateMix.enemies.length === 5 && specsValid && allDispersed && noIdleStall,
+      details: `Active=${stateMix.enemies.map((e) => e.id).join(', ')}; Fast(speed=${eFast?.speed},hp=${eFast?.hp},aim=${eFast?.aimTime}s), Power(speed=${ePower?.speed},hp=${ePower?.hp},aim=${ePower?.aimTime}s); maxIdleWithoutTarget=${Math.max(...Array.from(maxConsecutiveIdleWithoutTarget.values()))} tick.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-VER-06: M3 Aim Delay & Cooldown Exact Verification (BASIC 0.35s, FAST 0.15s, POWER 0.55s, ARMOR 0.65s)
+  // =========================================================================
+  {
+    const specs = ENEMY_CONFIG.SPECS;
+    const configExact =
+      specs.BASIC.aimTime === 0.35 &&
+      specs.BASIC.shootCooldown === 1.5 &&
+      specs.FAST.aimTime === 0.15 &&
+      specs.FAST.shootCooldown === 1.2 &&
+      specs.POWER.aimTime === 0.55 &&
+      specs.POWER.shootCooldown === 2.0 &&
+      specs.ARMOR.aimTime === 0.65 &&
+      specs.ARMOR.shootCooldown === 2.5;
+
+    const p1Target: TankStructure = {
+      id: 'p1',
+      x: 48,
+      y: 192,
+      direction: 'UP',
+      speed: 60,
+      type: 'player',
+      tier: 1,
+      isAlive: true,
+      isShielded: false,
+    };
+
+    const verifyTypeAim = (type: EnemyType, expectedAimS: number): boolean => {
+      const terrain = createRuntimeTerrainState(STAGE_1_MAP);
+      const spec = ENEMY_CONFIG.SPECS[type];
+      const tank: EnemyTank = {
+        id: `aim_${type}`,
+        type: 'enemy',
+        tier: 1,
+        isShielded: false,
+        enemyType: type,
+        x: 48,
+        y: 160,
+        direction: 'DOWN',
+        speed: spec.speed,
+        isAlive: true,
+        hp: spec.hp,
+        maxHp: spec.hp,
+        scoreValue: spec.score,
+        aiState: 'CHASE',
+        targetPos: { x: 48, y: 192 },
+        lastKnownP1Pos: { x: 48, y: 192 },
+        lostTargetTimer: 0.3,
+        searchTimer: 3.0,
+        path: [],
+        pathCooldown: 0.5,
+        shootCooldown: 0,
+        aimTimer: expectedAimS - 0.05,
+        aimTime: spec.aimTime,
+        directionHistory: [],
+        dirHoldTimer: 0,
+        leadPos: null,
+        leadEvalTimer: 0,
+        lastP1Direction: 'UP',
+        spawnShieldTimer: 0,
+      };
+      const before = updateEnemyAI(tank, p1Target, false, terrain, 0, [p1Target]);
+      tank.aimTimer = expectedAimS;
+      const atThreshold = updateEnemyAI(tank, p1Target, false, terrain, 0, [p1Target]);
+      return !before.shouldShoot && atThreshold.shouldShoot;
+    };
+
+    const runtimeAimExact =
+      verifyTypeAim('BASIC', 0.35) &&
+      verifyTypeAim('FAST', 0.15) &&
+      verifyTypeAim('POWER', 0.55) &&
+      verifyTypeAim('ARMOR', 0.65);
+
+    results.push({
+      id: 'TC-VER-06',
+      name: 'M3 Aim Delay & Cooldown exact verification (Basic=0.35s, Fast=0.15s, Power=0.55s, Armor=0.65s)',
+      passed: configExact && runtimeAimExact,
+      details: `BASIC=${specs.BASIC.aimTime}s/${specs.BASIC.shootCooldown}s, FAST=${specs.FAST.aimTime}s/${specs.FAST.shootCooldown}s, POWER=${specs.POWER.aimTime}s/${specs.POWER.shootCooldown}s, ARMOR=${specs.ARMOR.aimTime}s/${specs.ARMOR.shootCooldown}s; runtimeThresholdOk=${runtimeAimExact}.`,
+    });
+  }
+
+  // =========================================================================
+  // TC-VER-07: Frame Spike 1000ms Policy & Post-Spike Stability Verification
+  // =========================================================================
+  {
+    const spikeEngine = new GameEngine();
+    const blankInput = { up: false, down: false, left: false, right: false, shoot: false };
+
+    // 1. Run 60 normal frames (1.000s)
+    for (let i = 0; i < 60; i++) {
+      spikeEngine.advanceTime(1000 / 60, blankInput);
+    }
+    // 2. Inject 1000ms frame spike while playing
+    const ticksOnSpike = spikeEngine.advanceTime(1000, blankInput);
+    const telemetryOnSpike = spikeEngine.getTimingTelemetry();
+
+    // 3. Run 60 normal frames (1.000s) after spike to verify clean recovery
+    let postSpikeTicks = 0;
+    for (let i = 0; i < 60; i++) {
+      postSpikeTicks += spikeEngine.advanceTime(1000 / 60, blankInput);
+    }
+    const telemetryAfterRecovery = spikeEngine.getTimingTelemetry();
+
+    const passed =
+      ticksOnSpike === 2 &&
+      telemetryOnSpike.droppedSeconds === 0.95 &&
+      telemetryOnSpike.accumulatorMs === 16.67 &&
+      postSpikeTicks === 61 &&
+      telemetryAfterRecovery.actualTicks === 123 &&
+      telemetryAfterRecovery.droppedSeconds === 0.95 &&
+      telemetryAfterRecovery.realElapsedSeconds === 3 &&
+      telemetryAfterRecovery.simulatedSeconds === 2.05;
+
+    results.push({
+      id: 'TC-VER-07',
+      name: '1000ms frame spike processes 2 ticks, drops 0.950s, retains 16.67ms remainder, and recovers cleanly',
+      passed,
+      details: `Spike(1000ms): ticks=${ticksOnSpike}, dropped=${telemetryOnSpike.droppedSeconds}s, remAcc=${telemetryOnSpike.accumulatorMs}ms; Post-spike(60 frames): ticks=${postSpikeTicks}, totalTicks=${telemetryAfterRecovery.actualTicks}, simTime=${telemetryAfterRecovery.simulatedSeconds}s vs realTime=${telemetryAfterRecovery.realElapsedSeconds}s.`,
     });
   }
 

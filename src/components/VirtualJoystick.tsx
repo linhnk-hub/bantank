@@ -6,6 +6,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight } from 'lucide-react';
 import type { ActiveDirection } from './TouchControls.tsx';
+import { SessionManager } from '../core/sessionManager.ts';
 
 export interface VirtualJoystickProps {
   activeDirection: ActiveDirection;
@@ -62,6 +63,7 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
   const processPointerCoords = useCallback(
     (clientX: number, clientY: number) => {
       if (!baseRef.current) return;
+      SessionManager.getInstance().recordUserActivity();
       const rect = baseRef.current.getBoundingClientRect();
       const centerX = rect.left + rect.width / 2;
       const centerY = rect.top + rect.height / 2;

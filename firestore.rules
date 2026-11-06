@@ -1,0 +1,195 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 0. Global Default-Deny Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // 1. Primitive Helpers & Personal Gmail Verification
+    // =========================================================================
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string
+        && id.size() >= 1
+        && id.size() <= 128
+        && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidTokenId(token) {
+      return token is string
+        && token.size() >= 16
+        && token.size() <= 64
+        && token.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // Xác thực phía máy chủ:
+    // - Phải đăng nhập qua Google ('google.com')
+    // - Email đã xác minh (email_verified == true)
+    // - Email kết thúc chính xác bằng @gmail.com hoặc @googlemail.com
+    // - Không chứa claim 'hd' (Hosted Domain của Google Workspace)
+    function isVerifiedPersonalGmail() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.auth.token.email is string
+        && request.auth.token.email.size() <= 254
+        && request.auth.token.email.matches('^[a-zA-Z0-9._%+-]+@(gmail|googlemail)\\.com$')
+        && !('hd' in request.auth.token);
+    }
+
+    function isOwner(uid) {
+      return isVerifiedPersonalGmail() && request.auth.uid == uid;
+    }
+
+    // Kiểm tra phiên hiện tại có còn hiệu lực trong vòng 900 giây (15 phút) theo giờ máy chủ hay không
+    function isExistingSessionStillActive() {
+      return existing().isActive == true
+        && request.time <= existing().lastActiveAt + duration.value(900, 's');
+    }
+
+    // =========================================================================
+    // 2. Validation Helper cho UserSession (Anti-Update-Gap)
+    // =========================================================================
+    function isValidUserSession(data, uid) {
+      return data.keys().hasAll([
+          'uid',
+          'sessionId',
+          'deviceId',
+          'isActive',
+          'userAgentSummary',
+          'loginAt',
+          'lastActiveAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'sessionId',
+          'deviceId',
+          'isActive',
+          'userAgentSummary',
+          'loginAt',
+          'lastActiveAt'
+        ])
+        && data.uid == uid
+        && data.uid == request.auth.uid
+        && isValidTokenId(data.sessionId)
+        && isValidTokenId(data.deviceId)
+        && data.isActive is bool
+        && data.userAgentSummary is string
+        && data.userAgentSummary.size() >= 1
+        && data.userAgentSummary.size() <= 120
+        && data.loginAt is timestamp
+        && data.lastActiveAt is timestamp;
+    }
+
+    // Hành động 1: Heartbeat từ cùng thiết bị & cùng phiên đang hoạt động
+    // - Bắt buộc phiên còn hiệu lực (<= 900s) VÀ cách lần cập nhật trước tối thiểu 120s
+    // - Chỉ được phép cập nhật duy nhất trường 'lastActiveAt' bằng giờ máy chủ (request.time)
+    function isSameDeviceHeartbeatAction() {
+      return existing().isActive == true
+        && isExistingSessionStillActive()
+        && request.time >= existing().lastActiveAt + duration.value(120, 's')
+        && incoming().deviceId == existing().deviceId
+        && incoming().sessionId == existing().sessionId
+        && incoming().loginAt == existing().loginAt
+        && incoming().userAgentSummary == existing().userAgentSummary
+        && incoming().isActive == true
+        && incoming().lastActiveAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['lastActiveAt']);
+    }
+
+    // Hành động 2: Đăng xuất chủ động hoặc giải phóng phiên từ cùng thiết bị & cùng phiên đang hoạt động
+    // - Bắt buộc phiên đang ở trạng thái isActive == true chuyển sang isActive == false
+    function isSameDeviceLogoutAction() {
+      return existing().isActive == true
+        && incoming().deviceId == existing().deviceId
+        && incoming().sessionId == existing().sessionId
+        && incoming().loginAt == existing().loginAt
+        && incoming().userAgentSummary == existing().userAgentSummary
+        && incoming().isActive == false
+        && incoming().lastActiveAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly(['isActive', 'lastActiveAt']);
+    }
+
+    // Hành động 3: Chiếm phiên đăng nhập mới hợp lệ (First-Active-Session Wins)
+    // - Chỉ được phép khi:
+    //   (a) Phiên cũ không còn hoạt động (!isExistingSessionStillActive(): đã isActive == false hoặc đã quá 900s), HOẶC
+    //   (b) Cùng chính thiết bị đó (incoming().deviceId == existing().deviceId) đăng nhập/khởi tạo lại phiên mới
+    function isNewSessionAcquisitionAction() {
+      return (
+          !isExistingSessionStillActive()
+          || incoming().deviceId == existing().deviceId
+        )
+        && incoming().isActive == true
+        && incoming().sessionId != existing().sessionId
+        && incoming().loginAt == request.time
+        && incoming().lastActiveAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'sessionId',
+          'deviceId',
+          'isActive',
+          'userAgentSummary',
+          'loginAt',
+          'lastActiveAt'
+        ]);
+    }
+
+    // =========================================================================
+    // 3. Collection Rules: /user_sessions/{uid}
+    // =========================================================================
+    match /user_sessions/{uid} {
+      allow get: if isValidId(uid) && isOwner(uid);
+      allow list: if false;
+
+      allow create: if isValidId(uid)
+        && isOwner(uid)
+        && isValidUserSession(incoming(), uid)
+        && incoming().isActive == true
+        && incoming().loginAt == request.time
+        && incoming().lastActiveAt == request.time;
+
+      allow update: if isValidId(uid)
+        && isOwner(uid)
+        && isValidUserSession(incoming(), uid)
+        && incoming().uid == existing().uid
+        && (
+          isSameDeviceHeartbeatAction()
+          || isSameDeviceLogoutAction()
+          || isNewSessionAcquisitionAction()
+        );
+
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // 4. Collection Rules: /admins/{uid} (Khóa tuyệt đối trong M7.1)
+    // =========================================================================
+    match /admins/{uid} {
+      allow get: if isValidId(uid) && isOwner(uid);
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // =========================================================================
+    // 5. Collection Rules: /users/{uid} (Khóa ghi tuyệt đối trong M7.1)
+    // =========================================================================
+    match /users/{uid} {
+      allow get: if isValidId(uid) && isOwner(uid);
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+  }
+}

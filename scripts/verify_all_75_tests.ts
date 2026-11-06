@@ -17,6 +17,7 @@ import { runAllM6FinalTests as runM6Final } from '../src/core/testHarnessM6Final
 import { runAllM6FinalPlusTests as runM6FinalPlus } from '../src/core/testHarnessM6FinalPlus.ts';
 import { runSpeedAndLayoutTests } from '../src/core/testHarnessSpeedAndLayout.ts';
 import { runAllM6CorrectionAITests as runM6AICorr } from '../src/core/testHarnessM6CorrectionAI.ts';
+import { runAllM7_1Tests as runM71 } from '../src/core/testHarnessM7_1.ts';
 
 console.log('--- RUNNING FULL AUTOMATED REGRESSION SUITE ---');
 
@@ -34,6 +35,7 @@ const m6FinalResults = runM6Final().results;
 const m6FinalPlusResults = runM6FinalPlus().results;
 const speedAndLayoutResults = runSpeedAndLayoutTests().results;
 const m6AICorrResults = runM6AICorr().results;
+const m71Results = runM71().results;
 
 const allSuites = [
   { name: 'M2 Physics & Tank (12 Tests)', results: m2Results },
@@ -49,7 +51,8 @@ const allSuites = [
   { name: 'M6 Final UI, Respawn & Continuous Fire (24 Tests)', results: m6FinalResults },
   { name: 'M6 Final+ Locked 60 FPS, P1 Explosion Audio, XP & Xu Decoupling (26 Tests)', results: m6FinalPlusResults },
   { name: 'Game Speed, Real-Time Timing & Responsive Layout (14 Tests)', results: speedAndLayoutResults },
-  { name: 'M6 AI Dispersal, Lag Fix, No FPS/Rotate UI & MusicManager Admin (28 Tests)', results: m6AICorrResults },
+  { name: 'M6 AI Dispersal, Lag Fix, No FPS/Rotate UI & MusicManager Admin (31 Tests)', results: m6AICorrResults },
+  { name: 'M7.1 Firebase Auth & Single-Device Session (23 Tests)', results: m71Results },
 ];
 
 let totalTests = 0;
