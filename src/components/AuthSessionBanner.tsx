@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { AuthManager } from '../core/authManager.ts';
-import { SessionManager, type SessionStateSnapshot } from '../core/sessionManager.ts';
+import { SessionManager, type SessionStateSnapshot, type SessionStateStatus } from '../core/sessionManager.ts';
 import {
   LogIn,
   LogOut,
@@ -15,6 +15,90 @@ import {
   AlertTriangle,
   UserCheck,
 } from 'lucide-react';
+
+export interface SessionBadgeDisplay {
+  label: string;
+  badgeStyle: string;
+  dotStyle: string;
+}
+
+export function getSessionBadgeInfo(
+  status: SessionStateStatus,
+  isProcessing: boolean,
+  isHeartbeatInFlight: boolean,
+  hasUser: boolean
+): SessionBadgeDisplay {
+  if (isProcessing && !hasUser) {
+    return {
+      label: 'Đang đăng nhập...',
+      badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
+      dotStyle: 'bg-amber-400 animate-pulse',
+    };
+  }
+
+  if (!hasUser) {
+    return {
+      label: 'Chưa đăng nhập',
+      badgeStyle: 'bg-neutral-800 text-neutral-400 border-neutral-700',
+      dotStyle: 'bg-neutral-500',
+    };
+  }
+
+  // User is authenticated with Google
+  switch (status) {
+    case 'ACQUIRING':
+      return {
+        label: 'Đang xác thực phiên...',
+        badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
+        dotStyle: 'bg-amber-400 animate-spin',
+      };
+    case 'ACTIVE':
+      if (isHeartbeatInFlight) {
+        return {
+          label: 'Đang kiểm tra kết nối...',
+          badgeStyle: 'bg-sky-950/80 text-sky-300 border-sky-800/80',
+          dotStyle: 'bg-sky-400 animate-pulse',
+        };
+      }
+      return {
+        label: 'Phiên hoạt động',
+        badgeStyle: 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80',
+        dotStyle: 'bg-emerald-400 animate-pulse',
+      };
+    case 'CONNECTION_LOST_UNVERIFIED':
+      return {
+        label: 'Mất kết nối',
+        badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
+        dotStyle: 'bg-amber-400',
+      };
+    case 'DISPLACED':
+      return {
+        label: 'Bị chiếm phiên',
+        badgeStyle: 'bg-rose-950/80 text-rose-300 border-rose-800/80',
+        dotStyle: 'bg-rose-500',
+      };
+    case 'PAUSED_IDLE':
+    case 'EXPIRED':
+      return {
+        label: 'Phiên hết hạn',
+        badgeStyle: 'bg-rose-950/80 text-rose-300 border-rose-800/80',
+        dotStyle: 'bg-rose-500',
+      };
+    case 'HEARTBEAT_REJECTED_UNCLASSIFIED':
+      return {
+        label: 'Cần xác thực',
+        badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
+        dotStyle: 'bg-amber-400 animate-pulse',
+      };
+    case 'NO_SESSION':
+    default:
+      return {
+        label: 'Chưa kích hoạt phiên',
+        badgeStyle: 'bg-neutral-800 text-neutral-300 border-neutral-700',
+        dotStyle: 'bg-amber-400',
+      };
+  }
+}
 
 interface AuthSessionBannerProps {
   onStartMatchAllowedChange?: (allowed: boolean) => void;
@@ -43,6 +127,9 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
 
     const unsubSession = sessionManager.subscribe((s) => {
       setSession(s);
+      if (s.status === 'NO_SESSION' && s.message) {
+        setFeedbackMsg({ type: 'error', text: s.message });
+      }
       if (onStartMatchAllowedChange) {
         onStartMatchAllowedChange(s.status === 'ACTIVE');
       }
@@ -82,6 +169,20 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
     }
   };
 
+  const handleRetryAcquire = async () => {
+    if (!user) return;
+    setIsProcessing(true);
+    setFeedbackMsg(null);
+    try {
+      const res = await sessionManager.acquireSession(user.uid);
+      if (!res.success && res.message) {
+        setFeedbackMsg({ type: 'error', text: res.message });
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const handleReauth = async () => {
     setIsProcessing(true);
     setFeedbackMsg(null);
@@ -95,6 +196,13 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
       setIsProcessing(false);
     }
   };
+
+  const badgeInfo = getSessionBadgeInfo(
+    session.status,
+    isProcessing,
+    session.isHeartbeatInFlight ?? false,
+    Boolean(user)
+  );
 
   // 1. Session Alert Modal for unclassified pause, displaced, or idle timeout
   const showModal =
@@ -110,33 +218,47 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
         <div className="flex items-center gap-2">
           {user ? (
             <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className={`w-2 h-2 rounded-full ${badgeInfo.dotStyle}`} />
               <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
               <span className="font-semibold text-neutral-200 truncate max-w-[140px] sm:max-w-[200px]">
                 {user.email}
               </span>
-              <span className="text-[10px] px-1.5 py-0.2 rounded bg-neutral-800 text-neutral-400 border border-neutral-700">
-                {session.status === 'ACTIVE' ? 'Phiên hợp lệ' : 'Đang đồng bộ...'}
+              <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
+                {badgeInfo.label}
               </span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 text-amber-400">
+              <span className={`w-2 h-2 rounded-full ${badgeInfo.dotStyle}`} />
               <AlertTriangle className="w-3.5 h-3.5" />
-              <span>Chưa đăng nhập (Cần Gmail cá nhân để chơi)</span>
+              <span>{isProcessing ? 'Đang đăng nhập...' : 'Chưa đăng nhập (Cần Gmail cá nhân để chơi)'}</span>
             </div>
           )}
         </div>
 
         <div className="flex items-center gap-2">
           {user ? (
-            <button
-              onClick={handleSignOut}
-              disabled={isProcessing}
-              className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-all font-semibold active:scale-95 disabled:opacity-50"
-            >
-              <LogOut className="w-3 h-3 text-red-400" />
-              <span>Đăng xuất</span>
-            </button>
+            <div className="flex items-center gap-1.5">
+              {session.status === 'NO_SESSION' && (
+                <button
+                  onClick={handleRetryAcquire}
+                  disabled={isProcessing}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-black transition-all font-bold text-[11px] active:scale-95 disabled:opacity-50"
+                  title="Thử kích hoạt phiên lại"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isProcessing ? 'animate-spin' : ''}`} />
+                  <span>Kích hoạt phiên</span>
+                </button>
+              )}
+              <button
+                onClick={handleSignOut}
+                disabled={isProcessing}
+                className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-all font-semibold active:scale-95 disabled:opacity-50"
+              >
+                <LogOut className="w-3 h-3 text-red-400" />
+                <span>Đăng xuất</span>
+              </button>
+            </div>
           ) : (
             <button
               onClick={handleSignIn}

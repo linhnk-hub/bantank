@@ -5,6 +5,7 @@
 
 import { validatePersonalGmailUser } from './authManager.ts';
 import { SESSION_TIMINGS } from './sessionManager.ts';
+import { getSessionBadgeInfo } from '../components/AuthSessionBanner.tsx';
 
 export interface TestResult {
   id: string;
@@ -652,6 +653,144 @@ export function runAllM7_1Tests(): { results: TestResult[]; summary: { total: nu
       name: 'Every unverified or interrupted session state strictly locks match start permissions',
       passed,
       details: `all7NonActiveStatesLocked=${allLocked}, activeAllowed=${activeAllows}`,
+    });
+  }
+
+  // =========================================================================
+  // TC-M7-24: Dynamic UI State Resolution Matrix (Anti-Fake-Sync Guarantee)
+  // =========================================================================
+  {
+    const signingIn = getSessionBadgeInfo('NO_SESSION', true, false, false);
+    const unauthenticated = getSessionBadgeInfo('NO_SESSION', false, false, false);
+    const acquiring = getSessionBadgeInfo('ACQUIRING', false, false, true);
+    const activeNormal = getSessionBadgeInfo('ACTIVE', false, false, true);
+    const activeHeartbeat = getSessionBadgeInfo('ACTIVE', false, true, true);
+    const connectionLost = getSessionBadgeInfo('CONNECTION_LOST_UNVERIFIED', false, false, true);
+    const displaced = getSessionBadgeInfo('DISPLACED', false, false, true);
+    const idleTimeout = getSessionBadgeInfo('PAUSED_IDLE', false, false, true);
+    const expired = getSessionBadgeInfo('EXPIRED', false, false, true);
+    const unclassified = getSessionBadgeInfo('HEARTBEAT_REJECTED_UNCLASSIFIED', false, false, true);
+    const noSessionWithUser = getSessionBadgeInfo('NO_SESSION', false, false, true);
+
+    const labelsCorrect =
+      signingIn.label === 'Đang đăng nhập...' &&
+      unauthenticated.label === 'Chưa đăng nhập' &&
+      acquiring.label === 'Đang xác thực phiên...' &&
+      activeNormal.label === 'Phiên hoạt động' &&
+      activeHeartbeat.label === 'Đang kiểm tra kết nối...' &&
+      connectionLost.label === 'Mất kết nối' &&
+      displaced.label === 'Bị chiếm phiên' &&
+      idleTimeout.label === 'Phiên hết hạn' &&
+      expired.label === 'Phiên hết hạn' &&
+      unclassified.label === 'Cần xác thực' &&
+      noSessionWithUser.label === 'Chưa kích hoạt phiên';
+
+    // Zero fake sync guarantee: no state should ever return "Đang đồng bộ..."
+    const allStates: any[] = [
+      signingIn,
+      unauthenticated,
+      acquiring,
+      activeNormal,
+      activeHeartbeat,
+      connectionLost,
+      displaced,
+      idleTimeout,
+      expired,
+      unclassified,
+      noSessionWithUser,
+    ];
+    const noFakeSync = allStates.every((s) => s.label !== 'Đang đồng bộ...');
+
+    // Dot colors correct (emerald ONLY for active, never emerald for NO_SESSION or DISPLACED)
+    const dotColorsCorrect =
+      activeNormal.dotStyle.includes('bg-emerald-400') &&
+      !noSessionWithUser.dotStyle.includes('bg-emerald-400') &&
+      !displaced.dotStyle.includes('bg-emerald-400') &&
+      noSessionWithUser.dotStyle.includes('bg-amber-400');
+
+    const passed = labelsCorrect && noFakeSync && dotColorsCorrect;
+
+    results.push({
+      id: 'TC-M7-24',
+      name: 'Dynamic UI state resolution matrix accurately reflects real status and eliminates fake sync',
+      passed,
+      details: `labelsCorrect=${labelsCorrect}, noFakeSync=${noFakeSync}, dotColorsCorrect=${dotColorsCorrect}`,
+    });
+  }
+
+  // =========================================================================
+  // TC-M7-25: UI State Transitions (Login, Active, Displaced, Expired, Logout)
+  // =========================================================================
+  {
+    // Simulate user state transition lifecycle
+    let currentStatus: any = 'NO_SESSION';
+    let isProcessing = false;
+    let hasUser = false;
+    let inFlight = false;
+
+    // Step 1: Initial unauthenticated state
+    const s1 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
+    const step1Ok = s1.label === 'Chưa đăng nhập';
+
+    // Step 2: User initiates Google sign-in
+    isProcessing = true;
+    const s2 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
+    const step2Ok = s2.label === 'Đang đăng nhập...';
+
+    // Step 3: Google auth completes, session acquisition begins
+    isProcessing = false;
+    hasUser = true;
+    currentStatus = 'ACQUIRING';
+    const s3 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
+    const step3Ok = s3.label === 'Đang xác thực phiên...';
+
+    // Step 4: Session verified on server -> ACTIVE
+    currentStatus = 'ACTIVE';
+    const s4 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
+    const step4Ok = s4.label === 'Phiên hoạt động';
+
+    // Step 5: Transient heartbeat in flight
+    inFlight = true;
+    const s5 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
+    const step5Ok = s5.label === 'Đang kiểm tra kết nối...';
+
+    // Step 6: Heartbeat finishes -> back to ACTIVE
+    inFlight = false;
+    const s6 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
+    const step6Ok = s6.label === 'Phiên hoạt động';
+
+    // Step 7: Connection lost
+    currentStatus = 'CONNECTION_LOST_UNVERIFIED';
+    const s7 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
+    const step7Ok = s7.label === 'Mất kết nối';
+
+    // Step 8: Displaced by another device
+    currentStatus = 'DISPLACED';
+    const s8 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
+    const step8Ok = s8.label === 'Bị chiếm phiên';
+
+    // Step 9: User signs out safely
+    currentStatus = 'NO_SESSION';
+    hasUser = false;
+    const s9 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
+    const step9Ok = s9.label === 'Chưa đăng nhập';
+
+    const passed =
+      step1Ok &&
+      step2Ok &&
+      step3Ok &&
+      step4Ok &&
+      step5Ok &&
+      step6Ok &&
+      step7Ok &&
+      step8Ok &&
+      step9Ok;
+
+    results.push({
+      id: 'TC-M7-25',
+      name: 'Session lifecycle accurately transitions across login, active, heartbeat, error, displaced, and logout',
+      passed,
+      details: `all9LifecycleStepsPassed=${passed}`,
     });
   }
 

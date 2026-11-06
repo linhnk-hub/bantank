@@ -52,7 +52,7 @@ const allSuites = [
   { name: 'M6 Final+ Locked 60 FPS, P1 Explosion Audio, XP & Xu Decoupling (26 Tests)', results: m6FinalPlusResults },
   { name: 'Game Speed, Real-Time Timing & Responsive Layout (14 Tests)', results: speedAndLayoutResults },
   { name: 'M6 AI Dispersal, Lag Fix, No FPS/Rotate UI & MusicManager Admin (31 Tests)', results: m6AICorrResults },
-  { name: 'M7.1 Firebase Auth & Single-Device Session (23 Tests)', results: m71Results },
+  { name: 'M7.1 Firebase Auth & Single-Device Session (25 Tests)', results: m71Results },
 ];
 
 let totalTests = 0;

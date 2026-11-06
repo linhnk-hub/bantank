@@ -47,6 +47,7 @@ export interface SessionStateSnapshot {
   deviceId: string;
   lastKnownServerActiveMs: number;
   message: string | null;
+  isHeartbeatInFlight: boolean;
 }
 
 export type SessionStateListener = (snapshot: SessionStateSnapshot) => void;
@@ -89,6 +90,7 @@ export class SessionManager {
   private lastUserPhysicalActivityWallMs: number = Date.now();
   private isUserInteractingInCycle: boolean = true;
   private earlyRejectRetryCount: number = 0;
+  private isHeartbeatInFlight: boolean = false;
   private listeners: Set<SessionStateListener> = new Set();
   private onPauseGameCallback: (() => void) | null = null;
 
@@ -162,6 +164,7 @@ export class SessionManager {
       deviceId: this.deviceId,
       lastKnownServerActiveMs: this.lastKnownServerActiveMs,
       message: this.statusMessage,
+      isHeartbeatInFlight: this.isHeartbeatInFlight,
     };
   }
 
@@ -367,6 +370,20 @@ export class SessionManager {
       return { success: true, message: null };
     } catch (err: any) {
       const msg = String(err?.message || err?.code || err);
+
+      // Check if Firestore database is not yet created on Firebase Console
+      if (
+        msg.includes('does not exist') ||
+        msg.includes('not-found') ||
+        msg.includes('NOT_FOUND')
+      ) {
+        this.status = 'NO_SESSION';
+        this.statusMessage =
+          'Cơ sở dữ liệu Firestore chưa được khởi tạo trên Firebase Console. Vui lòng tạo Firestore Database để kích hoạt phiên chơi.';
+        this.notify();
+        return { success: false, message: this.statusMessage };
+      }
+
       const isPermissionDenied =
         msg.includes('permission-denied') ||
         msg.includes('PERMISSION_DENIED') ||
@@ -404,6 +421,19 @@ export class SessionManager {
             return { success: false, message: this.statusMessage };
           }
         } catch (readErr: any) {
+          const readMsg = String(readErr?.message || readErr);
+          if (
+            readMsg.includes('does not exist') ||
+            readMsg.includes('not-found') ||
+            readMsg.includes('NOT_FOUND')
+          ) {
+            this.status = 'NO_SESSION';
+            this.statusMessage =
+              'Cơ sở dữ liệu Firestore chưa được khởi tạo trên Firebase Console. Vui lòng tạo Firestore Database để kích hoạt phiên chơi.';
+            this.notify();
+            return { success: false, message: this.statusMessage };
+          }
+
           // Could not read server doc due to network/unavailable
           this.status = 'CONNECTION_LOST_UNVERIFIED';
           this.statusMessage =
@@ -467,6 +497,9 @@ export class SessionManager {
 
     const sessionDocRef = doc(this.db, 'user_sessions', this.currentUid);
 
+    this.isHeartbeatInFlight = true;
+    this.notify();
+
     try {
       await updateDoc(sessionDocRef, {
         lastActiveAt: serverTimestamp(),
@@ -496,6 +529,9 @@ export class SessionManager {
         if (this.onPauseGameCallback) this.onPauseGameCallback();
         this.notify();
       }
+    } finally {
+      this.isHeartbeatInFlight = false;
+      this.notify();
     }
   }
 
