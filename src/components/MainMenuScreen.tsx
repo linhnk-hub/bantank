@@ -85,13 +85,18 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-3 sm:px-4 py-2.5">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
           {/* Brand */}
-          <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center font-black text-black shadow-lg shadow-amber-500/20 text-sm">
-              BT
-            </div>
+          <div className="flex items-center gap-3">
+            <img
+              src="/logo-bantank.png"
+              alt="Huyền Thoại Tuổi Thơ Logo"
+              className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow p-0 m-0 shrink-0"
+              onError={(e) => {
+                e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+              }}
+            />
             <div>
               <span className="font-extrabold text-white tracking-wide text-sm sm:text-base font-mono">
-                BẮN TANK ONLINE
+                HUYỀN THOẠI TUỔI THƠ
               </span>
               <span className="text-[10px] sm:text-xs text-neutral-400 hidden sm:inline ml-2">
                 Menu Chính
@@ -166,11 +171,15 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
         <div className="w-full max-w-xl flex flex-col items-center text-center">
           {/* Emblem & Stage Banner */}
           <div className="mb-4">
-            <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl bg-neutral-900 border-2 border-amber-500/70 flex items-center justify-center shadow-2xl shadow-amber-500/20 mx-auto mb-3">
-              <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 flex flex-col items-center justify-center text-black font-black">
-                <span className="text-xl sm:text-2xl leading-none">TANK</span>
-                <span className="text-[9px] font-mono tracking-widest">1990</span>
-              </div>
+            <div className="flex justify-center mb-3 p-0 m-0">
+              <img
+                src="/logo-bantank.png"
+                alt="Huyền Thoại Tuổi Thơ Logo"
+                className="w-32 h-32 sm:w-40 sm:h-40 object-contain drop-shadow-xl p-0 m-0"
+                onError={(e) => {
+                  e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                }}
+              />
             </div>
             <h1 className="text-2xl sm:text-4xl font-black text-white tracking-wide font-mono mb-1">
               CHIẾN DỊCH SOLO
@@ -249,14 +258,8 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               }`}
             >
               <Play className={`w-5 h-5 ${isSessionActive ? 'fill-black' : 'fill-neutral-500'}`} />
-              <span>{isSessionActive ? 'CHƠI NGAY (STAGE 1)' : 'CẦN KÍCH HOẠT PHIÊN ĐỂ CHƠI'}</span>
+              <span>{isSessionActive ? 'CHỌN CHẾ ĐỘ CHƠI' : 'CẦN KÍCH HOẠT PHIÊN ĐỂ CHƠI'}</span>
             </button>
-
-            {isSessionActive && (
-              <span className="text-[11px] text-neutral-400 font-mono">
-                Nhấn [SPACE] hoặc [ENTER] trên bàn phím để bắt đầu
-              </span>
-            )}
           </div>
 
           {/* Controls Quick Card */}

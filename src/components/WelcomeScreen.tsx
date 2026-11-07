@@ -5,17 +5,12 @@
 
 import React from 'react';
 import {
-  Shield,
-  Crosshair,
-  Award,
-  Zap,
   Wrench,
   Settings,
   Maximize,
   Minimize,
   AlertCircle,
   CheckCircle2,
-  Lock,
 } from 'lucide-react';
 
 export interface WelcomeScreenProps {
@@ -51,13 +46,18 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-4 py-3">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center font-black text-black text-base shadow-lg shadow-amber-500/20 tracking-tighter">
-              BT
-            </div>
+            <img
+              src="/logo-bantank.png"
+              alt="Huyền Thoại Tuổi Thơ Logo"
+              className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow p-0 m-0 shrink-0"
+              onError={(e) => {
+                e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+              }}
+            />
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-extrabold text-white tracking-wide text-sm sm:text-base font-mono">
-                  BẮN TANK ONLINE
+                  HUYỀN THOẠI TUỔI THƠ
                 </span>
                 <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
                   M7.1.2
@@ -149,33 +149,24 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       {/* Main Welcome Content */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-8 max-w-4xl mx-auto w-full">
         <div className="flex flex-col items-center text-center max-w-2xl">
-          {/* Emblem Tank Arcade Badge */}
-          <div className="relative mb-6">
-            <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-3xl bg-neutral-900 border-2 border-amber-500/60 flex items-center justify-center shadow-2xl shadow-amber-500/20 transform rotate-1 hover:rotate-0 transition-transform">
-              <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-700 flex flex-col items-center justify-center text-black shadow-inner">
-                <span className="font-black text-2xl sm:text-3xl tracking-tighter leading-none">
-                  TANK
-                </span>
-                <span className="text-[10px] sm:text-xs font-mono font-black tracking-widest text-neutral-900">
-                  1990
-                </span>
-              </div>
-            </div>
-            <div className="absolute -bottom-2 -right-2 px-2.5 py-0.5 rounded-full bg-emerald-500 text-black text-[10px] font-black uppercase tracking-wider shadow">
-              ONLINE
-            </div>
+          {/* Official Game Logo Hero */}
+          <div className="flex justify-center items-center p-0 m-0 mb-3">
+            <img
+              src="/logo-bantank.png"
+              alt="Huyền Thoại Tuổi Thơ"
+              className="w-48 h-48 sm:w-60 sm:h-60 md:w-72 md:h-72 object-contain p-0 m-0 drop-shadow-2xl"
+              onError={(e) => {
+                e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+              }}
+            />
           </div>
 
-          {/* Title & Tagline */}
-          <h1 className="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wider mb-2 font-mono drop-shadow">
-            BẮN TANK ONLINE
+          {/* Title: HUYỀN THOẠI TUỔI THƠ with subtle yellow lines above and below */}
+          <div className="w-40 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mb-3" />
+          <h1 className="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wider font-mono drop-shadow p-0">
+            HUYỀN THOẠI TUỔI THƠ
           </h1>
-          <p className="text-sm sm:text-base text-neutral-300 font-medium mb-2 max-w-lg">
-            Huyền thoại xe tăng Battle City 1990 tái xuất trên nền tảng Web tiêu chuẩn cao
-          </p>
-          <p className="text-xs text-amber-400/90 font-mono mb-8 font-semibold">
-            STAGE 1 • 30 XE ĐỊCH • 1 ĐẠI BÀNG HOÀNG GIA • ĐỒNG BỘ ĐÁM MÂY
-          </p>
+          <div className="w-40 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mt-3 mb-8" />
 
           {/* Google Sign-in Call To Action */}
           <div className="w-full max-w-sm flex flex-col items-center gap-3 mb-8">
@@ -212,59 +203,14 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 {isProcessing ? 'ĐANG KẾT NỐI GOOGLE...' : 'ĐĂNG NHẬP BẰNG GOOGLE'}
               </span>
             </button>
-
-            <div className="flex items-center gap-1.5 text-[11px] text-neutral-400">
-              <Lock className="w-3 h-3 text-amber-400" />
-              <span>Chỉ chấp nhận tài khoản Google cá nhân (@gmail.com)</span>
-            </div>
-          </div>
-
-          {/* Feature Highlights Grid */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full text-left">
-            <div className="p-3.5 rounded-xl bg-neutral-900/80 border border-neutral-800 hover:border-neutral-700 transition-colors">
-              <Zap className="w-4 h-4 text-amber-400 mb-2" />
-              <h3 className="text-xs font-bold text-white mb-1">Tốc độ 60Hz</h3>
-              <p className="text-[11px] text-neutral-400 leading-tight">
-                Vật lý pixel mượt mà, chuẩn xác nguyên bản Battle City.
-              </p>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-neutral-900/80 border border-neutral-800 hover:border-neutral-700 transition-colors">
-              <Shield className="w-4 h-4 text-emerald-400 mb-2" />
-              <h3 className="text-xs font-bold text-white mb-1">Bảo Vệ Căn Cứ</h3>
-              <p className="text-[11px] text-neutral-400 leading-tight">
-                Bảo vệ Đại Bàng Hoàng Gia trước 30 đợt xe tăng địch.
-              </p>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-neutral-900/80 border border-neutral-800 hover:border-neutral-700 transition-colors">
-              <Crosshair className="w-4 h-4 text-sky-400 mb-2" />
-              <h3 className="text-xs font-bold text-white mb-1">4 Loại Địch</h3>
-              <p className="text-[11px] text-neutral-400 leading-tight">
-                Basic, Fast, Power và Thiết giáp Armor Tank 4 máu.
-              </p>
-            </div>
-
-            <div className="p-3.5 rounded-xl bg-neutral-900/80 border border-neutral-800 hover:border-neutral-700 transition-colors">
-              <Award className="w-4 h-4 text-purple-400 mb-2" />
-              <h3 className="text-xs font-bold text-white mb-1">Phiên Bảo Mật</h3>
-              <p className="text-[11px] text-neutral-400 leading-tight">
-                Chống đăng nhập trùng lặp, bảo vệ tài khoản Firebase.
-              </p>
-            </div>
           </div>
         </div>
       </main>
 
       {/* Footer Strip */}
       <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">
-        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-          <span>Bắn Tank Online © 2026 • Classic Retro Arcade Heritage</span>
-          <div className="flex items-center gap-3 text-[11px] text-neutral-400">
-            <span>Bàn phím: WASD / Space</span>
-            <span>•</span>
-            <span>Mobile: Joystick & Nút Bắn</span>
-          </div>
+        <div className="max-w-4xl mx-auto flex items-center justify-center">
+          <span>Bắn Tank Online © 2026</span>
         </div>
       </footer>
     </div>

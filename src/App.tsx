@@ -35,6 +35,7 @@ import { SessionManager } from './core/sessionManager.ts';
 import { AuthManager } from './core/authManager.ts';
 import { WelcomeScreen } from './components/WelcomeScreen.tsx';
 import { MainMenuScreen } from './components/MainMenuScreen.tsx';
+import { ModeSelectionScreen } from './components/ModeSelectionScreen.tsx';
 import { SessionAlertModal } from './components/SessionAlertModal.tsx';
 import {
   RotateCcw,
@@ -58,10 +59,10 @@ export default function App() {
   const authManager = useMemo(() => AuthManager.getInstance(), []);
   const sessionManager = useMemo(() => SessionManager.getInstance(), []);
 
-  // Screen View Routing: 'WELCOME' | 'MAIN_MENU' | 'BATTLE'
+  // Screen View Routing: 'WELCOME' | 'MAIN_MENU' | 'MODE_SELECTION' | 'BATTLE'
   const [currentUser, setCurrentUser] = useState(() => authManager.getCurrentUser());
   const [sessionSnapshot, setSessionSnapshot] = useState(() => sessionManager.getSnapshot());
-  const [appScreen, setAppScreen] = useState<'WELCOME' | 'MAIN_MENU' | 'BATTLE'>(() => {
+  const [appScreen, setAppScreen] = useState<'WELCOME' | 'MAIN_MENU' | 'MODE_SELECTION' | 'BATTLE'>(() => {
     return authManager.getCurrentUser() ? 'MAIN_MENU' : 'WELCOME';
   });
   const [authProcessing, setAuthProcessing] = useState<boolean>(false);
@@ -439,7 +440,7 @@ export default function App() {
           user={currentUser}
           session={sessionSnapshot}
           isProcessing={authProcessing}
-          onPlay={handleStartMatch}
+          onPlay={() => setAppScreen('MODE_SELECTION')}
           onSignOut={handleSignOut}
           onRetryAcquire={handleRetryAcquire}
           difficulty={difficulty}
@@ -451,6 +452,55 @@ export default function App() {
         />
 
         {/* Protective Interruption Modal if displaced while on menu */}
+        <SessionAlertModal
+          session={sessionSnapshot}
+          isProcessing={authProcessing}
+          onReauth={handleReauth}
+          onSignIn={handleSignIn}
+          onSignOut={handleSignOut}
+        />
+      </div>
+    );
+  }
+
+  // View 2.5: Mode Selection Screen (Select SOLO vs 2 PLAYERS)
+  if (appScreen === 'MODE_SELECTION') {
+    return (
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+        <FullscreenGuideModal isOpen={showFullscreenGuide} onClose={dismissFsGuide} />
+
+        <DevToolsDrawer
+          isOpen={isDevDrawerOpen}
+          onClose={() => setIsDevDrawerOpen(false)}
+          validation={validation}
+        />
+
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          difficulty={difficulty}
+          onDifficultyChange={handleDifficultyChange}
+        />
+
+        <ModeSelectionScreen
+          user={currentUser}
+          session={sessionSnapshot}
+          isProcessing={authProcessing}
+          onBack={() => setAppScreen('MAIN_MENU')}
+          onStartMatch={(mode) => {
+            if (mode === 'SOLO') {
+              handleStartMatch();
+            }
+          }}
+          difficulty={difficulty}
+          onDifficultyChange={handleDifficultyChange}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenDevTools={() => setIsDevDrawerOpen(true)}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={toggleFullscreen}
+        />
+
+        {/* Protective Interruption Modal if displaced while on mode selection */}
         <SessionAlertModal
           session={sessionSnapshot}
           isProcessing={authProcessing}
@@ -499,9 +549,14 @@ export default function App() {
           <header className="h-8 bg-neutral-950/95 border-b border-neutral-800 px-2 sm:px-3 flex items-center justify-between text-xs shrink-0 z-30">
             {/* Left: Brand & Stage */}
             <div className="flex items-center gap-1.5">
-              <div className="w-5 h-5 rounded bg-amber-500 flex items-center justify-center font-black text-black text-[11px] shadow">
-                BT
-              </div>
+              <img
+                src="/logo-bantank.png"
+                alt="Huyền Thoại Tuổi Thơ"
+                className="w-7 h-7 object-contain p-0 m-0 shrink-0"
+                onError={(e) => {
+                  e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                }}
+              />
               <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
                 STAGE 1
               </span>
@@ -612,11 +667,16 @@ export default function App() {
               {/* In MENU state: Overlay allowing immediate match start */}
               {gameState?.matchState === 'MENU' && (
                 <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20 rounded-sm">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center font-black text-black text-sm mb-2 shadow-lg">
-                    BT
-                  </div>
+                  <img
+                    src="/logo-bantank.png"
+                    alt="Huyền Thoại Tuổi Thơ"
+                    className="w-20 h-20 object-contain mb-2 drop-shadow-lg p-0 m-0"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                    }}
+                  />
                   <h2 className="text-base font-black text-white tracking-wider mb-1">
-                    BẮN TANK ONLINE
+                    HUYỀN THOẠI TUỔI THƠ
                   </h2>
                   <p className="text-[11px] text-amber-300 font-mono font-bold mb-3">
                     STAGE 1 • 30 Xe Địch • 1 Đại Bàng Hoàng Gia
@@ -667,9 +727,14 @@ export default function App() {
           <header className="h-9 bg-neutral-950/95 border-b border-neutral-800 px-3 flex items-center justify-between text-xs shrink-0 z-30">
             {/* Left: Brand & Stage */}
             <div className="flex items-center gap-2">
-              <div className="w-5 h-5 rounded bg-amber-500 flex items-center justify-center font-black text-black text-[11px] shadow">
-                BT
-              </div>
+              <img
+                src="/logo-bantank.png"
+                alt="Huyền Thoại Tuổi Thơ"
+                className="w-7 h-7 object-contain p-0 m-0 shrink-0"
+                onError={(e) => {
+                  e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                }}
+              />
               <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
                 STAGE 1
               </span>
@@ -751,11 +816,16 @@ export default function App() {
               {/* In MENU state: Overlay allowing immediate match start */}
               {gameState?.matchState === 'MENU' && (
                 <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20 rounded-xl">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500 flex items-center justify-center font-black text-black text-sm mb-2 shadow-lg">
-                    BT
-                  </div>
+                  <img
+                    src="/logo-bantank.png"
+                    alt="Huyền Thoại Tuổi Thơ"
+                    className="w-20 h-20 object-contain mb-2 drop-shadow-lg p-0 m-0"
+                    onError={(e) => {
+                      e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                    }}
+                  />
                   <h2 className="text-base font-black text-white tracking-wider mb-1">
-                    BẮN TANK ONLINE
+                    HUYỀN THOẠI TUỔI THƠ
                   </h2>
                   <p className="text-[11px] text-amber-300 font-mono font-bold mb-3">
                     STAGE 1 • 30 Xe Địch • 1 Đại Bàng Hoàng Gia
@@ -812,13 +882,18 @@ export default function App() {
           <header className="border-b border-neutral-800 bg-neutral-900/90 backdrop-blur px-4 py-2.5 sticky top-0 z-30 shadow-md">
             <div className="max-w-[1560px] mx-auto flex items-center justify-between gap-2">
               {/* Brand */}
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center font-black text-black shadow-lg shadow-amber-500/20 text-sm">
-                  BT
-                </div>
+              <div className="flex items-center gap-3">
+                <img
+                  src="/logo-bantank.png"
+                  alt="Huyền Thoại Tuổi Thơ"
+                  className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow p-0 m-0 shrink-0"
+                  onError={(e) => {
+                    e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                  }}
+                />
                 <div>
                   <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
-                    Bắn Tank Online
+                    HUYỀN THOẠI TUỔI THƠ
                     <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 font-medium">
                       M4 Solo
                     </span>
@@ -973,11 +1048,16 @@ export default function App() {
                   {/* In MENU state: Overlay allowing immediate match start */}
                   {gameState?.matchState === 'MENU' && (
                     <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-20 rounded-xl">
-                      <div className="w-14 h-14 rounded-2xl bg-amber-500 flex items-center justify-center font-black text-black text-xl mb-3 shadow-xl shadow-amber-500/20">
-                        BT
-                      </div>
+                      <img
+                        src="/logo-bantank.png"
+                        alt="Huyền Thoại Tuổi Thơ"
+                        className="w-24 h-24 object-contain mb-3 drop-shadow-xl p-0 m-0"
+                        onError={(e) => {
+                          e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                        }}
+                      />
                       <h2 className="text-xl sm:text-2xl font-black text-white tracking-wider mb-1.5">
-                        BẮN TANK ONLINE
+                        HUYỀN THOẠI TUỔI THƠ
                       </h2>
                       <p className="text-xs sm:text-sm text-neutral-400 mb-5 max-w-sm">
                         Chiến dịch Solo • 30 Xe Địch • 1 Đại Bàng Hoàng Gia • Tốc độ 60Hz Chuẩn Xác
