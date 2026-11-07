@@ -51,7 +51,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               alt="Huyền Thoại Tuổi Thơ Logo"
               className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow p-0 m-0 shrink-0"
               onError={(e) => {
-                e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
               }}
             />
             <div>
@@ -156,7 +156,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               alt="Huyền Thoại Tuổi Thơ"
               className="w-48 h-48 sm:w-60 sm:h-60 md:w-72 md:h-72 object-contain p-0 m-0 drop-shadow-2xl"
               onError={(e) => {
-                e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
               }}
             />
           </div>

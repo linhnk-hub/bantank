@@ -554,7 +554,7 @@ export default function App() {
                 alt="Huyền Thoại Tuổi Thơ"
                 className="w-7 h-7 object-contain p-0 m-0 shrink-0"
                 onError={(e) => {
-                  e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                  e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                 }}
               />
               <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
@@ -672,7 +672,7 @@ export default function App() {
                     alt="Huyền Thoại Tuổi Thơ"
                     className="w-20 h-20 object-contain mb-2 drop-shadow-lg p-0 m-0"
                     onError={(e) => {
-                      e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                      e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                     }}
                   />
                   <h2 className="text-base font-black text-white tracking-wider mb-1">
@@ -732,7 +732,7 @@ export default function App() {
                 alt="Huyền Thoại Tuổi Thơ"
                 className="w-7 h-7 object-contain p-0 m-0 shrink-0"
                 onError={(e) => {
-                  e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                  e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                 }}
               />
               <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
@@ -821,7 +821,7 @@ export default function App() {
                     alt="Huyền Thoại Tuổi Thơ"
                     className="w-20 h-20 object-contain mb-2 drop-shadow-lg p-0 m-0"
                     onError={(e) => {
-                      e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                      e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                     }}
                   />
                   <h2 className="text-base font-black text-white tracking-wider mb-1">
@@ -888,7 +888,7 @@ export default function App() {
                   alt="Huyền Thoại Tuổi Thơ"
                   className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow p-0 m-0 shrink-0"
                   onError={(e) => {
-                    e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                    e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                   }}
                 />
                 <div>
@@ -1053,7 +1053,7 @@ export default function App() {
                         alt="Huyền Thoại Tuổi Thơ"
                         className="w-24 h-24 object-contain mb-3 drop-shadow-xl p-0 m-0"
                         onError={(e) => {
-                          e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                          e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                         }}
                       />
                       <h2 className="text-xl sm:text-2xl font-black text-white tracking-wider mb-1.5">

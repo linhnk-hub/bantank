@@ -195,7 +195,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 alt="Huyền Thoại Tuổi Thơ Logo"
                 className="w-10 h-10 sm:w-12 sm:h-12 object-contain drop-shadow p-0 m-0 shrink-0"
                 onError={(e) => {
-                  e.currentTarget.src = 'https://i.ibb.co/9mzzCBnR/logo-bantank.png';
+                  e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                 }}
               />
               <div>
