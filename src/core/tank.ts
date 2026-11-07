@@ -26,6 +26,20 @@ export function createP1Tank(): TankStructure {
   };
 }
 
+export function createP2Tank(): TankStructure {
+  return {
+    id: 'p2',
+    x: 144,
+    y: 192,
+    direction: 'UP',
+    speed: TANK_CONFIG.SPEED_PX_S,
+    type: 'player2',
+    tier: 1,
+    isAlive: true,
+    isShielded: false,
+  };
+}
+
 /**
  * Updates tank position and orientation based on user input.
  * Fixed movement: exactly 1.0 px per tick at 60Hz.

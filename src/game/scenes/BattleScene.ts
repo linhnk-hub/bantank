@@ -27,6 +27,8 @@ export class BattleScene extends Phaser.Scene {
   private engine: GameEngine;
   private p1Sprite?: Phaser.GameObjects.Image;
   private p1ShieldSprite?: Phaser.GameObjects.Image;
+  private p2Sprite?: Phaser.GameObjects.Image;
+  private p2ShieldSprite?: Phaser.GameObjects.Image;
   private enemySprites: Map<string, Phaser.GameObjects.Image> = new Map();
   private enemyShieldSprites: Map<string, Phaser.GameObjects.Image> = new Map();
   private bulletSprites: Map<string, Phaser.GameObjects.Image> = new Map();
@@ -233,6 +235,55 @@ export class BattleScene extends Phaser.Scene {
         this.p1Sprite.setAlpha(1.0);
         if (this.p1ShieldSprite) this.p1ShieldSprite.setVisible(false);
       }
+    }
+
+    // 3b. Update P2 Tank & Shield (if P2 exists in 2-Player mode)
+    if (state.p2) {
+      if (!this.p2Sprite) {
+        this.p2Sprite = this.add.image(state.p2.x, state.p2.y, `tank_p2_${state.p2.direction.toLowerCase()}`);
+        this.p2Sprite.setOrigin(0, 0);
+        this.p2Sprite.setDisplaySize(16, 16);
+        this.p2Sprite.setDepth(10);
+      }
+      if (!this.p2ShieldSprite) {
+        this.p2ShieldSprite = this.add.image(state.p2.x - 1, state.p2.y - 1, 'shield_aura');
+        this.p2ShieldSprite.setOrigin(0, 0);
+        this.p2ShieldSprite.setDisplaySize(18, 18);
+        this.p2ShieldSprite.setDepth(12);
+        this.p2ShieldSprite.setVisible(false);
+      }
+
+      if (state.p2.isAlive && (!state.p2State || !state.p2State.isDead)) {
+        this.p2Sprite.setPosition(state.p2.x, state.p2.y);
+        this.p2Sprite.setTexture(`tank_p2_${state.p2.direction.toLowerCase()}`);
+        this.p2Sprite.setVisible(true);
+
+        const hasShield = state.p2.isShielded || (state.p2State && state.p2State.shieldTimer > 0);
+        if (hasShield) {
+          const pulsePhase = Math.floor((state.p2State?.shieldTimer ?? 1) * 10) % 2 === 0;
+          const tankAlpha = pulsePhase ? 0.7 : 1.0;
+          const auraAlpha = pulsePhase ? 0.95 : 0.45;
+
+          this.p2Sprite.setAlpha(tankAlpha);
+          if (this.p2ShieldSprite) {
+            this.p2ShieldSprite.setPosition(state.p2.x - 1, state.p2.y - 1);
+            this.p2ShieldSprite.setVisible(true);
+            this.p2ShieldSprite.setAlpha(auraAlpha);
+          }
+        } else {
+          this.p2Sprite.setAlpha(1.0);
+          if (this.p2ShieldSprite) {
+            this.p2ShieldSprite.setVisible(false);
+          }
+        }
+      } else {
+        this.p2Sprite.setVisible(false);
+        this.p2Sprite.setAlpha(1.0);
+        if (this.p2ShieldSprite) this.p2ShieldSprite.setVisible(false);
+      }
+    } else {
+      if (this.p2Sprite) this.p2Sprite.setVisible(false);
+      if (this.p2ShieldSprite) this.p2ShieldSprite.setVisible(false);
     }
 
     // 4. Update Enemy Sprites

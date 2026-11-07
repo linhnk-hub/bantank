@@ -37,6 +37,7 @@ import { WelcomeScreen } from './components/WelcomeScreen.tsx';
 import { MainMenuScreen } from './components/MainMenuScreen.tsx';
 import { ModeSelectionScreen } from './components/ModeSelectionScreen.tsx';
 import { SessionAlertModal } from './components/SessionAlertModal.tsx';
+import { UserProfileModal } from './components/UserProfileModal.tsx';
 import {
   RotateCcw,
   Pause,
@@ -68,6 +69,7 @@ export default function App() {
   const [authProcessing, setAuthProcessing] = useState<boolean>(false);
   const [authErrorMsg, setAuthErrorMsg] = useState<string | null>(null);
   const [logoutSuccessNotice, setLogoutSuccessNotice] = useState<string | null>(null);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
 
   // Milestone 4 Game State & Lifecycle
   const [gameEngine, setGameEngine] = useState<GameEngine>(() => new GameEngine());
@@ -204,11 +206,19 @@ export default function App() {
     setGameState({ ...st });
   }, [gameEngine]);
 
-  const handleStartMatch = useCallback(() => {
-    if (sessionSnapshot.status !== 'ACTIVE') return;
-    setAppScreen('BATTLE');
-    handleRestart();
-  }, [sessionSnapshot.status, handleRestart]);
+  const handleStartMatch = useCallback(
+    (mode: 'SOLO' | 'TWO_PLAYERS' = 'SOLO', twoPlayerOption?: 'P2_AI' | 'P2_REAL') => {
+      if (sessionSnapshot.status !== 'ACTIVE') return;
+      const engineMode = mode === 'TWO_PLAYERS' && twoPlayerOption === 'P2_AI' ? 'TWO_PLAYERS_AI' : 'SOLO';
+      gameEngine.startMatch(engineMode, difficulty);
+      setIsPaused(false);
+      const st = gameEngine.getState();
+      MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
+      setGameState({ ...st });
+      setAppScreen('BATTLE');
+    },
+    [sessionSnapshot.status, gameEngine, difficulty]
+  );
 
   const handleQuitToMenu = useCallback(() => {
     gameEngine.quitToMenu();
@@ -449,6 +459,16 @@ export default function App() {
           onOpenDevTools={() => setIsDevDrawerOpen(true)}
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
+          onOpenProfile={() => setIsProfileModalOpen(true)}
+        />
+
+        <UserProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          user={currentUser}
+          onProfileUpdated={(updated) => {
+            setCurrentUser((prev) => (prev ? { ...prev, ...updated } : prev));
+          }}
         />
 
         {/* Protective Interruption Modal if displaced while on menu */}
@@ -487,10 +507,8 @@ export default function App() {
           session={sessionSnapshot}
           isProcessing={authProcessing}
           onBack={() => setAppScreen('MAIN_MENU')}
-          onStartMatch={(mode) => {
-            if (mode === 'SOLO') {
-              handleStartMatch();
-            }
+          onStartMatch={(mode, twoPlayerOption) => {
+            handleStartMatch(mode, twoPlayerOption);
           }}
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
@@ -498,6 +516,16 @@ export default function App() {
           onOpenDevTools={() => setIsDevDrawerOpen(true)}
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
+          onOpenProfile={() => setIsProfileModalOpen(true)}
+        />
+
+        <UserProfileModal
+          isOpen={isProfileModalOpen}
+          onClose={() => setIsProfileModalOpen(false)}
+          user={currentUser}
+          onProfileUpdated={(updated) => {
+            setCurrentUser((prev) => (prev ? { ...prev, ...updated } : prev));
+          }}
         />
 
         {/* Protective Interruption Modal if displaced while on mode selection */}
@@ -847,14 +875,14 @@ export default function App() {
               )}
             </main>
 
-            {/* Controls Cluster: Separated 28px below Canvas (24–32px specification) */}
+            {/* Controls Cluster: Expanded on Tablet (680px), centered 28px below Canvas */}
             <div
               style={{
-                width: `${layout.canvasSizePx}px`,
-                maxWidth: '440px',
+                width: layout.isTabletOrDesktop ? '100%' : `${layout.canvasSizePx}px`,
+                maxWidth: layout.isTabletOrDesktop ? '680px' : '440px',
                 marginTop: '28px',
               }}
-              className="w-full shrink-0 mx-auto z-20 flex justify-center"
+              className="w-full shrink-0 mx-auto z-20 flex justify-center px-2 sm:px-4"
             >
               <TouchControls
                 onInputChange={handleTouchInput}

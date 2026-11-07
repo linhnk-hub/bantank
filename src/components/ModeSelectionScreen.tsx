@@ -44,6 +44,7 @@ export interface ModeSelectionScreenProps {
   onOpenDevTools: () => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  onOpenProfile?: () => void;
 }
 
 /**
@@ -125,6 +126,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   onOpenDevTools,
   isFullscreen,
   onToggleFullscreen,
+  onOpenProfile,
 }) => {
   const [selectedMode, setSelectedMode] = useState<GameModeType>('SOLO');
   const [twoPlayerOption, setTwoPlayerOption] = useState<TwoPlayerOption>('P2_AI');
@@ -139,8 +141,11 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   );
 
   // Can the player start match with current selection?
-  // SOLO is fully ready and implemented. 2 PLAYERS is not available yet in Game Core M1-M6.
-  const isStartAllowed = selectedMode === 'SOLO' && isSessionActive && !isProcessing;
+  // SOLO and 2 PLAYERS (P2 AI Ally) are both fully ready and implemented!
+  const isStartAllowed =
+    (selectedMode === 'SOLO' || (selectedMode === 'TWO_PLAYERS' && twoPlayerOption === 'P2_AI')) &&
+    isSessionActive &&
+    !isProcessing;
 
   // Keyboard navigation: 1 for SOLO, 2 for 2 PLAYERS, ESC for Back, Enter/Space for Start
   useEffect(() => {
@@ -155,17 +160,17 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       } else if (e.code === 'Enter' || e.code === 'Space') {
         if (isStartAllowed) {
           e.preventDefault();
-          onStartMatch('SOLO');
+          onStartMatch(selectedMode, twoPlayerOption);
         }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isStartAllowed, onBack, onStartMatch]);
+  }, [isStartAllowed, onBack, onStartMatch, selectedMode, twoPlayerOption]);
 
   const handleStartClick = () => {
     if (!isStartAllowed) return;
-    onStartMatch('SOLO');
+    onStartMatch(selectedMode, twoPlayerOption);
   };
 
   return (
@@ -222,6 +227,18 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               </span>
             </div>
 
+            {onOpenProfile && (
+              <button
+                type="button"
+                onClick={onOpenProfile}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold shadow transition-all cursor-pointer active:scale-95"
+                title="Cập nhật hồ sơ tài khoản (tên hiển thị, avatar)"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="hidden sm:inline">Hồ Sơ</span>
+              </button>
+            )}
+
             <button
               type="button"
               onClick={onToggleFullscreen}
@@ -262,7 +279,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
         <div className="w-full max-w-3xl flex flex-col items-center text-center">
           {/* Header Title */}
           <div className="mb-6 flex flex-col items-center">
-            <h1 className="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wider font-mono drop-shadow-lg uppercase">
+            <h1 className="text-[clamp(1.35rem,5.5vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow-lg uppercase">
               CHỌN CHẾ ĐỘ CHƠI
             </h1>
             <p className="text-xs sm:text-sm text-neutral-300 mt-1 max-w-md">
@@ -395,20 +412,20 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   }}
                   className={`p-2.5 rounded-xl border transition-all text-xs flex items-start gap-2.5 ${
                     selectedMode === 'TWO_PLAYERS' && twoPlayerOption === 'P2_AI'
-                      ? 'bg-neutral-800/90 border-amber-500/80'
+                      ? 'bg-emerald-950/40 border-emerald-500/80 shadow-md ring-1 ring-emerald-500/30'
                       : 'bg-neutral-950/60 border-neutral-800 hover:border-neutral-700'
                   }`}
                 >
                   <Bot className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-white font-mono">B.1. P2 là AI</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-neutral-800 text-amber-400 border border-neutral-700 font-mono">
-                        CHƯA KHẢ DỤNG
+                      <span className="font-bold text-white font-mono">B.1. P2 là AI (Đồng minh)</span>
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-700 font-mono font-bold">
+                        SẴN SÀNG • KHẢ DỤNG
                       </span>
                     </div>
-                    <p className="text-[11px] text-neutral-400 mt-0.5 leading-snug">
-                      P1 do người điều khiển, P2 do máy tính điều khiển. Game Core M1–M6 hiện chỉ có AI địch, chưa có module xe tăng đồng minh AI.
+                    <p className="text-[11px] text-neutral-300 mt-0.5 leading-snug">
+                      P1 do bạn điều khiển (Xe vàng), P2 do máy tính điều khiển (Xe xanh lá, 3 mạng). AI bảo vệ Căn cứ Đại bàng, hỗ trợ tiêu diệt địch và tuyệt đối không bắn đồng đội (Friendly-Fire Safe).
                     </p>
                   </div>
                 </div>
@@ -429,13 +446,13 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   <WifiOff className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                   <div className="flex-1">
                     <div className="flex items-center justify-between">
-                      <span className="font-bold text-white font-mono">B.2. P2 là người thật</span>
+                      <span className="font-bold text-white font-mono">B.2. P2 là người thật (Online)</span>
                       <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-950/60 text-rose-300 border border-rose-800 font-mono">
                         CHƯA KHẢ DỤNG
                       </span>
                     </div>
                     <p className="text-[11px] text-neutral-400 mt-0.5 leading-snug">
-                      Hệ thống Multiplayer thời gian thực chưa được triển khai. Tuyệt đối không giả lập kết nối hoặc tạo trận đấu ảo.
+                      Hạ tầng Multiplayer P2P thời gian thực đang được chuẩn bị. Tuyệt đối không giả lập phòng đấu ảo.
                     </p>
                   </div>
                 </div>
@@ -445,53 +462,109 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
           {/* Detailed Status Notice depending on chosen mode */}
           {selectedMode === 'TWO_PLAYERS' && (
-            <div className="w-full mb-6 p-4 rounded-xl bg-amber-950/40 border border-amber-700/60 text-amber-200 text-left flex items-start gap-3 shadow-lg animate-fade-in">
-              <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+            <div
+              className={`w-full mb-6 p-4 rounded-xl border text-left flex items-start gap-3 shadow-lg animate-fade-in ${
+                twoPlayerOption === 'P2_AI'
+                  ? 'bg-emerald-950/40 border-emerald-700/60 text-emerald-200'
+                  : 'bg-amber-950/40 border-amber-700/60 text-amber-200'
+              }`}
+            >
+              {twoPlayerOption === 'P2_AI' ? (
+                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+              ) : (
+                <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+              )}
               <div className="text-xs space-y-1">
-                <span className="font-bold text-amber-300 block font-mono">
-                  THÔNG BÁO TÍNH NĂNG CHẾ ĐỘ 2 NGƯỜI CHƠI
-                </span>
-                <p className="text-amber-200/90 leading-relaxed">
+                <span
+                  className={`font-bold block font-mono ${
+                    twoPlayerOption === 'P2_AI' ? 'text-emerald-300' : 'text-amber-300'
+                  }`}
+                >
                   {twoPlayerOption === 'P2_AI'
-                    ? 'Game Core M1–M6 hiện tại chỉ tập trung tối ưu hóa chế độ Solo Stage 1 (30 xe địch, 1 Đại bàng). Module AI xe tăng đồng minh P2 chưa được xây dựng trong lõi game, và hệ thống tuân thủ nguyên tắc không tự ý sửa đổi Game Core.'
-                    : 'Hệ thống hạ tầng Multiplayer kết nối 2 thiết bị thời gian thực chưa được thiết lập. Để bảo vệ trải nghiệm trung thực và an toàn tài khoản, trò chơi không hỗ trợ phòng đấu giả lập.'}
-                </p>
-                <p className="text-amber-400 font-bold pt-1">
-                  👉 Vui lòng chuyển sang chế độ <strong className="underline cursor-pointer" onClick={() => setSelectedMode('SOLO')}>SOLO – 1 NGƯỜI CHƠI</strong> để bắt đầu trận đấu ngay bây giờ.
+                    ? 'CHẾ ĐỘ CO-OP 2 NGƯỜI CHƠI (P2 LÀ AI) ĐÃ SẴN SÀNG THAM CHIẾN'
+                    : 'THÔNG BÁO TÍNH NĂNG CHẾ ĐỘ 2 NGƯỜI CHƠI ONLINE'}
+                </span>
+                <p className="leading-relaxed opacity-90">
+                  {twoPlayerOption === 'P2_AI'
+                    ? 'P1 (Xe vàng) và P2 (Xe xanh lá do AI điều khiển) sẽ cùng xuất kích tại hàng dưới. AI đồng minh có thuật toán nhận diện chướng ngại vật A*, ưu tiên tuần tra bảo vệ Căn cứ Đại bàng và tự động kiểm tra đường đạn để không bao giờ bắn trúng P1 hoặc Căn cứ. Khi một người chơi hy sinh hết mạng, người còn lại vẫn có thể chiến đấu để bảo vệ căn cứ!'
+                    : 'Hệ thống hạ tầng Multiplayer kết nối 2 thiết bị thời gian thực chưa được thiết lập. Vui lòng chọn chế độ SOLO hoặc P2 LÀ AI để bắt đầu trận đấu ngay bây giờ.'}
                 </p>
               </div>
             </div>
           )}
 
-          {/* Difficulty Option Selection */}
-          <div className="w-full mb-6 p-3 rounded-xl bg-neutral-900/90 border border-neutral-800 flex items-center justify-between">
-            <span className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
-              <Flame className="w-4 h-4 text-amber-400" />
-              <span>Độ khó chiến dịch:</span>
-            </span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
+          {/* Difficulty Option Selection (Normal vs Hard) with Comparison */}
+          <div className="w-full mb-6 p-4 rounded-2xl bg-neutral-900/90 border border-neutral-800 text-left">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-bold text-neutral-200 flex items-center gap-2 font-mono">
+                <Flame className="w-4 h-4 text-amber-400" />
+                <span>CHỌN ĐỘ KHÓ CHIẾN DỊCH</span>
+              </span>
+              <span className="text-[11px] text-neutral-400 font-mono">
+                Áp dụng cho mọi chế độ chơi
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* NORMAL / TIÊU CHUẨN */}
+              <div
                 onClick={() => onDifficultyChange('DEFAULT')}
-                className={`py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
                   difficulty === 'DEFAULT'
-                    ? 'bg-amber-500 text-black shadow-md'
-                    : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200 border border-neutral-700'
+                    ? 'bg-amber-950/30 border-amber-500 shadow-md ring-1 ring-amber-500/20'
+                    : 'bg-neutral-950/60 border-neutral-800 hover:border-neutral-700'
                 }`}
               >
-                Tiêu chuẩn (Default)
-              </button>
-              <button
-                type="button"
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-black text-amber-300 text-xs sm:text-sm font-mono uppercase">
+                      NORMAL (TIÊU CHUẨN)
+                    </span>
+                    {difficulty === 'DEFAULT' && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500 text-black font-bold font-mono">
+                        ĐANG CHỌN
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-neutral-300 leading-snug">
+                    Cân bằng theo nguyên bản NES Battle City. Tầm quan sát địch 80px, thời gian nạp đạn ~1.5s - 2.0s, tốc độ di chuyển chuẩn. Phù hợp cho giải trí cổ điển.
+                  </p>
+                </div>
+                <div className="mt-2 pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[10px] text-neutral-400 font-mono">
+                  <span>30 Xe địch Stage 1</span>
+                  <span className="text-amber-400 font-semibold">Tốc độ đạn: Chuẩn</span>
+                </div>
+              </div>
+
+              {/* HARD / CỰC HẠN */}
+              <div
                 onClick={() => onDifficultyChange('EXTREME')}
-                className={`py-1 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
                   difficulty === 'EXTREME'
-                    ? 'bg-rose-600 text-white shadow-md'
-                    : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200 border border-neutral-700'
+                    ? 'bg-rose-950/30 border-rose-500 shadow-md ring-1 ring-rose-500/20'
+                    : 'bg-neutral-950/60 border-neutral-800 hover:border-neutral-700'
                 }`}
               >
-                Cực hạn (Extreme)
-              </button>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-black text-rose-300 text-xs sm:text-sm font-mono uppercase">
+                      HARD (CỰC HẠN)
+                    </span>
+                    {difficulty === 'EXTREME' && (
+                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-600 text-white font-bold font-mono">
+                        ĐANG CHỌN
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-neutral-300 leading-snug">
+                    Địch phản xạ nhạy hơn, tầm quan sát rộng dọc toàn bản đồ qua hành lang trống, tần suất bắn cao (nạp ~1.0s - 1.2s), 70% chủ động tập kích căn cứ và người chơi.
+                  </p>
+                </div>
+                <div className="mt-2 pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[10px] text-neutral-400 font-mono">
+                  <span>30 Xe địch Stage 1</span>
+                  <span className="text-rose-400 font-semibold">Tốc độ đạn: +15%</span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -520,9 +593,13 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               <span>
                 {selectedMode === 'SOLO'
                   ? isSessionActive
-                    ? 'BẮT ĐẦU TRẬN ĐẤU (SOLO)'
+                    ? `BẮT ĐẦU TRẬN ĐẤU (SOLO - ${difficulty === 'EXTREME' ? 'HARD' : 'NORMAL'})`
                     : 'CẦN KÍCH HOẠT PHIÊN ĐỂ VÀO TRẬN'
-                  : 'CHẾ ĐỘ CHƯA KHẢ DỤNG'}
+                  : twoPlayerOption === 'P2_AI'
+                  ? isSessionActive
+                    ? `BẮT ĐẦU CO-OP (P1 + P2 AI - ${difficulty === 'EXTREME' ? 'HARD' : 'NORMAL'})`
+                    : 'CẦN KÍCH HOẠT PHIÊN ĐỂ VÀO TRẬN'
+                  : 'CHẾ ĐỘ MULTIPLAYER CHƯA KHẢ DỤNG'}
               </span>
             </button>
           </div>

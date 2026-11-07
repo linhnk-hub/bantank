@@ -39,6 +39,7 @@ export interface MainMenuScreenProps {
   onOpenDevTools: () => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
+  onOpenProfile?: () => void;
 }
 
 export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
@@ -54,6 +55,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   onOpenDevTools,
   isFullscreen,
   onToggleFullscreen,
+  onOpenProfile,
 }) => {
   const isSessionActive = session.status === 'ACTIVE';
 
@@ -116,6 +118,18 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 {badgeInfo.label}
               </span>
             </div>
+
+            {onOpenProfile && (
+              <button
+                type="button"
+                onClick={onOpenProfile}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold shadow transition-all cursor-pointer active:scale-95"
+                title="Cập nhật hồ sơ tài khoản (tên hiển thị, avatar)"
+              >
+                <UserCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                <span className="hidden sm:inline">Hồ Sơ</span>
+              </button>
+            )}
 
             {/* Quick Actions */}
             <div className="flex items-center gap-1 sm:gap-1.5">
@@ -294,7 +308,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       {/* Footer */}
       <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-2.5 text-center text-xs text-neutral-500">
         <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1 text-[11px]">
-          <span>Phiên làm việc bảo mật bởi Firebase Authentication & Cloud Firestore</span>
+          <span>Bảo mật bởi Firebase Authentication & Cloud Firestore</span>
           <span>Bắn Tank Online • https://bantank.online</span>
         </div>
       </footer>

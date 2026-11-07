@@ -44,7 +44,7 @@ export const SessionAlertModal: React.FC<SessionAlertModalProps> = ({
         <div>
           <h3 className="text-base sm:text-lg font-black text-white">
             {session.status === 'DISPLACED' && 'Tài Khoản Đang Mở Ở Thiết Bị Khác'}
-            {session.status === 'PAUSED_IDLE' && 'Phiên Đăng Nhập Đã Hết Hạn'}
+            {session.status === 'PAUSED_IDLE' && 'Tài Khoản Tạm Dừng Do Không Hoạt Động'}
             {session.status === 'CONNECTION_LOST_UNVERIFIED' && 'Mất Kết Nối Máy Chủ'}
             {session.status === 'HEARTBEAT_REJECTED_UNCLASSIFIED' && 'Bảo Vệ Tài Khoản Người Chơi'}
           </h3>

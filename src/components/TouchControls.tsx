@@ -302,7 +302,7 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
   );
 
   return (
-    <div className="w-full flex items-center justify-between select-none touch-none py-2 px-2 sm:px-4 bg-neutral-950/80 rounded-2xl border border-neutral-800 shadow-xl">
+    <div className="w-full flex items-center justify-between select-none touch-none py-2 px-3 sm:px-6 md:px-8 bg-neutral-950/80 rounded-2xl border border-neutral-800 shadow-xl">
       {/* Left Column: Virtual Joystick Centered in left zone */}
       <div className="flex-1 flex items-center justify-center">
         {controlType === 'joystick' ? (

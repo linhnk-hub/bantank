@@ -162,11 +162,11 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           </div>
 
           {/* Title: HUYỀN THOẠI TUỔI THƠ with subtle yellow lines above and below */}
-          <div className="w-40 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mb-3" />
-          <h1 className="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wider font-mono drop-shadow p-0">
+          <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mb-2 sm:mb-3" />
+          <h1 className="text-[clamp(1.15rem,4.8vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow p-0 text-center">
             HUYỀN THOẠI TUỔI THƠ
           </h1>
-          <div className="w-40 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mt-3 mb-8" />
+          <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mt-2 sm:mt-3 mb-6 sm:mb-8" />
 
           {/* Google Sign-in Call To Action */}
           <div className="w-full max-w-sm flex flex-col items-center gap-3 mb-8">

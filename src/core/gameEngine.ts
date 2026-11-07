@@ -15,9 +15,10 @@ import {
   type AABB,
 } from './types.ts';
 import { createRuntimeTerrainState } from './terrain.ts';
-import { createP1Tank, updateTankMovement } from './tank.ts';
+import { createP1Tank, createP2Tank, updateTankMovement } from './tank.ts';
 import { spawnBullet, updateBullet } from './bullet.ts';
 import { EnemyManager } from './enemyManager.ts';
+import { AllyAIController } from './ai/allyAI.ts';
 import {
   checkBulletVsBullet,
   checkTankVsTanks,
@@ -52,6 +53,8 @@ export class GameEngine {
   private combatEvents: CombatEvent[] = [];
   private eventListeners: Map<string, Set<(payload: any) => void>> = new Map();
   private difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT';
+  private gameMode: 'SOLO' | 'TWO_PLAYERS_AI' = 'SOLO';
+  private allyAI = new AllyAIController();
   private externalInput: InputState = {
     up: false,
     down: false,
@@ -158,6 +161,15 @@ export class GameEngine {
     this.state.difficulty = diff;
   }
 
+  public getGameMode(): 'SOLO' | 'TWO_PLAYERS_AI' {
+    return this.gameMode;
+  }
+
+  public setGameMode(mode: 'SOLO' | 'TWO_PLAYERS_AI'): void {
+    this.gameMode = mode;
+    this.state.gameMode = mode;
+  }
+
   public getState(): Readonly<GameCoreState> {
     return this.state;
   }
@@ -238,6 +250,7 @@ export class GameEngine {
     this.combatEvents = [];
     this.enemyManager.reset(stage.enemyQueue);
     this.scoreManager.resetRun();
+    this.allyAI.reset();
 
     this.state = {
       tickCount: 0,
@@ -250,6 +263,16 @@ export class GameEngine {
         waitingForClearSpawn: false,
         spawnCheckTimer: 0,
       },
+      p2: this.gameMode === 'TWO_PLAYERS_AI' ? createP2Tank() : null,
+      p2State: this.gameMode === 'TWO_PLAYERS_AI' ? {
+        lives: P1_CONFIG.STARTING_LIVES,
+        isDead: false,
+        respawnTimer: 0,
+        shieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,
+        waitingForClearSpawn: false,
+        spawnCheckTimer: 0,
+      } : null,
+      gameMode: this.gameMode,
       bullet: null,
       bullets: [],
       enemies: this.enableEnemies ? this.enemyManager.getActiveEnemies() : [],
@@ -266,6 +289,7 @@ export class GameEngine {
       isStageClear: false,
       gameOverReason: null,
       diagnosticLog: null,
+      difficulty: this.difficulty,
       matchState: MATCH_STATES.PLAYING,
     };
     this.matchStateMachine.transitionTo(MATCH_STATES.PLAYING, true);
@@ -284,7 +308,12 @@ export class GameEngine {
     this.matchStateMachine.transitionTo(MATCH_STATES.MENU, true);
   }
 
-  public startMatch(): void {
+  public startMatch(
+    mode: 'SOLO' | 'TWO_PLAYERS_AI' = this.gameMode,
+    difficulty: 'DEFAULT' | 'EXTREME' = this.difficulty
+  ): void {
+    this.gameMode = mode;
+    this.difficulty = difficulty;
     this.restartStage();
   }
 
@@ -302,9 +331,11 @@ export class GameEngine {
     this.accumulatorMs = 0;
     this.isPaused = false;
     this.enemyManager.reset(stage.enemyQueue);
+    this.allyAI.reset();
 
     // Carry forward P1 lives and existing total score
     const preservedLives = this.state.p1State.lives;
+    const preservedP2Lives = this.state.p2State?.lives ?? P1_CONFIG.STARTING_LIVES;
 
     this.state = {
       tickCount: 0,
@@ -317,6 +348,16 @@ export class GameEngine {
         waitingForClearSpawn: false,
         spawnCheckTimer: 0,
       },
+      p2: this.gameMode === 'TWO_PLAYERS_AI' ? createP2Tank() : null,
+      p2State: this.gameMode === 'TWO_PLAYERS_AI' ? {
+        lives: preservedP2Lives,
+        isDead: false,
+        respawnTimer: 0,
+        shieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,
+        waitingForClearSpawn: false,
+        spawnCheckTimer: 0,
+      } : null,
+      gameMode: this.gameMode,
       bullet: null,
       bullets: [],
       enemies: this.enableEnemies ? this.enemyManager.getActiveEnemies() : [],
@@ -482,41 +523,43 @@ export class GameEngine {
       } else {
         // Respawn delay completed: check lives first
         if (this.state.p1State.lives <= 0) {
-          this.state.isGameOver = true;
-          this.state.gameOverReason = 'P1 hết mạng! Game Over.';
-          this.state.matchState = MATCH_STATES.GAME_OVER;
-          this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
-          return;
-        }
-
-        // Check if spawn position (48, 192) is occupied by any enemy tank
-        const spawnBox = getTankHitbox(P1_CONFIG.SPAWN_X, P1_CONFIG.SPAWN_Y);
-        const isOccupied = checkTankVsTanks('p1_respawn_probe', spawnBox, this.state.enemies);
-
-        if (isOccupied) {
-          // Wait and re-check every 100ms; NEVER shift spawn coordinates
-          this.state.p1State.occupiedDuration = (this.state.p1State.occupiedDuration || 0) + dt;
-          this.state.p1State.waitingForClearSpawn = true;
-          this.state.p1State.spawnCheckTimer = (this.state.p1State.spawnCheckTimer || 0.1) - dt;
-          if (this.state.p1State.spawnCheckTimer <= 0) {
-            this.state.p1State.spawnCheckTimer = 0.1;
-            // If enemy occupies P1 spawn continuously for >= 2.0s, order occupying enemy to vacate
-            if (this.state.p1State.occupiedDuration >= 2.0) {
-              this.triggerSpawnAvoidance(spawnBox);
-            }
+          if (this.gameMode === 'SOLO' || !this.state.p2 || !this.state.p2State || (this.state.p2State.lives <= 0 && this.state.p2State.isDead)) {
+            this.state.isGameOver = true;
+            this.state.gameOverReason = 'P1 hết mạng! Game Over.';
+            this.state.matchState = MATCH_STATES.GAME_OVER;
+            this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
+            return;
           }
         } else {
-          // Clear to spawn at fixed (48, 192)
-          this.state.p1State.isDead = false;
-          this.state.p1State.waitingForClearSpawn = false;
-          this.state.p1State.spawnCheckTimer = 0;
-          this.state.p1State.occupiedDuration = 0;
-          this.state.p1State.shieldTimer = P1_CONFIG.RESPAWN_SHIELD_S;
-          this.state.p1.x = P1_CONFIG.SPAWN_X;
-          this.state.p1.y = P1_CONFIG.SPAWN_Y;
-          this.state.p1.direction = P1_CONFIG.SPAWN_DIRECTION;
-          this.state.p1.isAlive = true;
-          this.state.p1.isShielded = true;
+          // Check if spawn position (48, 192) is occupied by any enemy tank
+          const spawnBox = getTankHitbox(P1_CONFIG.SPAWN_X, P1_CONFIG.SPAWN_Y);
+          const isOccupied = checkTankVsTanks('p1_respawn_probe', spawnBox, this.state.enemies);
+
+          if (isOccupied) {
+            // Wait and re-check every 100ms; NEVER shift spawn coordinates
+            this.state.p1State.occupiedDuration = (this.state.p1State.occupiedDuration || 0) + dt;
+            this.state.p1State.waitingForClearSpawn = true;
+            this.state.p1State.spawnCheckTimer = (this.state.p1State.spawnCheckTimer || 0.1) - dt;
+            if (this.state.p1State.spawnCheckTimer <= 0) {
+              this.state.p1State.spawnCheckTimer = 0.1;
+              // If enemy occupies P1 spawn continuously for >= 2.0s, order occupying enemy to vacate
+              if (this.state.p1State.occupiedDuration >= 2.0) {
+                this.triggerSpawnAvoidance(spawnBox);
+              }
+            }
+          } else {
+            // Clear to spawn at fixed (48, 192)
+            this.state.p1State.isDead = false;
+            this.state.p1State.waitingForClearSpawn = false;
+            this.state.p1State.spawnCheckTimer = 0;
+            this.state.p1State.occupiedDuration = 0;
+            this.state.p1State.shieldTimer = P1_CONFIG.RESPAWN_SHIELD_S;
+            this.state.p1.x = P1_CONFIG.SPAWN_X;
+            this.state.p1.y = P1_CONFIG.SPAWN_Y;
+            this.state.p1.direction = P1_CONFIG.SPAWN_DIRECTION;
+            this.state.p1.isAlive = true;
+            this.state.p1.isShielded = true;
+          }
         }
       }
     }
@@ -526,13 +569,54 @@ export class GameEngine {
       this.state.p1.isShielded = this.state.p1State.shieldTimer > 0;
     }
 
+    // 1b. P2 Respawn & Shield Handling (Point 4: Ally AI in Two Players Mode)
+    if (this.gameMode === 'TWO_PLAYERS_AI' && this.state.p2 && this.state.p2State) {
+      if (this.state.p2State.isDead) {
+        if (this.state.p2State.respawnTimer > 0) {
+          this.state.p2State.respawnTimer -= dt;
+        } else {
+          if (this.state.p2State.lives <= 0) {
+            if (this.state.p1State.lives <= 0 && this.state.p1State.isDead) {
+              this.state.isGameOver = true;
+              this.state.gameOverReason = 'Cả hai người chơi đều hết mạng! Game Over.';
+              this.state.matchState = MATCH_STATES.GAME_OVER;
+              this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
+              return;
+            }
+          } else {
+            const p2SpawnBox = getTankHitbox(144, 192);
+            const otherTanks = [this.state.p1, ...this.state.enemies];
+            const isOccupied = checkTankVsTanks('p2_respawn_probe', p2SpawnBox, otherTanks);
+            if (!isOccupied) {
+              this.state.p2State.isDead = false;
+              this.state.p2State.waitingForClearSpawn = false;
+              this.state.p2State.shieldTimer = P1_CONFIG.RESPAWN_SHIELD_S;
+              this.state.p2.x = 144;
+              this.state.p2.y = 192;
+              this.state.p2.direction = 'UP';
+              this.state.p2.isAlive = true;
+              this.state.p2.isShielded = true;
+            }
+          }
+        }
+      }
+
+      if (this.state.p2State.shieldTimer > 0) {
+        this.state.p2State.shieldTimer = Math.max(0, this.state.p2State.shieldTimer - dt);
+        this.state.p2.isShielded = this.state.p2State.shieldTimer > 0;
+      }
+    }
+
     // 2. P1 Tank Movement & Continuous Shooting
     if (this.state.p1.isAlive && !this.state.p1State.isDead) {
-      updateTankMovement(this.state.p1, input, this.state.terrain, this.state.enemies);
+      const obstaclesForP1 = (this.state.p2 && this.state.p2.isAlive && !this.state.p2State?.isDead)
+        ? [...this.state.enemies, this.state.p2]
+        : this.state.enemies;
+      updateTankMovement(this.state.p1, input, this.state.terrain, obstaclesForP1);
 
       // Continuous fire: if shoot button is held down and no P1 bullet is active, immediately fire!
       const p1HasBullet = this.state.bullets.some(
-        (b) => b.ownerId === this.state.p1.id || b.ownerType === 'player'
+        (b) => b.ownerId === this.state.p1.id || (b.ownerType === 'player' && b.ownerId !== 'p2')
       );
       if (input.shoot && !p1HasBullet) {
         const newBullet = spawnBullet(this.state.p1, null);
@@ -546,6 +630,32 @@ export class GameEngine {
       this.lastShootState = input.shoot;
     } else {
       this.lastShootState = input.shoot;
+    }
+
+    // 2b. P2 Ally AI decision, movement & shooting
+    if (this.gameMode === 'TWO_PLAYERS_AI' && this.state.p2 && this.state.p2State && this.state.p2.isAlive && !this.state.p2State.isDead) {
+      const p2HasBullet = this.state.bullets.some((b) => b.ownerId === 'p2');
+      const p2Input = this.allyAI.update(
+        dt,
+        this.state.p2,
+        this.state.p1,
+        this.state.enemies,
+        this.state.terrain,
+        p2HasBullet
+      );
+
+      const obstaclesForP2 = [this.state.p1, ...this.state.enemies];
+      updateTankMovement(this.state.p2, p2Input, this.state.terrain, obstaclesForP2);
+
+      if (p2Input.shoot && !p2HasBullet) {
+        const p2Bullet = spawnBullet(this.state.p2, null);
+        if (p2Bullet) {
+          p2Bullet.ownerType = 'player';
+          p2Bullet.ownerId = 'p2';
+          this.state.bullets.push(p2Bullet);
+          this.emit('P2_SHOOT', p2Bullet);
+        }
+      }
     }
 
     // 3. Update Enemies (AI, movement, and shooting)
@@ -653,46 +763,76 @@ export class GameEngine {
 
     for (const eb of activeEnemyBullets) {
       if (consumedBulletIds.has(eb.id)) continue;
-
-      // When P1 is dead: enemy bullets pass through cleanly without hitting P1
-      if (!this.state.p1.isAlive || this.state.p1State.isDead) {
-        continue;
-      }
-
       const bulletBox = getBulletHitbox(eb.x, eb.y);
-      const p1Box = getTankHitbox(this.state.p1.x, this.state.p1.y);
 
-      if (intersectAABB(bulletBox, p1Box)) {
-        // Bullet contacts P1 hitbox -> bullet is always consumed/stopped (no penetration)
-        consumedBulletIds.add(eb.id);
+      // Check vs P1
+      if (this.state.p1.isAlive && !this.state.p1State.isDead) {
+        const p1Box = getTankHitbox(this.state.p1.x, this.state.p1.y);
 
-        // If P1 has active shield: absorb bullet completely, take NO damage!
-        if (this.state.p1.isShielded || this.state.p1State.shieldTimer > 0) {
+        if (intersectAABB(bulletBox, p1Box)) {
+          // Bullet contacts P1 hitbox -> bullet is always consumed/stopped (no penetration)
+          consumedBulletIds.add(eb.id);
+
+          // If P1 has active shield: absorb bullet completely, take NO damage!
+          if (!this.state.p1.isShielded && this.state.p1State.shieldTimer <= 0) {
+            // If P1 is NOT shielded: P1 dies with dedicated P1_EXPLOSION!
+            this.emitCombatEvent('P1_EXPLOSION', this.state.p1.x + 8, this.state.p1.y + 8);
+            this.state.p1State.lives -= 1;
+            this.state.p1State.isDead = true;
+            this.state.p1.isAlive = false;
+            this.state.p1State.respawnTimer = P1_CONFIG.RESPAWN_DELAY_S;
+            this.state.p1State.waitingForClearSpawn = false;
+            this.state.p1State.spawnCheckTimer = 0;
+
+            // Immediately delete player 1 bullets; enemy bullets keep flying! (Point H)
+            this.state.bullets = this.state.bullets.filter(
+              (b) => b.ownerId !== this.state.p1.id
+            );
+            if (this.state.bullet?.ownerId === this.state.p1.id) {
+              this.state.bullet = null;
+            }
+
+            if (this.state.p1State.lives <= 0) {
+              if (this.gameMode === 'SOLO' || !this.state.p2 || !this.state.p2State || (this.state.p2State.lives <= 0 && this.state.p2State.isDead)) {
+                this.state.isGameOver = true;
+                this.state.gameOverReason = 'P1 hết mạng! Game Over.';
+                this.state.matchState = MATCH_STATES.GAME_OVER;
+                this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
+              }
+            }
+          }
           continue;
         }
+      }
 
-        // If P1 is NOT shielded: P1 dies with dedicated P1_EXPLOSION!
-        this.emitCombatEvent('P1_EXPLOSION', this.state.p1.x + 8, this.state.p1.y + 8);
-        this.state.p1State.lives -= 1;
-        this.state.p1State.isDead = true;
-        this.state.p1.isAlive = false;
-        this.state.p1State.respawnTimer = P1_CONFIG.RESPAWN_DELAY_S;
-        this.state.p1State.waitingForClearSpawn = false;
-        this.state.p1State.spawnCheckTimer = 0;
+      // Check vs P2 (Two-Player mode)
+      if (this.gameMode === 'TWO_PLAYERS_AI' && this.state.p2 && this.state.p2State && this.state.p2.isAlive && !this.state.p2State.isDead) {
+        const p2Box = getTankHitbox(this.state.p2.x, this.state.p2.y);
+        if (intersectAABB(bulletBox, p2Box)) {
+          consumedBulletIds.add(eb.id);
+          if (!this.state.p2.isShielded && this.state.p2State.shieldTimer <= 0) {
+            this.emitCombatEvent('TANK_EXPLOSION', this.state.p2.x + 8, this.state.p2.y + 8);
+            this.state.p2State.lives -= 1;
+            this.state.p2State.isDead = true;
+            this.state.p2.isAlive = false;
+            this.state.p2State.respawnTimer = P1_CONFIG.RESPAWN_DELAY_S;
+            this.state.p2State.waitingForClearSpawn = false;
+            this.state.p2State.spawnCheckTimer = 0;
+            this.state.bullets = this.state.bullets.filter(
+              (b) => b.ownerId !== 'p2'
+            );
 
-        // Immediately delete player bullets; enemy bullets keep flying! (Point H)
-        this.state.bullets = this.state.bullets.filter(
-          (b) => b.ownerType !== 'player' && b.ownerId !== this.state.p1.id
-        );
-        this.state.bullet = null;
-
-        if (this.state.p1State.lives <= 0) {
-          this.state.isGameOver = true;
-          this.state.gameOverReason = 'P1 hết mạng! Game Over.';
-          this.state.matchState = MATCH_STATES.GAME_OVER;
-          this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
+            if (this.state.p2State.lives <= 0) {
+              if (this.state.p1State.lives <= 0 && this.state.p1State.isDead) {
+                this.state.isGameOver = true;
+                this.state.gameOverReason = 'Cả hai người chơi đều hết mạng! Game Over.';
+                this.state.matchState = MATCH_STATES.GAME_OVER;
+                this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
+              }
+            }
+          }
+          continue;
         }
-        break;
       }
     }
 
@@ -703,7 +843,7 @@ export class GameEngine {
     // 8. Sync state.bullet with P1 active bullet
     this.state.bullet =
       this.state.bullets.find(
-        (b) => b.ownerId === this.state.p1.id || b.ownerType === 'player'
+        (b) => b.ownerId === this.state.p1.id || (b.ownerType === 'player' && b.ownerId !== 'p2')
       ) ?? null;
 
     // 9. Sync active enemies list
@@ -722,10 +862,13 @@ export class GameEngine {
     }
 
     // 11. Check Stage Clear condition
+    const hasLivingPlayer = this.state.p1State.lives > 0 || !this.state.p1State.isDead ||
+      (this.gameMode === 'TWO_PLAYERS_AI' && this.state.p2State && (this.state.p2State.lives > 0 || !this.state.p2State.isDead));
+
     if (
       !this.state.isGameOver &&
       !this.state.terrain.isBaseDestroyed &&
-      this.state.p1State.lives > 0 &&
+      hasLivingPlayer &&
       this.state.totalDefeatedEnemies >= ENEMY_CONFIG.TOTAL_COUNT &&
       this.state.enemies.length === 0
     ) {

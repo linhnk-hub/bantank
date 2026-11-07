@@ -18,6 +18,7 @@ import { runAllM6FinalPlusTests as runM6FinalPlus } from '../src/core/testHarnes
 import { runSpeedAndLayoutTests } from '../src/core/testHarnessSpeedAndLayout.ts';
 import { runAllM6CorrectionAITests as runM6AICorr } from '../src/core/testHarnessM6CorrectionAI.ts';
 import { runAllM7_1Tests as runM71 } from '../src/core/testHarnessM7_1.ts';
+import { runAllM7_2Tests as runM72 } from '../src/core/testHarnessM7_2.ts';
 
 console.log('--- RUNNING FULL AUTOMATED REGRESSION SUITE ---');
 
@@ -36,6 +37,7 @@ const m6FinalPlusResults = runM6FinalPlus().results;
 const speedAndLayoutResults = runSpeedAndLayoutTests().results;
 const m6AICorrResults = runM6AICorr().results;
 const m71Results = runM71().results;
+const m72Results = runM72().results;
 
 const allSuites = [
   { name: 'M2 Physics & Tank (12 Tests)', results: m2Results },
@@ -53,6 +55,7 @@ const allSuites = [
   { name: 'Game Speed, Real-Time Timing & Responsive Layout (14 Tests)', results: speedAndLayoutResults },
   { name: 'M6 AI Dispersal, Lag Fix, No FPS/Rotate UI & MusicManager Admin (31 Tests)', results: m6AICorrResults },
   { name: 'M7.1 Firebase Auth & Single-Device Session (35 Tests)', results: m71Results },
+  { name: 'M7.2 Ally AI, Co-op, Profile & Typography (10 Tests)', results: m72Results },
 ];
 
 let totalTests = 0;

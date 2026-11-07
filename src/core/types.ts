@@ -236,8 +236,10 @@ export interface GameCoreState {
   isGameOver: boolean;
   isStageClear: boolean;
   gameOverReason: string | null;
-  diagnosticLog: string | null;
   difficulty?: 'DEFAULT' | 'EXTREME';
+  gameMode?: 'SOLO' | 'TWO_PLAYERS_AI';
+  p2?: TankStructure | null;
+  p2State?: P1PlayerState | null;
   matchState: 'MENU' | 'STAGE_START' | 'PLAYING' | 'PAUSED' | 'STAGE_CLEAR' | 'GAME_OVER' | 'SUMMARY_STATS';
 }
 
