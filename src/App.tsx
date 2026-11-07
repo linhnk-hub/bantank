@@ -32,6 +32,10 @@ import type { GameCoreState, InputState } from './core/types.ts';
 import type { SceneTileHoverInfo } from './game/scenes/StageViewerScene.ts';
 import { AuthSessionBanner } from './components/AuthSessionBanner.tsx';
 import { SessionManager } from './core/sessionManager.ts';
+import { AuthManager } from './core/authManager.ts';
+import { WelcomeScreen } from './components/WelcomeScreen.tsx';
+import { MainMenuScreen } from './components/MainMenuScreen.tsx';
+import { SessionAlertModal } from './components/SessionAlertModal.tsx';
 import {
   RotateCcw,
   Pause,
@@ -51,6 +55,19 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  const authManager = useMemo(() => AuthManager.getInstance(), []);
+  const sessionManager = useMemo(() => SessionManager.getInstance(), []);
+
+  // Screen View Routing: 'WELCOME' | 'MAIN_MENU' | 'BATTLE'
+  const [currentUser, setCurrentUser] = useState(() => authManager.getCurrentUser());
+  const [sessionSnapshot, setSessionSnapshot] = useState(() => sessionManager.getSnapshot());
+  const [appScreen, setAppScreen] = useState<'WELCOME' | 'MAIN_MENU' | 'BATTLE'>(() => {
+    return authManager.getCurrentUser() ? 'MAIN_MENU' : 'WELCOME';
+  });
+  const [authProcessing, setAuthProcessing] = useState<boolean>(false);
+  const [authErrorMsg, setAuthErrorMsg] = useState<string | null>(null);
+  const [logoutSuccessNotice, setLogoutSuccessNotice] = useState<string | null>(null);
+
   // Milestone 4 Game State & Lifecycle
   const [gameEngine, setGameEngine] = useState<GameEngine>(() => new GameEngine());
   const [gameState, setGameState] = useState<GameCoreState | null>(null);
@@ -134,11 +151,42 @@ export default function App() {
     setGameState({ ...gameEngine.getState() });
   }, [gameEngine]);
 
+  // Global subscription to AuthManager & SessionManager
   useEffect(() => {
+    const unsubAuth = authManager.subscribe((u) => {
+      setCurrentUser(u);
+      if (u) {
+        setLogoutSuccessNotice(null);
+        setAppScreen((prev) => (prev === 'WELCOME' ? 'MAIN_MENU' : prev));
+        if (sessionManager.getSnapshot().status === 'NO_SESSION') {
+          sessionManager.acquireSession(u.uid);
+        }
+      } else {
+        setAppScreen('WELCOME');
+      }
+    });
+
+    const unsubSession = sessionManager.subscribe((s) => {
+      setSessionSnapshot(s);
+      setIsMatchAllowed(s.status === 'ACTIVE');
+      if (
+        s.status === 'DISPLACED' ||
+        s.status === 'PAUSED_IDLE' ||
+        s.status === 'CONNECTION_LOST_UNVERIFIED'
+      ) {
+        handlePause();
+      }
+    });
+
     SessionManager.getInstance().setOnPauseGame(() => {
       handlePause();
     });
-  }, [handlePause]);
+
+    return () => {
+      unsubAuth();
+      unsubSession();
+    };
+  }, [authManager, sessionManager, handlePause]);
 
   const handleResume = useCallback(() => {
     gameEngine.resume();
@@ -155,12 +203,75 @@ export default function App() {
     setGameState({ ...st });
   }, [gameEngine]);
 
+  const handleStartMatch = useCallback(() => {
+    if (sessionSnapshot.status !== 'ACTIVE') return;
+    setAppScreen('BATTLE');
+    handleRestart();
+  }, [sessionSnapshot.status, handleRestart]);
+
   const handleQuitToMenu = useCallback(() => {
     gameEngine.quitToMenu();
     setIsPaused(false);
     MusicManager.getInstance().pause();
     setGameState({ ...gameEngine.getState() });
+    setAppScreen('MAIN_MENU');
   }, [gameEngine]);
+
+  const handleSignIn = useCallback(async () => {
+    setAuthProcessing(true);
+    setAuthErrorMsg(null);
+    setLogoutSuccessNotice(null);
+    try {
+      const res = await authManager.signInWithGoogle();
+      if (!res.isValid) {
+        setAuthErrorMsg(res.errorMessage || 'Đăng nhập không thành công.');
+      } else {
+        setAppScreen('MAIN_MENU');
+      }
+    } catch (err: any) {
+      setAuthErrorMsg(err?.message || 'Lỗi khi đăng nhập bằng Google.');
+    } finally {
+      setAuthProcessing(false);
+    }
+  }, [authManager]);
+
+  const handleSignOut = useCallback(async () => {
+    setAuthProcessing(true);
+    try {
+      gameEngine.quitToMenu();
+      MusicManager.getInstance().pause();
+      setIsPaused(false);
+      await sessionManager.releaseSessionAndSignOut();
+      setAppScreen('WELCOME');
+      setLogoutSuccessNotice('Bạn đã đăng xuất an toàn.');
+      setAuthErrorMsg(null);
+    } finally {
+      setAuthProcessing(false);
+    }
+  }, [gameEngine, sessionManager]);
+
+  const handleRetryAcquire = useCallback(async () => {
+    if (!currentUser) return;
+    setAuthProcessing(true);
+    setAuthErrorMsg(null);
+    try {
+      const res = await sessionManager.acquireSession(currentUser.uid);
+      if (!res.success && res.message) {
+        setAuthErrorMsg(res.message);
+      }
+    } finally {
+      setAuthProcessing(false);
+    }
+  }, [currentUser, sessionManager]);
+
+  const handleReauth = useCallback(async () => {
+    setAuthProcessing(true);
+    try {
+      await sessionManager.handleUserReauthenticate();
+    } finally {
+      setAuthProcessing(false);
+    }
+  }, [sessionManager]);
 
   const handleNextStageOrReplay = useCallback(() => {
     if (!gameEngine.advanceToNextStage()) {
@@ -247,10 +358,10 @@ export default function App() {
     }
   }, [isPaused]);
 
-  // Listen for Space / Enter to start game when in MENU state
+  // Listen for Space / Enter to start game when in MENU state during BATTLE
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (gameState?.matchState === 'MENU') {
+      if (appScreen === 'BATTLE' && gameState?.matchState === 'MENU') {
         if (e.code === 'Space' || e.code === 'Enter') {
           e.preventDefault();
           handleRestart();
@@ -259,7 +370,7 @@ export default function App() {
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [gameState?.matchState, handleRestart]);
+  }, [appScreen, gameState?.matchState, handleRestart]);
 
   const isGameOverModalOpen = Boolean(
     gameState && gameState.matchState === 'GAME_OVER'
@@ -268,6 +379,90 @@ export default function App() {
     gameState && gameState.matchState === 'STAGE_CLEAR'
   );
 
+  // View 1: Welcome Screen (Unauthenticated user or initial landing)
+  if (!currentUser || appScreen === 'WELCOME') {
+    return (
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+        <FullscreenGuideModal isOpen={showFullscreenGuide} onClose={dismissFsGuide} />
+
+        <DevToolsDrawer
+          isOpen={isDevDrawerOpen}
+          onClose={() => setIsDevDrawerOpen(false)}
+          validation={validation}
+        />
+
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          difficulty={difficulty}
+          onDifficultyChange={handleDifficultyChange}
+        />
+
+        <WelcomeScreen
+          onSignIn={handleSignIn}
+          isProcessing={authProcessing}
+          errorMessage={authErrorMsg}
+          successMessage={logoutSuccessNotice}
+          onClearFeedback={() => {
+            setAuthErrorMsg(null);
+            setLogoutSuccessNotice(null);
+          }}
+          onOpenDevTools={() => setIsDevDrawerOpen(true)}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={toggleFullscreen}
+        />
+      </div>
+    );
+  }
+
+  // View 2: Main Menu Screen (Authenticated user before entering battle)
+  if (appScreen === 'MAIN_MENU') {
+    return (
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+        <FullscreenGuideModal isOpen={showFullscreenGuide} onClose={dismissFsGuide} />
+
+        <DevToolsDrawer
+          isOpen={isDevDrawerOpen}
+          onClose={() => setIsDevDrawerOpen(false)}
+          validation={validation}
+        />
+
+        <SettingsModal
+          isOpen={isSettingsOpen}
+          onClose={() => setIsSettingsOpen(false)}
+          difficulty={difficulty}
+          onDifficultyChange={handleDifficultyChange}
+        />
+
+        <MainMenuScreen
+          user={currentUser}
+          session={sessionSnapshot}
+          isProcessing={authProcessing}
+          onPlay={handleStartMatch}
+          onSignOut={handleSignOut}
+          onRetryAcquire={handleRetryAcquire}
+          difficulty={difficulty}
+          onDifficultyChange={handleDifficultyChange}
+          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenDevTools={() => setIsDevDrawerOpen(true)}
+          isFullscreen={isFullscreen}
+          onToggleFullscreen={toggleFullscreen}
+        />
+
+        {/* Protective Interruption Modal if displaced while on menu */}
+        <SessionAlertModal
+          session={sessionSnapshot}
+          isProcessing={authProcessing}
+          onReauth={handleReauth}
+          onSignIn={handleSignIn}
+          onSignOut={handleSignOut}
+        />
+      </div>
+    );
+  }
+
+  // View 3: Battle Arena with Canvas (Only mounted when player clicked "Chơi ngay")
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
       {/* Fallback Fullscreen API Guide Modal (iOS Safari & Restricted Browsers) */}
