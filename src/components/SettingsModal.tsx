@@ -24,15 +24,19 @@ import { MusicAdminPanel } from './MusicAdminPanel.tsx';
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
-  difficulty: 'DEFAULT' | 'EXTREME';
-  onDifficultyChange: (diff: 'DEFAULT' | 'EXTREME') => void;
+  difficulty?: 'DEFAULT' | 'EXTREME';
+  onDifficultyChange?: (diff: 'DEFAULT' | 'EXTREME') => void;
+  isSuperAdmin?: boolean;
+  isFullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
-  difficulty,
-  onDifficultyChange,
+  isSuperAdmin = false,
+  isFullscreen = false,
+  onToggleFullscreen,
 }) => {
   const soundManager = SoundManager.getInstance();
   const musicManager = MusicManager.getInstance();
@@ -40,6 +44,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [showMusicAdmin, setShowMusicAdmin] = useState<boolean>(false);
 
   if (!isOpen) return null;
+
+  const canShowAdminMusic = isSuperAdmin && musicManager.canManageMusic();
 
   const handleBgmToggle = () => {
     soundManager.unlock();
@@ -89,10 +95,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-extrabold text-white flex items-center gap-2">
-                Cài Đặt & Tùy Chọn Trận Đấu
+                Cấu Hình Âm Thanh & Hiển Thị
               </h2>
               <p className="text-[11px] text-neutral-400">
-                Độ khó AI • Âm thanh Chiến đấu Arcade 8-bit • Quản lý Nhạc nền (BGM)
+                Tùy chỉnh Nhạc nền (BGM) • Hiệu ứng Tiếng súng & Nổ (SFX) • Chế độ Màn hình
               </p>
             </div>
           </div>
@@ -101,7 +107,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             type="button"
             onClick={onClose}
             className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-all active:scale-95"
-            title="Đóng cài đặt"
+            title="Đóng cấu hình"
           >
             <X className="w-4 h-4" />
           </button>
@@ -110,58 +116,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         {/* Settings Body */}
         <div className="p-4 sm:p-5 overflow-y-auto space-y-5 text-xs scrollbar-thin">
           {/* =========================================================================
-              SECTION 1: DIFFICULTY (DEFAULT 80PX vs EXTREME WHOLE MAP)
-             ========================================================================= */}
-          <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-3.5 space-y-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-neutral-200">
-                <Flame className="w-4 h-4 text-rose-400" />
-                <span>Mức Độ Khó AI (Phạm vi phát hiện P1)</span>
-              </div>
-              <span className={`font-mono text-[10px] px-2 py-0.5 rounded font-bold border ${
-                difficulty === 'EXTREME'
-                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40'
-                  : 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-              }`}>
-                {difficulty === 'EXTREME' ? 'CỰC KHÓ' : 'MẶC ĐỊNH'}
-              </span>
-            </div>
-
-            <p className="text-[11px] text-neutral-400 leading-relaxed">
-              Mặc định xe địch phát hiện trong bán kính 80px. Ở mức Cực khó, xe địch phát hiện P1 trên toàn bộ bản đồ Stage 1 qua đường nhìn thẳng (LoS), chủ động truy đuổi bằng A* và ngắm bắn từ xa.
-            </p>
-
-            <div className="grid grid-cols-2 gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => onDifficultyChange('DEFAULT')}
-                className={`py-2 px-3 rounded-lg border text-left flex flex-col gap-0.5 transition-all ${
-                  difficulty === 'DEFAULT'
-                    ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300 font-bold shadow-md'
-                    : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:bg-neutral-800'
-                }`}
-              >
-                <span className="font-extrabold text-xs">Mặc Định (80px)</span>
-                <span className="text-[10px] text-neutral-400">Chuẩn thiết kế M3, bán kính 80px</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onDifficultyChange('EXTREME')}
-                className={`py-2 px-3 rounded-lg border text-left flex flex-col gap-0.5 transition-all ${
-                  difficulty === 'EXTREME'
-                    ? 'bg-rose-500/20 border-rose-500 text-rose-300 font-bold shadow-md'
-                    : 'bg-neutral-900 border-neutral-800 text-neutral-400 hover:bg-neutral-800'
-                }`}
-              >
-                <span className="font-extrabold text-xs">Cực Khó (Toàn Bản Đồ)</span>
-                <span className="text-[10px] text-neutral-400">Truy đuổi P1 mọi nơi, ngắm bắn xa</span>
-              </button>
-            </div>
-          </section>
-
-          {/* =========================================================================
-              SECTION 2: ARCADE SOUND SYSTEM (WEB AUDIO 8-BIT)
+              SECTION 1: ARCADE SOUND SYSTEM (WEB AUDIO 8-BIT)
              ========================================================================= */}
           <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-3.5 space-y-3.5">
             <div className="flex items-center justify-between">
@@ -177,7 +132,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5 text-neutral-300 font-semibold">
                   {audioSettings.bgmEnabled ? <Volume2 className="w-3.5 h-3.5 text-amber-400" /> : <VolumeX className="w-3.5 h-3.5 text-neutral-500" />}
-                  <span>Nhạc nền Arcade (BGM Quân sự)</span>
+                  <span>Nhạc nền Arcade (BGM Chiến dịch)</span>
                 </div>
                 <button
                   type="button"
@@ -251,7 +206,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             {/* Test Audio Trigger Buttons */}
             <div className="pt-2 border-t border-neutral-800 space-y-1.5">
               <span className="text-[10px] text-neutral-400 block font-semibold">
-                Nghe thử các hiệu ứng âm thanh arcade:
+                Kiểm tra nhanh hiệu ứng âm thanh:
               </span>
               <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5">
                 <button
@@ -292,22 +247,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
             </div>
 
-            {/* Toggle Super Admin Music Management Panel */}
-            <div className="pt-2 border-t border-neutral-800 flex items-center justify-between">
-              <span className="text-[11px] text-amber-300 font-bold">
-                Quản trị & Upload Thư viện Nhạc nền (Super Admin)
-              </span>
-              <button
-                type="button"
-                onClick={() => setShowMusicAdmin((v) => !v)}
-                className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-[11px] transition-all"
-              >
-                {showMusicAdmin ? 'Thu gọn Quản lý Nhạc' : 'Mở Quản lý & Upload Nhạc'}
-              </button>
-            </div>
+            {onToggleFullscreen && (
+              <div className="pt-2 border-t border-neutral-800 flex items-center justify-between">
+                <span className="text-[11px] text-neutral-300 font-semibold">
+                  Chế độ hiển thị toàn màn hình (Fullscreen)
+                </span>
+                <button
+                  type="button"
+                  onClick={onToggleFullscreen}
+                  className="px-3 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 font-bold text-[11px] transition-all"
+                >
+                  {isFullscreen ? 'Thu Nhỏ Cửa Sổ' : 'Bật Toàn Màn Hình'}
+                </button>
+              </div>
+            )}
+
+            {/* Toggle Super Admin Music Management Panel — ONLY visible for Super Admin */}
+            {canShowAdminMusic && (
+              <div className="pt-2 border-t border-neutral-800 flex items-center justify-between">
+                <span className="text-[11px] text-amber-300 font-bold">
+                  Quản trị & Upload Thư viện Nhạc nền (Super Admin)
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setShowMusicAdmin((v) => !v)}
+                  className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-[11px] transition-all"
+                >
+                  {showMusicAdmin ? 'Thu gọn Quản lý Nhạc' : 'Mở Quản lý & Upload Nhạc'}
+                </button>
+              </div>
+            )}
           </section>
 
-          {showMusicAdmin && <MusicAdminPanel />}
+          {canShowAdminMusic && showMusicAdmin && <MusicAdminPanel />}
         </div>
 
         {/* Footer */}
@@ -317,7 +289,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onClick={onClose}
             className="py-2 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs transition-transform active:scale-95 shadow"
           >
-            ĐÓNG & LƯU CÀI ĐẶT
+            ĐÓNG & LƯU CẤU HÌNH
           </button>
         </div>
       </div>

@@ -14,6 +14,7 @@ import {
 import { GameEngine } from '../../core/gameEngine.ts';
 import { generateTileTextures } from '../textureGenerator.ts';
 import { SoundManager } from '../../core/audio.ts';
+import { CoopOnlineManager } from '../../core/coopOnlineManager.ts';
 
 interface ActiveVisualEffect {
   id: string;
@@ -48,6 +49,7 @@ export class BattleScene extends Phaser.Scene {
   private onFpsCallback?: (fps: number) => void;
   private fpsAccumulatorMs = 0;
   private fpsFrameCount = 0;
+  private unsubOnlineSnapshots?: () => void;
 
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd?: {
@@ -142,8 +144,28 @@ export class BattleScene extends Phaser.Scene {
     this.engine.on('P1_SHOOT', () => {
       SoundManager.getInstance().playP1Shoot();
     });
+    this.engine.on('P2_SHOOT', () => {
+      SoundManager.getInstance().playP1Shoot();
+    });
     this.engine.on('ENEMY_SHOOT', () => {
       SoundManager.getInstance().playEnemyShoot();
+    });
+
+    // 8. Subscribe to Co-op Online snapshots when acting as Guest (P2)
+    if (this.unsubOnlineSnapshots) {
+      this.unsubOnlineSnapshots();
+    }
+    this.unsubOnlineSnapshots = CoopOnlineManager.getInstance().subscribeSnapshots((snapshot) => {
+      if (
+        this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE' &&
+        CoopOnlineManager.getInstance().getRole() === 'GUEST'
+      ) {
+        const prevStageId = this.engine.getState().currentStageId;
+        this.engine.applyAuthoritativeSnapshot(snapshot);
+        if (snapshot.currentStageId !== prevStageId) {
+          this.refreshAllTerrain();
+        }
+      }
     });
   }
 
@@ -189,7 +211,29 @@ export class BattleScene extends Phaser.Scene {
     };
 
     // 2. Advance GameCore Simulation with Fixed Timestep 60Hz
-    this.engine.advanceTime(rawDelta, input);
+    if (this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE') {
+      const coopManager = CoopOnlineManager.getInstance();
+      const onlineRole = coopManager.getRole();
+      if (onlineRole === 'HOST') {
+        this.engine.setExternalInputP2(coopManager.getLatestValidatedGuestInput());
+        this.engine.advanceTime(rawDelta, input);
+        void coopManager.onHostSimulationFrame(rawDelta, this.engine.getState());
+      } else if (onlineRole === 'GUEST') {
+        void coopManager.submitGuestInput(input);
+        this.engine.setExternalInputP2(input);
+        this.engine.advanceTime(rawDelta, {
+          up: false,
+          down: false,
+          left: false,
+          right: false,
+          shoot: false,
+        });
+      } else {
+        this.engine.advanceTime(rawDelta, input);
+      }
+    } else {
+      this.engine.advanceTime(rawDelta, input);
+    }
     const state = this.engine.getState();
 
     // Check if stage was restarted or stage was changed

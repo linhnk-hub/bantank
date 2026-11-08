@@ -504,6 +504,7 @@ export function runAllM6CorrectionAITests(): {
     mm.deleteTrack('test_track_solo');
     mm.deleteTrack('test_track_global');
     mm.resetAllAssignmentsToDefault();
+    mm.syncRoleFromAuthUser(null);
 
     const priorityPassed =
       upGlobal.success &&

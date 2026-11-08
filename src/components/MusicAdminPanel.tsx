@@ -63,16 +63,9 @@ export const MusicAdminPanel: React.FC = () => {
 
   const isSuperAdmin = role === 'SUPER_ADMIN';
 
-  const handleRoleSwitch = (newRole: UserRole) => {
-    musicManager.setUserRole(newRole);
-    setStatusMsg({
-      type: 'success',
-      text:
-        newRole === 'SUPER_ADMIN'
-          ? 'Đã chuyển sang quyền Super Admin: Mở khóa toàn bộ tính năng Upload, Xóa và Cấu hình nhạc nền.'
-          : 'Đã chuyển sang quyền Người chơi (Player): Chặn Upload/Xóa/Cấu hình hệ thống (chỉ cho phép bật/tắt & chỉnh âm lượng).',
-    });
-  };
+  if (!isSuperAdmin) {
+    return null;
+  }
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;

@@ -71,13 +71,45 @@
     },
     "AdminRecord": {
       "title": "AdminRecord",
-      "description": "Danh sách Super Admin (khóa ghi tuyệt đối trong M7.1).",
+      "description": "Danh sách Super Admin (chỉ dành cho linhnk.online@gmail.com).",
       "type": "object",
       "properties": {
         "uid": { "type": "string" },
         "role": { "type": "string", "enum": ["SUPER_ADMIN"] }
       },
       "required": ["uid", "role"]
+    },
+    "CoopRoom": {
+      "title": "CoopRoom",
+      "description": "Phòng chơi Co-op Online 2 người chơi thật (Host P1 và Guest P2).",
+      "type": "object",
+      "properties": {
+        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6 },
+        "status": { "type": "string", "enum": ["WAITING", "PLAYING", "FINISHED", "ABANDONED", "EXPIRED"] },
+        "difficulty": { "type": "string", "enum": ["DEFAULT", "EXTREME"] },
+        "hostUid": { "type": "string" },
+        "hostDisplayName": { "type": "string" },
+        "hostReady": { "type": "boolean" },
+        "hostLastActiveAt": { "type": "number" },
+        "guestUid": { "type": "string" },
+        "guestDisplayName": { "type": "string" },
+        "guestReady": { "type": "boolean" },
+        "guestLastActiveAt": { "type": "number" },
+        "snapshotSeq": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "expiresAt": { "type": "number" }
+      },
+      "required": [
+        "roomCode",
+        "status",
+        "difficulty",
+        "hostUid",
+        "hostDisplayName",
+        "hostReady",
+        "hostLastActiveAt",
+        "createdAt",
+        "expiresAt"
+      ]
     }
   },
   "firestore": {
@@ -91,7 +123,11 @@
     },
     "/admins/{uid}": {
       "schema": { "$ref": "#/entities/AdminRecord" },
-      "description": "Bảng quyền Super Admin chỉ đọc từ Client, cấm Client ghi."
+      "description": "Bảng quyền Super Admin chỉ dành cho linhnk.online@gmail.com."
+    },
+    "/coop_rooms/{roomCode}": {
+      "schema": { "$ref": "#/entities/CoopRoom" },
+      "description": "Phòng chơi Co-op Online tối đa 2 người chơi (Host P1 & Guest P2)."
     }
   }
 }

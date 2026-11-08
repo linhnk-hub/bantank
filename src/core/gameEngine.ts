@@ -53,7 +53,7 @@ export class GameEngine {
   private combatEvents: CombatEvent[] = [];
   private eventListeners: Map<string, Set<(payload: any) => void>> = new Map();
   private difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT';
-  private gameMode: 'SOLO' | 'TWO_PLAYERS_AI' = 'SOLO';
+  private gameMode: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' = 'SOLO';
   private allyAI = new AllyAIController();
   private externalInput: InputState = {
     up: false,
@@ -62,6 +62,17 @@ export class GameEngine {
     right: false,
     shoot: false,
   };
+  private externalInputP2: InputState = {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    shoot: false,
+  };
+
+  public isCoopMode(): boolean {
+    return this.gameMode === 'TWO_PLAYERS_AI' || this.gameMode === 'TWO_PLAYERS_ONLINE';
+  }
 
   public on(event: string, callback: (payload: any) => void): () => void {
     if (!this.eventListeners.has(event)) {
@@ -161,11 +172,11 @@ export class GameEngine {
     this.state.difficulty = diff;
   }
 
-  public getGameMode(): 'SOLO' | 'TWO_PLAYERS_AI' {
+  public getGameMode(): 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' {
     return this.gameMode;
   }
 
-  public setGameMode(mode: 'SOLO' | 'TWO_PLAYERS_AI'): void {
+  public setGameMode(mode: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE'): void {
     this.gameMode = mode;
     this.state.gameMode = mode;
   }
@@ -205,6 +216,17 @@ export class GameEngine {
     return { ...this.externalInput };
   }
 
+  public setExternalInputP2(input: Partial<InputState>): void {
+    this.externalInputP2 = {
+      ...this.externalInputP2,
+      ...input,
+    };
+  }
+
+  public getExternalInputP2(): InputState {
+    return { ...this.externalInputP2 };
+  }
+
   public pause(): boolean {
     if (this.state.matchState === MATCH_STATES.PLAYING) {
       const trans = this.matchStateMachine.transitionTo(MATCH_STATES.PAUSED);
@@ -215,6 +237,7 @@ export class GameEngine {
         this.state.matchState = MATCH_STATES.PAUSED;
         // Clear inputs upon pausing
         this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
+        this.externalInputP2 = { up: false, down: false, left: false, right: false, shoot: false };
         return true;
       }
     }
@@ -247,6 +270,7 @@ export class GameEngine {
     this.lastShootState = false;
     this.isPaused = false;
     this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
+    this.externalInputP2 = { up: false, down: false, left: false, right: false, shoot: false };
     this.combatEvents = [];
     this.enemyManager.reset(stage.enemyQueue);
     this.scoreManager.resetRun();
@@ -263,8 +287,8 @@ export class GameEngine {
         waitingForClearSpawn: false,
         spawnCheckTimer: 0,
       },
-      p2: this.gameMode === 'TWO_PLAYERS_AI' ? createP2Tank() : null,
-      p2State: this.gameMode === 'TWO_PLAYERS_AI' ? {
+      p2: this.isCoopMode() ? createP2Tank() : null,
+      p2State: this.isCoopMode() ? {
         lives: P1_CONFIG.STARTING_LIVES,
         isDead: false,
         respawnTimer: 0,
@@ -299,6 +323,7 @@ export class GameEngine {
     this.isPaused = true;
     this.accumulatorMs = 0;
     this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
+    this.externalInputP2 = { up: false, down: false, left: false, right: false, shoot: false };
     this.state.isGameOver = false;
     this.state.isStageClear = false;
     this.state.gameOverReason = null;
@@ -309,7 +334,7 @@ export class GameEngine {
   }
 
   public startMatch(
-    mode: 'SOLO' | 'TWO_PLAYERS_AI' = this.gameMode,
+    mode: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' = this.gameMode,
     difficulty: 'DEFAULT' | 'EXTREME' = this.difficulty
   ): void {
     this.gameMode = mode;
@@ -348,8 +373,8 @@ export class GameEngine {
         waitingForClearSpawn: false,
         spawnCheckTimer: 0,
       },
-      p2: this.gameMode === 'TWO_PLAYERS_AI' ? createP2Tank() : null,
-      p2State: this.gameMode === 'TWO_PLAYERS_AI' ? {
+      p2: this.isCoopMode() ? createP2Tank() : null,
+      p2State: this.isCoopMode() ? {
         lives: preservedP2Lives,
         isDead: false,
         respawnTimer: 0,
@@ -569,8 +594,8 @@ export class GameEngine {
       this.state.p1.isShielded = this.state.p1State.shieldTimer > 0;
     }
 
-    // 1b. P2 Respawn & Shield Handling (Point 4: Ally AI in Two Players Mode)
-    if (this.gameMode === 'TWO_PLAYERS_AI' && this.state.p2 && this.state.p2State) {
+    // 1b. P2 Respawn & Shield Handling (Co-op AI & Co-op Online)
+    if (this.isCoopMode() && this.state.p2 && this.state.p2State) {
       if (this.state.p2State.isDead) {
         if (this.state.p2State.respawnTimer > 0) {
           this.state.p2State.respawnTimer -= dt;
@@ -647,12 +672,7 @@ export class GameEngine {
       this.lastShootState = input.shoot;
     }
 
-    // 2b. P2 Ally AI decision, movement & shooting
-    // Strict sequence per M7.2 Fix B.3:
-    //   1) Determine final movement/aim direction via AllyAI
-    //   2) Update P2 tank orientation and position first
-    //   3) Re-verify line of fire along the ACTUAL updated P2 direction/position (never hit P1 or Eagle Base)
-    //   4) Spawn bullet only if post-turn verification confirms safe shot
+    // 2b. P2 Movement & Shooting (AI in TWO_PLAYERS_AI, Human Remote Input in TWO_PLAYERS_ONLINE)
     if (this.gameMode === 'TWO_PLAYERS_AI' && this.state.p2 && this.state.p2State && this.state.p2.isAlive && !this.state.p2State.isDead) {
       const p2HasBullet = this.state.bullets.some((b) => b.ownerId === 'p2');
       const p2Decision = this.allyAI.update(
@@ -694,6 +714,22 @@ export class GameEngine {
           this.emit('P2_SHOOT', p2Bullet);
         }
       }
+    } else if (this.gameMode === 'TWO_PLAYERS_ONLINE' && this.state.p2 && this.state.p2State && this.state.p2.isAlive && !this.state.p2State.isDead) {
+      const obstaclesForP2 = (this.state.p1 && this.state.p1.isAlive && !this.state.p1State.isDead)
+        ? [this.state.p1, ...this.state.enemies]
+        : this.state.enemies;
+      updateTankMovement(this.state.p2, this.externalInputP2, this.state.terrain, obstaclesForP2);
+
+      const p2HasBullet = this.state.bullets.some((b) => b.ownerId === 'p2');
+      if (this.externalInputP2.shoot && !p2HasBullet) {
+        const p2Bullet = spawnBullet(this.state.p2, null);
+        if (p2Bullet) {
+          p2Bullet.ownerType = 'player';
+          p2Bullet.ownerId = 'p2';
+          this.state.bullets.push(p2Bullet);
+          this.emit('P2_SHOOT', p2Bullet);
+        }
+      }
     }
 
     // 3. Update Enemies (AI, movement, and shooting)
@@ -708,7 +744,7 @@ export class GameEngine {
         this.state.terrain,
         this.state.bullets,
         this.difficulty,
-        this.gameMode === 'TWO_PLAYERS_AI' ? this.state.p2 : null,
+        this.isCoopMode() ? this.state.p2 : null,
         p2IsDead
       );
 
@@ -727,8 +763,9 @@ export class GameEngine {
 
     // Update Bullet Trajectory & Terrain Collisions
     const survivingBullets: BulletStructure[] = [];
+    const protectBaseFromAllPlayers = this.gameMode === 'TWO_PLAYERS_ONLINE';
     for (const b of this.state.bullets) {
-      const bulletResult = updateBullet(b, this.state.terrain);
+      const bulletResult = updateBullet(b, this.state.terrain, protectBaseFromAllPlayers);
       if (bulletResult.hitBase) {
         this.state.isGameOver = true;
         this.state.gameOverReason = 'Căn cứ đã bị phá hủy! Game Over.';
@@ -846,8 +883,8 @@ export class GameEngine {
         }
       }
 
-      // Check vs P2 (Two-Player mode)
-      if (this.gameMode === 'TWO_PLAYERS_AI' && this.state.p2 && this.state.p2State && this.state.p2.isAlive && !this.state.p2State.isDead) {
+      // Check vs P2 (Two-Player mode: AI or Online)
+      if (this.isCoopMode() && this.state.p2 && this.state.p2State && this.state.p2.isAlive && !this.state.p2State.isDead) {
         const p2Box = getTankHitbox(this.state.p2.x, this.state.p2.y);
         if (intersectAABB(bulletBox, p2Box)) {
           consumedBulletIds.add(eb.id);
@@ -904,7 +941,7 @@ export class GameEngine {
 
     // 11. Check Stage Clear condition
     const hasLivingPlayer = this.state.p1State.lives > 0 || !this.state.p1State.isDead ||
-      (this.gameMode === 'TWO_PLAYERS_AI' && this.state.p2State && (this.state.p2State.lives > 0 || !this.state.p2State.isDead));
+      (this.isCoopMode() && this.state.p2State && (this.state.p2State.lives > 0 || !this.state.p2State.isDead));
 
     if (
       !this.state.isGameOver &&
@@ -919,6 +956,68 @@ export class GameEngine {
       this.scoreManager.checkAndUpdateHighScore();
       this.state.highScore = this.scoreManager.getHighScore();
     }
+  }
+
+  /**
+   * Applies an authoritative state snapshot from Host onto a Guest client in Co-op Online mode.
+   */
+  public applyAuthoritativeSnapshot(snapshot: {
+    tickCount: number;
+    p1: TankStructure;
+    p1State: GameCoreState['p1State'];
+    p2: TankStructure | null;
+    p2State: GameCoreState['p2State'];
+    bullets: BulletStructure[];
+    enemies: EnemyTank[];
+    enemyQueueLength: number;
+    totalDefeatedEnemies: number;
+    score: number;
+    highScore: number;
+    defeatedCounts: GameCoreState['defeatedCounts'];
+    currentStageId: number;
+    currentStageName: string;
+    stageElapsedSeconds: number;
+    brickSubTiles: Record<string, number>;
+    isBaseDestroyed: boolean;
+    isGameOver: boolean;
+    isStageClear: boolean;
+    gameOverReason: string | null;
+    matchState: GameCoreState['matchState'];
+  }): void {
+    this.state.tickCount = snapshot.tickCount;
+    this.state.p1 = { ...snapshot.p1 };
+    this.state.p1State = { ...snapshot.p1State };
+    this.state.p2 = snapshot.p2 ? { ...snapshot.p2 } : null;
+    this.state.p2State = snapshot.p2State ? { ...snapshot.p2State } : null;
+    this.state.bullets = snapshot.bullets.map((b) => ({ ...b }));
+    this.state.bullet =
+      this.state.bullets.find(
+        (b) => b.ownerId === this.state.p1.id || (b.ownerType === 'player' && b.ownerId !== 'p2')
+      ) ?? null;
+    this.state.enemies = snapshot.enemies.map((e) => ({ ...e }));
+    this.state.enemyQueue = new Array(Math.max(0, snapshot.enemyQueueLength)).fill('BASIC');
+    this.state.totalDefeatedEnemies = snapshot.totalDefeatedEnemies;
+    this.state.score = snapshot.score;
+    this.state.highScore = snapshot.highScore;
+    this.state.defeatedCounts = { ...snapshot.defeatedCounts };
+    this.state.currentStageId = snapshot.currentStageId;
+    this.state.currentStageName = snapshot.currentStageName;
+    this.state.stageElapsedSeconds = snapshot.stageElapsedSeconds;
+    for (const [key, mask] of Object.entries(snapshot.brickSubTiles)) {
+      this.state.terrain.brickSubTiles[key] = mask;
+      const [rStr, cStr] = key.split('_');
+      const r = Number(rStr);
+      const c = Number(cStr);
+      if (!Number.isNaN(r) && !Number.isNaN(c) && this.state.terrain.currentMap[r]) {
+        this.state.terrain.currentMap[r][c] = mask === 0 ? 0 : 1;
+      }
+    }
+    this.state.terrain.isBaseDestroyed = snapshot.isBaseDestroyed;
+    this.state.isGameOver = snapshot.isGameOver;
+    this.state.isStageClear = snapshot.isStageClear;
+    this.state.gameOverReason = snapshot.gameOverReason;
+    this.state.matchState = snapshot.matchState;
+    this.matchStateMachine.transitionTo(snapshot.matchState as any, true);
   }
 
   /**

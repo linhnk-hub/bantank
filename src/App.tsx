@@ -6,7 +6,6 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { PhaserGame } from './game/PhaserGame.tsx';
 import { TerrainLegend } from './components/TerrainLegend.tsx';
-import { ValidationPanel } from './components/ValidationPanel.tsx';
 import { M3Hud } from './components/M3Hud.tsx';
 import { PauseModal } from './components/PauseModal.tsx';
 import { GameOverModal } from './components/GameOverModal.tsx';
@@ -20,19 +19,24 @@ import {
 import { FullscreenGuideModal } from './components/FullscreenGuideModal.tsx';
 import { DevToolsDrawer } from './components/DevToolsDrawer.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
+import { SupportModal } from './components/SupportModal.tsx';
 import { SoundManager } from './core/audio.ts';
 import { MusicManager } from './core/musicManager.ts';
-import { STAGE_1_MAP, MAP_DIMENSIONS } from './core/constants.ts';
+import { STAGE_1_MAP } from './core/constants.ts';
 import { validateStageMap } from './core/mapValidator.ts';
 import { GameEngine } from './core/gameEngine.ts';
+import {
+  CoopOnlineManager,
+  type CoopRoomDocument,
+  type CoopPlayerRole,
+} from './core/coopOnlineManager.ts';
 import { useOrientation } from './hooks/useOrientation.ts';
 import { useFullscreen } from './hooks/useFullscreen.ts';
 import { useViewportLayout } from './hooks/useViewportLayout.ts';
 import type { GameCoreState, InputState } from './core/types.ts';
-import type { SceneTileHoverInfo } from './game/scenes/StageViewerScene.ts';
 import { AuthSessionBanner } from './components/AuthSessionBanner.tsx';
 import { SessionManager } from './core/sessionManager.ts';
-import { AuthManager } from './core/authManager.ts';
+import { AuthManager, isSuperAdminUser } from './core/authManager.ts';
 import { WelcomeScreen } from './components/WelcomeScreen.tsx';
 import { MainMenuScreen } from './components/MainMenuScreen.tsx';
 import { ModeSelectionScreen } from './components/ModeSelectionScreen.tsx';
@@ -48,17 +52,18 @@ import {
   Play,
   Heart,
   Trophy,
-  Shield,
-  Layers,
   Monitor,
   Maximize,
   Minimize,
   Settings,
+  HelpCircle,
+  AlertTriangle,
 } from 'lucide-react';
 
 export default function App() {
   const authManager = useMemo(() => AuthManager.getInstance(), []);
   const sessionManager = useMemo(() => SessionManager.getInstance(), []);
+  const coopManager = useMemo(() => CoopOnlineManager.getInstance(), []);
 
   // Screen View Routing: 'WELCOME' | 'MAIN_MENU' | 'MODE_SELECTION' | 'BATTLE'
   const [currentUser, setCurrentUser] = useState(() => authManager.getCurrentUser());
@@ -70,12 +75,16 @@ export default function App() {
   const [authErrorMsg, setAuthErrorMsg] = useState<string | null>(null);
   const [logoutSuccessNotice, setLogoutSuccessNotice] = useState<string | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
+  const [isSupportOpen, setIsSupportOpen] = useState<boolean>(false);
+  const [onlineDisconnectMsg, setOnlineDisconnectMsg] = useState<string | null>(null);
+
+  const isSuperAdmin = useMemo(() => isSuperAdminUser(currentUser), [currentUser]);
 
   // Milestone 4 Game State & Lifecycle
-  const [gameEngine, setGameEngine] = useState<GameEngine>(() => new GameEngine());
+  const [gameEngine] = useState<GameEngine>(() => new GameEngine());
   const [gameState, setGameState] = useState<GameCoreState | null>(null);
   const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [fps, setFps] = useState<number>(60);
+  const [, setFps] = useState<number>(60);
   const [difficulty, setDifficulty] = useState<'DEFAULT' | 'EXTREME'>('DEFAULT');
   const [selectedMode, setSelectedMode] = useState<'SOLO' | 'TWO_PLAYERS'>('SOLO');
   const [twoPlayerOption, setTwoPlayerOption] = useState<'P2_AI' | 'P2_REAL'>('P2_AI');
@@ -134,11 +143,6 @@ export default function App() {
   const [isMenuExpanded, setIsMenuExpanded] = useState<boolean>(false);
   const [isDevDrawerOpen, setIsDevDrawerOpen] = useState<boolean>(false);
 
-  // Milestone 1 Inspector state (accessible via Dev Tools)
-  const [showGrid, setShowGrid] = useState<boolean>(true);
-  const [showCoords, setShowCoords] = useState<boolean>(false);
-  const [hoverInfo, setHoverInfo] = useState<SceneTileHoverInfo | null>(null);
-
   // Virtual Controls state for Landscape 3-Column Layout
   const [landscapeDirection, setLandscapeDirection] = useState<ActiveDirection>(null);
   const [landscapeShooting, setLandscapeShooting] = useState<boolean>(false);
@@ -159,8 +163,11 @@ export default function App() {
 
   // Global subscription to AuthManager & SessionManager
   useEffect(() => {
+    MusicManager.getInstance().syncRoleFromAuthUser(authManager.getCurrentUser());
+
     const unsubAuth = authManager.subscribe((u) => {
       setCurrentUser(u);
+      MusicManager.getInstance().syncRoleFromAuthUser(u);
       setProfileRevision((r) => r + 1);
       if (u) {
         setLogoutSuccessNotice(null);
@@ -169,6 +176,7 @@ export default function App() {
           sessionManager.acquireSession(u.uid);
         }
       } else {
+        setIsDevDrawerOpen(false);
         setAppScreen('WELCOME');
       }
     });
@@ -195,6 +203,25 @@ export default function App() {
     };
   }, [authManager, sessionManager, handlePause]);
 
+  // Monitor Co-op Online Room for peer disconnection during BATTLE
+  useEffect(() => {
+    if (appScreen !== 'BATTLE') return;
+    const unsubCoop = coopManager.subscribe((room) => {
+      if (gameEngine.getState().gameMode !== 'TWO_PLAYERS_ONLINE') return;
+      if (!room) {
+        setOnlineDisconnectMsg('Phòng Co-op Online đã đóng.');
+        handlePause();
+        return;
+      }
+      const status = coopManager.evaluatePeerConnectionStatus(Date.now());
+      if (status.isTimedOut) {
+        setOnlineDisconnectMsg(status.warningMessage || 'Đồng đội đã ngắt kết nối.');
+        handlePause();
+      }
+    });
+    return () => unsubCoop();
+  }, [appScreen, coopManager, gameEngine, handlePause]);
+
   const handleResume = useCallback(() => {
     gameEngine.resume();
     setIsPaused(false);
@@ -213,6 +240,7 @@ export default function App() {
   const handleStartMatch = useCallback(
     (mode: 'SOLO' | 'TWO_PLAYERS' = 'SOLO', twoPlayerOption?: 'P2_AI' | 'P2_REAL') => {
       if (sessionSnapshot.status !== 'ACTIVE') return;
+      setOnlineDisconnectMsg(null);
       const engineMode = mode === 'TWO_PLAYERS' && twoPlayerOption === 'P2_AI' ? 'TWO_PLAYERS_AI' : 'SOLO';
       gameEngine.startMatch(engineMode, difficulty);
       setIsPaused(false);
@@ -224,13 +252,30 @@ export default function App() {
     [sessionSnapshot.status, gameEngine, difficulty]
   );
 
+  const handleStartOnlineMatch = useCallback(
+    (room: CoopRoomDocument, _role: CoopPlayerRole) => {
+      if (sessionSnapshot.status !== 'ACTIVE') return;
+      setOnlineDisconnectMsg(null);
+      setDifficulty(room.difficulty);
+      gameEngine.startMatch('TWO_PLAYERS_ONLINE', room.difficulty);
+      setIsPaused(false);
+      const st = gameEngine.getState();
+      MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
+      setGameState({ ...st });
+      setAppScreen('BATTLE');
+    },
+    [sessionSnapshot.status, gameEngine]
+  );
+
   const handleQuitToMenu = useCallback(() => {
+    void coopManager.leaveRoom();
+    setOnlineDisconnectMsg(null);
     gameEngine.quitToMenu();
     setIsPaused(false);
     MusicManager.getInstance().pause();
     setGameState({ ...gameEngine.getState() });
     setAppScreen('MAIN_MENU');
-  }, [gameEngine]);
+  }, [gameEngine, coopManager]);
 
   const handleSignIn = useCallback(async () => {
     setAuthProcessing(true);
@@ -253,6 +298,8 @@ export default function App() {
   const handleSignOut = useCallback(async () => {
     setAuthProcessing(true);
     try {
+      await coopManager.leaveRoom();
+      setOnlineDisconnectMsg(null);
       gameEngine.quitToMenu();
       MusicManager.getInstance().pause();
       setIsPaused(false);
@@ -263,7 +310,7 @@ export default function App() {
     } finally {
       setAuthProcessing(false);
     }
-  }, [gameEngine, sessionManager]);
+  }, [gameEngine, sessionManager, coopManager]);
 
   const handleRetryAcquire = useCallback(async () => {
     if (!currentUser) return;
@@ -307,9 +354,10 @@ export default function App() {
   }, [gameEngine]);
 
   const handleSpawnNextEnemy = useCallback(() => {
+    if (!isSuperAdmin) return;
     gameEngine.spawnEnemyImmediate();
     setGameState({ ...gameEngine.getState() });
-  }, [gameEngine]);
+  }, [gameEngine, isSuperAdmin]);
 
   const handleDifficultyChange = useCallback(
     (diff: 'DEFAULT' | 'EXTREME') => {
@@ -324,9 +372,18 @@ export default function App() {
   const handleTouchInput = useCallback(
     (input: Partial<InputState>) => {
       SessionManager.getInstance().recordUserActivity();
-      gameEngine.setExternalInput(input);
+      if (
+        gameEngine.getState().gameMode === 'TWO_PLAYERS_ONLINE' &&
+        coopManager.getLocalRole() === 'GUEST'
+      ) {
+        gameEngine.setExternalInputP2(input);
+        const p2In = gameEngine.getExternalInputP2();
+        void coopManager.submitGuestInput(p2In, Date.now());
+      } else {
+        gameEngine.setExternalInput(input);
+      }
     },
-    [gameEngine]
+    [gameEngine, coopManager]
   );
 
   // Landscape specific multi-touch handlers with independent release
@@ -335,26 +392,42 @@ export default function App() {
       SessionManager.getInstance().recordUserActivity();
       landscapeDirRef.current = dir;
       setLandscapeDirection(dir);
-      gameEngine.setExternalInput({
+      const dirInput: Partial<InputState> = {
         up: dir === 'UP',
         down: dir === 'DOWN',
         left: dir === 'LEFT',
         right: dir === 'RIGHT',
-      });
+      };
+      if (
+        gameEngine.getState().gameMode === 'TWO_PLAYERS_ONLINE' &&
+        coopManager.getLocalRole() === 'GUEST'
+      ) {
+        gameEngine.setExternalInputP2(dirInput);
+        void coopManager.submitGuestInput(gameEngine.getExternalInputP2(), Date.now());
+      } else {
+        gameEngine.setExternalInput(dirInput);
+      }
     },
-    [gameEngine]
+    [gameEngine, coopManager]
   );
 
   const handleLandscapeShootChange = useCallback(
     (shooting: boolean) => {
       SessionManager.getInstance().recordUserActivity();
       setLandscapeShooting(shooting);
-      // Releasing or pressing shoot NEVER cancels active movement direction
-      gameEngine.setExternalInput({
-        shoot: shooting,
-      });
+      if (
+        gameEngine.getState().gameMode === 'TWO_PLAYERS_ONLINE' &&
+        coopManager.getLocalRole() === 'GUEST'
+      ) {
+        gameEngine.setExternalInputP2({ shoot: shooting });
+        void coopManager.submitGuestInput(gameEngine.getExternalInputP2(), Date.now());
+      } else {
+        gameEngine.setExternalInput({
+          shoot: shooting,
+        });
+      }
     },
-    [gameEngine]
+    [gameEngine, coopManager]
   );
 
   // Auto-collapse menu when match starts/resumes
@@ -400,18 +473,23 @@ export default function App() {
       <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         <FullscreenGuideModal isOpen={showFullscreenGuide} onClose={dismissFsGuide} />
 
-        <DevToolsDrawer
-          isOpen={isDevDrawerOpen}
-          onClose={() => setIsDevDrawerOpen(false)}
-          validation={validation}
-        />
+        {isSuperAdmin && (
+          <DevToolsDrawer
+            isOpen={isDevDrawerOpen}
+            onClose={() => setIsDevDrawerOpen(false)}
+            validation={validation}
+          />
+        )}
 
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
+          isSuperAdmin={isSuperAdmin}
         />
+
+        <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
 
         <WelcomeScreen
           onSignIn={handleSignIn}
@@ -426,6 +504,7 @@ export default function App() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
+          isSuperAdmin={isSuperAdmin}
         />
       </div>
     );
@@ -437,18 +516,23 @@ export default function App() {
       <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         <FullscreenGuideModal isOpen={showFullscreenGuide} onClose={dismissFsGuide} />
 
-        <DevToolsDrawer
-          isOpen={isDevDrawerOpen}
-          onClose={() => setIsDevDrawerOpen(false)}
-          validation={validation}
-        />
+        {isSuperAdmin && (
+          <DevToolsDrawer
+            isOpen={isDevDrawerOpen}
+            onClose={() => setIsDevDrawerOpen(false)}
+            validation={validation}
+          />
+        )}
 
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
+          isSuperAdmin={isSuperAdmin}
         />
+
+        <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
 
         <MainMenuScreen
           user={{
@@ -465,10 +549,12 @@ export default function App() {
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSupport={() => setIsSupportOpen(true)}
           onOpenDevTools={() => setIsDevDrawerOpen(true)}
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
           onOpenProfile={() => setIsProfileModalOpen(true)}
+          isSuperAdmin={isSuperAdmin}
         />
 
         <UserProfileModal
@@ -493,24 +579,29 @@ export default function App() {
     );
   }
 
-  // View 2.5: Mode Selection Screen (Select SOLO vs 2 PLAYERS)
+  // View 2.5: Mode Selection Screen (Select SOLO vs CO-OP AI vs CO-OP ONLINE)
   if (appScreen === 'MODE_SELECTION') {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         <FullscreenGuideModal isOpen={showFullscreenGuide} onClose={dismissFsGuide} />
 
-        <DevToolsDrawer
-          isOpen={isDevDrawerOpen}
-          onClose={() => setIsDevDrawerOpen(false)}
-          validation={validation}
-        />
+        {isSuperAdmin && (
+          <DevToolsDrawer
+            isOpen={isDevDrawerOpen}
+            onClose={() => setIsDevDrawerOpen(false)}
+            validation={validation}
+          />
+        )}
 
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
+          isSuperAdmin={isSuperAdmin}
         />
+
+        <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
 
         <ModeSelectionScreen
           user={{
@@ -518,6 +609,7 @@ export default function App() {
             displayName: currentUser.displayName,
             photoURL: currentUser.photoURL,
           }}
+          firebaseUser={currentUser}
           key={`mode_select_${profileRevision}`}
           session={sessionSnapshot}
           isProcessing={authProcessing}
@@ -525,9 +617,11 @@ export default function App() {
           onStartMatch={(mode, opt) => {
             handleStartMatch(mode, opt);
           }}
+          onStartOnlineMatch={handleStartOnlineMatch}
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSupport={() => setIsSupportOpen(true)}
           onOpenDevTools={() => setIsDevDrawerOpen(true)}
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
@@ -536,6 +630,7 @@ export default function App() {
           onSelectedModeChange={setSelectedMode}
           twoPlayerOption={twoPlayerOption}
           onTwoPlayerOptionChange={setTwoPlayerOption}
+          isSuperAdmin={isSuperAdmin}
         />
 
         <UserProfileModal
@@ -566,12 +661,14 @@ export default function App() {
       {/* Fallback Fullscreen API Guide Modal (iOS Safari & Restricted Browsers) */}
       <FullscreenGuideModal isOpen={showFullscreenGuide} onClose={dismissFsGuide} />
 
-      {/* Developer & QA Test Suite Drawer */}
-      <DevToolsDrawer
-        isOpen={isDevDrawerOpen}
-        onClose={() => setIsDevDrawerOpen(false)}
-        validation={validation}
-      />
+      {/* Developer & QA Test Suite Drawer (Super Admin Only) */}
+      {isSuperAdmin && (
+        <DevToolsDrawer
+          isOpen={isDevDrawerOpen}
+          onClose={() => setIsDevDrawerOpen(false)}
+          validation={validation}
+        />
+      )}
 
       {/* Settings & Audio Modal */}
       <SettingsModal
@@ -579,17 +676,34 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         difficulty={difficulty}
         onDifficultyChange={handleDifficultyChange}
+        isSuperAdmin={isSuperAdmin}
       />
+
+      {/* Support Modal */}
+      <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
 
       {/* M7.1: Firebase Authentication & Single-Device Session Header Banner */}
       <AuthSessionBanner onStartMatchAllowedChange={setIsMatchAllowed} />
 
+      {/* Co-op Online Peer Disconnection Banner */}
+      {onlineDisconnectMsg && (
+        <div className="bg-red-950/95 border-b border-red-700 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-red-200 z-40">
+          <div className="flex items-center gap-2 font-bold">
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+            <span>{onlineDisconnectMsg}</span>
+          </div>
+          <button
+            type="button"
+            onClick={handleQuitToMenu}
+            className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs cursor-pointer"
+          >
+            Về Menu Chính
+          </button>
+        </div>
+      )}
+
       {/* =========================================================================
           LANDSCAPE MODE (Mobile / Tablet 3-Column Ergonomic Layout)
-          - Left: Virtual Joystick (smooth 4-way dominant axis)
-          - Center: Game Canvas (1:1 square, fitted without distortion)
-          - Right: Virtual Shoot Button (80px target)
-          - Top: Slim HUD (Score, Lives, Stage, Pause)
          ========================================================================= */}
       {(!isDesktop && layout.isLandscape) ? (
         <div className="flex-1 flex flex-col h-screen w-screen overflow-hidden safe-area-inset">
@@ -599,23 +713,20 @@ export default function App() {
             <div className="flex items-center gap-1.5">
               <img
                 src="/logo-bantank.png"
-                alt="Huyền Thoại Tuổi Thơ"
+                alt="Bắn Tank Online"
                 className="w-7 h-7 object-contain p-0 m-0 shrink-0"
                 onError={(e) => {
                   e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                 }}
               />
               <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
-                STAGE 1
+                STAGE {gameState?.currentStageId ?? 1}
               </span>
               <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
             </div>
 
-            {/* Center: Live Match Metrics */}
+            {/* Center: Live Match Metrics (No remaining enemy count per M7.3 IV) */}
             <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono">
-              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold border bg-neutral-900 border-neutral-700 text-neutral-400">
-                PING: --
-              </span>
               <div className="flex items-center gap-1 text-amber-400">
                 <Trophy className="w-3.5 h-3.5" />
                 <span className="font-bold">{gameState?.score ?? 0} XP</span>
@@ -624,16 +735,12 @@ export default function App() {
                 <Heart className="w-3.5 h-3.5 fill-rose-500" />
                 <span>P1×{gameState?.p1State.lives ?? 3}</span>
               </div>
-              {gameState?.gameMode === 'TWO_PLAYERS_AI' && gameState?.p2State && (
-                <div className="flex items-center gap-1 text-emerald-400 font-bold" title="Mạng P2 (AI)">
+              {(gameState?.gameMode === 'TWO_PLAYERS_AI' || gameState?.gameMode === 'TWO_PLAYERS_ONLINE') && gameState?.p2State && (
+                <div className="flex items-center gap-1 text-emerald-400 font-bold" title="Mạng P2">
                   <Heart className="w-3.5 h-3.5 fill-emerald-500" />
                   <span>P2×{gameState.p2State.lives}</span>
                 </div>
               )}
-              <div className="flex items-center gap-1 text-sky-400">
-                <Shield className="w-3.5 h-3.5" />
-                <span>Địch: {gameState?.enemyQueue.length ?? 0}</span>
-              </div>
             </div>
 
             {/* Right: Quick Action Buttons */}
@@ -661,27 +768,29 @@ export default function App() {
                 type="button"
                 onClick={() => setIsSettingsOpen(true)}
                 className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
-                title="Cài đặt & Âm thanh"
+                title="Cấu hình & Âm thanh"
               >
                 <Settings className="w-3 h-3 text-amber-400" />
-                <span className="hidden sm:inline">Cài đặt</span>
+                <span className="hidden sm:inline">Cấu hình</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setIsDevDrawerOpen(true)}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
-                title="Bảng Kiểm thử & QA"
-              >
-                <Wrench className="w-3 h-3 text-amber-400" />
-                <span className="hidden sm:inline">QA</span>
-              </button>
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setIsDevDrawerOpen(true)}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
+                  title="Bảng Kiểm thử & QA (Super Admin)"
+                >
+                  <Wrench className="w-3 h-3 text-amber-400" />
+                  <span className="hidden sm:inline">QA</span>
+                </button>
+              )}
             </div>
           </header>
 
-          {/* Landscape Main 3-Column Combat View (Prioritizing Canvas Area with Compact Controls) */}
+          {/* Landscape Main 3-Column Combat View */}
           <main className="flex-1 flex flex-row items-center justify-center w-full h-[calc(100dvh-32px)] px-1 sm:px-2 py-0 overflow-hidden">
-            {/* Left Column: Virtual Joystick Centered in left zone */}
+            {/* Left Column: Virtual Joystick */}
             <div
               style={{
                 width: `${layout.leftControlWidthPx}px`,
@@ -699,7 +808,7 @@ export default function App() {
               />
             </div>
 
-            {/* Center Column: Game Canvas Maximized 1:1 Aspect Ratio (No thick border, no clipping) */}
+            {/* Center Column: Game Canvas Maximized 1:1 Aspect Ratio */}
             <div
               style={{
                 width: `${layout.canvasSizePx}px`,
@@ -723,17 +832,14 @@ export default function App() {
                 <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20 rounded-sm">
                   <img
                     src="/logo-bantank.png"
-                    alt="Huyền Thoại Tuổi Thơ"
+                    alt="Bắn Tank Online"
                     className="w-20 h-20 object-contain mb-2 drop-shadow-lg p-0 m-0"
                     onError={(e) => {
                       e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                     }}
                   />
-                  <h2 className="text-base font-black text-white tracking-wider mb-1">
-                    HUYỀN THOẠI TUỔI THƠ
-                  </h2>
-                  <p className="text-[11px] text-amber-300 font-mono font-bold mb-3">
-                    STAGE 1 • 30 Xe Địch • 1 Đại Bàng Hoàng Gia
+                  <p className="text-xs text-amber-300 font-mono font-bold mb-3">
+                    STAGE {gameState?.currentStageId ?? 1}
                   </p>
                   <button
                     type="button"
@@ -752,7 +858,7 @@ export default function App() {
               )}
             </div>
 
-            {/* Right Column: Virtual Shoot Action Button Centered in right zone */}
+            {/* Right Column: Virtual Shoot Action Button */}
             <div
               style={{
                 width: `${layout.rightControlWidthPx}px`,
@@ -771,10 +877,6 @@ export default function App() {
       ) : !isDesktop ? (
         /* =========================================================================
             MOBILE / TABLET PORTRAIT MODE (Dedicated 100dvh Top-to-Bottom Stack)
-            - Top: Slim HUD (Brand, STAGE 1, FPS, PING: --, Score, Lives, Quick Actions)
-            - Center: Game Canvas (Strictly 1:1, placed directly below HUD)
-            - Below Canvas: Touch Controls (Centered with symmetric flex layout)
-            - Bottom: Safe Area Buffer (Absorbs leftover space, keeping controls high above Safari bar)
            ========================================================================= */
         <div className="flex-1 flex flex-col h-[100dvh] max-h-[100dvh] w-screen overflow-hidden safe-area-inset bg-neutral-950">
           {/* Slim Portrait Top HUD */}
@@ -783,23 +885,20 @@ export default function App() {
             <div className="flex items-center gap-2">
               <img
                 src="/logo-bantank.png"
-                alt="Huyền Thoại Tuổi Thơ"
+                alt="Bắn Tank Online"
                 className="w-7 h-7 object-contain p-0 m-0 shrink-0"
                 onError={(e) => {
                   e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                 }}
               />
               <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
-                STAGE 1
+                STAGE {gameState?.currentStageId ?? 1}
               </span>
               <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
             </div>
 
-            {/* Center: Live Match Metrics */}
+            {/* Center: Live Match Metrics (No remaining enemy count per M7.3 IV) */}
             <div className="flex items-center gap-2 text-xs font-mono">
-              <span className="px-1.5 py-0.2 rounded text-[10px] font-bold border bg-neutral-900 border-neutral-700 text-neutral-400" title="Chế độ Solo Stage 1 - Offline">
-                PING: --
-              </span>
               <div className="flex items-center gap-1 text-amber-400">
                 <Trophy className="w-3.5 h-3.5" />
                 <span className="font-bold">{gameState?.score ?? 0} XP</span>
@@ -808,16 +907,12 @@ export default function App() {
                 <Heart className="w-3.5 h-3.5 fill-rose-500" />
                 <span>P1×{gameState?.p1State.lives ?? 3}</span>
               </div>
-              {gameState?.gameMode === 'TWO_PLAYERS_AI' && gameState?.p2State && (
-                <div className="flex items-center gap-1 text-emerald-400 font-bold" title="Mạng P2 (AI)">
+              {(gameState?.gameMode === 'TWO_PLAYERS_AI' || gameState?.gameMode === 'TWO_PLAYERS_ONLINE') && gameState?.p2State && (
+                <div className="flex items-center gap-1 text-emerald-400 font-bold" title="Mạng P2">
                   <Heart className="w-3.5 h-3.5 fill-emerald-500" />
                   <span>P2×{gameState.p2State.lives}</span>
                 </div>
               )}
-              <div className="flex items-center gap-1 text-sky-400">
-                <Shield className="w-3.5 h-3.5" />
-                <span>{gameState?.enemyQueue.length ?? 0}</span>
-              </div>
             </div>
 
             {/* Right: Quick Action Buttons */}
@@ -835,26 +930,27 @@ export default function App() {
                 type="button"
                 onClick={() => setIsSettingsOpen(true)}
                 className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300"
-                title="Cài đặt & Âm thanh"
+                title="Cấu hình & Âm thanh"
               >
                 <Settings className="w-3.5 h-3.5 text-amber-400" />
               </button>
 
-              <button
-                type="button"
-                onClick={() => setIsDevDrawerOpen(true)}
-                className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-[10px] font-semibold"
-                title="Bảng Kiểm thử & QA"
-              >
-                <Wrench className="w-3 h-3 text-amber-400" />
-                <span>QA</span>
-              </button>
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setIsDevDrawerOpen(true)}
+                  className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-[10px] font-semibold"
+                  title="Bảng Kiểm thử & QA (Super Admin)"
+                >
+                  <Wrench className="w-3 h-3 text-amber-400" />
+                  <span>QA</span>
+                </button>
+              )}
             </div>
           </header>
 
           {/* Main Content Stack: HUD -> Canvas -> Controls -> Safe Bottom Spacer */}
           <div className="flex-1 flex flex-col items-center justify-start w-full overflow-hidden px-2 pt-1 pb-1">
-            {/* Game Canvas Strictly Sized & Centered (1:1 Square, placed directly below HUD) */}
             <main
               style={{
                 width: `${layout.canvasSizePx}px`,
@@ -878,17 +974,14 @@ export default function App() {
                 <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20 rounded-xl">
                   <img
                     src="/logo-bantank.png"
-                    alt="Huyền Thoại Tuổi Thơ"
+                    alt="Bắn Tank Online"
                     className="w-20 h-20 object-contain mb-2 drop-shadow-lg p-0 m-0"
                     onError={(e) => {
                       e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                     }}
                   />
-                  <h2 className="text-base font-black text-white tracking-wider mb-1">
-                    HUYỀN THOẠI TUỔI THƠ
-                  </h2>
-                  <p className="text-[11px] text-amber-300 font-mono font-bold mb-3">
-                    STAGE 1 • 30 Xe Địch • 1 Đại Bàng Hoàng Gia
+                  <p className="text-xs text-amber-300 font-mono font-bold mb-3">
+                    STAGE {gameState?.currentStageId ?? 1}
                   </p>
                   <button
                     type="button"
@@ -907,7 +1000,7 @@ export default function App() {
               )}
             </main>
 
-            {/* Controls Cluster: Expanded on Tablet Portrait to match canvas width, centered 28px below Canvas */}
+            {/* Controls Cluster */}
             <div
               style={{
                 width: `${layout.canvasSizePx}px`,
@@ -924,7 +1017,6 @@ export default function App() {
               />
             </div>
 
-            {/* Safe Bottom Buffer: absorbs remaining viewport space, keeping controls safely above Safari bar */}
             <div
               style={{
                 minHeight: 'max(28px, env(safe-area-inset-bottom, 28px))',
@@ -938,35 +1030,31 @@ export default function App() {
             ENLARGED DESKTOP PC MODE (8/4 Grid Layout with Full Visibility)
            ========================================================================= */
         <div className="flex-1 flex flex-col w-full">
-          {/* Header */}
+          {/* Header (No "HUYỀN THOẠI TUỔI THƠ" on top menu per M7.3 VI) */}
           <header className="border-b border-neutral-800 bg-neutral-900/90 backdrop-blur px-4 py-2.5 sticky top-0 z-30 shadow-md">
             <div className="max-w-[1560px] mx-auto flex items-center justify-between gap-2">
               {/* Brand */}
               <div className="flex items-center gap-3">
                 <img
                   src="/logo-bantank.png"
-                  alt="Huyền Thoại Tuổi Thơ"
-                  className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow p-0 m-0 shrink-0"
+                  alt="Bắn Tank Online"
+                  className="w-10 h-10 sm:w-12 sm:h-12 object-contain drop-shadow p-0 m-0 shrink-0"
                   onError={(e) => {
                     e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                   }}
                 />
-                <div>
-                  <h1 className="text-sm sm:text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
-                    HUYỀN THOẠI TUỔI THƠ
-                    <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 font-medium">
-                      M4 Solo
-                    </span>
-                  </h1>
-                  <p className="text-[10px] sm:text-xs text-neutral-400 hidden sm:block">
-                    Phaser 3 + React + Pure Game Core | Vòng đời trận đấu | Cross-Platform & PC Scale
-                  </p>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm sm:text-base font-extrabold tracking-tight text-white">
+                    BẮN TANK ONLINE
+                  </span>
+                  <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono font-bold">
+                    STAGE {gameState?.currentStageId ?? 1}
+                  </span>
                 </div>
               </div>
 
               {/* Header Right Actions */}
               <div className="flex items-center gap-1.5 text-xs">
-                {/* Fullscreen API Toggle Button */}
                 <button
                   type="button"
                   onClick={toggleFullscreen}
@@ -977,31 +1065,37 @@ export default function App() {
                   <span className="text-xs hidden sm:inline">{isFullscreen ? 'Thu nhỏ' : 'Toàn MH'}</span>
                 </button>
 
-                {/* Settings & Audio Modal Button */}
                 <button
                   type="button"
                   onClick={() => setIsSettingsOpen(true)}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow"
-                  title="Cài đặt Độ khó & Âm thanh"
+                  title="Cấu hình & Âm thanh"
                 >
                   <Settings className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">Cài đặt</span>
+                  <span className="hidden sm:inline">Cấu hình</span>
                 </button>
 
-                {/* Developer Tools Drawer Button */}
                 <button
                   type="button"
-                  onClick={() => setIsDevDrawerOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow"
+                  onClick={() => setIsSupportOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-sky-500 text-neutral-200 font-semibold transition-all shadow"
+                  title="Hỗ trợ & Hướng dẫn"
                 >
-                  <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">Kiểm thử</span>
-                  <span className="px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-400 text-[10px] font-bold">
-                    161 Tests
-                  </span>
+                  <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+                  <span className="hidden sm:inline">Hỗ trợ</span>
                 </button>
 
-                {/* Collapsible Menu Toggle (Mobile) */}
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setIsDevDrawerOpen(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow"
+                  >
+                    <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="hidden sm:inline">QA Suite</span>
+                  </button>
+                )}
+
                 <button
                   type="button"
                   onClick={() => setIsMenuExpanded((v) => !v)}
@@ -1013,7 +1107,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Mobile Expanded Menu Strip (Collapsible) */}
+            {/* Mobile Expanded Menu Strip */}
             {isMenuExpanded && (
               <div className="mt-2.5 pt-2 border-t border-neutral-800 flex flex-wrap items-center justify-between gap-2 sm:hidden text-xs animate-fade-in">
                 <button
@@ -1023,16 +1117,18 @@ export default function App() {
                   {isFullscreen ? <Minimize className="w-3.5 h-3.5 text-amber-400" /> : <Maximize className="w-3.5 h-3.5 text-amber-400" />}
                   <span>{isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}</span>
                 </button>
-                <button
-                  onClick={() => {
-                    setIsDevDrawerOpen(true);
-                    setIsMenuExpanded(false);
-                  }}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-200 font-semibold"
-                >
-                  <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Bảng 161 Tests Tự Động</span>
-                </button>
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => {
+                      setIsDevDrawerOpen(true);
+                      setIsMenuExpanded(false);
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-200 font-semibold"
+                  >
+                    <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                    <span>QA Suite</span>
+                  </button>
+                )}
                 <button
                   onClick={() => setShowTouchControls((v) => !v)}
                   className="flex items-center gap-1 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-300 text-xs"
@@ -1043,9 +1139,9 @@ export default function App() {
             )}
           </header>
 
-          {/* Main Content Area: Expanded to max-w-[1560px] with 8/4 grid on PC */}
+          {/* Main Content Area */}
           <main className="flex-1 max-w-[1560px] mx-auto w-full p-3 sm:p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-start">
-            {/* Left Column: Enlarged Phaser Game Canvas (8 Cols on PC for maximum visibility) */}
+            {/* Left Column: Enlarged Phaser Game Canvas */}
             <section className="lg:col-span-8 flex flex-col gap-3">
               <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
                 {/* Viewport Header */}
@@ -1053,15 +1149,11 @@ export default function App() {
                   <div className="flex items-center gap-2.5">
                     <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
                     <span className="font-semibold text-amber-400 font-mono">
-                      STAGE 1 {isPaused ? '(PAUSED)' : ''}
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold border bg-neutral-900 border-neutral-700 text-neutral-400" title="Chế độ Solo Stage 1 - Offline">
-                      PING: --
+                      STAGE {gameState?.currentStageId ?? 1} {isPaused ? '(PAUSED)' : ''}
                     </span>
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {/* Toggle Touch Controls on PC/Tablet */}
                     <button
                       onClick={() => setShowTouchControls((v) => !v)}
                       className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors ${
@@ -1092,7 +1184,7 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Canvas Container: Prominently enlarged on PC up to 832px square (crisp integer scale) */}
+                {/* Canvas Container */}
                 <div className="p-3 sm:p-5 lg:p-6 bg-neutral-950/80 flex items-center justify-center min-h-[380px] sm:min-h-[500px] lg:min-h-[640px] xl:min-h-[720px] relative">
                   <div className="w-full max-w-[min(calc(100vh-140px),832px)] aspect-square flex items-center justify-center">
                     <PhaserGame
@@ -1110,17 +1202,14 @@ export default function App() {
                     <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-20 rounded-xl">
                       <img
                         src="/logo-bantank.png"
-                        alt="Huyền Thoại Tuổi Thơ"
+                        alt="Bắn Tank Online"
                         className="w-24 h-24 object-contain mb-3 drop-shadow-xl p-0 m-0"
                         onError={(e) => {
                           e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                         }}
                       />
-                      <h2 className="text-xl sm:text-2xl font-black text-white tracking-wider mb-1.5">
-                        HUYỀN THOẠI TUỔI THƠ
-                      </h2>
-                      <p className="text-xs sm:text-sm text-neutral-400 mb-5 max-w-sm">
-                        Chiến dịch Solo • 30 Xe Địch • 1 Đại Bàng Hoàng Gia • Tốc độ 60Hz Chuẩn Xác
+                      <p className="text-sm sm:text-base text-amber-400 font-mono font-bold mb-5">
+                        STAGE {gameState?.currentStageId ?? 1}
                       </p>
                       <button
                         type="button"
@@ -1153,12 +1242,11 @@ export default function App() {
                     <span>Tạm dừng: <strong className="text-white">P / ESC</strong></span>
                   </div>
                   <div className="text-[11px] text-neutral-500 font-mono">
-                    208×208 px (Scale 1:1 Pixel-Art)
+                    60 FPS
                   </div>
                 </div>
               </div>
 
-              {/* Virtual Touch Controls with Joystick (Visible when toggled on or on mobile) */}
               {showTouchControls && (
                 <TouchControls
                   onInputChange={handleTouchInput}
@@ -1176,36 +1264,42 @@ export default function App() {
                 onReset={handleResetGame}
                 onSpawnEnemy={handleSpawnNextEnemy}
                 onPause={handlePause}
+                isSuperAdmin={isSuperAdmin}
               />
 
-              {/* Terrain Legend */}
-              <TerrainLegend tileCounts={validation.tileCounts} />
+              {/* Super Admin Only: Terrain Legend & QA Quick Access Card */}
+              {isSuperAdmin && (
+                <>
+                  <TerrainLegend tileCounts={validation.tileCounts} />
 
-              {/* Developer Test Suite Quick Access Card */}
-              <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-xs flex flex-col gap-2.5 shadow">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Wrench className="w-4 h-4 text-amber-400" />
-                    <span className="font-bold text-white">Bảng Kiểm Thử & QA</span>
+                  <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-xs flex flex-col gap-2.5 shadow">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Wrench className="w-4 h-4 text-amber-400" />
+                        <span className="font-bold text-white">Bảng Kiểm Thử & QA (Super Admin)</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
+                        SUPER ADMIN
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsDevDrawerOpen(true)}
+                      className="w-full py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow cursor-pointer"
+                    >
+                      <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Mở Bảng Điều Khiển Kiểm Thử & QA</span>
+                    </button>
                   </div>
-                  <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
-                    115/115 PASS
-                  </span>
-                </div>
-                <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  Đã kiểm toán và tích hợp toàn bộ 115 kiểm thử tự động (M1, M2, M3, M4, Sửa lỗi, UI Polish, Joystick, 5 Nhóm Gameplay, 6 Nhóm M6 PC Scale & M6 Round 2 Responsive/Eagle/Explosion) trong ngăn kéo QA riêng biệt.
-                </p>
-                <button
-                  type="button"
-                  onClick={() => setIsDevDrawerOpen(true)}
-                  className="w-full py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow"
-                >
-                  <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                  <span>Mở Bảng Điều Khiển Kiểm Thử & QA</span>
-                </button>
-              </div>
+                </>
+              )}
             </section>
           </main>
+
+          {/* Footer */}
+          <footer className="border-t border-neutral-900 bg-neutral-950/90 py-3 px-4 text-center text-[11px] text-neutral-500 mt-auto">
+            Bắn Tank Online © 2026
+          </footer>
         </div>
       )}
 

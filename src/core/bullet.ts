@@ -67,7 +67,8 @@ export function spawnBullet(
  */
 export function updateBullet(
   bullet: BulletStructure,
-  terrain: RuntimeTerrainState
+  terrain: RuntimeTerrainState,
+  protectBaseFromAllPlayers: boolean = false
 ): BulletUpdateResult {
   const step = BULLET_CONFIG.SPEED_PX_TICK;
 
@@ -86,12 +87,16 @@ export function updateBullet(
     return { isAlive: false, hitObstacle: true };
   }
 
+  const isProtectedPlayerBullet =
+    bullet.ownerId === 'p2' ||
+    (protectBaseFromAllPlayers && (bullet.ownerType === 'player' || bullet.ownerId === 'p1' || bullet.ownerId === 'p2'));
+
   if (collision.collides && collision.hitTile) {
     const { row, col, type } = collision.hitTile;
 
     if (type === TILE_TYPES.BASE) {
-      // Friendly-fire protection: P2 ally bullets NEVER destroy the Eagle Base!
-      if (bullet.ownerId === 'p2') {
+      // Friendly-fire protection: P2 ally bullets (and P1/P2 in Co-op Online) NEVER destroy the Eagle Base!
+      if (isProtectedPlayerBullet) {
         return { isAlive: false, hitObstacle: true, hitBase: false };
       }
       destroyBase(terrain);
@@ -104,9 +109,9 @@ export function updateBullet(
     }
 
     if (type === TILE_TYPES.BRICK) {
-      // P2 ally bullets also never chip away the immediate brick shield around the Eagle Base (rows 11..12, cols 5..7)
+      // Protected player bullets also never chip away the immediate brick shield around the Eagle Base (rows 11..12, cols 5..7)
       const isBaseShieldBrick = row >= 11 && col >= 5 && col <= 7;
-      if (bullet.ownerId === 'p2' && isBaseShieldBrick) {
+      if (isProtectedPlayerBullet && isBaseShieldBrick) {
         return { isAlive: false, hitObstacle: true, hitBrick: false };
       }
 

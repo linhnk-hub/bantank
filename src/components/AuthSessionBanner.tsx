@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { AuthManager } from '../core/authManager.ts';
+import { AuthManager, getUserDisplayLabel } from '../core/authManager.ts';
 import { SessionManager, type SessionStateSnapshot, type SessionStateStatus } from '../core/sessionManager.ts';
 import {
   LogIn,
@@ -45,7 +45,7 @@ export function formatAccountStatusMessage(
     .replace(/Phiên làm việc đã tạm dừng sau 5 phút không hoạt động/gi, 'Tài khoản đã tạm dừng sau 5 phút không hoạt động')
     .replace(/Phiên đăng nhập/gi, 'Tài khoản')
     .replace(/Phiên làm việc/gi, 'Trạng thái hoạt động')
-    .replace(/Phiên hoạt động/gi, 'Đang trực tuyến')
+    .replace(/Phiên hoạt động/gi, 'Đã xác thực')
     .replace(/Bị chiếm phiên/gi, 'Đang mở ở thiết bị khác')
     .replace(/Phiên hết hạn/gi, 'Tạm dừng do ngưng thao tác')
     .replace(/quyền gia hạn phiên/gi, 'kết nối bảo mật tài khoản')
@@ -92,10 +92,11 @@ export function getSessionBadgeInfo(
           dotStyle: 'bg-sky-400 animate-pulse',
         };
       }
+      // M7.3: Loại bỏ hoàn toàn hiển thị trạng thái "Đang trực tuyến"
       return {
-        label: 'Đang trực tuyến',
-        badgeStyle: 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80',
-        dotStyle: 'bg-emerald-400 animate-pulse',
+        label: '',
+        badgeStyle: 'hidden',
+        dotStyle: 'bg-emerald-400',
       };
     case 'CONNECTION_LOST_UNVERIFIED':
       return {
@@ -243,19 +244,24 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
         <div className="flex items-center gap-2">
           {user ? (
             <div className="flex items-center gap-1.5">
-              <span className={`w-2 h-2 rounded-full ${badgeInfo.dotStyle}`} />
-              <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
-              {user.displayName && (
-                <span className="font-bold text-amber-300 truncate max-w-[110px] sm:max-w-[150px]">
-                  {user.displayName}
+              {user.photoURL ? (
+                <img
+                  src={user.photoURL}
+                  alt={getUserDisplayLabel(user)}
+                  className="w-5 h-5 rounded-full object-cover border border-amber-500/40 shrink-0"
+                  referrerPolicy="no-referrer"
+                />
+              ) : (
+                <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              )}
+              <span className="font-bold text-amber-300 truncate max-w-[160px] sm:max-w-[220px]">
+                {getUserDisplayLabel(user)}
+              </span>
+              {badgeInfo.label && (
+                <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
+                  {badgeInfo.label}
                 </span>
               )}
-              <span className="font-semibold text-neutral-200 truncate max-w-[140px] sm:max-w-[200px]">
-                {user.email}
-              </span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
-                {badgeInfo.label}
-              </span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 text-amber-400">

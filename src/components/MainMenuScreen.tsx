@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import type { SessionStateSnapshot } from '../core/sessionManager.ts';
+import { getUserDisplayLabel } from '../core/authManager.ts';
 import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
 import {
   Play,
@@ -18,7 +19,7 @@ import {
   ShieldAlert,
   Keyboard,
   Smartphone,
-  Flame,
+  HelpCircle,
 } from 'lucide-react';
 
 export interface MainMenuScreenProps {
@@ -32,13 +33,15 @@ export interface MainMenuScreenProps {
   onPlay: () => void;
   onSignOut: () => Promise<void>;
   onRetryAcquire: () => Promise<void>;
-  difficulty: 'DEFAULT' | 'EXTREME';
-  onDifficultyChange: (d: 'DEFAULT' | 'EXTREME') => void;
+  difficulty?: 'DEFAULT' | 'EXTREME';
+  onDifficultyChange?: (d: 'DEFAULT' | 'EXTREME') => void;
   onOpenSettings: () => void;
+  onOpenSupport?: () => void;
   onOpenDevTools: () => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
   onOpenProfile?: () => void;
+  isSuperAdmin?: boolean;
 }
 
 export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
@@ -48,13 +51,13 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   onPlay,
   onSignOut,
   onRetryAcquire,
-  difficulty,
-  onDifficultyChange,
   onOpenSettings,
+  onOpenSupport,
   onOpenDevTools,
   isFullscreen,
   onToggleFullscreen,
   onOpenProfile,
+  isSuperAdmin = false,
 }) => {
   const isSessionActive = session.status === 'ACTIVE';
   const [avatarError, setAvatarError] = useState(false);
@@ -70,7 +73,9 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
     Boolean(user)
   );
 
-  // Keyboard shortcut: Space or Enter starts the game if session is ACTIVE
+  const displayLabel = getUserDisplayLabel(user);
+
+  // Keyboard shortcut: Space or Enter starts mode selection if session is ACTIVE
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.code === 'Space' || e.code === 'Enter') && isSessionActive && !isProcessing) {
@@ -87,56 +92,42 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       {/* Background Ambience */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.18),rgba(255,255,255,0))] pointer-events-none" />
 
-      {/* Top Header Bar */}
+      {/* Top Header Bar — M7.3: Removed "HUYỀN THOẠI TUỔI THƠ", removed email & "Đang trực tuyến" */}
       <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-3 sm:px-4 py-2.5">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
-          {/* Brand */}
-          <div className="flex items-center gap-3">
+          {/* Left: Logo only */}
+          <div className="flex items-center gap-2.5">
             <img
               src="/logo-bantank.png"
-              alt="Huyền Thoại Tuổi Thơ Logo"
-              className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow p-0 m-0 shrink-0"
+              alt="Bắn Tank Online Logo"
+              className="w-11 h-11 sm:w-12 sm:h-12 object-contain drop-shadow p-0 m-0 shrink-0"
               onError={(e) => {
                 e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
               }}
             />
-            <div>
-              <span className="font-extrabold text-white tracking-wide text-sm sm:text-base font-mono">
-                HUYỀN THOẠI TUỔI THƠ
-              </span>
-              <span className="text-[10px] sm:text-xs text-neutral-400 hidden sm:inline ml-2">
-                Menu Chính
-              </span>
-            </div>
           </div>
 
-          {/* User Profile & Account Status Badge */}
+          {/* Right: User Profile (Avatar + Display Name Only) & Quick Actions */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-800/80 border border-neutral-700/80 text-xs">
-              <span className={`w-2 h-2 rounded-full ${badgeInfo.dotStyle}`} />
+            <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-neutral-800/80 border border-neutral-700/80 text-xs">
               {user.photoURL && user.photoURL.trim() && !avatarError ? (
                 <img
                   src={user.photoURL.trim()}
-                  alt={user.displayName || user.email || 'Avatar'}
+                  alt={displayLabel}
                   className="w-5 h-5 rounded-full object-cover border border-amber-400/60 shrink-0"
                   onError={() => setAvatarError(true)}
                 />
               ) : (
                 <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               )}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:gap-1.5 leading-tight">
-                {user.displayName && user.displayName.trim() && (
-                  <span className="font-bold text-amber-300 truncate max-w-[100px] sm:max-w-[140px]">
-                    {user.displayName.trim()}
-                  </span>
-                )}
-                <span className="font-medium text-neutral-200 truncate max-w-[120px] sm:max-w-[180px]">
-                  {user.email}
-                </span>
-              </div>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
-                {badgeInfo.label}
+              <span className="font-bold text-amber-300 truncate max-w-[130px] sm:max-w-[190px]">
+                {displayLabel}
               </span>
+              {badgeInfo.label && (
+                <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
+                  {badgeInfo.label}
+                </span>
+              )}
             </div>
 
             {onOpenProfile && (
@@ -170,20 +161,22 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 type="button"
                 onClick={onOpenSettings}
                 className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 transition-all shadow"
-                title="Cài đặt Âm thanh & Điều khiển"
+                title="Cấu hình Âm thanh & Hiển thị"
               >
                 <Settings className="w-3.5 h-3.5 text-amber-400" />
               </button>
 
-              <button
-                type="button"
-                onClick={onOpenDevTools}
-                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow"
-                title="Bảng Kiểm thử & QA"
-              >
-                <Wrench className="w-3 h-3 text-amber-400" />
-                <span className="hidden sm:inline">QA</span>
-              </button>
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={onOpenDevTools}
+                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow"
+                  title="Bảng Kiểm thử & QA (Super Admin)"
+                >
+                  <Wrench className="w-3 h-3 text-amber-400" />
+                  <span className="hidden sm:inline">QA</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -203,12 +196,12 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       {/* Main Container */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-6 max-w-4xl mx-auto w-full">
         <div className="w-full max-w-xl flex flex-col items-center text-center">
-          {/* Emblem & Stage Banner */}
-          <div className="mb-4">
+          {/* Emblem & Stage Banner — M7.3 IV: Only STAGE 1 */}
+          <div className="mb-5">
             <div className="flex justify-center mb-3 p-0 m-0">
               <img
                 src="/logo-bantank.png"
-                alt="Huyền Thoại Tuổi Thơ Logo"
+                alt="Bắn Tank Online Logo"
                 className="w-32 h-32 sm:w-40 sm:h-40 object-contain drop-shadow-xl p-0 m-0"
                 onError={(e) => {
                   e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
@@ -216,10 +209,10 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               />
             </div>
             <h1 className="text-2xl sm:text-4xl font-black text-white tracking-wide font-mono mb-1">
-              CHIẾN DỊCH SOLO
+              BẮN TANK ONLINE
             </h1>
-            <p className="text-xs sm:text-sm text-amber-400 font-mono font-bold">
-              STAGE 1 • 30 Xe Địch • 1 Đại Bàng Hoàng Gia
+            <p className="text-xs sm:text-sm text-amber-400 font-mono font-bold tracking-widest uppercase">
+              STAGE 1
             </p>
           </div>
 
@@ -247,40 +240,8 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             </div>
           )}
 
-          {/* Difficulty Selection */}
-          <div className="w-full mb-6 p-3 rounded-xl bg-neutral-900/90 border border-neutral-800 flex items-center justify-between">
-            <span className="text-xs font-bold text-neutral-300 flex items-center gap-1.5">
-              <Flame className="w-4 h-4 text-amber-400" />
-              <span>Độ khó chiến dịch:</span>
-            </span>
-            <div className="flex items-center gap-1.5">
-              <button
-                type="button"
-                onClick={() => onDifficultyChange('DEFAULT')}
-                className={`py-1 px-3 rounded-lg text-xs font-bold transition-all ${
-                  difficulty === 'DEFAULT'
-                    ? 'bg-amber-500 text-black shadow-md'
-                    : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200 border border-neutral-700'
-                }`}
-              >
-                Tiêu chuẩn (Default)
-              </button>
-              <button
-                type="button"
-                onClick={() => onDifficultyChange('EXTREME')}
-                className={`py-1 px-3 rounded-lg text-xs font-bold transition-all ${
-                  difficulty === 'EXTREME'
-                    ? 'bg-rose-600 text-white shadow-md'
-                    : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200 border border-neutral-700'
-                }`}
-              >
-                Cực hạn (Extreme)
-              </button>
-            </div>
-          </div>
-
           {/* Primary Action Button: "CHỌN CHẾ ĐỘ CHƠI" */}
-          <div className="w-full flex flex-col items-center gap-2 mb-6">
+          <div className="w-full flex flex-col items-center gap-3 mb-6">
             <button
               type="button"
               onClick={isSessionActive ? onPlay : undefined}
@@ -294,6 +255,27 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               <Play className={`w-5 h-5 ${isSessionActive ? 'fill-black' : 'fill-neutral-500'}`} />
               <span>{isSessionActive ? 'CHỌN CHẾ ĐỘ CHƠI' : 'CẦN KẾT NỐI MÁY CHỦ ĐỂ CHƠI'}</span>
             </button>
+
+            {/* M7.3 VII: Add CẤU HÌNH and HỖ TRỢ right below CHỌN CHẾ ĐỘ CHƠI */}
+            <div className="w-full grid grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={onOpenSettings}
+                className="py-3 px-4 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 hover:border-amber-500/50 text-neutral-100 font-extrabold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow active:scale-95 cursor-pointer"
+              >
+                <Settings className="w-4 h-4 text-amber-400" />
+                <span>CẤU HÌNH</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={onOpenSupport}
+                className="py-3 px-4 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 hover:border-sky-500/50 text-neutral-100 font-extrabold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow active:scale-95 cursor-pointer"
+              >
+                <HelpCircle className="w-4 h-4 text-sky-400" />
+                <span>HỖ TRỢ</span>
+              </button>
+            </div>
           </div>
 
           {/* Controls Quick Card */}
@@ -325,11 +307,10 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-2.5 text-center text-xs text-neutral-500">
-        <div className="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-1 text-[11px]">
-          <span>Bảo mật bởi Firebase Authentication & Cloud Firestore</span>
-          <span>Bắn Tank Online • https://bantank.online</span>
+      {/* Footer — M7.3 VI: Only "Bắn Tank Online © 2026" */}
+      <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">
+        <div className="max-w-4xl mx-auto flex items-center justify-center">
+          <span>Bắn Tank Online © 2026</span>
         </div>
       </footer>
     </div>

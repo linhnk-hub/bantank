@@ -4,43 +4,51 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import type { User as FirebaseUser } from 'firebase/auth';
 import type { SessionStateSnapshot } from '../core/sessionManager.ts';
+import { getUserDisplayLabel } from '../core/authManager.ts';
 import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
+import { CoopOnlineLobbyPanel } from './CoopOnlineLobbyModal.tsx';
+import type { CoopRoomDocument } from '../core/coopOnlineManager.ts';
 import {
   Play,
   ArrowLeft,
+  ArrowRight,
   Settings,
   Wrench,
   Maximize,
   Minimize,
   UserCheck,
-  ShieldAlert,
-  Users,
   User,
   Bot,
-  WifiOff,
+  Globe,
   CheckCircle2,
-  AlertTriangle,
   Flame,
-  Info,
+  Shield,
 } from 'lucide-react';
 
 export type GameModeType = 'SOLO' | 'TWO_PLAYERS';
 export type TwoPlayerOption = 'P2_AI' | 'P2_REAL';
+export type SelectionCardMode = 'SOLO' | 'COOP_AI' | 'COOP_ONLINE';
+export type SelectionFlowStep = 'SELECT_MODE' | 'SELECT_DIFFICULTY' | 'COOP_ONLINE_LOBBY';
 
 export interface ModeSelectionScreenProps {
   user: {
+    uid?: string;
     email: string | null;
     displayName?: string | null;
     photoURL?: string | null;
   };
+  firebaseUser?: FirebaseUser | null;
   session: SessionStateSnapshot;
   isProcessing: boolean;
   onBack: () => void;
   onStartMatch: (mode: GameModeType, twoPlayerOption?: TwoPlayerOption) => void;
+  onStartOnlineMatch?: (room: CoopRoomDocument, role: 'HOST' | 'GUEST') => void;
   difficulty: 'DEFAULT' | 'EXTREME';
   onDifficultyChange: (d: 'DEFAULT' | 'EXTREME') => void;
   onOpenSettings: () => void;
+  onOpenSupport?: () => void;
   onOpenDevTools: () => void;
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
@@ -49,6 +57,7 @@ export interface ModeSelectionScreenProps {
   onSelectedModeChange?: (mode: GameModeType) => void;
   twoPlayerOption?: TwoPlayerOption;
   onTwoPlayerOptionChange?: (opt: TwoPlayerOption) => void;
+  isSuperAdmin?: boolean;
 }
 
 /**
@@ -61,26 +70,20 @@ const RetroTankIconP1: React.FC<{ className?: string }> = ({ className = 'w-12 h
     className={className}
     style={{ shapeRendering: 'crispEdges' }}
   >
-    {/* P1 Classic Yellow Tank */}
-    {/* Left Tread */}
     <rect x="4" y="6" width="4" height="20" fill="#B45309" />
     <rect x="4" y="7" width="2" height="3" fill="#FBBF24" />
     <rect x="4" y="12" width="2" height="3" fill="#FBBF24" />
     <rect x="4" y="17" width="2" height="3" fill="#FBBF24" />
     <rect x="4" y="22" width="2" height="3" fill="#FBBF24" />
-    {/* Right Tread */}
     <rect x="24" y="6" width="4" height="20" fill="#B45309" />
     <rect x="26" y="7" width="2" height="3" fill="#FBBF24" />
     <rect x="26" y="12" width="2" height="3" fill="#FBBF24" />
     <rect x="26" y="17" width="2" height="3" fill="#FBBF24" />
     <rect x="26" y="22" width="2" height="3" fill="#FBBF24" />
-    {/* Hull */}
     <rect x="8" y="8" width="16" height="16" fill="#F59E0B" />
     <rect x="10" y="10" width="12" height="12" fill="#FBBF24" />
-    {/* Cannon Barrel pointing UP */}
     <rect x="14" y="2" width="4" height="9" fill="#F59E0B" />
     <rect x="15" y="2" width="2" height="8" fill="#FDE68A" />
-    {/* Turret Center */}
     <rect x="12" y="12" width="8" height="8" fill="#D97706" />
     <rect x="14" y="14" width="4" height="4" fill="#FEF3C7" />
   </svg>
@@ -93,26 +96,20 @@ const RetroTankIconP2: React.FC<{ className?: string }> = ({ className = 'w-12 h
     className={className}
     style={{ shapeRendering: 'crispEdges' }}
   >
-    {/* P2 Classic Green Tank */}
-    {/* Left Tread */}
     <rect x="4" y="6" width="4" height="20" fill="#047857" />
     <rect x="4" y="7" width="2" height="3" fill="#34D399" />
     <rect x="4" y="12" width="2" height="3" fill="#34D399" />
     <rect x="4" y="17" width="2" height="3" fill="#34D399" />
     <rect x="4" y="22" width="2" height="3" fill="#34D399" />
-    {/* Right Tread */}
     <rect x="24" y="6" width="4" height="20" fill="#047857" />
     <rect x="26" y="7" width="2" height="3" fill="#34D399" />
     <rect x="26" y="12" width="2" height="3" fill="#34D399" />
     <rect x="26" y="17" width="2" height="3" fill="#34D399" />
     <rect x="26" y="22" width="2" height="3" fill="#34D399" />
-    {/* Hull */}
     <rect x="8" y="8" width="16" height="16" fill="#10B981" />
     <rect x="10" y="10" width="12" height="12" fill="#34D399" />
-    {/* Cannon Barrel pointing UP */}
     <rect x="14" y="2" width="4" height="9" fill="#059669" />
     <rect x="15" y="2" width="2" height="8" fill="#A7F3D0" />
-    {/* Turret Center */}
     <rect x="12" y="12" width="8" height="8" fill="#047857" />
     <rect x="14" y="14" width="4" height="4" fill="#D1FAE5" />
   </svg>
@@ -120,10 +117,12 @@ const RetroTankIconP2: React.FC<{ className?: string }> = ({ className = 'w-12 h
 
 export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   user,
+  firebaseUser,
   session,
   isProcessing,
   onBack,
   onStartMatch,
+  onStartOnlineMatch,
   difficulty,
   onDifficultyChange,
   onOpenSettings,
@@ -135,35 +134,38 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   onSelectedModeChange,
   twoPlayerOption: controlledTwoPlayerOption,
   onTwoPlayerOptionChange,
+  isSuperAdmin = false,
 }) => {
-  const [internalMode, setInternalMode] = useState<GameModeType>(controlledMode ?? 'SOLO');
-  const [internalTwoPlayerOption, setInternalTwoPlayerOption] = useState<TwoPlayerOption>(
-    controlledTwoPlayerOption ?? 'P2_AI'
-  );
+  const deriveInitialCardMode = (): SelectionCardMode => {
+    if (controlledMode === 'TWO_PLAYERS') {
+      return controlledTwoPlayerOption === 'P2_REAL' ? 'COOP_ONLINE' : 'COOP_AI';
+    }
+    return 'SOLO';
+  };
+
+  const [cardMode, setCardMode] = useState<SelectionCardMode>(deriveInitialCardMode);
+  const [flowStep, setFlowStep] = useState<SelectionFlowStep>('SELECT_MODE');
   const [avatarError, setAvatarError] = useState(false);
 
   useEffect(() => {
     setAvatarError(false);
   }, [user?.photoURL]);
 
-  const selectedMode = controlledMode ?? internalMode;
-  const twoPlayerOption = controlledTwoPlayerOption ?? internalTwoPlayerOption;
-
-  const setSelectedMode = (mode: GameModeType) => {
-    setInternalMode(mode);
-    if (onSelectedModeChange) {
-      onSelectedModeChange(mode);
-    }
-  };
-
-  const setTwoPlayerOption = (opt: TwoPlayerOption) => {
-    setInternalTwoPlayerOption(opt);
-    if (onTwoPlayerOptionChange) {
-      onTwoPlayerOptionChange(opt);
+  const handleSelectCardMode = (next: SelectionCardMode) => {
+    setCardMode(next);
+    if (next === 'SOLO') {
+      onSelectedModeChange?.('SOLO');
+    } else if (next === 'COOP_AI') {
+      onSelectedModeChange?.('TWO_PLAYERS');
+      onTwoPlayerOptionChange?.('P2_AI');
+    } else {
+      onSelectedModeChange?.('TWO_PLAYERS');
+      onTwoPlayerOptionChange?.('P2_REAL');
     }
   };
 
   const isSessionActive = session.status === 'ACTIVE';
+  const displayLabel = getUserDisplayLabel(user);
 
   const badgeInfo = getSessionBadgeInfo(
     session.status,
@@ -172,107 +174,83 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     Boolean(user)
   );
 
-  // Can the player start match with current selection?
-  // SOLO and 2 PLAYERS (P2 AI Ally) are both fully ready and implemented!
-  const isStartAllowed =
-    (selectedMode === 'SOLO' || (selectedMode === 'TWO_PLAYERS' && twoPlayerOption === 'P2_AI')) &&
-    isSessionActive &&
-    !isProcessing;
+  const handleContinueFromMode = () => {
+    setFlowStep('SELECT_DIFFICULTY');
+  };
 
-  // Keyboard navigation: 1 for SOLO, 2 for 2 PLAYERS, ESC for Back, Enter/Space for Start
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === '1') {
-        setSelectedMode('SOLO');
-      } else if (e.key === '2') {
-        setSelectedMode('TWO_PLAYERS');
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        onBack();
-      } else if (e.code === 'Enter' || e.code === 'Space') {
-        if (isStartAllowed) {
-          e.preventDefault();
-          onStartMatch(selectedMode, twoPlayerOption);
-        }
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isStartAllowed, onBack, onStartMatch, selectedMode, twoPlayerOption]);
+  const handleProceedFromDifficulty = () => {
+    if (!isSessionActive || isProcessing) return;
+    if (cardMode === 'SOLO') {
+      onStartMatch('SOLO', 'P2_AI');
+    } else if (cardMode === 'COOP_AI') {
+      onStartMatch('TWO_PLAYERS', 'P2_AI');
+    } else if (cardMode === 'COOP_ONLINE') {
+      setFlowStep('COOP_ONLINE_LOBBY');
+    }
+  };
 
-  const handleStartClick = () => {
-    if (!isStartAllowed) return;
-    onStartMatch(selectedMode, twoPlayerOption);
+  const handleTopBack = () => {
+    if (flowStep === 'COOP_ONLINE_LOBBY') {
+      setFlowStep('SELECT_DIFFICULTY');
+    } else if (flowStep === 'SELECT_DIFFICULTY') {
+      setFlowStep('SELECT_MODE');
+    } else {
+      onBack();
+    }
   };
 
   return (
     <div className="relative min-h-screen w-full flex flex-col bg-neutral-950 text-neutral-100 select-none overflow-x-hidden">
-      {/* Background Ambience: Subtle arcade grid and radial glow */}
+      {/* Background Ambience */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.18),rgba(255,255,255,0))] pointer-events-none" />
       <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
 
-      {/* Top Header Bar */}
+      {/* Top Header Bar — M7.3: Removed "HUYỀN THOẠI TUỔI THƠ", removed email & "Đang trực tuyến" */}
       <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-3 sm:px-4 py-2.5">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
-          {/* Left: Back Button & Brand */}
+          {/* Left: Back Button & Logo */}
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
-              onClick={onBack}
+              onClick={handleTopBack}
               className="p-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 transition-all active:scale-95 shadow flex items-center gap-1.5 cursor-pointer text-xs font-bold"
-              title="Quay lại Main Menu"
+              title="Quay lại"
             >
               <ArrowLeft className="w-4 h-4 text-amber-400" />
-              <span className="hidden sm:inline">Menu</span>
+              <span className="hidden sm:inline">Quay lại</span>
             </button>
 
-            <div className="flex items-center gap-2">
-              <img
-                src="/logo-bantank.png"
-                alt="Huyền Thoại Tuổi Thơ Logo"
-                className="w-10 h-10 sm:w-12 sm:h-12 object-contain drop-shadow p-0 m-0 shrink-0"
-                onError={(e) => {
-                  e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
-                }}
-              />
-              <div>
-                <span className="font-extrabold text-white tracking-wide text-xs sm:text-sm font-mono block">
-                  HUYỀN THOẠI TUỔI THƠ
-                </span>
-                <span className="text-[10px] text-amber-400/90 font-mono">
-                  Chọn Chế Độ Chơi
-                </span>
-              </div>
-            </div>
+            <img
+              src="/logo-bantank.png"
+              alt="Bắn Tank Online Logo"
+              className="w-10 h-10 sm:w-12 sm:h-12 object-contain drop-shadow p-0 m-0 shrink-0"
+              onError={(e) => {
+                e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
+              }}
+            />
           </div>
 
-          {/* Right: User Profile, Email & Actions */}
+          {/* Right: User Profile (Avatar + Display Name Only) & Actions */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-800/80 border border-neutral-700/80 text-xs">
-              <span className={`w-2 h-2 rounded-full ${badgeInfo.dotStyle}`} />
+            <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-neutral-800/80 border border-neutral-700/80 text-xs">
               {user.photoURL && user.photoURL.trim() && !avatarError ? (
                 <img
                   src={user.photoURL.trim()}
-                  alt={user.displayName || user.email || 'Avatar'}
+                  alt={displayLabel}
                   className="w-5 h-5 rounded-full object-cover border border-amber-400/60 shrink-0"
                   onError={() => setAvatarError(true)}
                 />
               ) : (
                 <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               )}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:gap-1.5 leading-tight">
-                {user.displayName && user.displayName.trim() && (
-                  <span className="font-bold text-amber-300 truncate max-w-[90px] sm:max-w-[130px]">
-                    {user.displayName.trim()}
-                  </span>
-                )}
-                <span className="font-medium text-neutral-200 truncate max-w-[100px] sm:max-w-[170px]">
-                  {user.email}
-                </span>
-              </div>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
-                {badgeInfo.label}
+              <span className="font-bold text-amber-300 truncate max-w-[120px] sm:max-w-[180px]">
+                {displayLabel}
               </span>
+              {badgeInfo.label && (
+                <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
+                  {badgeInfo.label}
+                </span>
+              )}
             </div>
 
             {onOpenProfile && (
@@ -304,359 +282,385 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               type="button"
               onClick={onOpenSettings}
               className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 transition-all shadow cursor-pointer"
-              title="Cài đặt Âm thanh & Điều khiển"
+              title="Cấu hình Âm thanh & Hiển thị"
             >
               <Settings className="w-3.5 h-3.5 text-amber-400" />
             </button>
 
-            <button
-              type="button"
-              onClick={onOpenDevTools}
-              className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold shadow cursor-pointer"
-              title="Bảng Kiểm thử & QA"
-            >
-              <Wrench className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden md:inline">QA</span>
-            </button>
+            {isSuperAdmin && (
+              <button
+                type="button"
+                onClick={onOpenDevTools}
+                className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold shadow cursor-pointer"
+                title="Bảng Kiểm thử & QA (Super Admin)"
+              >
+                <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                <span className="hidden md:inline">QA</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
 
       {/* Main Content Area */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-6 max-w-5xl mx-auto w-full overflow-y-auto">
-        <div className="w-full max-w-3xl flex flex-col items-center text-center">
-          {/* Header Title */}
-          <div className="mb-6 flex flex-col items-center">
-            <h1 className="text-[clamp(1.35rem,5.5vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow-lg uppercase">
-              CHỌN CHẾ ĐỘ CHƠI
-            </h1>
-            <p className="text-xs sm:text-sm text-neutral-300 mt-1 max-w-md">
-              Chọn chế độ chiến đấu phù hợp trước khi bước vào chiến trường khói lửa
-            </p>
-          </div>
-
-          {/* Mode Selection Cards Grid */}
-          <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-            {/* Card A: SOLO – 1 NGƯỜI CHƠI */}
-            <div
-              onClick={() => setSelectedMode('SOLO')}
-              className={`relative p-5 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
-                selectedMode === 'SOLO'
-                  ? 'bg-amber-950/40 border-amber-500 ring-2 ring-amber-500/30 shadow-2xl shadow-amber-500/20'
-                  : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700 opacity-90'
-              }`}
-            >
-              {/* Selected Radio Indicator / Badge */}
-              <div className="flex items-center justify-between mb-3">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>SẴN SÀNG • KHUYÊN DÙNG</span>
-                </span>
-                <div
-                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                    selectedMode === 'SOLO'
-                      ? 'border-amber-400 bg-amber-500'
-                      : 'border-neutral-600 bg-neutral-800'
-                  }`}
-                >
-                  {selectedMode === 'SOLO' && (
-                    <div className="w-2 h-2 rounded-full bg-black" />
-                  )}
-                </div>
-              </div>
-
-              {/* Tank Illustration & Title */}
-              <div className="flex items-start gap-4 mb-3">
-                <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 shrink-0">
-                  <RetroTankIconP1 className="w-12 h-12" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-black text-white font-mono tracking-wide">
-                    SOLO – 1 NGƯỜI CHƠI
-                  </h2>
-                  <p className="text-xs text-amber-300 font-medium">
-                    Chiến dịch cổ điển Tank 1990 nguyên bản
-                  </p>
-                </div>
-              </div>
-
-              {/* Feature Specifications */}
-              <ul className="space-y-1.5 text-xs text-neutral-300 font-mono border-t border-neutral-800/80 pt-3">
-                <li className="flex items-center gap-2">
-                  <User className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>1 Người chơi P1 điều khiển xe tăng vàng</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-3.5 text-center text-amber-400">•</span>
-                  <span>Không có người chơi thứ hai (P2)</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-3.5 text-center text-amber-400">•</span>
-                  <span>Stage 1: 30 xe địch • 1 Căn cứ Hoàng Gia</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <span className="w-3.5 text-center text-amber-400">•</span>
-                  <span>Không bật vật phẩm hỗ trợ ở Stage 1</span>
-                </li>
-              </ul>
-            </div>
-
-            {/* Card B: 2 PLAYERS – 2 NGƯỜI CHƠI */}
-            <div
-              onClick={() => setSelectedMode('TWO_PLAYERS')}
-              className={`relative p-5 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
-                selectedMode === 'TWO_PLAYERS'
-                  ? 'bg-neutral-900 border-amber-500 ring-2 ring-amber-500/30 shadow-2xl'
-                  : 'bg-neutral-900/60 border-neutral-800 hover:border-neutral-700 opacity-80'
-              }`}
-            >
-              {/* Selected Radio Indicator / Badge */}
-              <div className="flex items-center justify-between mb-3">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                  <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                  <span>2 LỰA CHỌN PHỤ</span>
-                </span>
-                <div
-                  className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
-                    selectedMode === 'TWO_PLAYERS'
-                      ? 'border-amber-400 bg-amber-500'
-                      : 'border-neutral-600 bg-neutral-800'
-                  }`}
-                >
-                  {selectedMode === 'TWO_PLAYERS' && (
-                    <div className="w-2 h-2 rounded-full bg-black" />
-                  )}
-                </div>
-              </div>
-
-              {/* Tank Illustration & Title */}
-              <div className="flex items-start gap-4 mb-3">
-                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shrink-0 flex items-center gap-1">
-                  <RetroTankIconP1 className="w-8 h-8" />
-                  <RetroTankIconP2 className="w-8 h-8" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-black text-white font-mono tracking-wide">
-                    2 PLAYERS – 2 NGƯỜI
-                  </h2>
-                  <p className="text-xs text-neutral-400 font-medium">
-                    Hợp tác Co-op P1 (Vàng) & P2 (Xanh lá)
-                  </p>
-                </div>
-              </div>
-
-              {/* Sub-options for 2 PLAYERS */}
-              <div className="border-t border-neutral-800/80 pt-3 space-y-2">
-                <span className="text-[11px] font-mono font-bold text-neutral-400 block mb-1">
-                  LỰA CHỌN NGƯỜI CHƠI P2:
-                </span>
-
-                {/* Sub-Option B.1: P2 là AI */}
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedMode('TWO_PLAYERS');
-                    setTwoPlayerOption('P2_AI');
-                  }}
-                  className={`p-2.5 rounded-xl border transition-all text-xs flex items-start gap-2.5 ${
-                    selectedMode === 'TWO_PLAYERS' && twoPlayerOption === 'P2_AI'
-                      ? 'bg-emerald-950/40 border-emerald-500/80 shadow-md ring-1 ring-emerald-500/30'
-                      : 'bg-neutral-950/60 border-neutral-800 hover:border-neutral-700'
-                  }`}
-                >
-                  <Bot className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-white font-mono">B.1. P2 là AI (Đồng minh)</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-700 font-mono font-bold">
-                        SẴN SÀNG • KHẢ DỤNG
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-neutral-300 mt-0.5 leading-snug">
-                      P1 do bạn điều khiển (Xe vàng), P2 do máy tính điều khiển (Xe xanh lá, 3 mạng). AI bảo vệ Căn cứ Đại bàng, hỗ trợ tiêu diệt địch và tuyệt đối không bắn đồng đội (Friendly-Fire Safe).
-                    </p>
-                  </div>
-                </div>
-
-                {/* Sub-Option B.2: P2 là người thật */}
-                <div
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setSelectedMode('TWO_PLAYERS');
-                    setTwoPlayerOption('P2_REAL');
-                  }}
-                  className={`p-2.5 rounded-xl border transition-all text-xs flex items-start gap-2.5 ${
-                    selectedMode === 'TWO_PLAYERS' && twoPlayerOption === 'P2_REAL'
-                      ? 'bg-neutral-800/90 border-amber-500/80'
-                      : 'bg-neutral-950/60 border-neutral-800 hover:border-neutral-700'
-                  }`}
-                >
-                  <WifiOff className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
-                      <span className="font-bold text-white font-mono">B.2. P2 là người thật (Online)</span>
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-950/60 text-rose-300 border border-rose-800 font-mono">
-                        CHƯA KHẢ DỤNG
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-neutral-400 mt-0.5 leading-snug">
-                      Hạ tầng Multiplayer P2P thời gian thực đang được chuẩn bị. Tuyệt đối không giả lập phòng đấu ảo.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Detailed Status Notice depending on chosen mode */}
-          {selectedMode === 'TWO_PLAYERS' && (
-            <div
-              className={`w-full mb-6 p-4 rounded-xl border text-left flex items-start gap-3 shadow-lg animate-fade-in ${
-                twoPlayerOption === 'P2_AI'
-                  ? 'bg-emerald-950/40 border-emerald-700/60 text-emerald-200'
-                  : 'bg-amber-950/40 border-amber-700/60 text-amber-200'
-              }`}
-            >
-              {twoPlayerOption === 'P2_AI' ? (
-                <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
-              ) : (
-                <Info className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
-              )}
-              <div className="text-xs space-y-1">
-                <span
-                  className={`font-bold block font-mono ${
-                    twoPlayerOption === 'P2_AI' ? 'text-emerald-300' : 'text-amber-300'
-                  }`}
-                >
-                  {twoPlayerOption === 'P2_AI'
-                    ? 'CHẾ ĐỘ CO-OP 2 NGƯỜI CHƠI (P2 LÀ AI) ĐÃ SẴN SÀNG THAM CHIẾN'
-                    : 'THÔNG BÁO TÍNH NĂNG CHẾ ĐỘ 2 NGƯỜI CHƠI ONLINE'}
-                </span>
-                <p className="leading-relaxed opacity-90">
-                  {twoPlayerOption === 'P2_AI'
-                    ? 'P1 (Xe vàng) và P2 (Xe xanh lá do AI điều khiển) sẽ cùng xuất kích tại hàng dưới. AI đồng minh có thuật toán nhận diện chướng ngại vật A*, ưu tiên tuần tra bảo vệ Căn cứ Đại bàng và tự động kiểm tra đường đạn để không bao giờ bắn trúng P1 hoặc Căn cứ. Khi một người chơi hy sinh hết mạng, người còn lại vẫn có thể chiến đấu để bảo vệ căn cứ!'
-                    : 'Hệ thống hạ tầng Multiplayer kết nối 2 thiết bị thời gian thực chưa được thiết lập. Vui lòng chọn chế độ SOLO hoặc P2 LÀ AI để bắt đầu trận đấu ngay bây giờ.'}
+        <div className="w-full max-w-4xl flex flex-col items-center text-center">
+          {/* ===================================================================
+              STEP 1: CHỌN CHẾ ĐỘ CHƠI (SOLO / CO-OP AI / CO-OP ONLINE)
+             =================================================================== */}
+          {flowStep === 'SELECT_MODE' && (
+            <>
+              <div className="mb-6 flex flex-col items-center">
+                <h1 className="text-[clamp(1.35rem,5.5vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow-lg uppercase">
+                  CHỌN CHẾ ĐỘ CHƠI
+                </h1>
+                <p className="text-xs sm:text-sm text-neutral-300 mt-1 max-w-lg">
+                  Bước 1/2: Chọn chế độ chiến đấu trước khi sang bước thiết lập Độ khó
                 </p>
               </div>
-            </div>
+
+              {/* 3 Mode Cards */}
+              <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                {/* 1. SOLO */}
+                <div
+                  onClick={() => handleSelectCardMode('SOLO')}
+                  className={`relative p-5 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
+                    cardMode === 'SOLO'
+                      ? 'bg-amber-950/40 border-amber-500 ring-2 ring-amber-500/30 shadow-2xl shadow-amber-500/20'
+                      : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700 opacity-90'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        <User className="w-3 h-3 text-amber-400" />
+                        <span>1 NGƯỜI CHƠI</span>
+                      </span>
+                      <div
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          cardMode === 'SOLO'
+                            ? 'border-amber-400 bg-amber-500'
+                            : 'border-neutral-600 bg-neutral-800'
+                        }`}
+                      >
+                        {cardMode === 'SOLO' && <div className="w-2 h-2 rounded-full bg-black" />}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 shrink-0">
+                        <RetroTankIconP1 className="w-10 h-10" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-black text-white font-mono tracking-wide">
+                          1. SOLO
+                        </h2>
+                        <p className="text-[11px] text-amber-300 font-medium">
+                          Chiến dịch 1 người chơi
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-neutral-300 leading-relaxed">
+                      Người chơi P1 độc lập điều khiển Chiến xa vàng tiêu diệt toàn bộ quân địch và bảo vệ Căn cứ Đại Bàng.
+                    </p>
+                  </div>
+
+                  <div className="mt-4 pt-2.5 border-t border-neutral-800/80 flex items-center justify-between text-[10px] font-mono text-amber-300">
+                    <span>STAGE 1</span>
+                    <span>Sẵn sàng</span>
+                  </div>
+                </div>
+
+                {/* 2. CO-OP AI */}
+                <div
+                  onClick={() => handleSelectCardMode('COOP_AI')}
+                  className={`relative p-5 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
+                    cardMode === 'COOP_AI'
+                      ? 'bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/30 shadow-2xl shadow-emerald-500/20'
+                      : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700 opacity-90'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                        <Bot className="w-3 h-3 text-emerald-400" />
+                        <span>P1 + ĐỒNG ĐỘI AI</span>
+                      </span>
+                      <div
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          cardMode === 'COOP_AI'
+                            ? 'border-emerald-400 bg-emerald-500'
+                            : 'border-neutral-600 bg-neutral-800'
+                        }`}
+                      >
+                        {cardMode === 'COOP_AI' && <div className="w-2 h-2 rounded-full bg-black" />}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shrink-0 flex items-center gap-1">
+                        <RetroTankIconP1 className="w-7 h-7" />
+                        <RetroTankIconP2 className="w-7 h-7" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-black text-white font-mono tracking-wide">
+                          2. CO-OP AI
+                        </h2>
+                        <p className="text-[11px] text-emerald-300 font-medium">
+                          Phối hợp cùng Đồng đội AI
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-neutral-300 leading-relaxed">
+                      Người chơi 1 sát cánh cùng Chiến xa P2 do AI thông minh điều khiển: tìm đường A*, bọc lót căn cứ và khóa bắn nhầm đồng đội.
+                    </p>
+                  </div>
+
+                  <div className="mt-4 pt-2.5 border-t border-neutral-800/80 flex items-center justify-between text-[10px] font-mono text-emerald-300">
+                    <span>STAGE 1</span>
+                    <span>Sẵn sàng</span>
+                  </div>
+                </div>
+
+                {/* 3. CO-OP ONLINE */}
+                <div
+                  onClick={() => handleSelectCardMode('COOP_ONLINE')}
+                  className={`relative p-5 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
+                    cardMode === 'COOP_ONLINE'
+                      ? 'bg-sky-950/40 border-sky-500 ring-2 ring-sky-500/30 shadow-2xl shadow-sky-500/20'
+                      : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700 opacity-90'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40">
+                        <Globe className="w-3 h-3 text-sky-400" />
+                        <span>2 NGƯỜI CHƠI THẬT</span>
+                      </span>
+                      <div
+                        className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
+                          cardMode === 'COOP_ONLINE'
+                            ? 'border-sky-400 bg-sky-500'
+                            : 'border-neutral-600 bg-neutral-800'
+                        }`}
+                      >
+                        {cardMode === 'COOP_ONLINE' && <div className="w-2 h-2 rounded-full bg-black" />}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-3 mb-3">
+                      <div className="p-2 rounded-xl bg-sky-500/10 border border-sky-500/20 shrink-0 flex items-center gap-1">
+                        <RetroTankIconP1 className="w-7 h-7" />
+                        <RetroTankIconP2 className="w-7 h-7" />
+                      </div>
+                      <div>
+                        <h2 className="text-lg font-black text-white font-mono tracking-wide">
+                          3. CO-OP ONLINE
+                        </h2>
+                        <p className="text-[11px] text-sky-300 font-medium">
+                          2 Người chơi qua Internet
+                        </p>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-neutral-300 leading-relaxed">
+                      Tạo phòng hoặc nhập mã phòng 6 ký tự để phối hợp trực tuyến giữa Người chơi 1 (Chủ phòng) và Người chơi 2 qua Internet.
+                    </p>
+                  </div>
+
+                  <div className="mt-4 pt-2.5 border-t border-neutral-800/80 flex items-center justify-between text-[10px] font-mono text-sky-300">
+                    <span>STAGE 1</span>
+                    <span>Tối đa 2 người/phòng</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Step 1 Navigation Buttons */}
+              <div className="w-full flex flex-col sm:flex-row items-center gap-3">
+                <button
+                  type="button"
+                  onClick={onBack}
+                  className="w-full sm:w-1/3 py-4 px-6 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 font-bold text-sm sm:text-base border border-neutral-700 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>QUAY LẠI MENU</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleContinueFromMode}
+                  className="w-full sm:w-2/3 py-4 px-8 rounded-2xl font-black text-sm sm:text-base tracking-wider uppercase transition-all shadow-2xl flex items-center justify-center gap-3 transform active:scale-98 bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black shadow-amber-500/30 cursor-pointer"
+                >
+                  <span>TIẾP TỤC CHỌN ĐỘ KHÓ</span>
+                  <ArrowRight className="w-5 h-5" />
+                </button>
+              </div>
+            </>
           )}
 
-          {/* Difficulty Option Selection (Normal vs Hard) with Comparison */}
-          <div className="w-full mb-6 p-4 rounded-2xl bg-neutral-900/90 border border-neutral-800 text-left">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-sm font-bold text-neutral-200 flex items-center gap-2 font-mono">
-                <Flame className="w-4 h-4 text-amber-400" />
-                <span>CHỌN ĐỘ KHÓ CHIẾN DỊCH</span>
-              </span>
-              <span className="text-[11px] text-neutral-400 font-mono">
-                Áp dụng cho mọi chế độ chơi
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {/* NORMAL / TIÊU CHUẨN */}
-              <div
-                onClick={() => onDifficultyChange('DEFAULT')}
-                className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                  difficulty === 'DEFAULT'
-                    ? 'bg-amber-950/30 border-amber-500 shadow-md ring-1 ring-amber-500/20'
-                    : 'bg-neutral-950/60 border-neutral-800 hover:border-neutral-700'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-black text-amber-300 text-xs sm:text-sm font-mono uppercase">
-                      NORMAL (TIÊU CHUẨN)
-                    </span>
-                    {difficulty === 'DEFAULT' && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500 text-black font-bold font-mono">
-                        ĐANG CHỌN
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-neutral-300 leading-snug">
-                    Cân bằng theo nguyên bản NES Battle City. Tầm quan sát địch 80px, thời gian nạp đạn ~1.5s - 2.0s, tốc độ di chuyển chuẩn. Phù hợp cho giải trí cổ điển.
-                  </p>
+          {/* ===================================================================
+              STEP 2: CHỌN ĐỘ KHÓ (NORMAL / HARD)
+             =================================================================== */}
+          {flowStep === 'SELECT_DIFFICULTY' && (
+            <>
+              <div className="mb-6 flex flex-col items-center">
+                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-900 border border-neutral-700 text-xs font-mono text-amber-300 mb-2">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>
+                    Chế độ đã chọn:{' '}
+                    <strong>
+                      {cardMode === 'SOLO'
+                        ? '1. SOLO (1 Người chơi)'
+                        : cardMode === 'COOP_AI'
+                        ? '2. CO-OP AI (P1 + Đồng đội AI)'
+                        : '3. CO-OP ONLINE (2 Người chơi qua Internet)'}
+                    </strong>
+                  </span>
                 </div>
-                <div className="mt-2 pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[10px] text-neutral-400 font-mono">
-                  <span>30 Xe địch Stage 1</span>
-                  <span className="text-amber-400 font-semibold">Phản xạ AI: Tiêu chuẩn</span>
+                <h1 className="text-[clamp(1.35rem,5.5vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow-lg uppercase">
+                  CHỌN ĐỘ KHÓ CHIẾN DỊCH
+                </h1>
+                <p className="text-xs sm:text-sm text-neutral-300 mt-1 max-w-lg">
+                  Bước 2/2: Chọn mức độ thử thách cho trận đấu của bạn
+                </p>
+              </div>
+
+              <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 text-left">
+                {/* NORMAL / DEFAULT */}
+                <div
+                  onClick={() => onDifficultyChange('DEFAULT')}
+                  className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                    difficulty === 'DEFAULT'
+                      ? 'bg-amber-950/35 border-amber-500 shadow-2xl ring-2 ring-amber-500/25'
+                      : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-black text-amber-300 text-base sm:text-lg font-mono uppercase flex items-center gap-2">
+                        <Shield className="w-4 h-4 text-amber-400" />
+                        <span>NORMAL (MẶC ĐỊNH)</span>
+                      </span>
+                      {difficulty === 'DEFAULT' && (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500 text-black font-black font-mono">
+                          ĐANG CHỌN
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-neutral-300 leading-relaxed">
+                      Cân bằng theo chuẩn cổ điển. Tầm phát hiện xe địch 80px, nhịp độ nạp đạn và di chuyển tiêu chuẩn, phù hợp để làm quen hoặc phối hợp giải trí.
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-neutral-800/80 flex items-center justify-between text-[11px] text-neutral-400 font-mono">
+                    <span>STAGE 1</span>
+                    <span className="text-amber-400 font-semibold">Phản xạ AI: Tiêu chuẩn</span>
+                  </div>
+                </div>
+
+                {/* HARD / EXTREME */}
+                <div
+                  onClick={() => onDifficultyChange('EXTREME')}
+                  className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                    difficulty === 'EXTREME'
+                      ? 'bg-rose-950/35 border-rose-500 shadow-2xl ring-2 ring-rose-500/25'
+                      : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-black text-rose-300 text-base sm:text-lg font-mono uppercase flex items-center gap-2">
+                        <Flame className="w-4 h-4 text-rose-400" />
+                        <span>HARD (THỬ THÁCH CAO)</span>
+                      </span>
+                      {difficulty === 'EXTREME' && (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-rose-600 text-white font-black font-mono">
+                          ĐANG CHỌN
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-neutral-300 leading-relaxed">
+                      Xe địch quan sát xa dọc hành lang bản đồ, tốc độ hành quân nhanh hơn 18%, nhịp bắn dồn dập (1.0s – 1.2s), chủ động né đạn vuông góc và gây áp lực mạnh lên căn cứ.
+                    </p>
+                  </div>
+                  <div className="mt-4 pt-3 border-t border-neutral-800/80 flex items-center justify-between text-[11px] text-neutral-400 font-mono">
+                    <span>STAGE 1</span>
+                    <span className="text-rose-400 font-semibold">Phản xạ AI: Cao cấp</span>
+                  </div>
                 </div>
               </div>
 
-              {/* HARD / CỰC HẠN */}
-              <div
-                onClick={() => onDifficultyChange('EXTREME')}
-                className={`p-3 rounded-xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                  difficulty === 'EXTREME'
-                    ? 'bg-rose-950/30 border-rose-500 shadow-md ring-1 ring-rose-500/20'
-                    : 'bg-neutral-950/60 border-neutral-800 hover:border-neutral-700'
-                }`}
-              >
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <span className="font-black text-rose-300 text-xs sm:text-sm font-mono uppercase">
-                      HARD (CỰC HẠN)
-                    </span>
-                    {difficulty === 'EXTREME' && (
-                      <span className="text-[10px] px-1.5 py-0.2 rounded bg-rose-600 text-white font-bold font-mono">
-                        ĐANG CHỌN
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-[11px] text-neutral-300 leading-snug">
-                    Địch phản xạ nhạy hơn, tầm quan sát rộng dọc toàn bản đồ qua hành lang trống, tần suất bắn cao (nạp ~1.0s - 1.2s), 70% chủ động tập kích căn cứ và né đạn vuông góc.
-                  </p>
-                </div>
-                <div className="mt-2 pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[10px] text-neutral-400 font-mono">
-                  <span>30 Xe địch Stage 1</span>
-                  <span className="text-rose-400 font-semibold">Phản xạ né đạn: Chủ động</span>
-                </div>
+              {/* Step 2 Navigation Buttons */}
+              <div className="w-full flex flex-col sm:flex-row items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setFlowStep('SELECT_MODE')}
+                  className="w-full sm:w-1/3 py-4 px-6 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 font-bold text-sm sm:text-base border border-neutral-700 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>ĐỔI CHẾ ĐỘ CHƠI</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleProceedFromDifficulty}
+                  disabled={!isSessionActive || isProcessing}
+                  className={`w-full sm:w-2/3 py-4 px-8 rounded-2xl font-black text-sm sm:text-base tracking-wider uppercase transition-all shadow-2xl flex items-center justify-center gap-3 transform active:scale-98 ${
+                    isSessionActive && !isProcessing
+                      ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black shadow-amber-500/30 cursor-pointer'
+                      : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
+                  }`}
+                >
+                  <Play className={`w-5 h-5 ${isSessionActive ? 'fill-black' : 'fill-neutral-500'}`} />
+                  <span>
+                    {!isSessionActive
+                      ? 'CẦN KẾT NỐI MÁY CHỦ ĐỂ TIẾP TỤC'
+                      : cardMode === 'COOP_ONLINE'
+                      ? `TIẾP TỤC VÀO PHÒNG ONLINE (${difficulty === 'EXTREME' ? 'HARD' : 'NORMAL'})`
+                      : cardMode === 'COOP_AI'
+                      ? `BẮT ĐẦU CO-OP AI (${difficulty === 'EXTREME' ? 'HARD' : 'NORMAL'})`
+                      : `BẮT ĐẦU TRẬN ĐẤU (${difficulty === 'EXTREME' ? 'HARD' : 'NORMAL'})`}
+                  </span>
+                </button>
               </div>
+            </>
+          )}
+
+          {/* ===================================================================
+              STEP 3 (CO-OP ONLINE): TẠO PHÒNG / THAM GIA PHÒNG
+             =================================================================== */}
+          {flowStep === 'COOP_ONLINE_LOBBY' && (
+            <div className="w-full text-left">
+              <div className="mb-5 text-center">
+                <h1 className="text-[clamp(1.25rem,5vw,2.2rem)] font-black text-transparent bg-clip-text bg-gradient-to-b from-sky-200 via-sky-400 to-sky-600 font-mono uppercase">
+                  KẾT NỐI PHÒNG CO-OP ONLINE
+                </h1>
+                <p className="text-xs text-neutral-400 mt-1">
+                  Tạo phòng mới (P1) hoặc nhập mã phòng 6 ký tự từ bạn bè (P2)
+                </p>
+              </div>
+
+              <CoopOnlineLobbyPanel
+                user={firebaseUser ?? (user as any)}
+                difficulty={difficulty}
+                onBackToDifficulty={() => setFlowStep('SELECT_DIFFICULTY')}
+                onOnlineMatchStarted={(room, role) => {
+                  if (onStartOnlineMatch) {
+                    onStartOnlineMatch(room, role);
+                  }
+                }}
+              />
             </div>
-          </div>
-
-          {/* Navigation Action Buttons: QUAY LẠI & BẮT ĐẦU */}
-          <div className="w-full flex flex-col sm:flex-row items-center gap-3">
-            <button
-              type="button"
-              onClick={onBack}
-              className="w-full sm:w-1/3 py-4 px-6 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 font-bold text-sm sm:text-base border border-neutral-700 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              <span>QUAY LẠI MENU</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={handleStartClick}
-              disabled={!isStartAllowed}
-              className={`w-full sm:w-2/3 py-4 px-8 rounded-2xl font-black text-sm sm:text-base tracking-wider uppercase transition-all shadow-2xl flex items-center justify-center gap-3 transform active:scale-98 ${
-                isStartAllowed
-                  ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black shadow-amber-500/30 cursor-pointer'
-                  : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
-              }`}
-            >
-              <Play className={`w-5 h-5 ${isStartAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
-              <span>
-                {selectedMode === 'SOLO'
-                  ? isSessionActive
-                    ? `BẮT ĐẦU TRẬN ĐẤU (SOLO - ${difficulty === 'EXTREME' ? 'HARD' : 'NORMAL'})`
-                    : 'CẦN KẾT NỐI MÁY CHỦ ĐỂ VÀO TRẬN'
-                  : twoPlayerOption === 'P2_AI'
-                  ? isSessionActive
-                    ? `BẮT ĐẦU CO-OP (P1 + P2 AI - ${difficulty === 'EXTREME' ? 'HARD' : 'NORMAL'})`
-                    : 'CẦN KẾT NỐI MÁY CHỦ ĐỂ VÀO TRẬN'
-                  : 'CHẾ ĐỘ MULTIPLAYER CHƯA KHẢ DỤNG'}
-              </span>
-            </button>
-          </div>
+          )}
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="relative z-10 w-full border-t border-neutral-800/80 bg-neutral-950/80 px-4 py-2 text-center text-[10px] text-neutral-400 font-mono">
-        BẮN TANK ONLINE • HUYỀN THOẠI TUỔI THƠ • CHẾ ĐỘ CHƠI THEO QUY CHUẨN NES BATTLE CITY 1990
+      {/* Footer — M7.3 VI: Only "Bắn Tank Online © 2026" */}
+      <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">
+        <div className="max-w-4xl mx-auto flex items-center justify-center">
+          <span>Bắn Tank Online © 2026</span>
+        </div>
       </footer>
     </div>
   );

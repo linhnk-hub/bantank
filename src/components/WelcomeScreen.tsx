@@ -23,6 +23,7 @@ export interface WelcomeScreenProps {
   onOpenSettings?: () => void;
   isFullscreen?: boolean;
   onToggleFullscreen?: () => void;
+  isSuperAdmin?: boolean;
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
@@ -35,6 +36,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onOpenSettings,
   isFullscreen,
   onToggleFullscreen,
+  isSuperAdmin = false,
 }) => {
   return (
     <div className="relative min-h-screen w-full flex flex-col bg-neutral-950 text-neutral-100 select-none overflow-x-hidden">
@@ -43,30 +45,17 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
 
       {/* Top Header Bar */}
-      <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-4 py-3">
+      <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-4 py-2.5">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
             <img
               src="/logo-bantank.png"
-              alt="Huyền Thoại Tuổi Thơ Logo"
-              className="w-12 h-12 sm:w-14 sm:h-14 object-contain drop-shadow p-0 m-0 shrink-0"
+              alt="Bắn Tank Online Logo"
+              className="w-11 h-11 sm:w-12 sm:h-12 object-contain drop-shadow p-0 m-0 shrink-0"
               onError={(e) => {
                 e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
               }}
             />
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="font-extrabold text-white tracking-wide text-sm sm:text-base font-mono">
-                  HUYỀN THOẠI TUỔI THƠ
-                </span>
-                <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                  M7.1.2
-                </span>
-              </div>
-              <span className="text-[11px] text-neutral-400 font-mono hidden sm:inline">
-                https://bantank.online
-              </span>
-            </div>
           </div>
 
           <div className="flex items-center gap-2 text-xs">
@@ -91,19 +80,19 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 type="button"
                 onClick={onOpenSettings}
                 className="p-2 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 transition-all active:scale-95 shadow"
-                title="Cài đặt & Âm thanh"
-                aria-label="Cài đặt"
+                title="Cấu hình & Âm thanh"
+                aria-label="Cấu hình"
               >
                 <Settings className="w-4 h-4 text-amber-400" />
               </button>
             )}
 
-            {onOpenDevTools && (
+            {isSuperAdmin && onOpenDevTools && (
               <button
                 type="button"
                 onClick={onOpenDevTools}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 font-semibold transition-all active:scale-95 shadow"
-                title="Bảng Kiểm thử & QA"
+                title="Bảng Kiểm thử & QA (Super Admin)"
               >
                 <Wrench className="w-3.5 h-3.5 text-amber-400" />
                 <span className="hidden sm:inline">QA Suite</span>

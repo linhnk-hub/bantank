@@ -55,6 +55,12 @@ service cloud.firestore {
       return isVerifiedPersonalGmail() && request.auth.uid == uid;
     }
 
+    // M7.3: Chỉ định Super Admin chính thức và duy nhất của hệ thống
+    function isSuperAdmin() {
+      return isVerifiedPersonalGmail()
+        && request.auth.token.email == 'linhnk.online@gmail.com';
+    }
+
     // Kiểm tra phiên hiện tại có còn hiệu lực trong vòng 900 giây (15 phút) theo giờ máy chủ hay không
     function isExistingSessionStillActive() {
       return existing().isActive == true
@@ -175,12 +181,12 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 4. Collection Rules: /admins/{uid} (Khóa tuyệt đối trong M7.1)
+    // 4. Collection Rules: /admins/{uid} (M7.3: Chỉ Super Admin linhnk.online@gmail.com)
     // =========================================================================
     match /admins/{uid} {
-      allow get: if isValidId(uid) && isOwner(uid);
-      allow list: if false;
-      allow create, update, delete: if false;
+      allow get: if (isValidId(uid) && isOwner(uid)) || isSuperAdmin();
+      allow list: if isSuperAdmin();
+      allow create, update, delete: if isSuperAdmin();
     }
 
     // =========================================================================
@@ -190,6 +196,47 @@ service cloud.firestore {
       allow get: if isValidId(uid) && isOwner(uid);
       allow list: if false;
       allow create, update, delete: if false;
+    }
+
+    // =========================================================================
+    // 6. Collection Rules: /coop_rooms/{roomCode} (M7.3: Phòng Co-op Online 2 Người Chơi)
+    // =========================================================================
+    match /coop_rooms/{roomCode} {
+      // Cho phép đọc trực tiếp theo mã phòng 6 ký tự (get); chặn liệt kê toàn bộ danh sách phòng (list)
+      allow get: if isVerifiedPersonalGmail() && roomCode.matches('^[A-Z0-9]{6}$');
+      allow list: if isSuperAdmin();
+
+      // Tạo phòng: Người tạo bắt buộc là Chủ phòng (hostUid == request.auth.uid), trạng thái WAITING, tối đa 2 người
+      allow create: if isVerifiedPersonalGmail()
+        && roomCode.matches('^[A-Z0-9]{6}$')
+        && incoming().roomCode == roomCode
+        && incoming().hostUid == request.auth.uid
+        && incoming().status == 'WAITING'
+        && incoming().guestUid == null
+        && incoming().difficulty in ['DEFAULT', 'EXTREME'];
+
+      // Cập nhật phòng:
+      // - Giữ bất biến roomCode và hostUid (không tự chuyển Host)
+      // - Chỉ cho phép:
+      //   (a) Chủ phòng (hostUid) cập nhật trạng thái/snapshot
+      //   (b) Khách hiện tại (guestUid) cập nhật trạng thái sẵn sàng/input/rời phòng
+      //   (c) Người chơi thứ 2 tham gia vào slot trống khi phòng đang WAITING (guestUid từ null -> request.auth.uid, khác hostUid)
+      allow update: if isVerifiedPersonalGmail()
+        && incoming().roomCode == existing().roomCode
+        && incoming().hostUid == existing().hostUid
+        && incoming().status in ['WAITING', 'PLAYING', 'FINISHED', 'ABANDONED', 'EXPIRED']
+        && (
+          request.auth.uid == existing().hostUid
+          || request.auth.uid == existing().guestUid
+          || (
+            existing().status == 'WAITING'
+            && existing().guestUid == null
+            && incoming().guestUid == request.auth.uid
+            && request.auth.uid != existing().hostUid
+          )
+        );
+
+      allow delete: if isSuperAdmin();
     }
   }
 }

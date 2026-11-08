@@ -20,6 +20,8 @@
  */
 
 import { SoundManager } from './audio.ts';
+import { isSuperAdminUser, type ValidatedUserAccount } from './authManager.ts';
+import type { User } from 'firebase/auth';
 
 export type SupportedAudioFormat = 'audio/mpeg' | 'audio/ogg' | 'audio/wav' | 'audio/x-wav' | 'audio/mp3';
 export type UserRole = 'PLAYER' | 'SUPER_ADMIN';
@@ -130,7 +132,7 @@ export class MusicManager {
     silenceThresholdDb: -48,
   };
 
-  private currentRole: UserRole = 'SUPER_ADMIN'; // Default in Admin/QA build so user can test immediately, toggleable
+  private currentRole: UserRole = 'PLAYER'; // Strict default: PLAYER unless authenticated as Super Admin
 
   // Playback runtime state
   private activeContext: { stageId: number; mode: GameModeScope } = { stageId: 1, mode: 'SOLO' };
@@ -181,11 +183,35 @@ export class MusicManager {
     return this.currentRole;
   }
 
+  /**
+   * Synchronizes the user role strictly from the authenticated Firebase Google user.
+   * Only `linhnk.online@gmail.com` with verified Google provider receives `SUPER_ADMIN`.
+   */
+  public syncRoleFromAuthUser(user: User | ValidatedUserAccount | null | undefined): UserRole {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      try {
+        window.localStorage.removeItem(MUSIC_STORAGE_KEYS.USER_ROLE);
+      } catch {
+        // ignore
+      }
+    }
+    const nextRole: UserRole = isSuperAdminUser(user) ? 'SUPER_ADMIN' : 'PLAYER';
+    if (this.currentRole !== nextRole) {
+      this.currentRole = nextRole;
+      this.notify();
+    }
+    return this.currentRole;
+  }
+
+  /**
+   * Programmatic role setter for unit test harnesses.
+   * NEVER persists role to localStorage to prevent privilege escalation via browser storage tampering.
+   */
   public setUserRole(role: UserRole): void {
     this.currentRole = role;
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && window.localStorage) {
       try {
-        localStorage.setItem(MUSIC_STORAGE_KEYS.USER_ROLE, role);
+        window.localStorage.removeItem(MUSIC_STORAGE_KEYS.USER_ROLE);
       } catch {
         // ignore
       }
@@ -1026,13 +1052,16 @@ export class MusicManager {
   // PERSISTENCE (LocalStorage Metadata + Ready for Firebase Firestore/Storage)
   // =========================================================================
 
+  public reloadPersistedState(): void {
+    this.loadPersistedState();
+  }
+
   private loadPersistedState(): void {
     if (typeof window === 'undefined') return;
     try {
-      const roleStr = localStorage.getItem(MUSIC_STORAGE_KEYS.USER_ROLE);
-      if (roleStr === 'PLAYER' || roleStr === 'SUPER_ADMIN') {
-        this.currentRole = roleStr;
-      }
+      // M7.3 Security Enforcement: Never load user role from localStorage.
+      // Remove any legacy or tampered role key if present.
+      localStorage.removeItem(MUSIC_STORAGE_KEYS.USER_ROLE);
 
       const configStr = localStorage.getItem(MUSIC_STORAGE_KEYS.LOOP_CONFIG);
       if (configStr) {

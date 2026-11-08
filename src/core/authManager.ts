@@ -23,10 +23,61 @@ export interface AuthValidationResult {
 export type AuthStateListener = (user: User | null) => void;
 
 /**
+ * Địa chỉ email Super Admin chính thức và duy nhất của hệ thống Bắn Tank Online.
+ */
+export const SUPER_ADMIN_EMAIL = 'linhnk.online@gmail.com';
+
+export interface ValidatedUserAccount {
+  uid: string;
+  email: string | null;
+  emailVerified: boolean;
+  displayName?: string | null;
+  photoURL?: string | null;
+  providerData?: Array<{ providerId: string }>;
+  providerIds?: string[];
+}
+
+/**
+ * Kiểm tra xem người dùng Firebase hiện tại có phải là Super Admin hợp lệ hay không.
+ * Bắt buộc:
+ * 1. Đã xác thực Google hợp lệ (validatePersonalGmailUser(user).isValid === true)
+ * 2. Email khớp chính xác với SUPER_ADMIN_EMAIL ('linhnk.online@gmail.com')
+ */
+export function isSuperAdminUser(user: User | ValidatedUserAccount | null | undefined): boolean {
+  if (!user) return false;
+  const validation = validatePersonalGmailUser(user as User);
+  if (!validation.isValid) return false;
+  return (user.email || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL;
+}
+
+/**
+ * Trả về tên hiển thị của người dùng trên giao diện (Header / Banner / Lobby).
+ * - Nếu người dùng có displayName hợp lệ: chỉ hiển thị displayName (không kèm email).
+ * - Nếu người dùng chưa có displayName: dùng tên mặc định hợp lý (phần tên trước @ của email hoặc "Chiến Binh Tank").
+ */
+export function getUserDisplayLabel(
+  user: { displayName?: string | null; email?: string | null } | null | undefined
+): string {
+  if (!user) return 'Chiến Binh Tank';
+  const trimmedName = (user.displayName || '').trim();
+  if (trimmedName.length > 0) {
+    return trimmedName;
+  }
+  const email = (user.email || '').trim();
+  if (email.includes('@')) {
+    const prefix = email.split('@')[0].trim();
+    if (prefix.length > 0) {
+      return prefix;
+    }
+  }
+  return 'Chiến Binh Tank';
+}
+
+/**
  * Validates whether the given Firebase user is a verified personal Gmail account.
  * Rejects Google Workspace domains, unverified emails, and non-Google providers.
  */
-export function validatePersonalGmailUser(user: User | null): AuthValidationResult {
+export function validatePersonalGmailUser(user: User | ValidatedUserAccount | null): AuthValidationResult {
   if (!user) {
     return {
       isValid: false,
@@ -36,11 +87,16 @@ export function validatePersonalGmailUser(user: User | null): AuthValidationResu
   }
 
   // 1. Must be Google sign-in provider
-  const isGoogleProvider = user.providerData.some((p) => p.providerId === 'google.com');
+  const u = user as ValidatedUserAccount;
+  const isGoogleProvider = Array.isArray(u.providerData)
+    ? u.providerData.some((p) => p.providerId === 'google.com')
+    : Array.isArray(u.providerIds)
+    ? u.providerIds.includes('google.com')
+    : false;
   if (!isGoogleProvider) {
     return {
       isValid: false,
-      user,
+      user: user as User,
       errorMessage: 'Chỉ chấp nhận đăng nhập qua tài khoản Google.',
     };
   }
@@ -49,7 +105,7 @@ export function validatePersonalGmailUser(user: User | null): AuthValidationResu
   if (!user.emailVerified) {
     return {
       isValid: false,
-      user,
+      user: user as User,
       errorMessage: 'Chỉ chấp nhận tài khoản Gmail cá nhân đã xác minh (@gmail.com).',
     };
   }
@@ -60,14 +116,14 @@ export function validatePersonalGmailUser(user: User | null): AuthValidationResu
   if (!gmailRegex.test(email)) {
     return {
       isValid: false,
-      user,
+      user: user as User,
       errorMessage: 'Chỉ chấp nhận tài khoản Gmail cá nhân đã xác minh (@gmail.com).',
     };
   }
 
   return {
     isValid: true,
-    user,
+    user: user as User,
     errorMessage: null,
   };
 }
@@ -99,6 +155,10 @@ export class AuthManager {
       AuthManager.instance = new AuthManager();
     }
     return AuthManager.instance;
+  }
+
+  public isSuperAdmin(): boolean {
+    return isSuperAdminUser(this.getCurrentUser());
   }
 
   private getProfileStorageKey(user: { uid?: string; email?: string | null }): string {

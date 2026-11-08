@@ -676,7 +676,7 @@ export function runAllM7_1Tests(): { results: TestResult[]; summary: { total: nu
       signingIn.label === 'Đang đăng nhập...' &&
       unauthenticated.label === 'Chưa đăng nhập' &&
       acquiring.label === 'Đang kiểm tra tài khoản...' &&
-      activeNormal.label === 'Đang trực tuyến' &&
+      activeNormal.label === '' &&
       activeHeartbeat.label === 'Đang kiểm tra kết nối...' &&
       connectionLost.label === 'Mất kết nối' &&
       displaced.label === 'Đang mở ở thiết bị khác' &&
@@ -744,10 +744,10 @@ export function runAllM7_1Tests(): { results: TestResult[]; summary: { total: nu
     const s3 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
     const step3Ok = s3.label === 'Đang kiểm tra tài khoản...';
 
-    // Step 4: Session verified on server -> ACTIVE
+    // Step 4: Session verified on server -> ACTIVE (M7.3: no "Đang trực tuyến" label)
     currentStatus = 'ACTIVE';
     const s4 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
-    const step4Ok = s4.label === 'Đang trực tuyến';
+    const step4Ok = s4.label === '';
 
     // Step 5: Transient heartbeat in flight
     inFlight = true;
@@ -757,7 +757,7 @@ export function runAllM7_1Tests(): { results: TestResult[]; summary: { total: nu
     // Step 6: Heartbeat finishes -> back to ACTIVE
     inFlight = false;
     const s6 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
-    const step6Ok = s6.label === 'Đang trực tuyến';
+    const step6Ok = s6.label === '';
 
     // Step 7: Connection lost
     currentStatus = 'CONNECTION_LOST_UNVERIFIED';
