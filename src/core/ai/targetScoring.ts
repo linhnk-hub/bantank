@@ -41,6 +41,11 @@ export const TYPE_TENDENCY_WEIGHTS: Record<EnemyType, { p1: number; eagle: numbe
   ARMOR: { p1: 0.4, eagle: 0.6 },
 };
 
+export const EXTREME_TENDENCY_WEIGHTS = {
+  p1: 0.3,
+  eagle: 0.7, // 70% priority toward Eagle Base in Hard Mode
+} as const;
+
 /**
  * Calculates raw objective target score based on:
  * - Distance: 30%
@@ -53,7 +58,8 @@ export function calculateTargetComponents(
   targetPos: { x: number; y: number },
   isP1: boolean,
   terrain: RuntimeTerrainState,
-  otherTanks?: Array<{ id: string; x: number; y: number }>
+  otherTanks?: Array<{ id: string; x: number; y: number }>,
+  difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT'
 ): {
   distanceScore: number;
   aStarScore: number;
@@ -81,7 +87,8 @@ export function calculateTargetComponents(
   const aStarScore = isReachable ? Math.max(0.1, 1 - Math.min(path.length, 30) / 30) : 0.0;
 
   // 3. Line of sight (20%)
-  const los = hasLineOfSight(enemy.x, enemy.y, targetPos.x, targetPos.y, terrain, AI_CONFIG.DETECTION_RADIUS_PX);
+  const losRadius = difficulty === 'EXTREME' ? 9999 : AI_CONFIG.DETECTION_RADIUS_PX;
+  const los = hasLineOfSight(enemy.x, enemy.y, targetPos.x, targetPos.y, terrain, losRadius);
   const losScore = los ? 1.0 : 0.0;
 
   // 4. Battlefield situation (10%):
@@ -114,13 +121,15 @@ export function calculateTargetComponents(
 /**
  * Evaluates both P1 and Eagle targets and selects the highest scoring destination.
  * Only applies type tendencies when both targets are valid and reachable.
+ * In EXTREME (Hard) mode: enforces a strict 70% Eagle Base priority (tendency 0.7 Eagle vs 0.3 P1).
  */
 export function scoreAndSelectTarget(
   enemy: EnemyTank,
   p1: TankStructure,
   p1IsDead: boolean,
   terrain: RuntimeTerrainState,
-  otherTanks?: Array<{ id: string; x: number; y: number }>
+  otherTanks?: Array<{ id: string; x: number; y: number }>,
+  difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT'
 ): {
   selectedTarget: 'p1' | 'eagle';
   destination: { x: number; y: number };
@@ -128,7 +137,7 @@ export function scoreAndSelectTarget(
   eagleCandidate: TargetCandidate;
 } {
   const eaglePos = AI_CONFIG.BASE_TARGET_COORDS; // { x: 96, y: 192 }
-  const eagleComp = calculateTargetComponents(enemy, eaglePos, false, terrain, otherTanks);
+  const eagleComp = calculateTargetComponents(enemy, eaglePos, false, terrain, otherTanks, difficulty);
 
   const eagleCandidate: TargetCandidate = {
     id: 'eagle',
@@ -155,7 +164,7 @@ export function scoreAndSelectTarget(
   }
 
   const p1Pos = { x: p1.x, y: p1.y };
-  const p1Comp = calculateTargetComponents(enemy, p1Pos, true, terrain, otherTanks);
+  const p1Comp = calculateTargetComponents(enemy, p1Pos, true, terrain, otherTanks, difficulty);
 
   const p1Candidate: TargetCandidate = {
     id: 'p1',
@@ -173,7 +182,10 @@ export function scoreAndSelectTarget(
 
   // Apply tendencies ONLY when BOTH targets are valid and reachable
   if (p1Comp.isReachable && eagleComp.isReachable) {
-    const tendencies = TYPE_TENDENCY_WEIGHTS[enemy.enemyType];
+    const tendencies =
+      difficulty === 'EXTREME'
+        ? EXTREME_TENDENCY_WEIGHTS
+        : TYPE_TENDENCY_WEIGHTS[enemy.enemyType];
     p1Candidate.components.tendencyMultiplier = tendencies.p1;
     eagleCandidate.components.tendencyMultiplier = tendencies.eagle;
 
@@ -203,3 +215,4 @@ export function scoreAndSelectTarget(
     };
   }
 }
+

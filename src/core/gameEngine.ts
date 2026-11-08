@@ -586,10 +586,25 @@ export class GameEngine {
           } else {
             const p2SpawnBox = getTankHitbox(144, 192);
             const otherTanks = [this.state.p1, ...this.state.enemies];
-            const isOccupied = checkTankVsTanks('p2_respawn_probe', p2SpawnBox, otherTanks);
-            if (!isOccupied) {
+            const isOccupiedByTank = checkTankVsTanks('p2_respawn_probe', p2SpawnBox, otherTanks);
+            const isOccupiedByBullet = this.state.bullets.some((b) =>
+              intersectAABB(p2SpawnBox, getBulletHitbox(b.x, b.y))
+            );
+            if (isOccupiedByTank || isOccupiedByBullet) {
+              this.state.p2State.occupiedDuration = (this.state.p2State.occupiedDuration || 0) + dt;
+              this.state.p2State.waitingForClearSpawn = true;
+              this.state.p2State.spawnCheckTimer = (this.state.p2State.spawnCheckTimer || 0.1) - dt;
+              if (this.state.p2State.spawnCheckTimer <= 0) {
+                this.state.p2State.spawnCheckTimer = 0.1;
+                if (this.state.p2State.occupiedDuration >= 2.0) {
+                  this.triggerSpawnAvoidance(p2SpawnBox);
+                }
+              }
+            } else {
               this.state.p2State.isDead = false;
               this.state.p2State.waitingForClearSpawn = false;
+              this.state.p2State.spawnCheckTimer = 0;
+              this.state.p2State.occupiedDuration = 0;
               this.state.p2State.shieldTimer = P1_CONFIG.RESPAWN_SHIELD_S;
               this.state.p2.x = 144;
               this.state.p2.y = 192;
@@ -633,6 +648,11 @@ export class GameEngine {
     }
 
     // 2b. P2 Ally AI decision, movement & shooting
+    // Strict sequence per M7.2 Fix B.3:
+    //   1) Determine final movement/aim direction via AllyAI
+    //   2) Update P2 tank orientation and position first
+    //   3) Re-verify line of fire along the ACTUAL updated P2 direction/position (never hit P1 or Eagle Base)
+    //   4) Spawn bullet only if post-turn verification confirms safe shot
     if (this.gameMode === 'TWO_PLAYERS_AI' && this.state.p2 && this.state.p2State && this.state.p2.isAlive && !this.state.p2State.isDead) {
       const p2HasBullet = this.state.bullets.some((b) => b.ownerId === 'p2');
       const p2Decision = this.allyAI.update(
@@ -644,18 +664,28 @@ export class GameEngine {
         p2HasBullet
       );
 
-      const p2Input: InputState = {
+      const p2MoveInput: InputState = {
         up: p2Decision.direction === 'UP',
         down: p2Decision.direction === 'DOWN',
         left: p2Decision.direction === 'LEFT',
         right: p2Decision.direction === 'RIGHT',
-        shoot: p2Decision.shouldShoot,
+        shoot: false,
       };
 
       const obstaclesForP2 = [this.state.p1, ...this.state.enemies];
-      updateTankMovement(this.state.p2, p2Input, this.state.terrain, obstaclesForP2);
+      updateTankMovement(this.state.p2, p2MoveInput, this.state.terrain, obstaclesForP2);
 
-      if (p2Decision.shouldShoot && !p2HasBullet) {
+      if (
+        p2Decision.shouldShoot &&
+        !p2HasBullet &&
+        this.allyAI.verifySafeShotAfterTurn(
+          this.state.p2,
+          this.state.p1,
+          this.state.enemies,
+          this.state.terrain,
+          p2HasBullet
+        )
+      ) {
         const p2Bullet = spawnBullet(this.state.p2, null);
         if (p2Bullet) {
           p2Bullet.ownerType = 'player';
@@ -668,15 +698,18 @@ export class GameEngine {
 
     // 3. Update Enemies (AI, movement, and shooting)
     if (this.enableEnemies) {
-      // Per Point A: Enemy AI targets and shoots shielded P1; only dead P1 is ignored
+      // Per Point A: Enemy AI targets and shoots shielded P1/P2; only dead players are ignored
       const p1IsDead = this.state.p1State.isDead;
+      const p2IsDead = !this.state.p2 || !this.state.p2.isAlive || Boolean(this.state.p2State?.isDead);
       const newEnemyBullets = this.enemyManager.update(
         dt,
         this.state.p1,
         p1IsDead,
         this.state.terrain,
         this.state.bullets,
-        this.difficulty
+        this.difficulty,
+        this.gameMode === 'TWO_PLAYERS_AI' ? this.state.p2 : null,
+        p2IsDead
       );
 
       for (const eb of newEnemyBullets) {

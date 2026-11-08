@@ -45,6 +45,10 @@ export interface ModeSelectionScreenProps {
   isFullscreen: boolean;
   onToggleFullscreen: () => void;
   onOpenProfile?: () => void;
+  selectedMode?: GameModeType;
+  onSelectedModeChange?: (mode: GameModeType) => void;
+  twoPlayerOption?: TwoPlayerOption;
+  onTwoPlayerOptionChange?: (opt: TwoPlayerOption) => void;
 }
 
 /**
@@ -127,9 +131,37 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   isFullscreen,
   onToggleFullscreen,
   onOpenProfile,
+  selectedMode: controlledMode,
+  onSelectedModeChange,
+  twoPlayerOption: controlledTwoPlayerOption,
+  onTwoPlayerOptionChange,
 }) => {
-  const [selectedMode, setSelectedMode] = useState<GameModeType>('SOLO');
-  const [twoPlayerOption, setTwoPlayerOption] = useState<TwoPlayerOption>('P2_AI');
+  const [internalMode, setInternalMode] = useState<GameModeType>(controlledMode ?? 'SOLO');
+  const [internalTwoPlayerOption, setInternalTwoPlayerOption] = useState<TwoPlayerOption>(
+    controlledTwoPlayerOption ?? 'P2_AI'
+  );
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [user?.photoURL]);
+
+  const selectedMode = controlledMode ?? internalMode;
+  const twoPlayerOption = controlledTwoPlayerOption ?? internalTwoPlayerOption;
+
+  const setSelectedMode = (mode: GameModeType) => {
+    setInternalMode(mode);
+    if (onSelectedModeChange) {
+      onSelectedModeChange(mode);
+    }
+  };
+
+  const setTwoPlayerOption = (opt: TwoPlayerOption) => {
+    setInternalTwoPlayerOption(opt);
+    if (onTwoPlayerOptionChange) {
+      onTwoPlayerOptionChange(opt);
+    }
+  };
 
   const isSessionActive = session.status === 'ACTIVE';
 
@@ -214,14 +246,30 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
             </div>
           </div>
 
-          {/* Right: User Email & Actions */}
+          {/* Right: User Profile, Email & Actions */}
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-800/80 border border-neutral-700/80 text-xs">
               <span className={`w-2 h-2 rounded-full ${badgeInfo.dotStyle}`} />
-              <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="font-medium text-neutral-200 truncate max-w-[100px] sm:max-w-[180px]">
-                {user.email}
-              </span>
+              {user.photoURL && user.photoURL.trim() && !avatarError ? (
+                <img
+                  src={user.photoURL.trim()}
+                  alt={user.displayName || user.email || 'Avatar'}
+                  className="w-5 h-5 rounded-full object-cover border border-amber-400/60 shrink-0"
+                  onError={() => setAvatarError(true)}
+                />
+              ) : (
+                <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              )}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:gap-1.5 leading-tight">
+                {user.displayName && user.displayName.trim() && (
+                  <span className="font-bold text-amber-300 truncate max-w-[90px] sm:max-w-[130px]">
+                    {user.displayName.trim()}
+                  </span>
+                )}
+                <span className="font-medium text-neutral-200 truncate max-w-[100px] sm:max-w-[170px]">
+                  {user.email}
+                </span>
+              </div>
               <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
                 {badgeInfo.label}
               </span>
@@ -235,7 +283,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 title="Cập nhật hồ sơ tài khoản (tên hiển thị, avatar)"
               >
                 <UserCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="hidden sm:inline">Hồ Sơ</span>
+                <span className="hidden sm:inline">Cập Nhật Hồ Sơ</span>
               </button>
             )}
 
@@ -532,7 +580,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 </div>
                 <div className="mt-2 pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[10px] text-neutral-400 font-mono">
                   <span>30 Xe địch Stage 1</span>
-                  <span className="text-amber-400 font-semibold">Tốc độ đạn: Chuẩn</span>
+                  <span className="text-amber-400 font-semibold">Phản xạ AI: Tiêu chuẩn</span>
                 </div>
               </div>
 
@@ -557,12 +605,12 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     )}
                   </div>
                   <p className="text-[11px] text-neutral-300 leading-snug">
-                    Địch phản xạ nhạy hơn, tầm quan sát rộng dọc toàn bản đồ qua hành lang trống, tần suất bắn cao (nạp ~1.0s - 1.2s), 70% chủ động tập kích căn cứ và người chơi.
+                    Địch phản xạ nhạy hơn, tầm quan sát rộng dọc toàn bản đồ qua hành lang trống, tần suất bắn cao (nạp ~1.0s - 1.2s), 70% chủ động tập kích căn cứ và né đạn vuông góc.
                   </p>
                 </div>
                 <div className="mt-2 pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[10px] text-neutral-400 font-mono">
                   <span>30 Xe địch Stage 1</span>
-                  <span className="text-rose-400 font-semibold">Tốc độ đạn: +15%</span>
+                  <span className="text-rose-400 font-semibold">Phản xạ né đạn: Chủ động</span>
                 </div>
               </div>
             </div>
@@ -594,11 +642,11 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 {selectedMode === 'SOLO'
                   ? isSessionActive
                     ? `BẮT ĐẦU TRẬN ĐẤU (SOLO - ${difficulty === 'EXTREME' ? 'HARD' : 'NORMAL'})`
-                    : 'CẦN KÍCH HOẠT PHIÊN ĐỂ VÀO TRẬN'
+                    : 'CẦN KẾT NỐI MÁY CHỦ ĐỂ VÀO TRẬN'
                   : twoPlayerOption === 'P2_AI'
                   ? isSessionActive
                     ? `BẮT ĐẦU CO-OP (P1 + P2 AI - ${difficulty === 'EXTREME' ? 'HARD' : 'NORMAL'})`
-                    : 'CẦN KÍCH HOẠT PHIÊN ĐỂ VÀO TRẬN'
+                    : 'CẦN KẾT NỐI MÁY CHỦ ĐỂ VÀO TRẬN'
                   : 'CHẾ ĐỘ MULTIPLAYER CHƯA KHẢ DỤNG'}
               </span>
             </button>

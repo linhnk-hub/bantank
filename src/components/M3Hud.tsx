@@ -57,15 +57,32 @@ export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy, onPa
 
           <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-neutral-950 border border-neutral-800">
             <Heart className="w-4 h-4 text-red-500 fill-red-500" />
-            <span className="text-neutral-400 font-mono">MẠNG:</span>
+            <span className="text-neutral-400 font-mono">MẠNG P1:</span>
             <span className="text-red-400 font-black font-mono text-sm">{p1State.lives}</span>
           </div>
 
           {p1State.shieldTimer > 0 && (
             <div className="flex items-center gap-1 px-2.5 py-1 rounded bg-sky-950/80 border border-sky-700 text-sky-300 font-mono text-[11px] animate-pulse">
               <Shield className="w-3.5 h-3.5 text-sky-400" />
-              <span>KHIÊN: {p1State.shieldTimer.toFixed(1)}s</span>
+              <span>KHIÊN P1: {p1State.shieldTimer.toFixed(1)}s</span>
             </div>
+          )}
+
+          {state.gameMode === 'TWO_PLAYERS_AI' && state.p2State && (
+            <>
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-emerald-950/60 border border-emerald-800/80">
+                <Heart className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+                <span className="text-emerald-200 font-mono">MẠNG P2 (AI):</span>
+                <span className="text-emerald-400 font-black font-mono text-sm">{state.p2State.lives}</span>
+              </div>
+
+              {state.p2State.shieldTimer > 0 && (
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded bg-teal-950/80 border border-teal-700 text-teal-300 font-mono text-[11px] animate-pulse">
+                  <Shield className="w-3.5 h-3.5 text-teal-400" />
+                  <span>KHIÊN P2: {state.p2State.shieldTimer.toFixed(1)}s</span>
+                </div>
+              )}
+            </>
           )}
         </div>
 

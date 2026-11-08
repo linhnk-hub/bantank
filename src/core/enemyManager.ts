@@ -25,6 +25,27 @@ import { spawnBullet } from './bullet.ts';
 import { EnemyCoordinator } from './ai/coordinator.ts';
 import { findPathAStar } from './ai/pathfinding.ts';
 
+export function getEffectiveShootCooldown(
+  enemyType: EnemyType,
+  difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT'
+): number {
+  if (difficulty === 'EXTREME') {
+    switch (enemyType) {
+      case 'FAST':
+        return 1.0;
+      case 'BASIC':
+        return 1.1;
+      case 'POWER':
+        return 1.15;
+      case 'ARMOR':
+        return 1.2;
+      default:
+        return 1.1;
+    }
+  }
+  return ENEMY_CONFIG.SPECS[enemyType].shootCooldown;
+}
+
 export class EnemyManager {
   private queue: EnemyType[] = [];
   private activeEnemies: EnemyTank[] = [];
@@ -83,7 +104,8 @@ export class EnemyManager {
     terrain: RuntimeTerrainState,
     allTanks: Array<{ id: string; x: number; y: number; isAlive: boolean }>,
     activeBullets: BulletStructure[] = [],
-    dt: number = 0.01667
+    dt: number = 0.01667,
+    difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT'
   ): EnemyTank | null {
     if (this.queue.length === 0) return null;
     if (this.activeEnemies.length >= ENEMY_CONFIG.MAX_ACTIVE) return null;
@@ -149,7 +171,7 @@ export class EnemyManager {
       searchTimer: 0,
       path: [],
       pathCooldown: 0,
-      shootCooldown: specs.shootCooldown,
+      shootCooldown: getEffectiveShootCooldown(type, difficulty),
       aimTimer: 0,
       aimTime: specs.aimTime,
       directionHistory: ['DOWN'],
@@ -216,8 +238,12 @@ export class EnemyManager {
     p1IsDead: boolean,
     terrain: RuntimeTerrainState,
     bullets: BulletStructure[],
-    difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT'
+    difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT',
+    p2: TankStructure | null = null,
+    p2IsDead: boolean = true
   ): BulletStructure[] {
+    const activeP2 = p2 && p2.isAlive && !p2IsDead ? p2 : null;
+
     // 1. Spawning with minimum 1.0s interval between successful spawns, retrying every 100ms if blocked
     if (this.spawnCooldown > 0) {
       this.spawnCooldown -= dt;
@@ -225,8 +251,8 @@ export class EnemyManager {
       this.spawnRetryTimer -= dt;
       if (this.spawnRetryTimer <= 0) {
         this.spawnRetryTimer = 0.1; // Check every 100ms
-        const allTanks = [p1, ...this.activeEnemies];
-        const spawned = this.trySpawnEnemy(terrain, allTanks, bullets, dt);
+        const allTanks = activeP2 ? [p1, activeP2, ...this.activeEnemies] : [p1, ...this.activeEnemies];
+        const spawned = this.trySpawnEnemy(terrain, allTanks, bullets, dt, difficulty);
         if (spawned) {
           this.spawnCooldown = ENEMY_CONFIG.SPAWN_INTERVAL_S;
           this.spawnRetryTimer = 0;
@@ -235,7 +261,8 @@ export class EnemyManager {
     }
 
     // 2. Coordinator update (groups enemies and assigns validated tactical approach vectors every 0.5s)
-    this.coordinator.update(dt, this.activeEnemies, terrain, p1);
+    const coordTarget = !p1IsDead && p1.isAlive ? p1 : activeP2 ?? p1;
+    this.coordinator.update(dt, this.activeEnemies, terrain, coordTarget);
 
     const newBullets: BulletStructure[] = [];
 
@@ -243,19 +270,41 @@ export class EnemyManager {
     for (const enemy of this.activeEnemies) {
       if (!enemy.isAlive) continue;
 
+      if (difficulty === 'EXTREME' && enemy.shootCooldown > 1.2) {
+        enemy.shootCooldown = getEffectiveShootCooldown(enemy.enemyType, 'EXTREME');
+      }
+
       const otherEnemies = this.activeEnemies.filter((e) => e.id !== enemy.id);
-      const otherTanks = [p1, ...otherEnemies];
+      const otherTanks = activeP2 ? [p1, activeP2, ...otherEnemies] : [p1, ...otherEnemies];
       const enemyHasBullet = bullets.some((b) => b.ownerId === enemy.id);
 
-      // AI Decision (P1 can be targeted and shot even when shielded; only dead P1 is ignored)
+      // Select target player: P1 or P2 in Co-op based on liveness and proximity
+      let targetPlayer = p1;
+      let targetPlayerIsDead = p1IsDead || !p1.isAlive;
+      if (activeP2) {
+        if (targetPlayerIsDead) {
+          targetPlayer = activeP2;
+          targetPlayerIsDead = false;
+        } else {
+          const distP1 = Math.hypot(p1.x - enemy.x, p1.y - enemy.y);
+          const distP2 = Math.hypot(activeP2.x - enemy.x, activeP2.y - enemy.y);
+          if (distP2 < distP1) {
+            targetPlayer = activeP2;
+            targetPlayerIsDead = false;
+          }
+        }
+      }
+
+      // AI Decision (Player can be targeted and shot even when shielded; only dead player is ignored)
       const aiDecision = updateEnemyAI(
         enemy,
-        p1,
-        p1IsDead,
+        targetPlayer,
+        targetPlayerIsDead,
         terrain,
         dt,
         otherTanks,
-        difficulty
+        difficulty,
+        bullets
       );
 
       // Handle Direction & Movement
@@ -295,7 +344,7 @@ export class EnemyManager {
         // Check Terrain collision
         const terrainColl = checkHitboxVsTerrain(nextBox, terrain, { forBullet: false });
 
-        // Check Tank-to-Tank collision
+        // Check Tank-to-Tank collision (includes P1, P2, and other enemies)
         const tankColl = checkTankVsTanks(enemy.id, nextBox, otherTanks);
 
         if (!terrainColl.collides && !tankColl) {
@@ -308,14 +357,14 @@ export class EnemyManager {
           const facingBrick = isFacingBrickObstacle(enemy, terrain);
 
           const alignedWithP1 =
-            !p1IsDead &&
+            !targetPlayerIsDead &&
             (enemy.debugLog?.losToP1 ?? false) &&
-            ((Math.abs(enemy.x - p1.x) <= 4 &&
-              ((p1.y > enemy.y && enemy.direction === 'DOWN') ||
-                (p1.y < enemy.y && enemy.direction === 'UP'))) ||
-              (Math.abs(enemy.y - p1.y) <= 4 &&
-                ((p1.x > enemy.x && enemy.direction === 'RIGHT') ||
-                  (p1.x < enemy.x && enemy.direction === 'LEFT'))));
+            ((Math.abs(enemy.x - targetPlayer.x) <= 4 &&
+              ((targetPlayer.y > enemy.y && enemy.direction === 'DOWN') ||
+                (targetPlayer.y < enemy.y && enemy.direction === 'UP'))) ||
+              (Math.abs(enemy.y - targetPlayer.y) <= 4 &&
+                ((targetPlayer.x > enemy.x && enemy.direction === 'RIGHT') ||
+                  (targetPlayer.x < enemy.x && enemy.direction === 'LEFT'))));
 
           const alignedWithEagleSiege =
             Math.hypot(96 - enemy.x, 192 - enemy.y) <= 48 &&
@@ -361,18 +410,18 @@ export class EnemyManager {
       }
 
       // STUCK DETECTION & RECOVERY:
-      // An enemy is legitimately allowed to stand still while engaging an aligned combat target (P1/Eagle)
+      // An enemy is legitimately allowed to stand still while engaging an aligned combat target (Player/Eagle)
       // or actively aiming with a ready shot
       const otherEnemiesForStuck = this.activeEnemies.filter((e) => e.id !== enemy.id);
       const alignedWithP1ForStuck =
-        !p1IsDead &&
+        !targetPlayerIsDead &&
         (enemy.debugLog?.losToP1 ?? false) &&
-        ((Math.abs(enemy.x - p1.x) <= 4 &&
-          ((p1.y > enemy.y && enemy.direction === 'DOWN') ||
-            (p1.y < enemy.y && enemy.direction === 'UP'))) ||
-          (Math.abs(enemy.y - p1.y) <= 4 &&
-            ((p1.x > enemy.x && enemy.direction === 'RIGHT') ||
-              (p1.x < enemy.x && enemy.direction === 'LEFT'))));
+        ((Math.abs(enemy.x - targetPlayer.x) <= 4 &&
+          ((targetPlayer.y > enemy.y && enemy.direction === 'DOWN') ||
+            (targetPlayer.y < enemy.y && enemy.direction === 'UP'))) ||
+          (Math.abs(enemy.y - targetPlayer.y) <= 4 &&
+            ((targetPlayer.x > enemy.x && enemy.direction === 'RIGHT') ||
+              (targetPlayer.x < enemy.x && enemy.direction === 'LEFT'))));
       const alignedWithEagleForStuck =
         Math.hypot(96 - enemy.x, 192 - enemy.y) <= 48 &&
         ((Math.abs(enemy.x - 96) <= 4 && enemy.direction === 'DOWN') ||
@@ -432,7 +481,7 @@ export class EnemyManager {
         if (bullet) {
           bullet.ownerType = 'enemy';
           newBullets.push(bullet);
-          enemy.shootCooldown = ENEMY_CONFIG.SPECS[enemy.enemyType].shootCooldown;
+          enemy.shootCooldown = getEffectiveShootCooldown(enemy.enemyType, difficulty);
           enemy.aimTimer = 0; // Reset aim timer after shooting
           if (enemy.debugLog) {
             enemy.debugLog.hasActiveBullet = true;

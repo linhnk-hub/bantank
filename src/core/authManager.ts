@@ -86,6 +86,9 @@ export class AuthManager {
 
   private constructor() {
     onAuthStateChanged(this.auth, (user) => {
+      if (user) {
+        this.applyStoredProfileOverride(user);
+      }
       this.currentUser = user;
       this.notifyListeners(user);
     });
@@ -98,8 +101,34 @@ export class AuthManager {
     return AuthManager.instance;
   }
 
+  private getProfileStorageKey(user: { uid?: string; email?: string | null }): string {
+    return `bantank_profile_${user.uid || user.email || 'default'}`;
+  }
+
+  private applyStoredProfileOverride(user: User): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const raw = window.localStorage.getItem(this.getProfileStorageKey(user));
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (typeof parsed.displayName === 'string' && parsed.displayName.trim().length > 0) {
+            (user as any).displayName = parsed.displayName.trim();
+          }
+          if (typeof parsed.photoURL === 'string') {
+            (user as any).photoURL = parsed.photoURL.trim();
+          }
+        }
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
   public subscribe(listener: AuthStateListener): () => void {
     this.listeners.add(listener);
+    if (this.currentUser) {
+      this.applyStoredProfileOverride(this.currentUser);
+    }
     listener(this.currentUser);
     return () => {
       this.listeners.delete(listener);
@@ -117,7 +146,11 @@ export class AuthManager {
   }
 
   public getCurrentUser(): User | null {
-    return this.auth.currentUser || this.currentUser;
+    const user = this.auth.currentUser || this.currentUser;
+    if (user) {
+      this.applyStoredProfileOverride(user);
+    }
+    return user;
   }
 
   /**
@@ -142,6 +175,7 @@ export class AuthManager {
         };
       }
 
+      this.applyStoredProfileOverride(result.user);
       this.currentUser = result.user;
       return validation;
     } catch (error: any) {
@@ -162,7 +196,7 @@ export class AuthManager {
     if (!user) {
       return {
         status: 'AUTH_INVALID',
-        error: new Error('Không có phiên người dùng để làm mới ID token.'),
+        error: new Error('Không có thông tin người dùng để làm mới xác thực.'),
       };
     }
 
@@ -205,15 +239,35 @@ export class AuthManager {
     if (!user) {
       return { success: false, error: 'Chưa đăng nhập.' };
     }
+    const nextDisplayName =
+      profile.displayName !== undefined ? profile.displayName.trim() : (user.displayName || '');
+    const nextPhotoURL =
+      profile.photoURL !== undefined ? profile.photoURL.trim() : (user.photoURL || '');
+
     try {
       if (typeof updateProfile === 'function' && this.auth?.currentUser) {
         await updateProfile(user, {
-          displayName: profile.displayName !== undefined ? profile.displayName.trim() : (user.displayName || ''),
-          photoURL: profile.photoURL !== undefined ? profile.photoURL.trim() : (user.photoURL || ''),
+          displayName: nextDisplayName,
+          photoURL: nextPhotoURL,
         });
       }
-      (user as any).displayName = profile.displayName !== undefined ? profile.displayName.trim() : (user.displayName || '');
-      (user as any).photoURL = profile.photoURL !== undefined ? profile.photoURL.trim() : (user.photoURL || '');
+      (user as any).displayName = nextDisplayName;
+      (user as any).photoURL = nextPhotoURL;
+
+      try {
+        if (typeof window !== 'undefined' && window.localStorage) {
+          window.localStorage.setItem(
+            this.getProfileStorageKey(user),
+            JSON.stringify({
+              displayName: nextDisplayName,
+              photoURL: nextPhotoURL,
+            })
+          );
+        }
+      } catch {
+        // Ignore storage write errors
+      }
+
       this.currentUser = this.auth?.currentUser || user;
       this.notifyListeners(this.currentUser);
       return { success: true };

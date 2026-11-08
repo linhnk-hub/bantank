@@ -5,6 +5,7 @@
 
 import React from 'react';
 import type { SessionStateSnapshot } from '../core/sessionManager.ts';
+import { formatAccountStatusMessage } from './AuthSessionBanner.tsx';
 import { ShieldAlert, WifiOff, RefreshCw, LogIn } from 'lucide-react';
 
 export interface SessionAlertModalProps {
@@ -49,8 +50,8 @@ export const SessionAlertModal: React.FC<SessionAlertModalProps> = ({
             {session.status === 'HEARTBEAT_REJECTED_UNCLASSIFIED' && 'Bảo Vệ Tài Khoản Người Chơi'}
           </h3>
           <p className="text-xs sm:text-sm text-neutral-300 mt-2 leading-relaxed">
-            {session.message ||
-              'Không thể xác minh quyền gia hạn phiên. Trận đấu đang tạm dừng để bảo vệ tài khoản.'}
+            {formatAccountStatusMessage(session.message, session.status) ||
+              'Không thể xác minh kết nối bảo mật tài khoản. Trận đấu đang tạm dừng để bảo vệ tài khoản.'}
           </p>
         </div>
 

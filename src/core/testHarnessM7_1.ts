@@ -675,15 +675,15 @@ export function runAllM7_1Tests(): { results: TestResult[]; summary: { total: nu
     const labelsCorrect =
       signingIn.label === 'Đang đăng nhập...' &&
       unauthenticated.label === 'Chưa đăng nhập' &&
-      acquiring.label === 'Đang xác thực phiên...' &&
-      activeNormal.label === 'Phiên hoạt động' &&
+      acquiring.label === 'Đang kiểm tra tài khoản...' &&
+      activeNormal.label === 'Đang trực tuyến' &&
       activeHeartbeat.label === 'Đang kiểm tra kết nối...' &&
       connectionLost.label === 'Mất kết nối' &&
-      displaced.label === 'Bị chiếm phiên' &&
-      idleTimeout.label === 'Phiên hết hạn' &&
-      expired.label === 'Phiên hết hạn' &&
+      displaced.label === 'Đang mở ở thiết bị khác' &&
+      idleTimeout.label === 'Tạm dừng do ngưng thao tác' &&
+      expired.label === 'Tạm dừng do ngưng thao tác' &&
       unclassified.label === 'Cần xác thực' &&
-      noSessionWithUser.label === 'Chưa kích hoạt phiên';
+      noSessionWithUser.label === 'Chưa kết nối máy chủ';
 
     // Zero fake sync guarantee: no state should ever return "Đang đồng bộ..."
     const allStates: any[] = [
@@ -742,12 +742,12 @@ export function runAllM7_1Tests(): { results: TestResult[]; summary: { total: nu
     hasUser = true;
     currentStatus = 'ACQUIRING';
     const s3 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
-    const step3Ok = s3.label === 'Đang xác thực phiên...';
+    const step3Ok = s3.label === 'Đang kiểm tra tài khoản...';
 
     // Step 4: Session verified on server -> ACTIVE
     currentStatus = 'ACTIVE';
     const s4 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
-    const step4Ok = s4.label === 'Phiên hoạt động';
+    const step4Ok = s4.label === 'Đang trực tuyến';
 
     // Step 5: Transient heartbeat in flight
     inFlight = true;
@@ -757,7 +757,7 @@ export function runAllM7_1Tests(): { results: TestResult[]; summary: { total: nu
     // Step 6: Heartbeat finishes -> back to ACTIVE
     inFlight = false;
     const s6 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
-    const step6Ok = s6.label === 'Phiên hoạt động';
+    const step6Ok = s6.label === 'Đang trực tuyến';
 
     // Step 7: Connection lost
     currentStatus = 'CONNECTION_LOST_UNVERIFIED';
@@ -767,7 +767,7 @@ export function runAllM7_1Tests(): { results: TestResult[]; summary: { total: nu
     // Step 8: Displaced by another device
     currentStatus = 'DISPLACED';
     const s8 = getSessionBadgeInfo(currentStatus, isProcessing, inFlight, hasUser);
-    const step8Ok = s8.label === 'Bị chiếm phiên';
+    const step8Ok = s8.label === 'Đang mở ở thiết bị khác';
 
     // Step 9: User signs out safely
     currentStatus = 'NO_SESSION';

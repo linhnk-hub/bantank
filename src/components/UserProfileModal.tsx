@@ -36,6 +36,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 }) => {
   const [displayName, setDisplayName] = useState<string>('');
   const [photoURL, setPhotoURL] = useState<string>('');
+  const [avatarLoadError, setAvatarLoadError] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -44,10 +45,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     if (user && isOpen) {
       setDisplayName(user.displayName || '');
       setPhotoURL(user.photoURL || '');
+      setAvatarLoadError(false);
       setErrorMessage(null);
       setSuccessMessage(null);
     }
   }, [user, isOpen]);
+
+  useEffect(() => {
+    setAvatarLoadError(false);
+  }, [photoURL]);
 
   if (!isOpen || !user) return null;
 
@@ -122,14 +128,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           {/* Avatar Preview Section */}
           <div className="flex flex-col items-center justify-center pt-1 pb-3">
             <div className="relative w-20 h-20 rounded-full border-2 border-amber-500/50 p-1 bg-neutral-950 overflow-hidden shadow-lg flex items-center justify-center mb-2">
-              {photoURL.trim() ? (
+              {photoURL.trim() && !avatarLoadError ? (
                 <img
                   src={photoURL.trim()}
                   alt="Avatar Preview"
                   className="w-full h-full rounded-full object-cover"
-                  onError={(e) => {
-                    // Fallback to placeholder if URL broken
-                    e.currentTarget.style.display = 'none';
+                  onError={() => {
+                    setAvatarLoadError(true);
                   }}
                 />
               ) : (

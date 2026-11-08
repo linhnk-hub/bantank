@@ -23,6 +23,37 @@ export interface SessionBadgeDisplay {
   dotStyle: string;
 }
 
+export function formatAccountStatusMessage(
+  rawMessage: string | null | undefined,
+  status?: SessionStateStatus
+): string {
+  if (!rawMessage) {
+    if (status === 'DISPLACED') {
+      return 'Tài khoản này đang được mở trên một thiết bị khác. Trận đấu hiện tại đã tạm dừng.';
+    }
+    if (status === 'PAUSED_IDLE' || status === 'EXPIRED') {
+      return 'Tài khoản đã tạm dừng sau 5 phút không hoạt động. Vui lòng đăng nhập lại để tiếp tục.';
+    }
+    if (status === 'CONNECTION_LOST_UNVERIFIED') {
+      return 'Mất kết nối mạng khi kiểm tra tài khoản. Trận đấu đang tạm dừng cho đến khi kết nối lại.';
+    }
+    return '';
+  }
+
+  return rawMessage
+    .replace(/Phiên đăng nhập đã được mở trên một thiết bị khác/gi, 'Tài khoản này đang được mở trên một thiết bị khác')
+    .replace(/Phiên làm việc đã tạm dừng sau 5 phút không hoạt động/gi, 'Tài khoản đã tạm dừng sau 5 phút không hoạt động')
+    .replace(/Phiên đăng nhập/gi, 'Tài khoản')
+    .replace(/Phiên làm việc/gi, 'Trạng thái hoạt động')
+    .replace(/Phiên hoạt động/gi, 'Đang trực tuyến')
+    .replace(/Bị chiếm phiên/gi, 'Đang mở ở thiết bị khác')
+    .replace(/Phiên hết hạn/gi, 'Tạm dừng do ngưng thao tác')
+    .replace(/quyền gia hạn phiên/gi, 'kết nối bảo mật tài khoản')
+    .replace(/kích hoạt phiên/gi, 'kết nối máy chủ')
+    .replace(/khởi tạo phiên/gi, 'kết nối máy chủ')
+    .replace(/phiên chơi/gi, 'kết nối tài khoản');
+}
+
 export function getSessionBadgeInfo(
   status: SessionStateStatus,
   isProcessing: boolean,
@@ -49,7 +80,7 @@ export function getSessionBadgeInfo(
   switch (status) {
     case 'ACQUIRING':
       return {
-        label: 'Đang xác thực phiên...',
+        label: 'Đang kiểm tra tài khoản...',
         badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
         dotStyle: 'bg-amber-400 animate-spin',
       };
@@ -62,7 +93,7 @@ export function getSessionBadgeInfo(
         };
       }
       return {
-        label: 'Phiên hoạt động',
+        label: 'Đang trực tuyến',
         badgeStyle: 'bg-emerald-950/80 text-emerald-300 border-emerald-800/80',
         dotStyle: 'bg-emerald-400 animate-pulse',
       };
@@ -74,14 +105,14 @@ export function getSessionBadgeInfo(
       };
     case 'DISPLACED':
       return {
-        label: 'Bị chiếm phiên',
+        label: 'Đang mở ở thiết bị khác',
         badgeStyle: 'bg-rose-950/80 text-rose-300 border-rose-800/80',
         dotStyle: 'bg-rose-500',
       };
     case 'PAUSED_IDLE':
     case 'EXPIRED':
       return {
-        label: 'Phiên hết hạn',
+        label: 'Tạm dừng do ngưng thao tác',
         badgeStyle: 'bg-rose-950/80 text-rose-300 border-rose-800/80',
         dotStyle: 'bg-rose-500',
       };
@@ -94,7 +125,7 @@ export function getSessionBadgeInfo(
     case 'NO_SESSION':
     default:
       return {
-        label: 'Chưa kích hoạt phiên',
+        label: 'Chưa kết nối máy chủ',
         badgeStyle: 'bg-neutral-800 text-neutral-300 border-neutral-700',
         dotStyle: 'bg-amber-400',
       };
@@ -129,7 +160,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
     const unsubSession = sessionManager.subscribe((s) => {
       setSession(s);
       if (s.status === 'NO_SESSION' && s.message) {
-        setFeedbackMsg({ type: 'error', text: s.message });
+        setFeedbackMsg({ type: 'error', text: formatAccountStatusMessage(s.message, s.status) });
       }
       if (onStartMatchAllowedChange) {
         onStartMatchAllowedChange(s.status === 'ACTIVE');
@@ -177,7 +208,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
     try {
       const res = await sessionManager.acquireSession(user.uid);
       if (!res.success && res.message) {
-        setFeedbackMsg({ type: 'error', text: res.message });
+        setFeedbackMsg({ type: 'error', text: formatAccountStatusMessage(res.message, session.status) });
       }
     } finally {
       setIsProcessing(false);
@@ -191,7 +222,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
       const res = await sessionManager.handleUserReauthenticate();
       setFeedbackMsg({
         type: res.success ? 'success' : 'error',
-        text: res.message,
+        text: formatAccountStatusMessage(res.message, session.status),
       });
     } finally {
       setIsProcessing(false);
@@ -214,6 +245,11 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
             <div className="flex items-center gap-1.5">
               <span className={`w-2 h-2 rounded-full ${badgeInfo.dotStyle}`} />
               <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+              {user.displayName && (
+                <span className="font-bold text-amber-300 truncate max-w-[110px] sm:max-w-[150px]">
+                  {user.displayName}
+                </span>
+              )}
               <span className="font-semibold text-neutral-200 truncate max-w-[140px] sm:max-w-[200px]">
                 {user.email}
               </span>
@@ -238,10 +274,10 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
                   onClick={handleRetryAcquire}
                   disabled={isProcessing}
                   className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-black transition-all font-bold text-[11px] active:scale-95 disabled:opacity-50"
-                  title="Thử kích hoạt phiên lại"
+                  title="Thử kết nối lại máy chủ"
                 >
                   <RefreshCw className={`w-3 h-3 ${isProcessing ? 'animate-spin' : ''}`} />
-                  <span>Kích hoạt phiên</span>
+                  <span>Kết nối máy chủ</span>
                 </button>
               )}
               <button
@@ -274,7 +310,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
               : 'bg-emerald-950/90 text-emerald-300 border-b border-emerald-800/80'
           }`}
         >
-          <span>{feedbackMsg.text}</span>
+          <span>{formatAccountStatusMessage(feedbackMsg.text, session.status)}</span>
           <button
             onClick={() => setFeedbackMsg(null)}
             className="text-neutral-400 hover:text-white px-1"

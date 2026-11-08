@@ -77,6 +77,9 @@ export default function App() {
   const [isPaused, setIsPaused] = useState<boolean>(false);
   const [fps, setFps] = useState<number>(60);
   const [difficulty, setDifficulty] = useState<'DEFAULT' | 'EXTREME'>('DEFAULT');
+  const [selectedMode, setSelectedMode] = useState<'SOLO' | 'TWO_PLAYERS'>('SOLO');
+  const [twoPlayerOption, setTwoPlayerOption] = useState<'P2_AI' | 'P2_REAL'>('P2_AI');
+  const [profileRevision, setProfileRevision] = useState<number>(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isMatchAllowed, setIsMatchAllowed] = useState<boolean>(false);
 
@@ -158,6 +161,7 @@ export default function App() {
   useEffect(() => {
     const unsubAuth = authManager.subscribe((u) => {
       setCurrentUser(u);
+      setProfileRevision((r) => r + 1);
       if (u) {
         setLogoutSuccessNotice(null);
         setAppScreen((prev) => (prev === 'WELCOME' ? 'MAIN_MENU' : prev));
@@ -447,7 +451,12 @@ export default function App() {
         />
 
         <MainMenuScreen
-          user={currentUser}
+          user={{
+            email: currentUser.email,
+            displayName: currentUser.displayName,
+            photoURL: currentUser.photoURL,
+          }}
+          key={`main_menu_${profileRevision}`}
           session={sessionSnapshot}
           isProcessing={authProcessing}
           onPlay={() => setAppScreen('MODE_SELECTION')}
@@ -468,6 +477,7 @@ export default function App() {
           user={currentUser}
           onProfileUpdated={() => {
             setCurrentUser(authManager.getCurrentUser());
+            setProfileRevision((r) => r + 1);
           }}
         />
 
@@ -503,12 +513,17 @@ export default function App() {
         />
 
         <ModeSelectionScreen
-          user={currentUser}
+          user={{
+            email: currentUser.email,
+            displayName: currentUser.displayName,
+            photoURL: currentUser.photoURL,
+          }}
+          key={`mode_select_${profileRevision}`}
           session={sessionSnapshot}
           isProcessing={authProcessing}
           onBack={() => setAppScreen('MAIN_MENU')}
-          onStartMatch={(mode, twoPlayerOption) => {
-            handleStartMatch(mode, twoPlayerOption);
+          onStartMatch={(mode, opt) => {
+            handleStartMatch(mode, opt);
           }}
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
@@ -517,6 +532,10 @@ export default function App() {
           isFullscreen={isFullscreen}
           onToggleFullscreen={toggleFullscreen}
           onOpenProfile={() => setIsProfileModalOpen(true)}
+          selectedMode={selectedMode}
+          onSelectedModeChange={setSelectedMode}
+          twoPlayerOption={twoPlayerOption}
+          onTwoPlayerOptionChange={setTwoPlayerOption}
         />
 
         <UserProfileModal
@@ -525,6 +544,7 @@ export default function App() {
           user={currentUser}
           onProfileUpdated={() => {
             setCurrentUser(authManager.getCurrentUser());
+            setProfileRevision((r) => r + 1);
           }}
         />
 
@@ -600,10 +620,16 @@ export default function App() {
                 <Trophy className="w-3.5 h-3.5" />
                 <span className="font-bold">{gameState?.score ?? 0} XP</span>
               </div>
-              <div className="flex items-center gap-1 text-rose-400 font-bold">
+              <div className="flex items-center gap-1 text-rose-400 font-bold" title="Mạng P1">
                 <Heart className="w-3.5 h-3.5 fill-rose-500" />
-                <span>×{gameState?.p1State.lives ?? 3}</span>
+                <span>P1×{gameState?.p1State.lives ?? 3}</span>
               </div>
+              {gameState?.gameMode === 'TWO_PLAYERS_AI' && gameState?.p2State && (
+                <div className="flex items-center gap-1 text-emerald-400 font-bold" title="Mạng P2 (AI)">
+                  <Heart className="w-3.5 h-3.5 fill-emerald-500" />
+                  <span>P2×{gameState.p2State.lives}</span>
+                </div>
+              )}
               <div className="flex items-center gap-1 text-sky-400">
                 <Shield className="w-3.5 h-3.5" />
                 <span>Địch: {gameState?.enemyQueue.length ?? 0}</span>
@@ -778,10 +804,16 @@ export default function App() {
                 <Trophy className="w-3.5 h-3.5" />
                 <span className="font-bold">{gameState?.score ?? 0} XP</span>
               </div>
-              <div className="flex items-center gap-1 text-rose-400 font-bold">
+              <div className="flex items-center gap-1 text-rose-400 font-bold" title="Mạng P1">
                 <Heart className="w-3.5 h-3.5 fill-rose-500" />
-                <span>×{gameState?.p1State.lives ?? 3}</span>
+                <span>P1×{gameState?.p1State.lives ?? 3}</span>
               </div>
+              {gameState?.gameMode === 'TWO_PLAYERS_AI' && gameState?.p2State && (
+                <div className="flex items-center gap-1 text-emerald-400 font-bold" title="Mạng P2 (AI)">
+                  <Heart className="w-3.5 h-3.5 fill-emerald-500" />
+                  <span>P2×{gameState.p2State.lives}</span>
+                </div>
+              )}
               <div className="flex items-center gap-1 text-sky-400">
                 <Shield className="w-3.5 h-3.5" />
                 <span>{gameState?.enemyQueue.length ?? 0}</span>
@@ -875,14 +907,14 @@ export default function App() {
               )}
             </main>
 
-            {/* Controls Cluster: Expanded on Tablet (680px), centered 28px below Canvas */}
+            {/* Controls Cluster: Expanded on Tablet Portrait to match canvas width, centered 28px below Canvas */}
             <div
               style={{
-                width: layout.isTabletOrDesktop ? '100%' : `${layout.canvasSizePx}px`,
-                maxWidth: layout.isTabletOrDesktop ? '680px' : '440px',
+                width: `${layout.canvasSizePx}px`,
+                maxWidth: layout.isTabletOrDesktop ? `${Math.max(layout.canvasSizePx, 680)}px` : '440px',
                 marginTop: '28px',
               }}
-              className="w-full shrink-0 mx-auto z-20 flex justify-center px-2 sm:px-4"
+              className="w-full shrink-0 mx-auto z-20 flex justify-center"
             >
               <TouchControls
                 onInputChange={handleTouchInput}

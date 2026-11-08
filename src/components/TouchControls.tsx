@@ -302,9 +302,9 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
   );
 
   return (
-    <div className="w-full flex items-center justify-between select-none touch-none py-2 px-3 sm:px-6 md:px-8 bg-neutral-950/80 rounded-2xl border border-neutral-800 shadow-xl">
-      {/* Left Column: Virtual Joystick Centered in left zone */}
-      <div className="flex-1 flex items-center justify-center">
+    <div className="w-full flex items-center justify-between select-none touch-none py-2 px-4 sm:px-8 md:px-10 bg-neutral-950/80 rounded-2xl border border-neutral-800 shadow-xl">
+      {/* Left Column: Virtual Joystick aligned to left hand zone */}
+      <div className="flex items-center justify-start shrink-0">
         {controlType === 'joystick' ? (
           <VirtualJoystick
             activeDirection={activeDirection}
@@ -337,8 +337,8 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
         </span>
       </div>
 
-      {/* Right Column: Shoot Action Button Centered in right zone */}
-      <div className="flex-1 flex items-center justify-center">
+      {/* Right Column: Shoot Action Button aligned to right hand zone */}
+      <div className="flex items-center justify-end shrink-0">
         <VirtualShootButton
           isShooting={isShooting}
           onShootChange={handleShootChange}

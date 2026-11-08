@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import type { SessionStateSnapshot } from '../core/sessionManager.ts';
 import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
 import {
@@ -19,7 +19,6 @@ import {
   Keyboard,
   Smartphone,
   Flame,
-  Award,
 } from 'lucide-react';
 
 export interface MainMenuScreenProps {
@@ -58,6 +57,11 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   onOpenProfile,
 }) => {
   const isSessionActive = session.status === 'ACTIVE';
+  const [avatarError, setAvatarError] = useState(false);
+
+  useEffect(() => {
+    setAvatarError(false);
+  }, [user?.photoURL]);
 
   const badgeInfo = getSessionBadgeInfo(
     session.status,
@@ -106,14 +110,30 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             </div>
           </div>
 
-          {/* User Email & Session Status Badge */}
+          {/* User Profile & Account Status Badge */}
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-800/80 border border-neutral-700/80 text-xs">
               <span className={`w-2 h-2 rounded-full ${badgeInfo.dotStyle}`} />
-              <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              <span className="font-medium text-neutral-200 truncate max-w-[120px] sm:max-w-[200px]">
-                {user.email}
-              </span>
+              {user.photoURL && user.photoURL.trim() && !avatarError ? (
+                <img
+                  src={user.photoURL.trim()}
+                  alt={user.displayName || user.email || 'Avatar'}
+                  className="w-5 h-5 rounded-full object-cover border border-amber-400/60 shrink-0"
+                  onError={() => setAvatarError(true)}
+                />
+              ) : (
+                <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              )}
+              <div className="flex flex-col sm:flex-row sm:items-center sm:gap-1.5 leading-tight">
+                {user.displayName && user.displayName.trim() && (
+                  <span className="font-bold text-amber-300 truncate max-w-[100px] sm:max-w-[140px]">
+                    {user.displayName.trim()}
+                  </span>
+                )}
+                <span className="font-medium text-neutral-200 truncate max-w-[120px] sm:max-w-[180px]">
+                  {user.email}
+                </span>
+              </div>
               <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
                 {badgeInfo.label}
               </span>
@@ -127,7 +147,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 title="Cập nhật hồ sơ tài khoản (tên hiển thị, avatar)"
               >
                 <UserCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="hidden sm:inline">Hồ Sơ</span>
+                <span className="hidden sm:inline">Cập Nhật Hồ Sơ</span>
               </button>
             )}
 
@@ -203,15 +223,15 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             </p>
           </div>
 
-          {/* Session Status & Warning Card (if NO_SESSION) */}
+          {/* Connection Status & Warning Card (if not connected) */}
           {!isSessionActive && (
             <div className="w-full mb-5 p-4 rounded-xl bg-amber-950/70 border border-amber-700/80 text-amber-200 text-left flex flex-col gap-2.5 shadow-lg animate-fade-in">
               <div className="flex items-center gap-2 font-bold text-xs sm:text-sm text-amber-300">
                 <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>Chưa kích hoạt phiên máy chủ Firestore</span>
+                <span>Chưa đồng bộ kết nối máy chủ Firestore</span>
               </div>
               <p className="text-[11px] sm:text-xs text-amber-200/90 leading-relaxed">
-                Hệ thống yêu cầu xác nhận phiên chơi duy nhất trên Cloud Firestore trước khi vào trận để bảo vệ điểm số và tiến trình tài khoản.
+                Hệ thống yêu cầu xác nhận kết nối tài khoản trên Cloud Firestore trước khi vào trận để bảo vệ điểm số và tiến trình người chơi.
               </p>
               <div>
                 <button
@@ -221,7 +241,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                   className="py-2 px-4 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs transition-all flex items-center gap-2 shadow active:scale-95 disabled:opacity-50 cursor-pointer"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} />
-                  <span>{isProcessing ? 'ĐANG KÍCH HOẠT...' : 'KÍCH HOẠT PHIÊN NGAY'}</span>
+                  <span>{isProcessing ? 'ĐANG KẾT NỐI...' : 'KẾT NỐI MÁY CHỦ NGAY'}</span>
                 </button>
               </div>
             </div>
@@ -259,7 +279,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             </div>
           </div>
 
-          {/* Primary Action Button: "CHƠI NGAY" */}
+          {/* Primary Action Button: "CHỌN CHẾ ĐỘ CHƠI" */}
           <div className="w-full flex flex-col items-center gap-2 mb-6">
             <button
               type="button"
@@ -272,7 +292,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               }`}
             >
               <Play className={`w-5 h-5 ${isSessionActive ? 'fill-black' : 'fill-neutral-500'}`} />
-              <span>{isSessionActive ? 'CHỌN CHẾ ĐỘ CHƠI' : 'CẦN KÍCH HOẠT PHIÊN ĐỂ CHƠI'}</span>
+              <span>{isSessionActive ? 'CHỌN CHẾ ĐỘ CHƠI' : 'CẦN KẾT NỐI MÁY CHỦ ĐỂ CHƠI'}</span>
             </button>
           </div>
 

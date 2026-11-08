@@ -483,7 +483,7 @@ export class BattleScene extends Phaser.Scene {
     // 9. Report state to React (immediately on key HUD state change or every ~100ms)
     if (this.onStateCallback) {
       this.hudSyncAccumulatorMs += rawDelta;
-      const sig = `${state.matchState}|${state.score}|${state.p1State.lives}|${state.p1State.isDead}|${state.totalDefeatedEnemies}|${state.enemyQueue.length}|${state.enemies.length}|${state.isGameOver}|${state.isStageClear}|${state.terrain.isBaseDestroyed}`;
+      const sig = `${state.matchState}|${state.score}|${state.p1State.lives}|${state.p1State.isDead}|${state.p2State?.lives ?? -1}|${state.p2State?.isDead ?? false}|${state.totalDefeatedEnemies}|${state.enemyQueue.length}|${state.enemies.length}|${state.isGameOver}|${state.isStageClear}|${state.terrain.isBaseDestroyed}`;
       if (sig !== this.lastHudSignature || this.hudSyncAccumulatorMs >= 100) {
         this.lastHudSignature = sig;
         this.hudSyncAccumulatorMs = 0;

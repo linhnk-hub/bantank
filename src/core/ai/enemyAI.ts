@@ -10,6 +10,7 @@ import {
   type TankStructure,
   type RuntimeTerrainState,
   type Direction,
+  type BulletStructure,
 } from '../types.ts';
 import { getBrickMask } from '../terrain.ts';
 import { getTankHitbox, checkHitboxVsTerrain, checkTankVsTanks } from '../physics.ts';
@@ -445,12 +446,94 @@ function getNavigableWaypointDirection(
 }
 
 /**
+ * In EXTREME (Hard) mode: Detects incoming player bullets heading directly toward this enemy
+ * along the same corridor and selects an unobstructed perpendicular dodge direction (90° turn).
+ */
+export function detectAndDodgeIncomingBullet(
+  enemy: EnemyTank,
+  activeBullets: BulletStructure[],
+  terrain: RuntimeTerrainState,
+  otherTanks?: Array<{ id: string; x: number; y: number }>
+): Direction | null {
+  if (!activeBullets || activeBullets.length === 0) return null;
+
+  const enemyCenterX = enemy.x + 8;
+  const enemyCenterY = enemy.y + 8;
+
+  for (const b of activeBullets) {
+    const isPlayerBullet =
+      b.ownerType === 'player' || b.ownerId === 'p1' || b.ownerId === 'p2';
+    if (!isPlayerBullet) continue;
+
+    const bCenterX = b.x + 2;
+    const bCenterY = b.y + 2;
+
+    let incomingVertical = false;
+    let incomingHorizontal = false;
+
+    if (
+      b.direction === 'DOWN' &&
+      bCenterY < enemyCenterY &&
+      enemyCenterY - bCenterY <= 96 &&
+      Math.abs(bCenterX - enemyCenterX) <= 12
+    ) {
+      incomingVertical = true;
+    } else if (
+      b.direction === 'UP' &&
+      bCenterY > enemyCenterY &&
+      bCenterY - enemyCenterY <= 96 &&
+      Math.abs(bCenterX - enemyCenterX) <= 12
+    ) {
+      incomingVertical = true;
+    } else if (
+      b.direction === 'RIGHT' &&
+      bCenterX < enemyCenterX &&
+      enemyCenterX - bCenterX <= 96 &&
+      Math.abs(bCenterY - enemyCenterY) <= 12
+    ) {
+      incomingHorizontal = true;
+    } else if (
+      b.direction === 'LEFT' &&
+      bCenterX > enemyCenterX &&
+      bCenterX - enemyCenterX <= 96 &&
+      Math.abs(bCenterY - enemyCenterY) <= 12
+    ) {
+      incomingHorizontal = true;
+    }
+
+    if (incomingVertical || incomingHorizontal) {
+      if (!hasLineOfSight(b.x, b.y, enemy.x, enemy.y, terrain, 112)) {
+        continue;
+      }
+
+      // Choose perpendicular 90-degree evasive directions
+      const perpDirs: Direction[] = incomingVertical
+        ? bCenterX <= enemyCenterX
+          ? ['RIGHT', 'LEFT']
+          : ['LEFT', 'RIGHT']
+        : bCenterY <= enemyCenterY
+        ? ['DOWN', 'UP']
+        : ['UP', 'DOWN'];
+
+      for (const candDir of perpDirs) {
+        if (canMoveInDirection(enemy, candDir, terrain, otherTanks, 2)) {
+          return candDir;
+        }
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
  * Updates AI State Machine (PATROL, CHASE, SEARCH) for one enemy tank.
  * Integrates:
  * - Line of sight (P1 detected even if shielded, ignored only if dead)
  * - Aim timer & <= 4px bore alignment
  * - Lead prediction with 100ms re-evaluation and cancel on P1 turn
- * - Multi-criteria target scoring and type tendencies
+ * - Multi-criteria target scoring and type tendencies (70% Eagle priority in EXTREME)
+ * - Active perpendicular bullet dodging in EXTREME mode
  * - LRU-driven deterministic Patrol & Anti-Oscillation
  */
 export function updateEnemyAI(
@@ -460,7 +543,8 @@ export function updateEnemyAI(
   terrain: RuntimeTerrainState,
   dt: number,
   otherTanks?: Array<{ id: string; x: number; y: number }>,
-  difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT'
+  difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT',
+  activeBullets: BulletStructure[] = []
 ): { shouldShoot: boolean; targetDir: Direction | null } {
   if (!enemy.isAlive) {
     return { shouldShoot: false, targetDir: null };
@@ -491,7 +575,7 @@ export function updateEnemyAI(
 
   // 1. Line of Sight Check to P1
   // DEFAULT: exact 80px radius per M3 spec.
-  // EXTREME: whole map coverage (9999px), but still blocked by BRICK & STEEL!
+  // EXTREME: whole map coverage (9999px) along open corridors, blocked by BRICK & STEEL!
   const detectionRadius = difficulty === 'EXTREME' ? 9999 : AI_CONFIG.DETECTION_RADIUS_PX;
   const p1Detected =
     !p1IsDead &&
@@ -576,7 +660,7 @@ export function updateEnemyAI(
     // PATROL state: throttle multi-criteria target scoring to pathCooldown intervals
     // to avoid running redundant A* searches 60 times/sec per enemy
     if (enemy.pathCooldown <= 0 || !enemy.cachedDestination || !enemy.cachedTarget || p1IsDead) {
-      scoringResult = scoreAndSelectTarget(enemy, p1, p1IsDead, terrain, otherTanks);
+      scoringResult = scoreAndSelectTarget(enemy, p1, p1IsDead, terrain, otherTanks, difficulty);
       enemy.cachedTarget = scoringResult.selectedTarget;
       enemy.cachedDestination = scoringResult.destination;
     }
@@ -585,7 +669,7 @@ export function updateEnemyAI(
     enemy.targetPos = destination;
   }
 
-  const otherEnemyTanks = otherTanks?.filter((t) => t.id !== 'p1' && t.id !== enemy.id) ?? [];
+  const otherEnemyTanks = otherTanks?.filter((t) => t.id !== 'p1' && t.id !== 'p2' && t.id !== enemy.id) ?? [];
   const p1CardinalDir = getCardinalDirection(enemy.x, enemy.y, p1.x, p1.y);
   let probeToP1X = enemy.x;
   let probeToP1Y = enemy.y;
@@ -645,7 +729,18 @@ export function updateEnemyAI(
 
   // 6. Determine Desired Movement Direction
   let targetDir: Direction | null = null;
-  if (inEagleSiegeLane) {
+
+  // Hard Mode (EXTREME) Active Reflex: Immediate perpendicular dodge when player bullet approaches!
+  if (difficulty === 'EXTREME' && activeBullets.length > 0) {
+    const dodgeDir = detectAndDodgeIncomingBullet(enemy, activeBullets, terrain, otherTanks);
+    if (dodgeDir) {
+      targetDir = dodgeDir;
+      enemy.dirHoldTimer = 0.3;
+      enemy.path = [];
+    }
+  }
+
+  if (!targetDir && inEagleSiegeLane) {
     const eagleDir = getCardinalDirection(enemy.x, enemy.y, 96, 192);
     let siegeProbeX = enemy.x;
     let siegeProbeY = enemy.y;
@@ -740,7 +835,8 @@ export function updateEnemyAI(
     isAligned = true;
   }
 
-  const requiredAimTime = enemy.aimTime ?? ENEMY_CONFIG.SPECS[enemy.enemyType].aimTime;
+  const baseAimTime = enemy.aimTime ?? ENEMY_CONFIG.SPECS[enemy.enemyType].aimTime;
+  const requiredAimTime = difficulty === 'EXTREME' ? Math.min(baseAimTime, 0.15) : baseAimTime;
 
   if (isAligned) {
     enemy.aimTimer = (enemy.aimTimer || 0) + dt;

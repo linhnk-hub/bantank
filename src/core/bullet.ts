@@ -90,6 +90,10 @@ export function updateBullet(
     const { row, col, type } = collision.hitTile;
 
     if (type === TILE_TYPES.BASE) {
+      // Friendly-fire protection: P2 ally bullets NEVER destroy the Eagle Base!
+      if (bullet.ownerId === 'p2') {
+        return { isAlive: false, hitObstacle: true, hitBase: false };
+      }
       destroyBase(terrain);
       return { isAlive: false, hitObstacle: true, hitBase: true };
     }
@@ -100,6 +104,12 @@ export function updateBullet(
     }
 
     if (type === TILE_TYPES.BRICK) {
+      // P2 ally bullets also never chip away the immediate brick shield around the Eagle Base (rows 11..12, cols 5..7)
+      const isBaseShieldBrick = row >= 11 && col >= 5 && col <= 7;
+      if (bullet.ownerId === 'p2' && isBaseShieldBrick) {
+        return { isAlive: false, hitObstacle: true, hitBrick: false };
+      }
+
       const impactResult = applyDeterministicBulletImpact(
         terrain,
         row,
