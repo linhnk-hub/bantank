@@ -38,14 +38,14 @@ export class AllyAIController {
    * Evaluates if shooting in a given direction would hit an ally (P1 or the Eagle base).
    * Strictly prevents friendly fire.
    */
-  private isFriendlyInLineOfFire(
+  public isFriendlyInLineOfFire(
     p2: TankStructure,
-    dir: Direction,
-    p1: TankStructure,
-    terrain: RuntimeTerrainState
+    dir: Direction = p2.direction,
+    p1?: TankStructure | null,
+    terrain?: RuntimeTerrainState
   ): boolean {
     // 1. Check if P1 is in line of fire
-    if (p1.isAlive) {
+    if (p1 && p1.isAlive) {
       if (dir === 'UP' && p1.x >= p2.x - 12 && p1.x <= p2.x + 12 && p1.y < p2.y) {
         return true;
       }
@@ -61,8 +61,17 @@ export class AllyAIController {
     }
 
     // 2. Check if Eagle Base at (96, 192) is in line of fire
-    const baseCenterX = 104; // col 6, 96 + 8
-    const baseCenterY = 200; // row 12, 192 + 8
+    if (this.isBaseInLineOfFire(p2, dir)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Specifically checks if Eagle Base (96, 192) is directly ahead on bullet path.
+   */
+  public isBaseInLineOfFire(p2: TankStructure, dir: Direction = p2.direction): boolean {
     if (dir === 'DOWN' && p2.y < 192 && Math.abs(p2.x - 96) <= 16) {
       return true;
     }
@@ -72,14 +81,13 @@ export class AllyAIController {
     if (dir === 'RIGHT' && p2.x < 80 && Math.abs(p2.y - 192) <= 16) {
       return true;
     }
-
     return false;
   }
 
   /**
    * Checks if an enemy tank is in the direct line of sight for the given direction.
    */
-  private isEnemyInLineOfFire(
+  public isEnemyInLineOfFire(
     p2: TankStructure,
     dir: Direction,
     enemies: EnemyTank[],
@@ -111,10 +119,10 @@ export class AllyAIController {
   public update(
     dt: number,
     p2: TankStructure,
-    p1: TankStructure,
+    p1: TankStructure | null,
     enemies: EnemyTank[],
     terrain: RuntimeTerrainState,
-    bullets: BulletStructure[]
+    bullets: BulletStructure[] | boolean = false
   ): AllyAIDecision {
     if (!p2.isAlive) {
       return { direction: null, shouldShoot: false };
@@ -189,7 +197,7 @@ export class AllyAIController {
         if (terrColl.collides) continue;
 
         // Avoid colliding into P1
-        if (p1.isAlive) {
+        if (p1 && p1.isAlive) {
           const p1Box = getTankHitbox(p1.x, p1.y);
           if (intersectAABB(testBox, p1Box)) continue;
         }
@@ -202,7 +210,7 @@ export class AllyAIController {
 
     // 4. Shooting Decision
     let shouldShoot = false;
-    const p2HasBullet = bullets.some((b) => b.ownerId === p2.id);
+    const p2HasBullet = typeof bullets === 'boolean' ? bullets : (Array.isArray(bullets) ? bullets.some((b) => b.ownerId === p2.id) : false);
 
     if (!p2HasBullet && this.shootCooldown <= 0) {
       // Never shoot if P1 or base is in the line of fire!

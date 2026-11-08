@@ -635,7 +635,7 @@ export class GameEngine {
     // 2b. P2 Ally AI decision, movement & shooting
     if (this.gameMode === 'TWO_PLAYERS_AI' && this.state.p2 && this.state.p2State && this.state.p2.isAlive && !this.state.p2State.isDead) {
       const p2HasBullet = this.state.bullets.some((b) => b.ownerId === 'p2');
-      const p2Input = this.allyAI.update(
+      const p2Decision = this.allyAI.update(
         dt,
         this.state.p2,
         this.state.p1,
@@ -644,10 +644,18 @@ export class GameEngine {
         p2HasBullet
       );
 
+      const p2Input: InputState = {
+        up: p2Decision.direction === 'UP',
+        down: p2Decision.direction === 'DOWN',
+        left: p2Decision.direction === 'LEFT',
+        right: p2Decision.direction === 'RIGHT',
+        shoot: p2Decision.shouldShoot,
+      };
+
       const obstaclesForP2 = [this.state.p1, ...this.state.enemies];
       updateTankMovement(this.state.p2, p2Input, this.state.terrain, obstaclesForP2);
 
-      if (p2Input.shoot && !p2HasBullet) {
+      if (p2Decision.shouldShoot && !p2HasBullet) {
         const p2Bullet = spawnBullet(this.state.p2, null);
         if (p2Bullet) {
           p2Bullet.ownerType = 'player';

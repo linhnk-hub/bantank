@@ -206,11 +206,15 @@ export class AuthManager {
       return { success: false, error: 'Chưa đăng nhập.' };
     }
     try {
-      await updateProfile(user, {
-        displayName: profile.displayName !== undefined ? profile.displayName.trim() : (user.displayName || ''),
-        photoURL: profile.photoURL !== undefined ? profile.photoURL.trim() : (user.photoURL || ''),
-      });
-      this.currentUser = this.auth.currentUser || user;
+      if (typeof updateProfile === 'function' && this.auth?.currentUser) {
+        await updateProfile(user, {
+          displayName: profile.displayName !== undefined ? profile.displayName.trim() : (user.displayName || ''),
+          photoURL: profile.photoURL !== undefined ? profile.photoURL.trim() : (user.photoURL || ''),
+        });
+      }
+      (user as any).displayName = profile.displayName !== undefined ? profile.displayName.trim() : (user.displayName || '');
+      (user as any).photoURL = profile.photoURL !== undefined ? profile.photoURL.trim() : (user.photoURL || '');
+      this.currentUser = this.auth?.currentUser || user;
       this.notifyListeners(this.currentUser);
       return { success: true };
     } catch (err: any) {

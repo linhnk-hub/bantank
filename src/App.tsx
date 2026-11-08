@@ -466,8 +466,8 @@ export default function App() {
           isOpen={isProfileModalOpen}
           onClose={() => setIsProfileModalOpen(false)}
           user={currentUser}
-          onProfileUpdated={(updated) => {
-            setCurrentUser((prev) => (prev ? { ...prev, ...updated } : prev));
+          onProfileUpdated={() => {
+            setCurrentUser(authManager.getCurrentUser());
           }}
         />
 
@@ -523,8 +523,8 @@ export default function App() {
           isOpen={isProfileModalOpen}
           onClose={() => setIsProfileModalOpen(false)}
           user={currentUser}
-          onProfileUpdated={(updated) => {
-            setCurrentUser((prev) => (prev ? { ...prev, ...updated } : prev));
+          onProfileUpdated={() => {
+            setCurrentUser(authManager.getCurrentUser());
           }}
         />
 

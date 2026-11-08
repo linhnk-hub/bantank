@@ -236,6 +236,7 @@ export interface GameCoreState {
   isGameOver: boolean;
   isStageClear: boolean;
   gameOverReason: string | null;
+  diagnosticLog?: string | null;
   difficulty?: 'DEFAULT' | 'EXTREME';
   gameMode?: 'SOLO' | 'TWO_PLAYERS_AI';
   p2?: TankStructure | null;

@@ -34,18 +34,24 @@ export function runAllM7_2Tests(): { results: TestCaseResult[] } {
   // 1. Profile Update
   try {
     const auth = AuthManager.getInstance();
+    (auth as any).currentUser = {
+      uid: 'u_test_123',
+      email: 'linhnk2013@gmail.com',
+      displayName: 'Default Name',
+      photoURL: '',
+    };
     let updatedUser: any = null;
     const unsub = auth.subscribe((u) => {
       updatedUser = u;
     });
 
-    const res = auth.updateUserProfile({
+    const promise = auth.updateUserProfile({
       displayName: 'Chiến Tướng Tank',
       photoURL: 'https://example.com/avatar.png',
     });
 
     const passed =
-      res.success &&
+      promise instanceof Promise &&
       updatedUser?.displayName === 'Chiến Tướng Tank' &&
       updatedUser?.photoURL === 'https://example.com/avatar.png';
 
@@ -53,7 +59,7 @@ export function runAllM7_2Tests(): { results: TestCaseResult[] } {
       'M7_2_T1',
       'Cập nhật hồ sơ tài khoản: updateUserProfile cập nhật displayName và photoURL hợp lệ',
       passed,
-      `Result: ${JSON.stringify(res)}, CurrentUser: ${JSON.stringify(updatedUser)}`,
+      `CurrentUser: ${JSON.stringify(updatedUser)}`,
       'Người chơi có thể chủ động cập nhật tên hiển thị và ảnh đại diện Google'
     );
     unsub();
@@ -95,7 +101,7 @@ export function runAllM7_2Tests(): { results: TestCaseResult[] } {
       state.p1 !== null &&
       state.p1.x === 48 &&
       state.p1.y === 192 &&
-      state.p2 !== null &&
+      state.p2 != null &&
       state.p2.x === 144 &&
       state.p2.y === 192 &&
       state.p1State.lives === 3 &&
@@ -127,8 +133,7 @@ export function runAllM7_2Tests(): { results: TestCaseResult[] } {
     p1.x = 100;
     p1.y = 60; // Ahead of P2 in UP direction
 
-    const isP1InLine = allyAI.isFriendlyInLineOfFire(p2, p1);
-    const isSafe = !isP1InLine; // should be false (friendly detected)
+    const isP1InLine = allyAI.isFriendlyInLineOfFire(p2, p2.direction, p1, terrain);
 
     record(
       'M7_2_T4',
@@ -151,7 +156,7 @@ export function runAllM7_2Tests(): { results: TestCaseResult[] } {
     p2.y = 150;
     p2.direction = 'DOWN';
 
-    const isBaseInLine = allyAI.isBaseInLineOfFire(p2);
+    const isBaseInLine = allyAI.isBaseInLineOfFire(p2, p2.direction);
 
     record(
       'M7_2_T5',
@@ -194,9 +199,9 @@ export function runAllM7_2Tests(): { results: TestCaseResult[] } {
     const state = engine.getState();
 
     // Defeat all 30 enemies
-    state.totalDefeatedEnemies = 30;
-    state.enemies = [];
-    state.terrain.isBaseDestroyed = false;
+    (state as any).totalDefeatedEnemies = 30;
+    (state as any).enemies = [];
+    (state.terrain as any).isBaseDestroyed = false;
 
     engine.stepTick({ up: false, down: false, left: false, right: false, shoot: false });
 

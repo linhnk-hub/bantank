@@ -36,7 +36,7 @@ export function createP2Tank(): TankStructure {
     type: 'player2',
     tier: 1,
     isAlive: true,
-    isShielded: false,
+    isShielded: true,
   };
 }
 
