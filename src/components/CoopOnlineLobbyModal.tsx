@@ -139,6 +139,19 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
     }
   };
 
+  const handleRetryWebRTC = async () => {
+    setErrorMsg(null);
+    setIsBusy(true);
+    try {
+      const res = await coopManager.retryWebRTCConnection();
+      if (!res.success && res.message) {
+        setErrorMsg(res.message);
+      }
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   // Nếu chưa ở trong phòng: Hiển thị 2 lựa chọn TẠO PHÒNG và THAM GIA PHÒNG
   if (!room || room.status === 'ABANDONED' || room.status === 'EXPIRED') {
     return (
@@ -320,6 +333,46 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
         <div className="p-3 rounded-xl bg-red-950/70 border border-red-500/50 text-red-200 text-xs flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
           <span>{errorMsg}</span>
+        </div>
+      )}
+
+      {bothPresent && (
+        <div
+          className={`p-3 rounded-xl border text-xs flex flex-wrap items-center justify-between gap-2 ${
+            room.rtcConnectionState === 'CONNECTED'
+              ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-200'
+              : room.rtcConnectionState === 'FAILED'
+                ? 'bg-red-950/70 border-red-500/50 text-red-200'
+                : 'bg-sky-950/50 border-sky-500/40 text-sky-200'
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {room.rtcConnectionState === 'CONNECTED' ? (
+              <Check className="w-4 h-4 text-emerald-400 shrink-0" />
+            ) : room.rtcConnectionState === 'FAILED' ? (
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            ) : (
+              <Loader2 className="w-4 h-4 animate-spin text-sky-400 shrink-0" />
+            )}
+            <span>
+              {room.rtcConnectionState === 'CONNECTED'
+                ? 'Đã thiết lập kênh P2P trực tiếp (WebRTC DataChannel) – Tiết kiệm 100% hạn mức Firestore trong trận!'
+                : room.rtcConnectionState === 'FAILED'
+                  ? coopManager.getWebrtcErrorMessage() ||
+                    'Kết nối P2P trực tiếp (WebRTC) thất bại. Vui lòng thử kết nối lại hoặc rời phòng an toàn.'
+                  : 'Đang thiết lập kênh P2P trực tiếp (WebRTC DataChannel) qua Firestore Signaling...'}
+            </span>
+          </div>
+          {room.rtcConnectionState === 'FAILED' && (
+            <button
+              type="button"
+              onClick={handleRetryWebRTC}
+              disabled={isBusy}
+              className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-black text-[11px] uppercase tracking-wider shrink-0"
+            >
+              Thử Kết Nối Lại P2P
+            </button>
+          )}
         </div>
       )}
 

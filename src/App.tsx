@@ -692,13 +692,25 @@ export default function App() {
             <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
             <span>{onlineDisconnectMsg}</span>
           </div>
-          <button
-            type="button"
-            onClick={handleQuitToMenu}
-            className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs cursor-pointer"
-          >
-            Về Menu Chính
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setOnlineDisconnectMsg(null);
+                void coopManager.retryWebRTCConnection();
+              }}
+              className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs cursor-pointer"
+            >
+              Thử Kết Nối Lại P2P
+            </button>
+            <button
+              type="button"
+              onClick={handleQuitToMenu}
+              className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs cursor-pointer"
+            >
+              Về Menu Chính
+            </button>
+          </div>
         </div>
       )}
 

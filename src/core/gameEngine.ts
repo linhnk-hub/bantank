@@ -763,9 +763,8 @@ export class GameEngine {
 
     // Update Bullet Trajectory & Terrain Collisions
     const survivingBullets: BulletStructure[] = [];
-    const protectBaseFromAllPlayers = this.gameMode === 'TWO_PLAYERS_ONLINE';
     for (const b of this.state.bullets) {
-      const bulletResult = updateBullet(b, this.state.terrain, protectBaseFromAllPlayers);
+      const bulletResult = updateBullet(b, this.state.terrain);
       if (bulletResult.hitBase) {
         this.state.isGameOver = true;
         this.state.gameOverReason = 'Căn cứ đã bị phá hủy! Game Over.';

@@ -23,6 +23,12 @@ import type {
 
 export type CoopRoomStatus = 'WAITING' | 'PLAYING' | 'FINISHED' | 'ABANDONED' | 'EXPIRED';
 export type CoopPlayerRole = 'HOST' | 'GUEST' | null;
+export type CoopRtcConnectionState =
+  | 'NEW'
+  | 'CONNECTING'
+  | 'CONNECTED'
+  | 'DISCONNECTED'
+  | 'FAILED';
 
 export interface SequencedInputPacket {
   up: boolean;
@@ -60,6 +66,16 @@ export interface CoopAuthoritativeSnapshot {
   matchState: GameCoreState['matchState'];
 }
 
+export type CoopDataChannelMessage =
+  | { type: 'GUEST_INPUT'; packet: SequencedInputPacket }
+  | { type: 'HOST_SNAPSHOT'; snapshot: CoopAuthoritativeSnapshot }
+  | { type: 'PING'; timestamp: number };
+
+/**
+ * Cấu trúc tài liệu `/coop_rooms/{roomCode}` trên Firestore (M7.3 FIX).
+ * Firestore CHỈ dùng cho tạo/vào phòng, trạng thái Ready, WebRTC Signaling (Offer/Answer/ICE)
+ * và kết quả cuối trận. KHÔNG ghi liên tục input 45ms hoặc snapshot vào Firestore.
+ */
 export interface CoopRoomDocument {
   roomCode: string;
   status: CoopRoomStatus;
@@ -74,9 +90,13 @@ export interface CoopRoomDocument {
   guestPhotoURL: string | null;
   guestReady: boolean;
   guestLastActiveAt: number | null;
-  guestInput: SequencedInputPacket | null;
-  snapshot: CoopAuthoritativeSnapshot | null;
-  snapshotSeq: number;
+  rtcOffer: string | null;
+  rtcAnswer: string | null;
+  hostIceCandidates: string | null;
+  guestIceCandidates: string | null;
+  rtcConnectionState: CoopRtcConnectionState;
+  finalScore: number;
+  matchOutcome: 'VICTORY' | 'GAME_OVER' | null;
   createdAt: number;
   expiresAt: number;
   disconnectReason: string | null;
@@ -94,6 +114,7 @@ export interface CoopActionResult {
     | 'SAME_USER_AS_HOST'
     | 'NOT_HOST'
     | 'PLAYERS_NOT_READY'
+    | 'WEBRTC_NOT_CONNECTED'
     | 'RATE_LIMITED'
     | 'OUT_OF_ORDER_SEQ'
     | 'INVALID_PACKET'
@@ -113,14 +134,25 @@ export interface CoopStorageAdapter {
   ): () => void;
 }
 
+export interface CoopP2PChannelAdapter {
+  isOpen(): boolean;
+  send(msg: CoopDataChannelMessage): boolean;
+  close(): void;
+}
+
 export const COOP_ONLINE_CONFIG = {
   ROOM_CODE_LENGTH: 6,
   ROOM_TTL_MS: 15 * 60 * 1000, // 15 minutes
-  SNAPSHOT_INTERVAL_MS: 200, // 5 Hz state sync to stay well within Firebase Spark limits
-  MIN_INPUT_INTERVAL_MS: 45, // Rate limit: max ~22 input packets/sec
-  HEARTBEAT_INTERVAL_MS: 5000, // 5s presence heartbeat during lobby/match
-  DISCONNECT_WARNING_MS: 15000, // 15s without heartbeat -> warning
-  DISCONNECT_TIMEOUT_MS: 45000, // 45s without heartbeat -> disconnect timeout
+  SNAPSHOT_INTERVAL_MS: 50, // 20 Hz direct P2P WebRTC DataChannel sync (0 Firestore writes!)
+  MIN_INPUT_INTERVAL_MS: 45, // Rate limit: max ~22 input packets/sec over DataChannel
+  HEARTBEAT_INTERVAL_MS: 2000, // 2s P2P DataChannel ping
+  DISCONNECT_WARNING_MS: 15000, // 15s without peer message -> warning
+  DISCONNECT_TIMEOUT_MS: 45000, // 45s without peer message -> disconnect timeout
+  WEBRTC_CONNECT_TIMEOUT_MS: 12000, // 12s timeout for WebRTC P2P establishment
+  STUN_SERVERS: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' },
+  ],
 } as const;
 
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -206,7 +238,6 @@ export function buildAuthoritativeSnapshot(
   snapshotSeq: number,
   nowMs: number = Date.now()
 ): CoopAuthoritativeSnapshot {
-  // Only include damaged/destroyed brick subtiles (mask !== 15) to keep Firestore payload small
   const damagedBricks: Record<string, number> = {};
   for (const [k, v] of Object.entries(state.terrain.brickSubTiles)) {
     if (v !== 15) {
@@ -282,7 +313,7 @@ export function evaluateJoinRoomCandidate(
     room.status === 'EXPIRED' ||
     room.status === 'ABANDONED' ||
     room.status === 'FINISHED' ||
-    nowMs > room.expiresAt
+    nowMs >= room.expiresAt
   ) {
     return {
       success: false,
@@ -350,25 +381,212 @@ export function evaluateStartMatchCandidate(
 }
 
 /**
+ * Bộ mô phỏng kiểm tra Firestore Rules cho `/coop_rooms/{roomCode}` (khớp 100% logic trong `firestore.rules`).
+ * Dùng để kiểm chứng độc lập các nhánh phân quyền Host / Guest Join / Guest Update / Guest Leave / Chặn người thứ 3.
+ */
+export function evaluateCoopRoomRuleUpdate(params: {
+  authUid: string | null;
+  isVerifiedPersonalGmail: boolean;
+  requestTimeMs: number;
+  existing: CoopRoomDocument;
+  incoming: CoopRoomDocument;
+}): { allowed: boolean; matchedBranch: string | null } {
+  const { authUid, isVerifiedPersonalGmail, requestTimeMs, existing, incoming } = params;
+  if (!authUid || !isVerifiedPersonalGmail) {
+    return { allowed: false, matchedBranch: null };
+  }
+
+  // Reject any attempt to inject legacy continuous sync fields into Firestore
+  const rawIncoming = incoming as unknown as Record<string, unknown>;
+  if ('guestInput' in rawIncoming || 'snapshot' in rawIncoming) {
+    return { allowed: false, matchedBranch: null };
+  }
+
+  // Immutable core fields check
+  if (
+    incoming.roomCode !== existing.roomCode ||
+    !/^[A-Z0-9]{6}$/.test(incoming.roomCode) ||
+    incoming.hostUid !== existing.hostUid ||
+    incoming.hostDisplayName !== existing.hostDisplayName ||
+    incoming.hostPhotoURL !== existing.hostPhotoURL ||
+    incoming.difficulty !== existing.difficulty ||
+    incoming.createdAt !== existing.createdAt ||
+    incoming.expiresAt !== existing.expiresAt
+  ) {
+    return { allowed: false, matchedBranch: null };
+  }
+
+  // Find changed keys
+  const allKeys = new Set([...Object.keys(existing), ...Object.keys(incoming)]);
+  const affectedKeys: string[] = [];
+  for (const k of allKeys) {
+    if ((existing as any)[k] !== (incoming as any)[k]) {
+      affectedKeys.push(k);
+    }
+  }
+
+  const isNotExpired = existing.status !== 'EXPIRED' && requestTimeMs < existing.expiresAt;
+
+  // Branch 1: Host Update
+  const hostAllowedKeys = new Set([
+    'status',
+    'hostReady',
+    'hostLastActiveAt',
+    'rtcOffer',
+    'hostIceCandidates',
+    'rtcConnectionState',
+    'finalScore',
+    'matchOutcome',
+    'disconnectReason',
+  ]);
+  if (
+    authUid === existing.hostUid &&
+    (isNotExpired || ['ABANDONED', 'EXPIRED', 'FINISHED'].includes(incoming.status)) &&
+    incoming.guestUid === existing.guestUid &&
+    incoming.guestDisplayName === existing.guestDisplayName &&
+    incoming.guestPhotoURL === existing.guestPhotoURL &&
+    (incoming.status !== 'PLAYING' ||
+      existing.status === 'PLAYING' ||
+      (existing.status === 'WAITING' &&
+        existing.guestUid !== null &&
+        existing.hostReady === true &&
+        existing.guestReady === true)) &&
+    affectedKeys.every((k) => hostAllowedKeys.has(k))
+  ) {
+    return { allowed: true, matchedBranch: 'HOST_UPDATE' };
+  }
+
+  // Branch 2: Guest Join
+  const guestJoinAllowedKeys = new Set([
+    'guestUid',
+    'guestDisplayName',
+    'guestPhotoURL',
+    'guestReady',
+    'guestLastActiveAt',
+    'rtcAnswer',
+    'guestIceCandidates',
+    'rtcConnectionState',
+    'disconnectReason',
+  ]);
+  if (
+    isNotExpired &&
+    existing.status === 'WAITING' &&
+    existing.guestUid === null &&
+    authUid !== existing.hostUid &&
+    incoming.guestUid === authUid &&
+    incoming.status === 'WAITING' &&
+    incoming.guestReady === false &&
+    affectedKeys.every((k) => guestJoinAllowedKeys.has(k))
+  ) {
+    return { allowed: true, matchedBranch: 'GUEST_JOIN' };
+  }
+
+  // Branch 3: Guest Signaling or Ready Update
+  const guestUpdateAllowedKeys = new Set([
+    'guestReady',
+    'guestLastActiveAt',
+    'rtcAnswer',
+    'guestIceCandidates',
+    'rtcConnectionState',
+  ]);
+  if (
+    isNotExpired &&
+    (existing.status === 'WAITING' || existing.status === 'PLAYING') &&
+    existing.guestUid !== null &&
+    authUid === existing.guestUid &&
+    incoming.guestUid === existing.guestUid &&
+    incoming.guestDisplayName === existing.guestDisplayName &&
+    incoming.guestPhotoURL === existing.guestPhotoURL &&
+    incoming.status === existing.status &&
+    affectedKeys.every((k) => guestUpdateAllowedKeys.has(k))
+  ) {
+    return { allowed: true, matchedBranch: 'GUEST_SIGNALING_OR_READY' };
+  }
+
+  // Branch 4: Guest Leave
+  const guestLeaveWaitingKeys = new Set([
+    'guestUid',
+    'guestDisplayName',
+    'guestPhotoURL',
+    'guestReady',
+    'guestLastActiveAt',
+    'rtcAnswer',
+    'guestIceCandidates',
+    'rtcConnectionState',
+    'disconnectReason',
+  ]);
+  const guestLeavePlayingKeys = new Set([
+    'status',
+    'guestLastActiveAt',
+    'rtcConnectionState',
+    'disconnectReason',
+  ]);
+  if (existing.guestUid !== null && authUid === existing.guestUid) {
+    if (
+      existing.status === 'WAITING' &&
+      incoming.status === 'WAITING' &&
+      incoming.guestUid === null &&
+      incoming.guestDisplayName === null &&
+      incoming.guestPhotoURL === null &&
+      incoming.guestReady === false &&
+      incoming.guestLastActiveAt === null &&
+      incoming.rtcAnswer === null &&
+      incoming.guestIceCandidates === null &&
+      affectedKeys.every((k) => guestLeaveWaitingKeys.has(k))
+    ) {
+      return { allowed: true, matchedBranch: 'GUEST_LEAVE_WAITING' };
+    }
+    if (
+      existing.status === 'PLAYING' &&
+      incoming.status === 'ABANDONED' &&
+      incoming.guestUid === existing.guestUid &&
+      affectedKeys.every((k) => guestLeavePlayingKeys.has(k))
+    ) {
+      return { allowed: true, matchedBranch: 'GUEST_LEAVE_PLAYING' };
+    }
+  }
+
+  return { allowed: false, matchedBranch: null };
+}
+
+/**
  * In-memory storage adapter dùng cho kiểm thử tự động (M7.3 Test Harness)
- * hoặc fallback khi chạy trong môi trường CLI không có kết nối mạng.
+ * có đếm số lượt đọc/ghi Firestore để xác minh không spam Firestore trong trận.
  */
 export class InMemoryCoopStorageAdapter implements CoopStorageAdapter {
   private rooms: Map<string, CoopRoomDocument> = new Map();
   private listeners: Map<string, Set<(room: CoopRoomDocument | null) => void>> = new Map();
+  private writeCount: number = 0;
+  private readCount: number = 0;
+
+  public getWriteCount(): number {
+    return this.writeCount;
+  }
+
+  public getReadCount(): number {
+    return this.readCount;
+  }
+
+  public resetCounters(): void {
+    this.writeCount = 0;
+    this.readCount = 0;
+  }
 
   public getRoomSync(roomCode: string): CoopRoomDocument | null {
+    this.readCount++;
     const r = this.rooms.get(roomCode);
     return r ? JSON.parse(JSON.stringify(r)) : null;
   }
 
   public setRoomSync(roomCode: string, room: CoopRoomDocument): void {
+    this.writeCount++;
     const copy = JSON.parse(JSON.stringify(room));
     this.rooms.set(roomCode, copy);
     this.notify(roomCode);
   }
 
   public updateRoomSync(roomCode: string, partial: Partial<CoopRoomDocument>): void {
+    this.writeCount++;
     const existing = this.rooms.get(roomCode);
     if (!existing) {
       throw new Error(`Room ${roomCode} does not exist`);
@@ -420,7 +638,43 @@ export class InMemoryCoopStorageAdapter implements CoopStorageAdapter {
   public clear(): void {
     this.rooms.clear();
     this.listeners.clear();
+    this.writeCount = 0;
+    this.readCount = 0;
   }
+}
+
+/**
+ * Kênh truyền P2P trực tiếp trong bộ nhớ (mô phỏng WebRTC RTCDataChannel giữa Host và Guest)
+ * phục vụ kiểm thử tự động trong môi trường Node/CLI.
+ */
+export function createInMemoryP2PChannelPair(
+  onHostReceive: (msg: CoopDataChannelMessage) => void,
+  onGuestReceive: (msg: CoopDataChannelMessage) => void
+): { hostChannel: CoopP2PChannelAdapter; guestChannel: CoopP2PChannelAdapter } {
+  let open = true;
+  const hostChannel: CoopP2PChannelAdapter = {
+    isOpen: () => open,
+    send: (msg) => {
+      if (!open) return false;
+      onGuestReceive(JSON.parse(JSON.stringify(msg)));
+      return true;
+    },
+    close: () => {
+      open = false;
+    },
+  };
+  const guestChannel: CoopP2PChannelAdapter = {
+    isOpen: () => open,
+    send: (msg) => {
+      if (!open) return false;
+      onHostReceive(JSON.parse(JSON.stringify(msg)));
+      return true;
+    },
+    close: () => {
+      open = false;
+    },
+  };
+  return { hostChannel, guestChannel };
 }
 
 /**
@@ -478,7 +732,21 @@ export class CoopOnlineManager {
   private unsubRoom: (() => void) | null = null;
   private listeners: Set<(room: CoopRoomDocument | null, role: CoopPlayerRole) => void> = new Set();
 
-  // Sequencing & Rate-Limiting state
+  // WebRTC PeerConnection & DataChannel state
+  private peerConnection: RTCPeerConnection | null = null;
+  private dataChannel: RTCDataChannel | null = null;
+  private customP2PChannel: CoopP2PChannelAdapter | null = null;
+  private rtcState: CoopRtcConnectionState = 'NEW';
+  private webrtcErrorMessage: string | null = null;
+  private webrtcConnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private hasSentOfferForGuestUid: string | null = null;
+  private hasAppliedRemoteAnswer: boolean = false;
+  private hasSentAnswerForOffer: string | null = null;
+  private addedRemoteCandidateSignatures: Set<string> = new Set();
+  private lastPeerP2PActiveAt: number = 0;
+  private lastPingSentAt: number = 0;
+
+  // Sequencing & Rate-Limiting state (transmitted over WebRTC DataChannel)
   private guestOutgoingSeq: number = 0;
   private lastGuestInputSentAt: number = 0;
   private lastSentInputSignature: string = '';
@@ -491,14 +759,14 @@ export class CoopOnlineManager {
     shoot: false,
   };
 
-  // Host Snapshot Throttling state
+  // Host Snapshot Throttling state (transmitted over WebRTC DataChannel)
   private hostSnapshotAccumulatorMs: number = 0;
   private hostOutgoingSnapshotSeq: number = 0;
   private lastBroadcastMatchState: string = '';
   private lastBroadcastStageId: number = -1;
-  private isSnapshotInFlight: boolean = false;
+  private hasRecordedMatchFinishInFirestore: boolean = false;
 
-  //Guest Snapshot Application state
+  // Guest Snapshot Application state
   private guestLastAppliedSnapshotSeq: number = 0;
   private snapshotListeners: Set<(snapshot: CoopAuthoritativeSnapshot) => void> = new Set();
 
@@ -515,7 +783,24 @@ export class CoopOnlineManager {
 
   public setStorageAdapter(adapter: CoopStorageAdapter): void {
     this.cleanupSubscription();
+    this.closeWebRTC();
     this.adapter = adapter;
+  }
+
+  /**
+   * Gắn kênh P2P trực tiếp tùy chỉnh (dùng cho kiểm thử tự động DataChannel).
+   */
+  public attachCustomP2PChannel(channel: CoopP2PChannelAdapter | null, nowMs: number = Date.now()): void {
+    this.customP2PChannel = channel;
+    if (channel && channel.isOpen()) {
+      this.rtcState = 'CONNECTED';
+      this.webrtcErrorMessage = null;
+      this.lastPeerP2PActiveAt = nowMs;
+      if (this.currentRoom) {
+        this.currentRoom = { ...this.currentRoom, rtcConnectionState: 'CONNECTED' };
+      }
+      this.notifyListeners();
+    }
   }
 
   public getCurrentRoom(): CoopRoomDocument | null {
@@ -528,6 +813,21 @@ export class CoopOnlineManager {
 
   public getLocalRole(): CoopPlayerRole {
     return this.role;
+  }
+
+  public getRtcConnectionState(): CoopRtcConnectionState {
+    return this.rtcState;
+  }
+
+  public getWebrtcErrorMessage(): string | null {
+    return this.webrtcErrorMessage;
+  }
+
+  public isP2PDataChannelOpen(): boolean {
+    if (this.customP2PChannel) {
+      return this.customP2PChannel.isOpen();
+    }
+    return Boolean(this.dataChannel && this.dataChannel.readyState === 'open');
   }
 
   public getHostLastProcessedGuestSeq(): number {
@@ -570,6 +870,7 @@ export class CoopOnlineManager {
 
   /**
    * Tạo phòng Co-op Online mới với vai trò Chủ phòng (Host = P1).
+   * Chỉ thực hiện 1 lần ghi Firestore (`setRoom`).
    */
   public async createRoom(
     user: { uid: string; displayName?: string | null; email?: string | null; photoURL?: string | null } | null,
@@ -585,12 +886,13 @@ export class CoopOnlineManager {
     }
 
     this.cleanupSubscription();
+    this.closeWebRTC();
 
     let roomCode = generateRoomCode();
     try {
       for (let attempt = 0; attempt < 5; attempt++) {
         const existing = await this.adapter.getRoom(roomCode);
-        if (!existing || existing.status === 'EXPIRED' || existing.status === 'ABANDONED' || nowMs > existing.expiresAt) {
+        if (!existing || existing.status === 'EXPIRED' || existing.status === 'ABANDONED' || nowMs >= existing.expiresAt) {
           break;
         }
         roomCode = generateRoomCode();
@@ -610,9 +912,13 @@ export class CoopOnlineManager {
         guestPhotoURL: null,
         guestReady: false,
         guestLastActiveAt: null,
-        guestInput: null,
-        snapshot: null,
-        snapshotSeq: 0,
+        rtcOffer: null,
+        rtcAnswer: null,
+        hostIceCandidates: null,
+        guestIceCandidates: null,
+        rtcConnectionState: 'NEW',
+        finalScore: 0,
+        matchOutcome: null,
         createdAt: nowMs,
         expiresAt: nowMs + COOP_ONLINE_CONFIG.ROOM_TTL_MS,
         disconnectReason: null,
@@ -640,6 +946,7 @@ export class CoopOnlineManager {
 
   /**
    * Tham gia phòng Co-op Online bằng mã phòng 6 ký tự với vai trò Khách (Guest = P2).
+   * Chỉ thực hiện 1 lần đọc + 1 lần cập nhật Firestore (`updateRoom`).
    */
   public async joinRoom(
     rawRoomCode: string,
@@ -665,61 +972,23 @@ export class CoopOnlineManager {
 
     try {
       const room = await this.adapter.getRoom(normalized);
-      if (!room) {
-        return {
-          success: false,
-          errorCode: 'ROOM_NOT_FOUND',
-          message: `Không tìm thấy phòng với mã "${normalized}". Vui lòng kiểm tra lại.`,
-        };
-      }
-
-      if (
-        room.status === 'EXPIRED' ||
-        room.status === 'ABANDONED' ||
-        room.status === 'FINISHED' ||
-        nowMs > room.expiresAt
-      ) {
-        return {
-          success: false,
-          errorCode: 'ROOM_EXPIRED',
-          message: 'Phòng chơi này đã hết hạn hoặc đã kết thúc.',
-        };
-      }
-
-      if (room.hostUid === user.uid) {
-        return {
-          success: false,
-          errorCode: 'SAME_USER_AS_HOST',
-          message: 'Bạn đang là Chủ phòng (P1) của mã phòng này. Cần người chơi thứ 2 sử dụng tài khoản Google khác.',
-        };
-      }
-
-      // Check if room already has another Guest (strictly max 2 players per room)
-      if (room.guestUid && room.guestUid !== user.uid) {
-        return {
-          success: false,
-          errorCode: 'ROOM_FULL',
-          message: 'Phòng đã đủ 2 người chơi (không cho phép người thứ 3 vào phòng).',
-        };
-      }
-
-      // If match already started and caller is not the existing guest reconnecting
-      if (room.status === 'PLAYING' && room.guestUid !== user.uid) {
-        return {
-          success: false,
-          errorCode: 'MATCH_ALREADY_STARTED',
-          message: 'Trận đấu trong phòng này đã bắt đầu.',
-        };
+      const joinCandidate = evaluateJoinRoomCandidate(room, normalized, user, nowMs);
+      if (!joinCandidate.success || !room) {
+        return joinCandidate;
       }
 
       this.cleanupSubscription();
+      this.closeWebRTC();
 
       const updatedFields: Partial<CoopRoomDocument> = {
         guestUid: user.uid,
         guestDisplayName: getUserDisplayLabel(user),
         guestPhotoURL: user.photoURL || '',
-        guestReady: room.status === 'PLAYING' ? true : false,
+        guestReady: false,
         guestLastActiveAt: nowMs,
+        rtcAnswer: null,
+        guestIceCandidates: null,
+        rtcConnectionState: 'CONNECTING',
         disconnectReason: null,
       };
 
@@ -731,6 +1000,8 @@ export class CoopOnlineManager {
 
       this.currentRoom = updatedRoom;
       this.role = 'GUEST';
+      this.rtcState = 'CONNECTING';
+      this.lastPeerP2PActiveAt = nowMs;
       this.resetSyncCounters();
       this.listenToRoom(normalized);
       this.notifyListeners();
@@ -778,51 +1049,49 @@ export class CoopOnlineManager {
 
   /**
    * Chủ phòng (Host) bắt đầu trận đấu khi cả 2 người chơi đã kết nối và xác nhận Sẵn sàng.
+   * Chỉ cập nhật trạng thái `status: 'PLAYING'` lên Firestore 1 lần duy nhất;
+   * Bản chụp trạng thái đầu tiên được gửi qua WebRTC DataChannel.
    */
   public async startOnlineMatch(
     callerUid: string,
     initialGameState?: Readonly<GameCoreState>,
     nowMs: number = Date.now()
   ): Promise<CoopActionResult> {
-    if (!this.currentRoom) {
-      return { success: false, message: 'Không tìm thấy thông tin phòng.' };
+    const check = evaluateStartMatchCandidate(this.currentRoom, callerUid, this.role);
+    if (!check.success || !this.currentRoom) {
+      return check;
     }
 
-    if (this.currentRoom.hostUid !== callerUid || this.role !== 'HOST') {
+    if (this.rtcState === 'FAILED') {
       return {
         success: false,
-        errorCode: 'NOT_HOST',
-        message: 'Chỉ Chủ phòng (P1) mới có quyền bắt đầu trận đấu.',
-      };
-    }
-
-    if (!this.currentRoom.guestUid || !this.currentRoom.hostReady || !this.currentRoom.guestReady) {
-      return {
-        success: false,
-        errorCode: 'PLAYERS_NOT_READY',
-        message: 'Cần đủ 2 người chơi trong phòng và cả 2 đều đã nhấn Sẵn sàng.',
+        errorCode: 'WEBRTC_NOT_CONNECTED',
+        message:
+          this.webrtcErrorMessage ||
+          'Kết nối P2P trực tiếp (WebRTC) chưa sẵn sàng. Vui lòng nhấn "Thử kết nối lại P2P".',
       };
     }
 
     this.resetSyncCounters();
-    const initialSnapshot = initialGameState
-      ? buildAuthoritativeSnapshot(initialGameState, 1, nowMs)
-      : null;
-    if (initialSnapshot) {
-      this.hostOutgoingSnapshotSeq = 1;
-    }
+    this.lastPeerP2PActiveAt = nowMs;
 
     const partial: Partial<CoopRoomDocument> = {
       status: 'PLAYING',
       hostLastActiveAt: nowMs,
-      snapshot: initialSnapshot,
-      snapshotSeq: initialSnapshot ? 1 : 0,
       disconnectReason: null,
     };
 
     try {
       await this.adapter.updateRoom(this.currentRoom.roomCode, partial);
       this.currentRoom = { ...this.currentRoom, ...partial };
+
+      // Send initial snapshot over P2P DataChannel if open (ZERO Firestore snapshot payload!)
+      if (initialGameState && this.isP2PDataChannelOpen()) {
+        this.hostOutgoingSnapshotSeq = 1;
+        const initialSnapshot = buildAuthoritativeSnapshot(initialGameState, 1, nowMs);
+        this.sendOverDataChannel({ type: 'HOST_SNAPSHOT', snapshot: initialSnapshot });
+      }
+
       this.notifyListeners();
       return { success: true, room: this.currentRoom };
     } catch (err: any) {
@@ -835,8 +1104,8 @@ export class CoopOnlineManager {
   }
 
   /**
-   * Guest (P2) gửi gói tin điều khiển có đánh số thứ tự `seq` và `clientTimestamp`.
-   * Có giới hạn tốc độ gửi (Rate-limit) để bảo vệ hạn mức Firestore Spark.
+   * Guest (P2) gửi gói tin điều khiển có đánh số thứ tự `seq` và `clientTimestamp`
+   * trực tiếp qua WebRTC DataChannel (TUYỆT ĐỐI KHÔNG GHI VÀO FIRESTORE!).
    */
   public async submitGuestInput(
     input: InputState,
@@ -850,12 +1119,11 @@ export class CoopOnlineManager {
     const sig = `${input.up ? 1 : 0}${input.down ? 1 : 0}${input.left ? 1 : 0}${input.right ? 1 : 0}${input.shoot ? 1 : 0}`;
     const elapsedSinceLast = nowMs - this.lastGuestInputSentAt;
 
-    // If input hasn't changed and heartbeat window hasn't elapsed, skip network write
     if (!forceSend && sig === this.lastSentInputSignature && elapsedSinceLast < COOP_ONLINE_CONFIG.HEARTBEAT_INTERVAL_MS) {
       return { success: true };
     }
 
-    // Rate limiting check
+    // Rate limiting check (45ms minimum interval)
     if (this.lastGuestInputSentAt > 0 && elapsedSinceLast < COOP_ONLINE_CONFIG.MIN_INPUT_INTERVAL_MS) {
       return {
         success: false,
@@ -884,31 +1152,41 @@ export class CoopOnlineManager {
       };
     }
 
+    if (!this.isP2PDataChannelOpen()) {
+      return {
+        success: false,
+        errorCode: 'WEBRTC_NOT_CONNECTED',
+        message: 'Kênh truyền P2P trực tiếp (WebRTC DataChannel) chưa mở. Không gửi lên Firestore để bảo vệ hạn mức.',
+      };
+    }
+
     this.guestOutgoingSeq = nextSeq;
     this.lastGuestInputSentAt = nowMs;
     this.lastSentInputSignature = sig;
 
-    try {
-      await this.adapter.updateRoom(this.currentRoom.roomCode, {
-        guestInput: validation.sanitized,
-        guestLastActiveAt: nowMs,
-      });
-      return { success: true };
-    } catch (err: any) {
+    const sent = this.sendOverDataChannel({
+      type: 'GUEST_INPUT',
+      packet: validation.sanitized,
+    });
+
+    if (!sent) {
       return {
         success: false,
-        errorCode: 'NETWORK_ERROR',
-        message: err?.message || 'Lỗi đồng bộ thao tác P2.',
+        errorCode: 'WEBRTC_NOT_CONNECTED',
+        message: 'Không thể gửi gói điều khiển qua WebRTC DataChannel.',
       };
     }
+
+    return { success: true };
   }
 
   /**
-   * Host (P1) kiểm tra và áp dụng gói tin điều khiển từ Guest (P2).
+   * Host (P1) kiểm tra và áp dụng gói tin điều khiển từ Guest (P2) nhận qua DataChannel.
    * Bỏ qua gói tin trùng lặp hoặc sai thứ tự (`seq <= hostLastProcessedGuestSeq`).
    */
   public processIncomingGuestInput(
-    rawPacket: unknown
+    rawPacket: unknown,
+    nowMs: number = Date.now()
   ): { accepted: boolean; input?: InputState; errorCode?: CoopActionResult['errorCode'] } {
     const validation = sanitizeAndValidateInputPacket(rawPacket);
     if (!validation.valid || !validation.sanitized) {
@@ -921,6 +1199,7 @@ export class CoopOnlineManager {
     }
 
     this.hostLastProcessedGuestSeq = packet.seq;
+    this.lastPeerP2PActiveAt = nowMs;
     this.latestValidatedGuestInput = {
       up: packet.up,
       down: packet.down,
@@ -936,8 +1215,9 @@ export class CoopOnlineManager {
   }
 
   /**
-   * Được gọi mỗi frame trên máy Chủ phòng (Host) để phát bản chụp trạng thái định kỳ (~200ms/lần)
-   * hoặc ngay lập tức khi có sự kiện quan trọng (Qua màn, Game Over, Tạm dừng).
+   * Được gọi mỗi frame trên máy Chủ phòng (Host) để phát bản chụp trạng thái qua WebRTC DataChannel.
+   * TUYỆT ĐỐI KHÔNG GHI SNAPSHOT VÀO FIRESTORE!
+   * Chỉ khi trận đấu kết thúc (`state.isGameOver`), Host mới ghi 1 lần kết quả cuối trận lên Firestore.
    */
   public async onHostSimulationFrame(
     deltaMs: number,
@@ -963,37 +1243,153 @@ export class CoopOnlineManager {
       return false;
     }
 
-    if (this.isSnapshotInFlight && !isCriticalTransition) {
-      return false;
-    }
-
     this.hostSnapshotAccumulatorMs = 0;
     this.lastBroadcastMatchState = state.matchState;
     this.lastBroadcastStageId = state.currentStageId;
     this.hostOutgoingSnapshotSeq += 1;
 
     const snapshot = buildAuthoritativeSnapshot(state, this.hostOutgoingSnapshotSeq, nowMs);
-    this.isSnapshotInFlight = true;
+    const sentOverP2P = this.sendOverDataChannel({
+      type: 'HOST_SNAPSHOT',
+      snapshot,
+    });
+
+    // Chỉ ghi Firestore ĐÚNG 1 LẦN khi trận đấu kết thúc (Game Over)
+    if (state.isGameOver && !this.hasRecordedMatchFinishInFirestore) {
+      this.hasRecordedMatchFinishInFirestore = true;
+      try {
+        await this.adapter.updateRoom(this.currentRoom.roomCode, {
+          status: 'FINISHED',
+          finalScore: state.score,
+          matchOutcome: 'GAME_OVER',
+          hostLastActiveAt: nowMs,
+        });
+        this.currentRoom = {
+          ...this.currentRoom,
+          status: 'FINISHED',
+          finalScore: state.score,
+          matchOutcome: 'GAME_OVER',
+          hostLastActiveAt: nowMs,
+        };
+        this.notifyListeners();
+      } catch {
+        // Ignore transient network failure on final summary write
+      }
+    }
+
+    return sentOverP2P;
+  }
+
+  /**
+   * Nhận thông điệp trực tiếp từ WebRTC DataChannel (hoặc InMemoryP2PChannel).
+   */
+  public handleIncomingDataChannelMessage(
+    msg: CoopDataChannelMessage,
+    nowMs: number = Date.now()
+  ): void {
+    if (!msg || typeof msg !== 'object') return;
+    this.lastPeerP2PActiveAt = nowMs;
+
+    if (msg.type === 'GUEST_INPUT' && this.role === 'HOST') {
+      this.processIncomingGuestInput(msg.packet, nowMs);
+    } else if (msg.type === 'HOST_SNAPSHOT' && this.role === 'GUEST') {
+      const snap = msg.snapshot;
+      if (snap && typeof snap.snapshotSeq === 'number' && snap.snapshotSeq > this.guestLastAppliedSnapshotSeq) {
+        this.guestLastAppliedSnapshotSeq = snap.snapshotSeq;
+        this.snapshotListeners.forEach((cb) => {
+          try {
+            cb(snap);
+          } catch (e) {
+            console.error('[CoopOnlineManager] snapshot listener error:', e);
+          }
+        });
+      }
+    }
+  }
+
+  private sendOverDataChannel(msg: CoopDataChannelMessage): boolean {
+    if (this.customP2PChannel) {
+      return this.customP2PChannel.send(msg);
+    }
+    if (this.dataChannel && this.dataChannel.readyState === 'open') {
+      try {
+        this.dataChannel.send(JSON.stringify(msg));
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Khởi tạo hoặc thử kết nối lại WebRTC P2P (Signaling qua Firestore 1 lần).
+   */
+  public async retryWebRTCConnection(nowMs: number = Date.now()): Promise<CoopActionResult> {
+    if (!this.currentRoom || !this.role) {
+      return { success: false, message: 'Chưa ở trong phòng Co-op Online.' };
+    }
+    this.closeWebRTC();
+    this.webrtcErrorMessage = null;
+    this.rtcState = 'CONNECTING';
+    this.lastPeerP2PActiveAt = nowMs;
 
     try {
-      const nextStatus: CoopRoomStatus =
-        state.isGameOver ? 'FINISHED' : this.currentRoom.status;
-      await this.adapter.updateRoom(this.currentRoom.roomCode, {
-        snapshot,
-        snapshotSeq: snapshot.snapshotSeq,
-        hostLastActiveAt: nowMs,
-        status: nextStatus,
-      });
-      return true;
-    } catch {
-      return false;
-    } finally {
-      this.isSnapshotInFlight = false;
+      if (this.role === 'HOST') {
+        await this.adapter.updateRoom(this.currentRoom.roomCode, {
+          rtcOffer: null,
+          hostIceCandidates: null,
+          rtcConnectionState: 'CONNECTING',
+          hostLastActiveAt: nowMs,
+        });
+        if (this.currentRoom.guestUid) {
+          await this.startHostWebRTCOffer(this.currentRoom.roomCode, this.currentRoom.guestUid);
+        }
+      } else if (this.role === 'GUEST') {
+        await this.adapter.updateRoom(this.currentRoom.roomCode, {
+          rtcAnswer: null,
+          guestIceCandidates: null,
+          rtcConnectionState: 'CONNECTING',
+          guestLastActiveAt: nowMs,
+        });
+        if (this.currentRoom.rtcOffer) {
+          await this.startGuestWebRTCAnswer(
+            this.currentRoom.roomCode,
+            this.currentRoom.rtcOffer,
+            this.currentRoom.hostIceCandidates
+          );
+        }
+      }
+      this.notifyListeners();
+      return { success: true, room: this.currentRoom };
+    } catch (err: any) {
+      return {
+        success: false,
+        errorCode: 'NETWORK_ERROR',
+        message: err?.message || 'Không thể khởi tạo lại kết nối P2P.',
+      };
     }
   }
 
   /**
-   * Kiểm tra tình trạng mất kết nối của đối phương dựa trên `hostLastActiveAt` / `guestLastActiveAt`.
+   * Đánh dấu lỗi kết nối WebRTC P2P một cách tường minh (không spam Firestore).
+   */
+  public markWebRTCConnectionFailed(reason?: string): void {
+    this.rtcState = 'FAILED';
+    this.webrtcErrorMessage =
+      reason ||
+      'Kết nối P2P trực tiếp (WebRTC DataChannel) thất bại. Vui lòng nhấn "Thử kết nối lại P2P" hoặc thoát phòng an toàn.';
+    if (this.currentRoom) {
+      this.currentRoom = {
+        ...this.currentRoom,
+        rtcConnectionState: 'FAILED',
+      };
+    }
+    this.notifyListeners();
+  }
+
+  /**
+   * Kiểm tra tình trạng mất kết nối của đối phương dựa trên tín hiệu P2P DataChannel và trạng thái phòng.
    */
   public evaluatePeerConnectionStatus(nowMs: number = Date.now()): {
     peerConnected: boolean;
@@ -1014,16 +1410,40 @@ export class CoopOnlineManager {
       };
     }
 
-    const peerLastActive =
+    if (this.rtcState === 'FAILED' || this.currentRoom.rtcConnectionState === 'FAILED') {
+      return {
+        peerConnected: false,
+        warningMessage:
+          this.webrtcErrorMessage ||
+          'Kết nối P2P trực tiếp (WebRTC) bị gián đoạn. Vui lòng thử kết nối lại hoặc thoát phòng an toàn.',
+        isTimedOut: true,
+      };
+    }
+
+    const fallbackFirestoreActive =
       this.role === 'HOST'
         ? this.currentRoom.guestLastActiveAt
         : this.currentRoom.hostLastActiveAt;
 
-    if (!peerLastActive) {
+    const effectiveLastActive = Math.max(
+      this.lastPeerP2PActiveAt || 0,
+      fallbackFirestoreActive || 0
+    );
+
+    if (!effectiveLastActive) {
       return { peerConnected: false, warningMessage: null, isTimedOut: false };
     }
 
-    const silenceMs = Math.max(0, nowMs - peerLastActive);
+    // Periodically send P2P ping over DataChannel if open
+    if (
+      this.isP2PDataChannelOpen() &&
+      nowMs - this.lastPingSentAt >= COOP_ONLINE_CONFIG.HEARTBEAT_INTERVAL_MS
+    ) {
+      this.lastPingSentAt = nowMs;
+      this.sendOverDataChannel({ type: 'PING', timestamp: nowMs });
+    }
+
+    const silenceMs = Math.max(0, nowMs - effectiveLastActive);
     if (silenceMs >= COOP_ONLINE_CONFIG.DISCONNECT_TIMEOUT_MS) {
       const msg =
         this.role === 'HOST'
@@ -1035,8 +1455,8 @@ export class CoopOnlineManager {
     if (silenceMs >= COOP_ONLINE_CONFIG.DISCONNECT_WARNING_MS) {
       const msg =
         this.role === 'HOST'
-          ? 'Tín hiệu từ Người chơi 2 (P2) đang yếu, đang chờ kết nối lại...'
-          : 'Đang chờ phản hồi đồng bộ từ Chủ phòng (P1)...';
+          ? 'Tín hiệu P2P từ Người chơi 2 (P2) đang yếu, đang chờ phản hồi...'
+          : 'Đang chờ phản hồi đồng bộ P2P từ Chủ phòng (P1)...';
       return { peerConnected: true, warningMessage: msg, isTimedOut: false };
     }
 
@@ -1049,10 +1469,11 @@ export class CoopOnlineManager {
    * - Nếu Khách (Guest) rời khi đang WAITING: giải phóng slot P2 để người khác có thể vào.
    * - Nếu Khách (Guest) rời khi đang PLAYING: đánh dấu `ABANDONED` kèm lý do để P1 biết.
    */
-  public async leaveRoom(reason?: string): Promise<void> {
+  public async leaveRoom(reason?: string, nowMs: number = Date.now()): Promise<void> {
     const room = this.currentRoom;
     const currentRole = this.role;
     this.cleanupSubscription();
+    this.closeWebRTC();
     this.currentRoom = null;
     this.role = null;
     this.resetSyncCounters();
@@ -1064,6 +1485,8 @@ export class CoopOnlineManager {
       if (currentRole === 'HOST') {
         await this.adapter.updateRoom(room.roomCode, {
           status: 'ABANDONED',
+          rtcConnectionState: 'DISCONNECTED',
+          hostLastActiveAt: nowMs,
           disconnectReason:
             reason || 'Chủ phòng (P1) đã rời phòng. Trận đấu kết thúc an toàn.',
         });
@@ -1075,12 +1498,16 @@ export class CoopOnlineManager {
             guestPhotoURL: null,
             guestReady: false,
             guestLastActiveAt: null,
-            guestInput: null,
+            rtcAnswer: null,
+            guestIceCandidates: null,
+            rtcConnectionState: 'NEW',
             disconnectReason: 'Người chơi 2 đã rời phòng chờ.',
           });
         } else {
           await this.adapter.updateRoom(room.roomCode, {
             status: 'ABANDONED',
+            guestLastActiveAt: nowMs,
+            rtcConnectionState: 'DISCONNECTED',
             disconnectReason:
               reason || 'Người chơi 2 (P2) đã rời trận đấu.',
           });
@@ -1096,29 +1523,290 @@ export class CoopOnlineManager {
       this.currentRoom = updatedRoom;
 
       if (updatedRoom) {
-        if (this.role === 'HOST' && updatedRoom.guestInput) {
-          this.processIncomingGuestInput(updatedRoom.guestInput);
-        }
-
-        if (
-          this.role === 'GUEST' &&
-          updatedRoom.snapshot &&
-          updatedRoom.snapshot.snapshotSeq > this.guestLastAppliedSnapshotSeq
-        ) {
-          this.guestLastAppliedSnapshotSeq = updatedRoom.snapshot.snapshotSeq;
-          const snap = updatedRoom.snapshot;
-          this.snapshotListeners.forEach((cb) => {
-            try {
-              cb(snap);
-            } catch (e) {
-              console.error('[CoopOnlineManager] snapshot listener error:', e);
-            }
-          });
-        }
+        this.coordinateWebRTCSignaling(updatedRoom);
       }
 
       this.notifyListeners();
     });
+  }
+
+  /**
+   * Điều phối trao đổi SDP Offer / Answer và ICE Candidates qua Firestore (chỉ chạy trong trình duyệt có RTCPeerConnection).
+   */
+  private coordinateWebRTCSignaling(room: CoopRoomDocument): void {
+    if (this.customP2PChannel) {
+      return; // Đang dùng kênh P2P trực tiếp trong bộ nhớ (Test Harness)
+    }
+    if (typeof RTCPeerConnection === 'undefined') {
+      return;
+    }
+
+    if (this.role === 'HOST') {
+      // Khi Guest rời phòng chờ -> đóng kết nối WebRTC cũ
+      if (!room.guestUid && this.peerConnection) {
+        this.closeWebRTC();
+        return;
+      }
+
+      // Khi có Guest mới tham gia -> Host tạo Offer 1 lần
+      if (room.guestUid && this.hasSentOfferForGuestUid !== room.guestUid) {
+        this.hasSentOfferForGuestUid = room.guestUid;
+        void this.startHostWebRTCOffer(room.roomCode, room.guestUid);
+      }
+
+      // Khi Guest gửi Answer -> Host áp dụng Answer + ICE của Guest
+      if (this.peerConnection && room.rtcAnswer && !this.hasAppliedRemoteAnswer) {
+        this.hasAppliedRemoteAnswer = true;
+        void this.applyGuestAnswerAndIce(room.rtcAnswer, room.guestIceCandidates);
+      } else if (this.peerConnection && this.hasAppliedRemoteAnswer && room.guestIceCandidates) {
+        void this.addRemoteIceCandidatesJson(room.guestIceCandidates);
+      }
+    } else if (this.role === 'GUEST') {
+      // Khi Host đã đăng Offer -> Guest tạo Answer 1 lần
+      if (room.rtcOffer && this.hasSentAnswerForOffer !== room.rtcOffer) {
+        this.hasSentAnswerForOffer = room.rtcOffer;
+        void this.startGuestWebRTCAnswer(room.roomCode, room.rtcOffer, room.hostIceCandidates);
+      } else if (this.peerConnection && room.hostIceCandidates) {
+        void this.addRemoteIceCandidatesJson(room.hostIceCandidates);
+      }
+    }
+  }
+
+  private async startHostWebRTCOffer(roomCode: string, guestUid: string): Promise<void> {
+    if (typeof RTCPeerConnection === 'undefined') return;
+    this.closeWebRTC();
+    this.hasSentOfferForGuestUid = guestUid;
+    this.rtcState = 'CONNECTING';
+
+    const pc = new RTCPeerConnection({ iceServers: [...COOP_ONLINE_CONFIG.STUN_SERVERS] });
+    this.peerConnection = pc;
+
+    const candidates: RTCIceCandidateInit[] = [];
+    pc.onicecandidate = (ev) => {
+      if (ev.candidate) {
+        candidates.push(ev.candidate.toJSON());
+      }
+    };
+
+    this.setupPeerConnectionLifecycle(pc, roomCode);
+
+    const dc = pc.createDataChannel('bantank_coop_dc', { ordered: false, maxRetransmits: 0 });
+    this.setupDataChannel(dc, roomCode);
+
+    try {
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      await this.waitForIceGatheringShort(pc, 500);
+
+      await this.adapter.updateRoom(roomCode, {
+        rtcOffer: JSON.stringify(pc.localDescription || offer),
+        hostIceCandidates: JSON.stringify(candidates),
+        rtcConnectionState: 'CONNECTING',
+        hostLastActiveAt: Date.now(),
+      });
+    } catch {
+      this.markWebRTCConnectionFailed('Không thể khởi tạo WebRTC Offer trên máy Chủ phòng.');
+    }
+  }
+
+  private async startGuestWebRTCAnswer(
+    roomCode: string,
+    rtcOfferJson: string,
+    hostIceJson: string | null
+  ): Promise<void> {
+    if (typeof RTCPeerConnection === 'undefined') return;
+    this.closeWebRTC();
+    this.hasSentAnswerForOffer = rtcOfferJson;
+    this.rtcState = 'CONNECTING';
+
+    const pc = new RTCPeerConnection({ iceServers: [...COOP_ONLINE_CONFIG.STUN_SERVERS] });
+    this.peerConnection = pc;
+
+    const candidates: RTCIceCandidateInit[] = [];
+    pc.onicecandidate = (ev) => {
+      if (ev.candidate) {
+        candidates.push(ev.candidate.toJSON());
+      }
+    };
+
+    pc.ondatachannel = (ev) => {
+      this.setupDataChannel(ev.channel, roomCode);
+    };
+
+    this.setupPeerConnectionLifecycle(pc, roomCode);
+
+    try {
+      const offerDesc = JSON.parse(rtcOfferJson) as RTCSessionDescriptionInit;
+      await pc.setRemoteDescription(offerDesc);
+      if (hostIceJson) {
+        await this.addRemoteIceCandidatesJson(hostIceJson);
+      }
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      await this.waitForIceGatheringShort(pc, 500);
+
+      await this.adapter.updateRoom(roomCode, {
+        rtcAnswer: JSON.stringify(pc.localDescription || answer),
+        guestIceCandidates: JSON.stringify(candidates),
+        rtcConnectionState: 'CONNECTING',
+        guestLastActiveAt: Date.now(),
+      });
+    } catch {
+      this.markWebRTCConnectionFailed('Không thể phản hồi WebRTC Answer từ máy Người chơi 2.');
+    }
+  }
+
+  private async applyGuestAnswerAndIce(
+    rtcAnswerJson: string,
+    guestIceJson: string | null
+  ): Promise<void> {
+    if (!this.peerConnection) return;
+    try {
+      const answerDesc = JSON.parse(rtcAnswerJson) as RTCSessionDescriptionInit;
+      if (this.peerConnection.signalingState === 'have-local-offer') {
+        await this.peerConnection.setRemoteDescription(answerDesc);
+      }
+      if (guestIceJson) {
+        await this.addRemoteIceCandidatesJson(guestIceJson);
+      }
+    } catch {
+      this.markWebRTCConnectionFailed('Không thể hoàn tất bắt tay WebRTC với Người chơi 2.');
+    }
+  }
+
+  private async addRemoteIceCandidatesJson(iceJson: string): Promise<void> {
+    if (!this.peerConnection || !this.peerConnection.remoteDescription) return;
+    try {
+      const list = JSON.parse(iceJson) as RTCIceCandidateInit[];
+      if (!Array.isArray(list)) return;
+      for (const cand of list) {
+        const sig = JSON.stringify(cand);
+        if (!this.addedRemoteCandidateSignatures.has(sig)) {
+          this.addedRemoteCandidateSignatures.add(sig);
+          await this.peerConnection.addIceCandidate(cand);
+        }
+      }
+    } catch {
+      // Ignore malformed or duplicate ICE candidate
+    }
+  }
+
+  private setupPeerConnectionLifecycle(pc: RTCPeerConnection, roomCode: string): void {
+    if (this.webrtcConnectTimer) {
+      clearTimeout(this.webrtcConnectTimer);
+    }
+    this.webrtcConnectTimer = setTimeout(() => {
+      if (!this.isP2PDataChannelOpen() && this.peerConnection === pc) {
+        this.markWebRTCConnectionFailed(
+          'Quá thời gian thiết lập kết nối P2P trực tiếp (WebRTC). Có thể do tường lửa hoặc NAT nghiêm ngặt.'
+        );
+      }
+    }, COOP_ONLINE_CONFIG.WEBRTC_CONNECT_TIMEOUT_MS);
+
+    pc.onconnectionstatechange = () => {
+      if (this.peerConnection !== pc) return;
+      const st = pc.connectionState;
+      if (st === 'failed' || st === 'disconnected') {
+        this.markWebRTCConnectionFailed(
+          'Kết nối P2P trực tiếp (WebRTC) đã bị ngắt hoặc không thể vượt tường lửa.'
+        );
+        void this.adapter
+          .updateRoom(roomCode, { rtcConnectionState: 'FAILED' })
+          .catch(() => undefined);
+      }
+    };
+  }
+
+  private setupDataChannel(dc: RTCDataChannel, roomCode: string): void {
+    this.dataChannel = dc;
+
+    dc.onopen = () => {
+      if (this.webrtcConnectTimer) {
+        clearTimeout(this.webrtcConnectTimer);
+        this.webrtcConnectTimer = null;
+      }
+      this.rtcState = 'CONNECTED';
+      this.webrtcErrorMessage = null;
+      this.lastPeerP2PActiveAt = Date.now();
+      if (this.currentRoom) {
+        this.currentRoom = { ...this.currentRoom, rtcConnectionState: 'CONNECTED' };
+      }
+      this.notifyListeners();
+      void this.adapter
+        .updateRoom(roomCode, { rtcConnectionState: 'CONNECTED' })
+        .catch(() => undefined);
+    };
+
+    dc.onmessage = (ev) => {
+      try {
+        const parsed = JSON.parse(String(ev.data)) as CoopDataChannelMessage;
+        this.handleIncomingDataChannelMessage(parsed, Date.now());
+      } catch {
+        // Ignore malformed message
+      }
+    };
+
+    dc.onclose = () => {
+      if (this.rtcState === 'CONNECTED') {
+        this.rtcState = 'DISCONNECTED';
+        this.notifyListeners();
+      }
+    };
+
+    dc.onerror = () => {
+      this.markWebRTCConnectionFailed('Lỗi trên kênh truyền WebRTC DataChannel.');
+    };
+  }
+
+  private waitForIceGatheringShort(pc: RTCPeerConnection, maxWaitMs: number): Promise<void> {
+    if (pc.iceGatheringState === 'complete') {
+      return Promise.resolve();
+    }
+    return new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        pc.removeEventListener('icegatheringstatechange', onState);
+        resolve();
+      }, maxWaitMs);
+      const onState = () => {
+        if (pc.iceGatheringState === 'complete') {
+          clearTimeout(timer);
+          pc.removeEventListener('icegatheringstatechange', onState);
+          resolve();
+        }
+      };
+      pc.addEventListener('icegatheringstatechange', onState);
+    });
+  }
+
+  private closeWebRTC(): void {
+    if (this.webrtcConnectTimer) {
+      clearTimeout(this.webrtcConnectTimer);
+      this.webrtcConnectTimer = null;
+    }
+    if (this.dataChannel) {
+      try {
+        this.dataChannel.close();
+      } catch {
+        // Ignore
+      }
+      this.dataChannel = null;
+    }
+    if (this.peerConnection) {
+      try {
+        this.peerConnection.close();
+      } catch {
+        // Ignore
+      }
+      this.peerConnection = null;
+    }
+    this.hasSentOfferForGuestUid = null;
+    this.hasAppliedRemoteAnswer = false;
+    this.hasSentAnswerForOffer = null;
+    this.addedRemoteCandidateSignatures.clear();
+    if (!this.customP2PChannel) {
+      this.rtcState = 'NEW';
+    }
   }
 
   private resetSyncCounters(): void {
@@ -1137,8 +1825,9 @@ export class CoopOnlineManager {
     this.hostOutgoingSnapshotSeq = 0;
     this.lastBroadcastMatchState = '';
     this.lastBroadcastStageId = -1;
-    this.isSnapshotInFlight = false;
+    this.hasRecordedMatchFinishInFirestore = false;
     this.guestLastAppliedSnapshotSeq = 0;
+    this.lastPingSentAt = 0;
   }
 
   private cleanupSubscription(): void {

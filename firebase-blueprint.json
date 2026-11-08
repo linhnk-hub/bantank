@@ -2,7 +2,7 @@
   "entities": {
     "UserSession": {
       "title": "UserSession",
-      "description": "Khóa phiên đơn thiết bị (Single-Device Session Lock) với heartbeat 150s và timeout 900s.",
+      "description": "Khóa phiên đơn thiết bị (Single-Device Session Lock) chuẩn M7.1 với heartbeat 150s (tối thiểu 120s) và timeout 900s.",
       "type": "object",
       "properties": {
         "uid": {
@@ -81,7 +81,7 @@
     },
     "CoopRoom": {
       "title": "CoopRoom",
-      "description": "Phòng chơi Co-op Online 2 người chơi thật (Host P1 và Guest P2).",
+      "description": "Phòng chơi Co-op Online 2 người chơi thật (Host P1 và Guest P2) sử dụng Firestore cho Signaling & WebRTC DataChannel cho đồng bộ trong trận.",
       "type": "object",
       "properties": {
         "roomCode": { "type": "string", "minLength": 6, "maxLength": 6 },
@@ -89,15 +89,24 @@
         "difficulty": { "type": "string", "enum": ["DEFAULT", "EXTREME"] },
         "hostUid": { "type": "string" },
         "hostDisplayName": { "type": "string" },
+        "hostPhotoURL": { "type": "string" },
         "hostReady": { "type": "boolean" },
         "hostLastActiveAt": { "type": "number" },
         "guestUid": { "type": "string" },
         "guestDisplayName": { "type": "string" },
+        "guestPhotoURL": { "type": "string" },
         "guestReady": { "type": "boolean" },
         "guestLastActiveAt": { "type": "number" },
-        "snapshotSeq": { "type": "number" },
+        "rtcOffer": { "type": "string" },
+        "rtcAnswer": { "type": "string" },
+        "hostIceCandidates": { "type": "string" },
+        "guestIceCandidates": { "type": "string" },
+        "rtcConnectionState": { "type": "string", "enum": ["NEW", "CONNECTING", "CONNECTED", "DISCONNECTED", "FAILED"] },
+        "finalScore": { "type": "number" },
+        "matchOutcome": { "type": "string", "enum": ["VICTORY", "GAME_OVER"] },
         "createdAt": { "type": "number" },
-        "expiresAt": { "type": "number" }
+        "expiresAt": { "type": "number" },
+        "disconnectReason": { "type": "string" }
       },
       "required": [
         "roomCode",
@@ -105,8 +114,12 @@
         "difficulty",
         "hostUid",
         "hostDisplayName",
+        "hostPhotoURL",
         "hostReady",
         "hostLastActiveAt",
+        "guestReady",
+        "rtcConnectionState",
+        "finalScore",
         "createdAt",
         "expiresAt"
       ]
@@ -127,7 +140,7 @@
     },
     "/coop_rooms/{roomCode}": {
       "schema": { "$ref": "#/entities/CoopRoom" },
-      "description": "Phòng chơi Co-op Online tối đa 2 người chơi (Host P1 & Guest P2)."
+      "description": "Phòng chơi Co-op Online tối đa 2 người chơi (Host P1 & Guest P2) dùng cho Signaling WebRTC."
     }
   }
 }

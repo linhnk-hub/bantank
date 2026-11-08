@@ -16,12 +16,14 @@ import { TILE_TYPES as TileType } from './types.ts';
 import {
   CoopOnlineManager,
   InMemoryCoopStorageAdapter,
+  createInMemoryP2PChannelPair,
   generateRoomCode,
   validateRoomCodeFormat,
   sanitizeAndValidateInputPacket,
   buildAuthoritativeSnapshot,
   evaluateJoinRoomCandidate,
   evaluateStartMatchCandidate,
+  evaluateCoopRoomRuleUpdate,
   COOP_ONLINE_CONFIG,
   type CoopRoomDocument,
 } from './coopOnlineManager.ts';
@@ -273,9 +275,13 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       guestPhotoURL: null,
       guestReady: false,
       guestLastActiveAt: null,
-      guestInput: null,
-      snapshot: null,
-      snapshotSeq: 0,
+      rtcOffer: null,
+      rtcAnswer: null,
+      hostIceCandidates: null,
+      guestIceCandidates: null,
+      rtcConnectionState: 'NEW',
+      finalScore: 0,
+      matchOutcome: null,
       createdAt: t0,
       expiresAt: t0 + COOP_ONLINE_CONFIG.ROOM_TTL_MS,
       disconnectReason: null,
@@ -352,9 +358,13 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       guestPhotoURL: null,
       guestReady: false,
       guestLastActiveAt: null,
-      guestInput: null,
-      snapshot: null,
-      snapshotSeq: 0,
+      rtcOffer: null,
+      rtcAnswer: null,
+      hostIceCandidates: null,
+      guestIceCandidates: null,
+      rtcConnectionState: 'NEW',
+      finalScore: 0,
+      matchOutcome: null,
       createdAt: t0,
       expiresAt: t0 + COOP_ONLINE_CONFIG.ROOM_TTL_MS,
       disconnectReason: null,
@@ -530,19 +540,19 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   }
 
   // =========================================================================
-  // M7_3_T10: Chống bắn nhầm (Friendly-Fire) & Bảo vệ Đại Bàng/Gạch căn cứ trong TWO_PLAYERS_ONLINE
+  // M7_3_T10: Luật Friendly-Fire P1-P2 & Hành vi đạn P1/P2/Địch với Base (M7.3 FIX Mục V)
   // =========================================================================
   {
     const engine = new GameEngine();
     engine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
     const st = engine.getState() as any;
 
-    // Clear shields and enemies for isolated friendly-fire & base protection test
+    // Clear shields and enemies for isolated test
     st.p1State.shieldTimer = 0;
     st.p2State.shieldTimer = 0;
     st.enemies = [];
 
-    // 1. Place P1 and P2 facing each other and fire bullets directly at each other
+    // 1. Place P1 and P2 facing each other and fire bullets directly at each other -> No friendly fire between P1 and P2
     st.p1.x = 64;
     st.p1.y = 192;
     st.p1.direction = 'RIGHT';
@@ -561,13 +571,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const p1AliveAfterFF = !st.p1State.isDead && st.p1State.lives === 3;
     const p2AliveAfterFF = !st.p2State.isDead && st.p2State.lives === 3;
 
-    // 2. Test P1 and P2 firing directly at protective brick (12,5) and Eagle Base (12,6)
-    st.terrain.currentMap[12][5] = TileType.BRICK;
-    st.terrain.brickSubTiles['12_5'] = 0b1111;
-    st.p1.x = 4 * 16; // col 4, row 12 facing RIGHT toward (12,5) and (12,6)
-    st.p1.y = 12 * 16;
-    st.p1.direction = 'RIGHT';
-
+    // 2. Test P2 firing directly at protective brick (12,7) and Eagle Base (12,6) -> P2 NEVER damages Base or protective bricks
     st.terrain.currentMap[12][7] = TileType.BRICK;
     st.terrain.brickSubTiles['12_7'] = 0b1111;
     st.p2.x = 8 * 16; // col 8, row 12 facing LEFT toward (12,7) and (12,6)
@@ -575,32 +579,57 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     st.p2.direction = 'LEFT';
 
     engine.setExternalInputP2({ up: false, down: false, left: false, right: false, shoot: true });
-    engine.stepTick({ up: false, down: false, left: false, right: false, shoot: true });
+    engine.stepTick({ up: false, down: false, left: false, right: false, shoot: false });
     engine.setExternalInputP2({ up: false, down: false, left: false, right: false, shoot: false });
 
     for (let i = 0; i < 30; i++) {
       engine.stepTick({ up: false, down: false, left: false, right: false, shoot: false });
     }
 
-    const leftBrickIntact =
-      st.terrain.currentMap[12][5] === TileType.BRICK && st.terrain.brickSubTiles['12_5'] === 0b1111;
-    const rightBrickIntact =
+    const rightBrickSafeFromP2 =
       st.terrain.currentMap[12][7] === TileType.BRICK && st.terrain.brickSubTiles['12_7'] === 0b1111;
-    const baseIntact =
+
+    // Also test P2 firing directly at exposed Base (12,6) -> Base remains intact
+    st.terrain.currentMap[12][7] = TileType.EMPTY;
+    st.terrain.brickSubTiles['12_7'] = 0;
+    engine.setExternalInputP2({ up: false, down: false, left: false, right: false, shoot: true });
+    engine.stepTick({ up: false, down: false, left: false, right: false, shoot: false });
+    engine.setExternalInputP2({ up: false, down: false, left: false, right: false, shoot: false });
+
+    for (let i = 0; i < 30; i++) {
+      engine.stepTick({ up: false, down: false, left: false, right: false, shoot: false });
+    }
+
+    const baseSafeFromP2 =
       st.terrain.currentMap[12][6] === TileType.BASE && st.terrain.isBaseDestroyed === false;
+
+    // 3. Verify pre-M7.3 P1 bullet behavior against Base is preserved (P1 bullet hitting exposed Base triggers Base destruction)
+    st.terrain.currentMap[12][5] = TileType.EMPTY;
+    st.terrain.brickSubTiles['12_5'] = 0;
+    st.p1.x = 4 * 16; // col 4, row 12 facing RIGHT toward exposed Base (12,6)
+    st.p1.y = 12 * 16;
+    st.p1.direction = 'RIGHT';
+
+    engine.stepTick({ up: false, down: false, left: false, right: false, shoot: true });
+    for (let i = 0; i < 30; i++) {
+      engine.stepTick({ up: false, down: false, left: false, right: false, shoot: false });
+    }
+
+    const p1PreservesPreM73BaseBehavior =
+      st.terrain.isBaseDestroyed === true && st.isGameOver === true;
 
     const passed =
       p1AliveAfterFF &&
       p2AliveAfterFF &&
-      leftBrickIntact &&
-      rightBrickIntact &&
-      baseIntact;
+      rightBrickSafeFromP2 &&
+      baseSafeFromP2 &&
+      p1PreservesPreM73BaseBehavior;
 
     results.push({
       id: 'M7_3_T10',
-      name: 'Chống bắn nhầm P1-P2 và bảo vệ Đại Bàng/gạch căn cứ trước đạn của cả P1 và P2',
+      name: 'Bảo toàn luật đạn: P1-P2 không bắn trúng nhau, P2 không phá Base/gạch bảo vệ, P1 giữ nguyên hành vi Game Core',
       passed,
-      details: `p1Safe=${p1AliveAfterFF}, p2Safe=${p2AliveAfterFF}, brick(12,5)=${leftBrickIntact}, brick(12,7)=${rightBrickIntact}, baseIntact=${baseIntact}`,
+      details: `p1Safe=${p1AliveAfterFF}, p2Safe=${p2AliveAfterFF}, p2BrickSafe=${rightBrickSafeFromP2}, p2BaseSafe=${baseSafeFromP2}, p1PreM73BaseBehavior=${p1PreservesPreM73BaseBehavior}`,
     });
   }
 
@@ -674,9 +703,13 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       guestPhotoURL: '',
       guestReady: true,
       guestLastActiveAt: t0,
-      guestInput: null,
-      snapshot: null,
-      snapshotSeq: 5,
+      rtcOffer: '{"type":"offer","sdp":"v=0..."}',
+      rtcAnswer: '{"type":"answer","sdp":"v=0..."}',
+      hostIceCandidates: '[]',
+      guestIceCandidates: '[]',
+      rtcConnectionState: 'CONNECTED',
+      finalScore: 0,
+      matchOutcome: null,
       createdAt: t0,
       expiresAt: t0 + COOP_ONLINE_CONFIG.ROOM_TTL_MS,
       disconnectReason: null,
@@ -685,6 +718,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     // Inject active room state as HOST
     (manager as any).currentRoom = activeRoom;
     (manager as any).role = 'HOST';
+    (manager as any).rtcState = 'CONNECTED';
+    (manager as any).lastPeerP2PActiveAt = t0;
 
     const healthyStatus = manager.evaluatePeerConnectionStatus(t0 + 3000);
     const warningStatus = manager.evaluatePeerConnectionStatus(
@@ -719,6 +754,250 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'Phát hiện cảnh báo kết nối yếu, ngắt kết nối quá hạn (Timeout) và đóng phòng an toàn',
       passed,
       details: `healthy=${healthyStatus.peerConnected}, warning="${warningStatus.warningMessage !== null}", timeout=${timeoutStatus.isTimedOut}, abandoned=${abandonedStatus.isTimedOut}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T13: Kiểm chứng Firestore Rules /coop_rooms/{roomCode} (Phân tách quyền Host/Guest/Người thứ 3)
+  // =========================================================================
+  {
+    const t0 = 1_700_000_000_000;
+    const waitingRoom: CoopRoomDocument = {
+      roomCode: 'TANK66',
+      status: 'WAITING',
+      difficulty: 'DEFAULT',
+      hostUid: 'uid_host_1',
+      hostDisplayName: 'Host 1',
+      hostPhotoURL: '',
+      hostReady: true,
+      hostLastActiveAt: t0,
+      guestUid: null,
+      guestDisplayName: null,
+      guestPhotoURL: null,
+      guestReady: false,
+      guestLastActiveAt: null,
+      rtcOffer: null,
+      rtcAnswer: null,
+      hostIceCandidates: null,
+      guestIceCandidates: null,
+      rtcConnectionState: 'NEW',
+      finalScore: 0,
+      matchOutcome: null,
+      createdAt: t0,
+      expiresAt: t0 + COOP_ONLINE_CONFIG.ROOM_TTL_MS,
+      disconnectReason: null,
+    };
+
+    // 1. Guest 2 joins open room -> ALLOWED (GUEST_JOIN)
+    const afterGuestJoin: CoopRoomDocument = {
+      ...waitingRoom,
+      guestUid: 'uid_guest_2',
+      guestDisplayName: 'Guest 2',
+      guestPhotoURL: '',
+      guestReady: false,
+      guestLastActiveAt: t0 + 1000,
+      rtcConnectionState: 'CONNECTING',
+    };
+    const guestJoinEval = evaluateCoopRoomRuleUpdate({
+      authUid: 'uid_guest_2',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: t0 + 1000,
+      existing: waitingRoom,
+      incoming: afterGuestJoin,
+    });
+
+    // 2. Third player tries to overwrite guestUid -> REJECTED
+    const thirdPlayerHijack: CoopRoomDocument = {
+      ...afterGuestJoin,
+      guestUid: 'uid_third_3',
+      guestDisplayName: 'Hacker 3',
+    };
+    const thirdPlayerEval = evaluateCoopRoomRuleUpdate({
+      authUid: 'uid_third_3',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: t0 + 2000,
+      existing: afterGuestJoin,
+      incoming: thirdPlayerHijack,
+    });
+
+    // 3. Guest 2 updates guestReady and rtcAnswer -> ALLOWED (GUEST_SIGNALING_OR_READY)
+    const guestReadyUpdate: CoopRoomDocument = {
+      ...afterGuestJoin,
+      guestReady: true,
+      rtcAnswer: '{"type":"answer","sdp":"v=0..."}',
+      guestLastActiveAt: t0 + 3000,
+    };
+    const guestReadyEval = evaluateCoopRoomRuleUpdate({
+      authUid: 'uid_guest_2',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: t0 + 3000,
+      existing: afterGuestJoin,
+      incoming: guestReadyUpdate,
+    });
+
+    // 4. Guest 2 tries to tamper with difficulty, hostUid, or status='PLAYING' -> REJECTED
+    const guestTamperStatus: CoopRoomDocument = {
+      ...guestReadyUpdate,
+      status: 'PLAYING',
+    };
+    const guestTamperEval = evaluateCoopRoomRuleUpdate({
+      authUid: 'uid_guest_2',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: t0 + 3500,
+      existing: guestReadyUpdate,
+      incoming: guestTamperStatus,
+    });
+
+    // 5. Host tries to overwrite joined guestUid to another user -> REJECTED
+    const hostOverwriteGuest: CoopRoomDocument = {
+      ...guestReadyUpdate,
+      guestUid: 'uid_other_guest',
+    };
+    const hostOverwriteGuestEval = evaluateCoopRoomRuleUpdate({
+      authUid: 'uid_host_1',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: t0 + 3600,
+      existing: guestReadyUpdate,
+      incoming: hostOverwriteGuest,
+    });
+
+    // 6. Host starts match when both players are ready -> ALLOWED (HOST_UPDATE)
+    const hostStartMatch: CoopRoomDocument = {
+      ...guestReadyUpdate,
+      status: 'PLAYING',
+      hostLastActiveAt: t0 + 4000,
+    };
+    const hostStartEval = evaluateCoopRoomRuleUpdate({
+      authUid: 'uid_host_1',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: t0 + 4000,
+      existing: guestReadyUpdate,
+      incoming: hostStartMatch,
+    });
+
+    const passed =
+      guestJoinEval.allowed === true &&
+      guestJoinEval.matchedBranch === 'GUEST_JOIN' &&
+      thirdPlayerEval.allowed === false &&
+      guestReadyEval.allowed === true &&
+      guestReadyEval.matchedBranch === 'GUEST_SIGNALING_OR_READY' &&
+      guestTamperEval.allowed === false &&
+      hostOverwriteGuestEval.allowed === false &&
+      hostStartEval.allowed === true &&
+      hostStartEval.matchedBranch === 'HOST_UPDATE';
+
+    results.push({
+      id: 'M7_3_T13',
+      name: 'Firestore Rules /coop_rooms: Tách biệt quyền Host/Guest, chặn người thứ 3 và chặn Guest sửa trạng thái Host',
+      passed,
+      details: `guestJoin=${guestJoinEval.allowed}, 3rdBlocked=${!thirdPlayerEval.allowed}, guestReady=${guestReadyEval.allowed}, guestTamperBlocked=${!guestTamperEval.allowed}, hostOverwriteGuestBlocked=${!hostOverwriteGuestEval.allowed}, hostStart=${hostStartEval.allowed}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T14: Kiến trúc WebRTC DataChannel P2P – 0 lượt ghi Firestore trong suốt trận đấu
+  // =========================================================================
+  {
+    const sharedStorage = new InMemoryCoopStorageAdapter();
+    const hostManager = new CoopOnlineManager(sharedStorage);
+    const guestManager = new CoopOnlineManager(sharedStorage);
+
+    const t0 = 1_700_000_000_000;
+    const initialRoom: CoopRoomDocument = {
+      roomCode: 'P2P999',
+      status: 'PLAYING',
+      difficulty: 'DEFAULT',
+      hostUid: 'uid_host_p1',
+      hostDisplayName: 'Host P1',
+      hostPhotoURL: '',
+      hostReady: true,
+      hostLastActiveAt: t0,
+      guestUid: 'uid_guest_p2',
+      guestDisplayName: 'Guest P2',
+      guestPhotoURL: '',
+      guestReady: true,
+      guestLastActiveAt: t0,
+      rtcOffer: '{"type":"offer"}',
+      rtcAnswer: '{"type":"answer"}',
+      hostIceCandidates: '[]',
+      guestIceCandidates: '[]',
+      rtcConnectionState: 'CONNECTED',
+      finalScore: 0,
+      matchOutcome: null,
+      createdAt: t0,
+      expiresAt: t0 + COOP_ONLINE_CONFIG.ROOM_TTL_MS,
+      disconnectReason: null,
+    };
+
+    sharedStorage.setRoomSync('P2P999', initialRoom);
+    (hostManager as any).currentRoom = initialRoom;
+    (hostManager as any).role = 'HOST';
+    (guestManager as any).currentRoom = initialRoom;
+    (guestManager as any).role = 'GUEST';
+
+    // Connect Host and Guest via direct P2P DataChannel pair
+    const { hostChannel, guestChannel } = createInMemoryP2PChannelPair(
+      (msg) => hostManager.handleIncomingDataChannelMessage(msg, t0 + 1000),
+      (msg) => guestManager.handleIncomingDataChannelMessage(msg, t0 + 1000)
+    );
+    hostManager.attachCustomP2PChannel(hostChannel, t0);
+    guestManager.attachCustomP2PChannel(guestChannel, t0);
+
+    let snapshotsReceivedByGuest = 0;
+    guestManager.subscribeSnapshots(() => {
+      snapshotsReceivedByGuest++;
+    });
+
+    // Reset Firestore write counter right before gameplay loop starts
+    sharedStorage.resetCounters();
+
+    const engine = new GameEngine();
+    engine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+
+    // Simulate 40 Guest input packets & 40 Host snapshot frames over P2P DataChannel
+    let simTime = t0 + 100;
+    for (let step = 1; step <= 40; step++) {
+      simTime += 50; // 50ms per step (> 45ms min input interval)
+      void guestManager.submitGuestInput(
+        {
+          up: step % 2 === 0,
+          down: false,
+          left: step % 2 === 1,
+          right: false,
+          shoot: step % 3 === 0,
+        },
+        simTime,
+        true
+      );
+      engine.setExternalInputP2(hostManager.getLatestValidatedGuestInput());
+      engine.stepTick({ up: true, down: false, left: false, right: false, shoot: false });
+      void hostManager.onHostSimulationFrame(50, engine.getState(), simTime);
+    }
+
+    const firestoreWritesDuringActiveMatch = sharedStorage.getWriteCount();
+    const hostProcessedSeq = hostManager.getHostLastProcessedGuestSeq();
+
+    // Now simulate P2P channel disconnect -> Guest input must fail cleanly with WEBRTC_NOT_CONNECTED and 0 Firestore fallback writes
+    guestChannel.close();
+    simTime += 100;
+    void guestManager.submitGuestInput(
+      { up: true, down: false, left: false, right: false, shoot: true },
+      simTime,
+      true
+    );
+    const firestoreWritesAfterP2PFailure = sharedStorage.getWriteCount();
+
+    const passed =
+      firestoreWritesDuringActiveMatch === 0 &&
+      firestoreWritesAfterP2PFailure === 0 &&
+      hostProcessedSeq === 40 &&
+      snapshotsReceivedByGuest >= 35;
+
+    results.push({
+      id: 'M7_3_T14',
+      name: 'Đồng bộ trong trận qua WebRTC DataChannel: 0 lượt ghi Firestore cho Input/Snapshot',
+      passed,
+      details: `firestoreWritesInMatch=${firestoreWritesDuringActiveMatch}, writesAfterDisconnect=${firestoreWritesAfterP2PFailure}, hostProcessedInputSeq=${hostProcessedSeq}, guestReceivedSnapshots=${snapshotsReceivedByGuest}`,
     });
   }
 
