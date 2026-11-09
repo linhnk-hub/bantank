@@ -770,5 +770,83 @@ service cloud.firestore {
         allow delete: if isSuperAdmin();
       }
     }
+
+    // =========================================================================
+    // 8. Collection Rules: /system_config/{docId} (M7.3.3: Cấu hình nhạc nền chung qua GitHub Pages)
+    //    - Không dùng Firebase Storage, không lưu downloadURL hay capability token, không lưu Base64.
+    //    - Chỉ lưu đường dẫn tương đối an toàn trong thư mục `audio/` (assetPath == 'audio/' + fileName).
+    //    - Người dùng Gmail cá nhân đã xác minh được phép đọc /system_config/audio
+    //      để tải nhạc trực tiếp từ GitHub Pages kèm cache-busting theo version.
+    //    - Chỉ duy nhất Super Admin (linhnk.online@gmail.com) được quyền tạo/cập nhật/xóa.
+    // =========================================================================
+    function isValidSystemAudioConfig(data) {
+      return data.keys().hasAll([
+          'assetPath',
+          'fileName',
+          'contentType',
+          'fileSize',
+          'updatedAt',
+          'updatedBy',
+          'version',
+          'isEnabled'
+        ])
+        && data.keys().hasOnly([
+          'assetPath',
+          'fileName',
+          'contentType',
+          'fileSize',
+          'updatedAt',
+          'updatedBy',
+          'version',
+          'isEnabled',
+          'displayName',
+          'durationSec',
+          'trimStartSec',
+          'trimEndSec',
+          'loopGapMs',
+          'fadeOutMs'
+        ])
+        && data.fileName is string
+        && data.fileName.size() >= 5
+        && data.fileName.size() <= 255
+        && data.fileName.matches('^[A-Za-z0-9._-]+\\.(mp3|ogg|wav)$')
+        && data.assetPath is string
+        && data.assetPath.size() >= 11
+        && data.assetPath.size() <= 300
+        && data.assetPath.matches('^audio/[A-Za-z0-9._-]+\\.(mp3|ogg|wav)$')
+        && data.assetPath == ('audio/' + data.fileName)
+        && data.contentType is string
+        && data.contentType.size() >= 9
+        && data.contentType.size() <= 120
+        && data.contentType.matches('^audio/(mpeg|mp3|ogg|wav|x-wav|wave)$')
+        && data.fileSize is int
+        && data.fileSize > 0
+        && data.fileSize <= 26214400
+        && isValidClientMillisTimestamp(data.updatedAt)
+        && data.updatedBy == 'linhnk.online@gmail.com'
+        && data.version is int
+        && data.version >= 1
+        && data.isEnabled is bool
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120))
+        && (!('durationSec' in data) || ((data.durationSec is int || data.durationSec is float) && data.durationSec > 0 && data.durationSec <= 7200))
+        && (!('trimStartSec' in data) || (data.trimStartSec == null || ((data.trimStartSec is int || data.trimStartSec is float) && data.trimStartSec >= 0)))
+        && (!('trimEndSec' in data) || (data.trimEndSec == null || ((data.trimEndSec is int || data.trimEndSec is float) && data.trimEndSec >= 0)))
+        && (!('loopGapMs' in data) || (data.loopGapMs is int && data.loopGapMs >= 0 && data.loopGapMs <= 10000))
+        && (!('fadeOutMs' in data) || (data.fadeOutMs is int && data.fadeOutMs >= 0 && data.fadeOutMs <= 10000));
+    }
+
+    match /system_config/{docId} {
+      allow get: if isVerifiedPersonalGmail() && docId == 'audio';
+      allow list: if false;
+      allow create: if isSuperAdmin()
+        && docId == 'audio'
+        && isValidSystemAudioConfig(incoming());
+      allow update: if isSuperAdmin()
+        && docId == 'audio'
+        && isValidSystemAudioConfig(incoming())
+        && incoming().version > existing().version;
+      allow delete: if isSuperAdmin() && docId == 'audio';
+    }
   }
 }
+

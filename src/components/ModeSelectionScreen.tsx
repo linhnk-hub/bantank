@@ -205,10 +205,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.18),rgba(255,255,255,0))] pointer-events-none" />
       <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
 
-      {/* Top Header Bar — M7.3: Removed "HUYỀN THOẠI TUỔI THƠ", removed email & "Đang trực tuyến" */}
+      {/* Top Header Bar — M7.3.2: Removed mini logo on Top Menu */}
       <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-3 sm:px-4 py-2.5">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
-          {/* Left: Back Button & Logo */}
+          {/* Left: Back Button */}
           <div className="flex items-center gap-2 sm:gap-3">
             <button
               type="button"
@@ -219,15 +219,6 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               <ArrowLeft className="w-4 h-4 text-amber-400" />
               <span className="hidden sm:inline">Quay lại</span>
             </button>
-
-            <img
-              src="/logo-bantank.png"
-              alt="Bắn Tank Online Logo"
-              className="w-10 h-10 sm:w-12 sm:h-12 object-contain drop-shadow p-0 m-0 shrink-0"
-              onError={(e) => {
-                e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
-              }}
-            />
           </div>
 
           {/* Right: User Profile (Avatar + Display Name Only) & Actions */}

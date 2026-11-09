@@ -135,6 +135,37 @@
         "finalScore",
         "updatedAt"
       ]
+    },
+    "SystemAudioConfig": {
+      "title": "SystemAudioConfig",
+      "description": "Cấu hình nhạc nền chung toàn hệ thống (M7.3.3) phân phối qua GitHub Pages tại thư mục tĩnh public/audio/ (không dùng Firebase Storage, không lưu downloadURL/token).",
+      "type": "object",
+      "properties": {
+        "assetPath": { "type": "string", "minLength": 11, "maxLength": 300, "pattern": "^audio/[A-Za-z0-9._-]+\\.(mp3|ogg|wav)$" },
+        "fileName": { "type": "string", "minLength": 5, "maxLength": 255, "pattern": "^[A-Za-z0-9._-]+\\.(mp3|ogg|wav)$" },
+        "contentType": { "type": "string", "minLength": 9, "maxLength": 120 },
+        "fileSize": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "updatedBy": { "type": "string" },
+        "version": { "type": "number" },
+        "isEnabled": { "type": "boolean" },
+        "displayName": { "type": "string", "maxLength": 120 },
+        "durationSec": { "type": "number" },
+        "trimStartSec": { "type": "number" },
+        "trimEndSec": { "type": "number" },
+        "loopGapMs": { "type": "number" },
+        "fadeOutMs": { "type": "number" }
+      },
+      "required": [
+        "assetPath",
+        "fileName",
+        "contentType",
+        "fileSize",
+        "updatedAt",
+        "updatedBy",
+        "version",
+        "isEnabled"
+      ]
     }
   },
   "firestore": {
@@ -157,6 +188,11 @@
     "/coop_rooms/{roomCode}/private/{docId}": {
       "schema": { "$ref": "#/entities/CoopRoomPrivateSignaling" },
       "description": "Signaling WebRTC (SDP Offer/Answer, ICE) và kết quả trận đấu riêng tư cho Host & Guest."
+    },
+    "/system_config/{docId}": {
+      "schema": { "$ref": "#/entities/SystemAudioConfig" },
+      "description": "Cấu hình nhạc nền chung toàn hệ thống (/system_config/audio)."
     }
   }
 }
+

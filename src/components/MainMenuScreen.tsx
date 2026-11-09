@@ -92,21 +92,9 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       {/* Background Ambience */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.18),rgba(255,255,255,0))] pointer-events-none" />
 
-      {/* Top Header Bar — M7.3: Removed "HUYỀN THOẠI TUỔI THƠ", removed email & "Đang trực tuyến" */}
+      {/* Top Header Bar — M7.3.2: Removed mini logo on Top Menu */}
       <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-3 sm:px-4 py-2.5">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
-          {/* Left: Logo only */}
-          <div className="flex items-center gap-2.5">
-            <img
-              src="/logo-bantank.png"
-              alt="Bắn Tank Online Logo"
-              className="w-11 h-11 sm:w-12 sm:h-12 object-contain drop-shadow p-0 m-0 shrink-0"
-              onError={(e) => {
-                e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
-              }}
-            />
-          </div>
-
+        <div className="max-w-6xl mx-auto flex items-center justify-end gap-2">
           {/* Right: User Profile (Avatar + Display Name Only) & Quick Actions */}
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-neutral-800/80 border border-neutral-700/80 text-xs">

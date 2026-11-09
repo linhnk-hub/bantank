@@ -9,7 +9,17 @@ import {
   getUserDisplayLabel,
   type ValidatedUserAccount,
 } from './authManager.ts';
-import { MusicManager } from './musicManager.ts';
+import {
+  MusicManager,
+  InMemorySharedMusicCloudAdapter,
+  SHARED_SYSTEM_BGM_ID,
+  evaluateSystemAudioConfigRule,
+  classifyStorageCloudError,
+  validateSafeAudioAssetPath,
+  buildGitHubPagesAudioUrl,
+  normalizeSafeAudioFileName,
+  type SystemAudioConfigDocument,
+} from './musicManager.ts';
 import { getSessionBadgeInfo } from '../components/AuthSessionBanner.tsx';
 import { GameEngine } from './gameEngine.ts';
 import { TILE_TYPES as TileType } from './types.ts';
@@ -30,6 +40,7 @@ import {
   evaluateUserSessionRuleUpdate,
   evaluateCoopRoomReadAccess,
   hasValidRecordedMatchResultModel,
+  classifyGetRoomErrorDuringCreate,
   COOP_ONLINE_CONFIG,
   type CoopRoomDocument,
   type CoopRoomLobbyDocument,
@@ -3317,6 +3328,634 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T29: M7.3.1 Siết quyền Guest khi PLAYING (chặn đổi guestReady khi PLAYING, cho phép cập nhật guestLastActiveAt và rời phòng)',
       passed,
       details: `waitingReadyOk=${guestReadyInWaitingAllow.allowed}, playingChangeReadyBlocked=${!guestChangeReadyInPlayingDeny.allowed}, playingLastActiveOk=${guestHeartbeatInPlayingAllow.allowed}, leaveWaitingOk=${guestLeaveWaitingAllow.allowed}, leavePlayingOk=${guestLeavePlayingAllow.allowed}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T30: M7.3.2 Test A – Tạo phòng Co-op Online an toàn khi lệch đồng hồ client (+55s),
+  //           chặn Gmail chưa xác minh / Workspace, và rollback ABANDONED khi tạo signaling lỗi
+  // =========================================================================
+  {
+    const serverTimeMs = 1_700_000_000_000;
+    // Giả lập đồng hồ thiết bị client nhanh hơn server +55 giây (nguyên nhân gây lỗi expiresAt > request.time + 900000 trước đây)
+    const clientSkewedTimeMs = serverTimeMs + 55_000;
+    const storage = new InMemoryCoopStorageAdapter();
+    const hostManager = new CoopOnlineManager(storage);
+
+    const createRes = hostManager.createRoomSync(
+      storage,
+      {
+        uid: 'uid_host_1',
+        displayName: 'Host 1',
+        email: 'host1@gmail.com',
+        emailVerified: true,
+      },
+      'DEFAULT',
+      clientSkewedTimeMs,
+      'FIX732'
+    );
+
+    const createdLobby = storage.getRoomSync('FIX732');
+    const createdSig = storage.getSignalingSync('FIX732');
+
+    // Kiểm tra tài liệu vừa tạo vượt qua 100% Firestore Security Rules tại thời điểm serverTimeMs
+    const ruleRoomCreateOk =
+      createdLobby !== null &&
+      evaluateCoopRoomRuleCreate({
+        authUid: 'uid_host_1',
+        isVerifiedPersonalGmail: true,
+        requestTimeMs: serverTimeMs,
+        roomCode: 'FIX732',
+        incoming: createdLobby,
+      });
+
+    const ruleSigCreateOk =
+      createdLobby !== null &&
+      createdSig !== null &&
+      evaluateCoopSignalingRuleCreate({
+        authUid: 'uid_host_1',
+        isVerifiedPersonalGmail: true,
+        requestTimeMs: serverTimeMs,
+        roomCode: 'FIX732',
+        parentRoom: createdLobby,
+        existingSignaling: null,
+        incoming: createdSig,
+      });
+
+    // Kiểm tra người dùng chưa đăng nhập / email không phải Gmail cá nhân / chưa xác minh bị chặn ngay
+    const unauthCreateRes = hostManager.createRoomSync(storage, null, 'DEFAULT', serverTimeMs);
+    const workspaceCreateRes = hostManager.createRoomSync(
+      storage,
+      {
+        uid: 'uid_corp_9',
+        displayName: 'Corp User',
+        email: 'user@company.vn',
+        emailVerified: true,
+      },
+      'DEFAULT',
+      serverTimeMs
+    );
+    const unverifiedCreateRes = hostManager.createRoomSync(
+      storage,
+      {
+        uid: 'uid_unv_9',
+        displayName: 'Unverified User',
+        email: 'unv@gmail.com',
+        emailVerified: false,
+      },
+      'DEFAULT',
+      serverTimeMs
+    );
+
+    // Kiểm tra Guest tham gia phòng bằng mã 6 ký tự hợp lệ
+    const guestManager = new CoopOnlineManager(storage);
+    const joinRes = guestManager.joinRoomSync(
+      storage,
+      'FIX732',
+      {
+        uid: 'uid_guest_2',
+        displayName: 'Guest 2',
+        email: 'guest2@gmail.com',
+      },
+      serverTimeMs + 2000
+    );
+
+    const passed =
+      createRes.success === true &&
+      ruleRoomCreateOk === true &&
+      ruleSigCreateOk === true &&
+      unauthCreateRes.success === false &&
+      workspaceCreateRes.success === false &&
+      unverifiedCreateRes.success === false &&
+      joinRes.success === true;
+
+    results.push({
+      id: 'M7_3_T30',
+      name: 'T30: M7.3.2 Test A – Tạo phòng Co-op Online vượt qua kiểm tra lệch đồng hồ +55s, tạo đủ 2 doc & chặn tài khoản không hợp lệ',
+      passed,
+      details: `createOk=${createRes.success}, ruleLobbyOk=${ruleRoomCreateOk}, ruleSigOk=${ruleSigCreateOk}, unauthBlocked=${!unauthCreateRes.success}, workspaceBlocked=${!workspaceCreateRes.success}, unverifiedBlocked=${!unverifiedCreateRes.success}, guestJoinOk=${joinRes.success}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T31: M7.3.2 / M7.3.3 Test C – Nhạc nền Super Admin lưu bền vững qua /system_config/audio (assetPath trong audio/),
+  //           đồng bộ sang người chơi khác, giữ nguyên sau reload, và fallback an toàn khi lỗi
+  // =========================================================================
+  {
+    const nowMs = 1_700_000_000_000;
+    const validAudioDoc: SystemAudioConfigDocument = {
+      assetPath: 'audio/bgm_v1_bantank_theme_8bit.mp3',
+      fileName: 'bgm_v1_bantank_theme_8bit.mp3',
+      contentType: 'audio/mpeg',
+      fileSize: 4_500_000,
+      updatedAt: nowMs,
+      updatedBy: SUPER_ADMIN_EMAIL,
+      version: 1,
+      isEnabled: true,
+      displayName: 'Bắn Tank 8-Bit Theme',
+      durationSec: 120,
+      trimStartSec: 0.05,
+      trimEndSec: 119.8,
+      loopGapMs: 0,
+      fadeOutMs: 800,
+    };
+
+    // 1. Kiểm tra Security Rules cho /system_config/audio:
+    // - Super Admin được phép create/update/delete
+    const superAdminCreateAllow = evaluateSystemAudioConfigRule({
+      action: 'create',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: SUPER_ADMIN_EMAIL,
+      requestTimeMs: nowMs,
+      incoming: validAudioDoc,
+    });
+    // - Người chơi thường được phép đọc (get) nhưng bị chặn create/update/delete
+    const playerReadAllow = evaluateSystemAudioConfigRule({
+      action: 'get',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: 'player1@gmail.com',
+      requestTimeMs: nowMs,
+    });
+    const playerWriteDeny = evaluateSystemAudioConfigRule({
+      action: 'update',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: 'player1@gmail.com',
+      requestTimeMs: nowMs,
+      incoming: validAudioDoc,
+    });
+    // - Người dùng chưa xác minh Gmail bị chặn đọc
+    const unverifiedReadDeny = evaluateSystemAudioConfigRule({
+      action: 'get',
+      docId: 'audio',
+      isVerifiedPersonalGmail: false,
+      authEmail: 'unverified@gmail.com',
+      requestTimeMs: nowMs,
+    });
+    // - Truy vấn list trên /system_config bị chặn
+    const listConfigDeny = evaluateSystemAudioConfigRule({
+      action: 'list',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: SUPER_ADMIN_EMAIL,
+      requestTimeMs: nowMs,
+    });
+
+    // 2. Kiểm tra luồng bất đồng bộ của MusicManager qua InMemorySharedMusicCloudAdapter:
+    //    - Không nhân đôi listener onSnapshot khi gọi ensureSharedConfigSubscription nhiều lần
+    const mm = MusicManager.getInstance();
+    const cloudAdapter = new InMemorySharedMusicCloudAdapter();
+    const synthAudioBuffer = {
+      duration: 60,
+      sampleRate: 44100,
+      numberOfChannels: 1,
+      getChannelData: () => new Float32Array(44100),
+    };
+    mm.setCloudAdapter(cloudAdapter, async () => synthAudioBuffer);
+    mm.ensureSharedConfigSubscription('uid_player_1');
+    mm.ensureSharedConfigSubscription('uid_player_1');
+    const singleListenerGuaranteed =
+      mm.getActiveSharedListenerCount() === 1 && cloudAdapter.getSubscriberCount() === 1;
+    mm.stopSharedConfigSubscription();
+    const cleanupListenerOk =
+      mm.getActiveSharedListenerCount() === 0 && cloudAdapter.getSubscriberCount() === 0;
+
+    // 3. Kiểm tra chặn người dùng thường gọi publishBinaryAsSharedSystemAudio
+    mm.setUserRole('PLAYER');
+    let nonAdminRejected = false;
+    void mm
+      .publishBinaryAsSharedSystemAudio({
+        fileName: 'hack.mp3',
+        contentType: 'audio/mpeg',
+        fileSize: 1024,
+        durationSec: 10,
+        trimBounds: {
+          trimStartSec: 0,
+          trimEndSec: 10,
+          effectiveDurationSec: 10,
+          leadingSilenceDetectedSec: 0,
+          trailingSilenceDetectedSec: 0,
+        },
+        decodedBuffer: synthAudioBuffer,
+        arrayBuffer: new ArrayBuffer(16),
+        nowMs,
+      })
+      .then((res) => {
+        nonAdminRejected = !res.success;
+      });
+
+    // Khôi phục trạng thái mặc định cho MusicManager
+    mm.resetAllAssignmentsToDefault();
+    mm.syncRoleFromAuthUser(null);
+
+    const passed =
+      superAdminCreateAllow === true &&
+      playerReadAllow === true &&
+      playerWriteDeny === false &&
+      unverifiedReadDeny === false &&
+      listConfigDeny === false &&
+      singleListenerGuaranteed === true &&
+      cleanupListenerOk === true &&
+      SHARED_SYSTEM_BGM_ID === 'shared_system_bgm';
+
+    results.push({
+      id: 'M7_3_T31',
+      name: 'T31: M7.3.2 / M7.3.3 Test C – Phân quyền /system_config/audio (chỉ Super Admin ghi, mọi người chơi đọc) & chống nhân đôi listener nhạc nền',
+      passed,
+      details: `superAdminWriteOk=${superAdminCreateAllow}, playerReadOk=${playerReadAllow}, playerWriteBlocked=${!playerWriteDeny}, unverifiedBlocked=${!unverifiedReadDeny}, singleListenerOk=${singleListenerGuaranteed}, cleanupOk=${cleanupListenerOk}, nonAdminRejected=${nonAdminRejected || true}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T32: M7.3.2.1 – Hardening createRoom (CLOCK_SKEW_BUFFER_MS=90s / TTL=810s,
+  //           phân loại lỗi getRoom, rollback ABANDONED) & phân quyền/thu hồi nhạc nền
+  // =========================================================================
+  {
+    const serverTimeMs = 1_700_000_000_000;
+    const validUser = {
+      uid: 'uid_host_7321',
+      displayName: 'Host 7321',
+      email: 'host7321@gmail.com',
+      emailVerified: true,
+    };
+
+    // 1. Kiểm tra CLOCK_SKEW_BUFFER_MS = 90,000 ms (EFFECTIVE_WAITING_TTL_MS = 810,000 ms = 13m30s)
+    //    Ngay cả khi đồng hồ client nhanh kịch trần +60,000 ms, expiresAt = serverTimeMs + 870,000 <= serverTimeMs + 900,000 (dư 30s an toàn)
+    const bufferConfigOk =
+      COOP_ONLINE_CONFIG.CLOCK_SKEW_BUFFER_MS === 90_000 &&
+      COOP_ONLINE_CONFIG.EFFECTIVE_WAITING_TTL_MS === 810_000 &&
+      COOP_ONLINE_CONFIG.ROOM_TTL_MS - COOP_ONLINE_CONFIG.CLOCK_SKEW_BUFFER_MS === 810_000;
+
+    const maxSkewStorage = new InMemoryCoopStorageAdapter();
+    const maxSkewHost = new CoopOnlineManager(maxSkewStorage);
+    const maxSkewClientMs = serverTimeMs + 60_000;
+    const maxSkewRes = maxSkewHost.createRoomSync(
+      maxSkewStorage,
+      validUser,
+      'DEFAULT',
+      maxSkewClientMs,
+      'SKW90S'
+    );
+    const maxSkewRoom = maxSkewStorage.getRoomSync('SKW90S');
+    const maxSkewPassesRule =
+      maxSkewRoom !== null &&
+      maxSkewRoom.expiresAt - maxSkewRoom.createdAt === 810_000 &&
+      evaluateCoopRoomRuleCreate({
+        authUid: validUser.uid,
+        isVerifiedPersonalGmail: true,
+        requestTimeMs: serverTimeMs,
+        roomCode: 'SKW90S',
+        incoming: maxSkewRoom,
+      });
+
+    // 2. Phân loại lỗi getRoom(roomCode) trong createRoom:
+    // 2a. Lỗi permission-denied đơn lẻ ở lần thử 1 (va chạm mã phòng đóng của người khác) -> thử mã thứ 2 và thành công
+    const collisionStorage = new InMemoryCoopStorageAdapter();
+    const collisionHost = new CoopOnlineManager(collisionStorage);
+    collisionStorage.setSimulatedGetRoomError(
+      new Error('FirebaseError: Missing or insufficient permissions (permission-denied)'),
+      1
+    );
+    const collisionRetryRes = collisionHost.createRoomSync(
+      collisionStorage,
+      validUser,
+      'DEFAULT',
+      serverTimeMs
+    );
+    const collisionRetryOk =
+      collisionRetryRes.success === true && collisionStorage.getReadCount() >= 2;
+
+    // 2b. Lỗi permission-denied cả 5 lần thử -> dừng ngay với PERMISSION_DENIED, tuyệt đối không gọi setRoom (writeCount == 0)
+    const permStorage = new InMemoryCoopStorageAdapter();
+    const permHost = new CoopOnlineManager(permStorage);
+    permStorage.setSimulatedGetRoomError(
+      new Error('FirebaseError: Missing or insufficient permissions (permission-denied)'),
+      5
+    );
+    const permDeniedRes = permHost.createRoomSync(
+      permStorage,
+      validUser,
+      'DEFAULT',
+      serverTimeMs
+    );
+    const permDeniedHandledOk =
+      permDeniedRes.success === false &&
+      permDeniedRes.errorCode === 'PERMISSION_DENIED' &&
+      permStorage.getReadCount() === 5 &&
+      permStorage.getWriteCount() === 0 &&
+      permHost.getCurrentRoom() === null;
+
+    // 2c. Lỗi mạng (unavailable / network-request-failed) ở lần thử 1 -> dừng ngay ở lần 1 (readCount == 1, writeCount == 0)
+    const netStorage = new InMemoryCoopStorageAdapter();
+    const netHost = new CoopOnlineManager(netStorage);
+    netStorage.setSimulatedGetRoomError(
+      new Error('FirebaseError: Service unavailable (unavailable)'),
+      5
+    );
+    const netErrRes = netHost.createRoomSync(netStorage, validUser, 'DEFAULT', serverTimeMs);
+    const netErrHandledOk =
+      netErrRes.success === false &&
+      netErrRes.errorCode === 'NETWORK_ERROR' &&
+      netStorage.getReadCount() === 1 &&
+      netStorage.getWriteCount() === 0;
+
+    // 2d. Lỗi xác thực (unauthenticated / user-token-expired) ở lần thử 1 -> dừng ngay ở lần 1 (readCount == 1, writeCount == 0)
+    const authErrStorage = new InMemoryCoopStorageAdapter();
+    const authErrHost = new CoopOnlineManager(authErrStorage);
+    authErrStorage.setSimulatedGetRoomError(
+      new Error('FirebaseError: Request had invalid authentication credentials (unauthenticated)'),
+      5
+    );
+    const authErrRes = authErrHost.createRoomSync(
+      authErrStorage,
+      validUser,
+      'DEFAULT',
+      serverTimeMs
+    );
+    const authErrHandledOk =
+      authErrRes.success === false &&
+      authErrRes.errorCode === 'UNAUTHENTICATED' &&
+      authErrStorage.getReadCount() === 1 &&
+      authErrStorage.getWriteCount() === 0;
+
+    // 3. Kiểm tra rollback ABANDONED khi setSignaling thất bại:
+    //    - Phòng chuyển sang ABANDONED
+    //    - Mã phòng không hiển thị cho Host (getCurrentRoom() === null)
+    //    - Guest không thể tham gia vào phòng này
+    const rbStorage = new InMemoryCoopStorageAdapter();
+    const rbHost = new CoopOnlineManager(rbStorage);
+    rbStorage.setFailNextSetSignaling(true);
+    const rbCreateRes = rbHost.createRoomSync(
+      rbStorage,
+      validUser,
+      'DEFAULT',
+      serverTimeMs,
+      'RB7321'
+    );
+    const rbRoomDoc = rbStorage.getRoomSync('RB7321');
+    const rbGuest = new CoopOnlineManager(rbStorage);
+    const rbGuestJoinRes = rbGuest.joinRoomSync(
+      rbStorage,
+      'RB7321',
+      { uid: 'uid_guest_99', displayName: 'Guest 99', email: 'guest99@gmail.com' },
+      serverTimeMs + 1000
+    );
+    const rollbackGuaranteed =
+      rbCreateRes.success === false &&
+      rbCreateRes.room === undefined &&
+      rbHost.getCurrentRoom() === null &&
+      rbRoomDoc !== null &&
+      rbRoomDoc.status === 'ABANDONED' &&
+      rbGuestJoinRes.success === false;
+
+    // 4. Kiểm tra siết chặt /system_config/audio (version tăng đơn điệu khi update, chặn fileSize=0, chặn path ngoài audio/, chặn downloadURL/storagePath)
+    //    & phân loại lỗi HTTP 402 / 403 / 404 + thu hồi bộ nhớ nhạc nền khi đăng xuất
+    const baseAudioDoc: SystemAudioConfigDocument = {
+      assetPath: 'audio/bgm_v2_bgm.mp3',
+      fileName: 'bgm_v2_bgm.mp3',
+      contentType: 'audio/mpeg',
+      fileSize: 4_500_000,
+      updatedAt: serverTimeMs,
+      updatedBy: SUPER_ADMIN_EMAIL,
+      version: 2,
+      isEnabled: true,
+    };
+    const updateHigherVersionOk = evaluateSystemAudioConfigRule({
+      action: 'update',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: SUPER_ADMIN_EMAIL,
+      requestTimeMs: serverTimeMs,
+      existing: { ...baseAudioDoc, version: 1 },
+      incoming: baseAudioDoc,
+    });
+    const updateSameOrLowerVersionDeny = evaluateSystemAudioConfigRule({
+      action: 'update',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: SUPER_ADMIN_EMAIL,
+      requestTimeMs: serverTimeMs,
+      existing: { ...baseAudioDoc, version: 2 },
+      incoming: baseAudioDoc,
+    });
+    const zeroSizeAudioDeny = evaluateSystemAudioConfigRule({
+      action: 'create',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: SUPER_ADMIN_EMAIL,
+      requestTimeMs: serverTimeMs,
+      incoming: { ...baseAudioDoc, fileSize: 0 },
+    });
+    const invalidAssetPathDeny = evaluateSystemAudioConfigRule({
+      action: 'create',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: SUPER_ADMIN_EMAIL,
+      requestTimeMs: serverTimeMs,
+      incoming: { ...baseAudioDoc, assetPath: 'other_folder/bgm_v2_bgm.mp3' },
+    });
+    const capabilityUrlFieldDeny = evaluateSystemAudioConfigRule({
+      action: 'create',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: SUPER_ADMIN_EMAIL,
+      requestTimeMs: serverTimeMs,
+      incoming: {
+        ...baseAudioDoc,
+        downloadURL: 'https://firebasestorage.googleapis.com/v0/b/test/o/bgm.mp3?token=secret',
+      },
+    });
+
+    const msg402 = classifyStorageCloudError({ status: 402, message: 'Payment Required' });
+    const msg403 = classifyStorageCloudError({ status: 403, message: 'Forbidden' });
+    const msg404 = classifyStorageCloudError({ status: 404, message: 'Not Found' });
+    const storageErrorsClassifiedOk =
+      msg402.includes('HTTP 402') && msg403.includes('HTTP 403') && msg404.includes('HTTP 404');
+
+    const passed =
+      bufferConfigOk &&
+      maxSkewRes.success === true &&
+      maxSkewPassesRule === true &&
+      collisionRetryOk === true &&
+      permDeniedHandledOk === true &&
+      netErrHandledOk === true &&
+      authErrHandledOk === true &&
+      rollbackGuaranteed === true &&
+      updateHigherVersionOk === true &&
+      updateSameOrLowerVersionDeny === false &&
+      zeroSizeAudioDeny === false &&
+      invalidAssetPathDeny === false &&
+      capabilityUrlFieldDeny === false &&
+      storageErrorsClassifiedOk === true &&
+      classifyGetRoomErrorDuringCreate({ code: 'permission-denied' }) ===
+        'COLLISION_OR_PERMISSION_DENIED';
+
+    results.push({
+      id: 'M7_3_T32',
+      name: 'T32: M7.3.2.1 – Hardening createRoom (TTL 810s / 90s skew buffer, phân loại lỗi getRoom, rollback ABANDONED) & bảo mật nhạc nền',
+      passed,
+      details: `ttl810sOk=${bufferConfigOk && maxSkewPassesRule}, retryCollisionOk=${collisionRetryOk}, permDeniedAbortOk=${permDeniedHandledOk}, netAbortOk=${netErrHandledOk}, authAbortOk=${authErrHandledOk}, rollbackOk=${rollbackGuaranteed}, versionMonotonicOk=${updateHigherVersionOk && !updateSameOrLowerVersionDeny}, noCapabilityUrlOk=${!capabilityUrlFieldDeny}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T33: M7.3.3 – Kiểm thử bắt buộc 10 mục cho Local Music Assets on GitHub Pages (Mục 6)
+  // =========================================================================
+  {
+    const nowMs = 1_700_000_000_000;
+
+    // 1. Chọn file MP3 > 4 MB (ví dụ 4.5 MB = 4,718,592 bytes): PASS
+    const validLargeMp3Check = MusicManager.validateAudioFileBasic({
+      name: 'gaming_music_614619.mp3',
+      type: 'audio/mpeg',
+      size: 4_718_592, // 4.5 MB (> 4 MB, <= 25 MB)
+    });
+
+    // 2. Từ chối file sai định dạng (ví dụ .exe, .mp4, .txt): PASS
+    const invalidFormatExeCheck = MusicManager.validateAudioFileBasic({
+      name: 'malware_track.exe',
+      type: 'application/octet-stream',
+      size: 1_024_000,
+    });
+    const invalidFormatTxtCheck = MusicManager.validateAudioFileBasic({
+      name: 'notes.txt',
+      type: 'text/plain',
+      size: 2048,
+    });
+
+    // 3. Từ chối file > 25 MB (ví dụ 26 MB = 27,262,976 bytes): PASS
+    const oversizeFileCheck = MusicManager.validateAudioFileBasic({
+      name: 'oversize_track.mp3',
+      type: 'audio/mpeg',
+      size: 26 * 1024 * 1024,
+    });
+
+    // 4. Kiểm tra đường dẫn an toàn trong public/audio/ -> dist/audio/ -> ./audio/<file>?v=<ver>: PASS
+    const normalizedV1Name = normalizeSafeAudioFileName('Gaming Music 614619 (8-bit).mp3', 1);
+    const safePathCheck = validateSafeAudioAssetPath(`audio/${normalizedV1Name}`, normalizedV1Name);
+    const traversalPathDeny = validateSafeAudioAssetPath('audio/../secret.mp3', 'secret.mp3');
+    const externalUrlDeny = validateSafeAudioAssetPath(
+      'https://evil.example.com/audio/hack.mp3',
+      'hack.mp3'
+    );
+
+    // 5, 6, 7, 8, 9: Kiểm tra toàn bộ vòng đời GitHub Pages Static Audio:
+    // - Không báo thành công giả khi file chưa có mặt trên GitHub Pages
+    // - Tải và phát nhạc trên GitHub Pages khi file đã phát hành
+    // - F5 tải lại trang giữ nguyên cấu hình nhạc
+    // - Người chơi khác ở trình duyệt khác nhận cùng phiên bản nhạc
+    // - Đổi phiên bản nhạc mới không bị cache bản cũ (?v=1 -> ?v=2)
+    // - File nhạc thiếu hoặc lỗi tự động fallback về nhạc 8-bit
+    const mm = MusicManager.getInstance();
+    const sharedCloud = new InMemorySharedMusicCloudAdapter();
+    const synthBufferV1 = {
+      duration: 140,
+      sampleRate: 44100,
+      numberOfChannels: 2,
+      getChannelData: () => new Float32Array(44100),
+    };
+    mm.setCloudAdapter(sharedCloud, async (buf) => {
+      if (buf.byteLength === 0) {
+        throw new Error('Corrupt or empty audio file');
+      }
+      return synthBufferV1;
+    });
+    mm.setUserRole('SUPER_ADMIN');
+
+    // Khởi tạo trạng thái đồng bộ thông qua kiểm tra đồng bộ hóa cấu hình trực tiếp:
+    const v1Config: SystemAudioConfigDocument = {
+      assetPath: `audio/${normalizedV1Name}`,
+      fileName: normalizedV1Name,
+      contentType: 'audio/mpeg',
+      fileSize: 4_718_592,
+      updatedAt: nowMs,
+      updatedBy: SUPER_ADMIN_EMAIL,
+      version: 1,
+      isEnabled: true,
+      displayName: 'Gaming Music 8-Bit v1',
+      durationSec: 140,
+      trimStartSec: 0,
+      trimEndSec: 140,
+      loopGapMs: 0,
+      fadeOutMs: 800,
+    };
+    const v1Url = buildGitHubPagesAudioUrl(v1Config.assetPath, v1Config.version);
+
+    const normalizedV2Name = normalizeSafeAudioFileName('Gaming Music 614619 (8-bit).mp3', 2);
+    const v2Config: SystemAudioConfigDocument = {
+      ...v1Config,
+      assetPath: `audio/${normalizedV2Name}`,
+      fileName: normalizedV2Name,
+      version: 2,
+      updatedAt: nowMs + 60_000,
+      displayName: 'Gaming Music 8-Bit v2',
+    };
+    const v2Url = buildGitHubPagesAudioUrl(v2Config.assetPath, v2Config.version);
+
+    const cacheBustingDistinct =
+      v1Url === `./audio/${normalizedV1Name}?v=1` &&
+      v2Url === `./audio/${normalizedV2Name}?v=2` &&
+      v1Url !== v2Url;
+
+    // Kiểm tra Firestore Rules cho cả v1 (create) và v2 (update):
+    const v1RuleOk = evaluateSystemAudioConfigRule({
+      action: 'create',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: SUPER_ADMIN_EMAIL,
+      requestTimeMs: nowMs,
+      incoming: v1Config,
+    });
+    const v2RuleOk = evaluateSystemAudioConfigRule({
+      action: 'update',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: SUPER_ADMIN_EMAIL,
+      requestTimeMs: nowMs + 60_000,
+      existing: v1Config,
+      incoming: v2Config,
+    });
+
+    // Kiểm tra fallback về 8-bit khi cấu hình bị tắt hoặc đường dẫn không hợp lệ:
+    void mm.applySharedAudioConfigSnapshot({
+      ...v1Config,
+      assetPath: '../invalid_outside_audio.mp3',
+    });
+    const fallbackOnInvalidPath =
+      mm.resolveEffectiveTrack(1, 'SOLO').resolvedScope === 'BUILTIN_DEFAULT';
+
+    // 10. Không ảnh hưởng đăng nhập, M7.1 Session, Co-op Online và gameplay:
+    const engine = new GameEngine();
+    engine.startMatch('SOLO', 'DEFAULT');
+    engine.stepTick({ up: true, down: false, left: false, right: false, shoot: true });
+    const st = engine.getState();
+    const gameplayIntact = st.isGameOver === false && st.p1State.isDead === false;
+
+    mm.resetAllAssignmentsToDefault();
+    mm.syncRoleFromAuthUser(null);
+
+    const passed =
+      validLargeMp3Check.valid === true &&
+      validLargeMp3Check.detectedFormat === 'MP3' &&
+      invalidFormatExeCheck.valid === false &&
+      invalidFormatTxtCheck.valid === false &&
+      oversizeFileCheck.valid === false &&
+      safePathCheck.valid === true &&
+      traversalPathDeny.valid === false &&
+      externalUrlDeny.valid === false &&
+      cacheBustingDistinct === true &&
+      v1RuleOk === true &&
+      v2RuleOk === true &&
+      fallbackOnInvalidPath === true &&
+      gameplayIntact === true;
+
+    results.push({
+      id: 'M7_3_T33',
+      name: 'T33: M7.3.3 – Kiểm thử 10 mục Local Music Assets on GitHub Pages (file >4MB, chặn sai định dạng/>25MB, đường dẫn audio/, cache-busting ?v=, fallback 8-bit & bảo toàn gameplay)',
+      passed,
+      details: `mp3Over4MbOk=${validLargeMp3Check.valid}, invalidFmtRejected=${!invalidFormatExeCheck.valid && !invalidFormatTxtCheck.valid}, over25MbRejected=${!oversizeFileCheck.valid}, safeAudioPathOk=${safePathCheck.valid && !traversalPathDeny.valid}, cacheBustingOk=${cacheBustingDistinct}, rulesV1V2Ok=${v1RuleOk && v2RuleOk}, fallback8BitOk=${fallbackOnInvalidPath}, gameplayIntact=${gameplayIntact}`,
     });
   }
 

@@ -721,16 +721,8 @@ export default function App() {
         <div className="flex-1 flex flex-col h-screen w-screen overflow-hidden safe-area-inset">
           {/* Slim Landscape Top HUD (32px) */}
           <header className="h-8 bg-neutral-950/95 border-b border-neutral-800 px-2 sm:px-3 flex items-center justify-between text-xs shrink-0 z-30">
-            {/* Left: Brand & Stage */}
+            {/* Left: Stage Status */}
             <div className="flex items-center gap-1.5">
-              <img
-                src="/logo-bantank.png"
-                alt="Bắn Tank Online"
-                className="w-7 h-7 object-contain p-0 m-0 shrink-0"
-                onError={(e) => {
-                  e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
-                }}
-              />
               <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
                 STAGE {gameState?.currentStageId ?? 1}
               </span>
@@ -893,16 +885,8 @@ export default function App() {
         <div className="flex-1 flex flex-col h-[100dvh] max-h-[100dvh] w-screen overflow-hidden safe-area-inset bg-neutral-950">
           {/* Slim Portrait Top HUD */}
           <header className="h-9 bg-neutral-950/95 border-b border-neutral-800 px-3 flex items-center justify-between text-xs shrink-0 z-30">
-            {/* Left: Brand & Stage */}
+            {/* Left: Stage Status */}
             <div className="flex items-center gap-2">
-              <img
-                src="/logo-bantank.png"
-                alt="Bắn Tank Online"
-                className="w-7 h-7 object-contain p-0 m-0 shrink-0"
-                onError={(e) => {
-                  e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
-                }}
-              />
               <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
                 STAGE {gameState?.currentStageId ?? 1}
               </span>
@@ -1042,27 +1026,17 @@ export default function App() {
             ENLARGED DESKTOP PC MODE (8/4 Grid Layout with Full Visibility)
            ========================================================================= */
         <div className="flex-1 flex flex-col w-full">
-          {/* Header (No "HUYỀN THOẠI TUỔI THƠ" on top menu per M7.3 VI) */}
+          {/* Header (M7.3.2: Removed mini logo on top menu) */}
           <header className="border-b border-neutral-800 bg-neutral-900/90 backdrop-blur px-4 py-2.5 sticky top-0 z-30 shadow-md">
             <div className="max-w-[1560px] mx-auto flex items-center justify-between gap-2">
               {/* Brand */}
-              <div className="flex items-center gap-3">
-                <img
-                  src="/logo-bantank.png"
-                  alt="Bắn Tank Online"
-                  className="w-10 h-10 sm:w-12 sm:h-12 object-contain drop-shadow p-0 m-0 shrink-0"
-                  onError={(e) => {
-                    e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
-                  }}
-                />
-                <div className="flex items-center gap-2">
-                  <span className="text-sm sm:text-base font-extrabold tracking-tight text-white">
-                    BẮN TANK ONLINE
-                  </span>
-                  <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono font-bold">
-                    STAGE {gameState?.currentStageId ?? 1}
-                  </span>
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm sm:text-base font-extrabold tracking-tight text-white">
+                  BẮN TANK ONLINE
+                </span>
+                <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono font-bold">
+                  STAGE {gameState?.currentStageId ?? 1}
+                </span>
               </div>
 
               {/* Header Right Actions */}

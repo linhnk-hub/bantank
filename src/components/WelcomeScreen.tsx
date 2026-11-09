@@ -44,20 +44,9 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.15),rgba(255,255,255,0))] pointer-events-none" />
       <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
 
-      {/* Top Header Bar */}
+      {/* Top Header Bar (M7.3.2: Removed mini logo on Top Menu) */}
       <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-4 py-2.5">
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img
-              src="/logo-bantank.png"
-              alt="Bắn Tank Online Logo"
-              className="w-11 h-11 sm:w-12 sm:h-12 object-contain drop-shadow p-0 m-0 shrink-0"
-              onError={(e) => {
-                e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
-              }}
-            />
-          </div>
-
+        <div className="max-w-6xl mx-auto flex items-center justify-end">
           <div className="flex items-center gap-2 text-xs">
             {onToggleFullscreen && (
               <button
@@ -142,7 +131,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <div className="flex justify-center items-center p-0 m-0 mb-3">
             <img
               src="/logo-bantank.png"
-              alt="Huyền Thoại Tuổi Thơ"
+              alt="Huyền thoại trở lại"
               className="w-48 h-48 sm:w-60 sm:h-60 md:w-72 md:h-72 object-contain p-0 m-0 drop-shadow-2xl"
               onError={(e) => {
                 e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
@@ -150,10 +139,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             />
           </div>
 
-          {/* Title: HUYỀN THOẠI TUỔI THƠ with subtle yellow lines above and below */}
+          {/* Title: Huyền thoại trở lại with subtle yellow lines above and below */}
           <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mb-2 sm:mb-3" />
-          <h1 className="text-[clamp(1.15rem,4.8vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow p-0 text-center">
-            HUYỀN THOẠI TUỔI THƠ
+          <h1 className="text-[clamp(1.15rem,4.8vw,2.5rem)] whitespace-nowrap font-black uppercase text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow p-0 text-center">
+            Huyền thoại trở lại
           </h1>
           <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mt-2 sm:mt-3 mb-6 sm:mb-8" />
 

@@ -784,7 +784,67 @@ async function main(): Promise<void> {
       'Người dùng thường không có quyền ghi /admins/{uid}',
       'firestore.rules: match /admins/{uid} allow create, update, delete: if isSuperAdmin()',
       () =>
-         deleteDoc(doc(hostDb, 'admins', 'uid_host_1'))
+        deleteDoc(doc(hostDb, 'admins', 'uid_host_1'))
+    );
+
+    // =========================================================================
+    // Nhóm 18: Cấu hình nhạc nền chung /system_config/audio (M7.3.3)
+    // =========================================================================
+    const validSystemAudioPayload = {
+      assetPath: 'audio/bgm_v1_bantank_theme_8bit.mp3',
+      fileName: 'bgm_v1_bantank_theme_8bit.mp3',
+      contentType: 'audio/mpeg',
+      fileSize: 4_500_000,
+      updatedAt: Date.now(),
+      updatedBy: 'linhnk.online@gmail.com',
+      version: 1,
+      isEnabled: true,
+      displayName: 'Bắn Tank 8-Bit Theme',
+      durationSec: 140,
+      trimStartSec: 0,
+      trimEndSec: 140,
+      loopGapMs: 0,
+      fadeOutMs: 800,
+    };
+
+    await checkRule(
+      'R18_ALLOW_SUPER_ADMIN_WRITE_SYSTEM_AUDIO',
+      18,
+      'ALLOW',
+      'Super Admin (linhnk.online@gmail.com) tạo/cập nhật cấu hình nhạc nền chung /system_config/audio hợp lệ',
+      'firestore.rules: match /system_config/{docId} allow create, update: if isSuperAdmin() && docId == "audio" && isValidSystemAudioConfig(incoming())',
+      () => setDoc(doc(superAdminDb, 'system_config', 'audio'), validSystemAudioPayload)
+    );
+
+    await checkRule(
+      'R18_ALLOW_PLAYER_READ_SYSTEM_AUDIO',
+      18,
+      'ALLOW',
+      'Người chơi Gmail đã xác minh được phép đọc /system_config/audio để đồng bộ nhạc nền chung',
+      'firestore.rules: match /system_config/{docId} allow get: if isVerifiedPersonalGmail() && docId == "audio"',
+      () => getDoc(doc(hostDb, 'system_config', 'audio'))
+    );
+
+    await checkRule(
+      'R18_DENY_PLAYER_WRITE_SYSTEM_AUDIO',
+      18,
+      'DENY',
+      'Người chơi thường bị chặn ghi/sửa /system_config/audio',
+      'firestore.rules: match /system_config/{docId} allow create, update: if isSuperAdmin()',
+      () =>
+        setDoc(doc(hostDb, 'system_config', 'audio'), {
+          ...validSystemAudioPayload,
+          version: 2,
+        })
+    );
+
+    await checkRule(
+      'R18_DENY_UNVERIFIED_READ_SYSTEM_AUDIO',
+      18,
+      'DENY',
+      'Tài khoản chưa xác minh Gmail bị chặn đọc /system_config/audio',
+      'firestore.rules: match /system_config/{docId} allow get: if isVerifiedPersonalGmail()',
+      () => getDoc(doc(unverifiedDb, 'system_config', 'audio'))
     );
   } finally {
     await testEnv.cleanup();

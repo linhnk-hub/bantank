@@ -1,0 +1,45 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedPersonalGmail() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && request.auth.token.email is string
+        && request.auth.token.email.size() <= 254
+        && request.auth.token.email.matches('^[a-zA-Z0-9._%+-]+@(gmail|googlemail)\\.com$')
+        && !('hd' in request.auth.token);
+    }
+
+    function isSuperAdmin() {
+      return isVerifiedPersonalGmail()
+        && request.auth.token.email == 'linhnk.online@gmail.com';
+    }
+
+    // Nhạc nền hệ thống dùng chung cho toàn bộ người chơi (M7.3.2)
+    // - Đọc: Người chơi đã xác thực bằng Gmail cá nhân hợp lệ
+    // - Ghi/Xóa: Chỉ duy nhất Super Admin (linhnk.online@gmail.com), giới hạn file audio <= 25MB
+    match /system_audio/{allPaths=**} {
+      allow read: if isVerifiedPersonalGmail();
+      allow write: if isSuperAdmin()
+        && (
+          request.resource == null
+          || (
+            request.resource.size > 0
+            && request.resource.size <= 25 * 1024 * 1024
+            && request.resource.contentType.matches('audio/.*')
+          )
+        );
+    }
+
+    // Mặc định từ chối mọi đường dẫn khác
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

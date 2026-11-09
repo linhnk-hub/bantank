@@ -21,13 +21,21 @@ import {
   CheckCircle2,
   FileAudio,
   RotateCcw,
+  Download,
+  FolderGit2,
+  Rocket,
+  XCircle,
 } from 'lucide-react';
 import {
   MusicManager,
   PIXABAY_TARGET_TRACK_SPEC,
+  STAGED_LOCAL_PREVIEW_BGM_ID,
+  buildGitHubPagesAudioUrl,
   type MusicTrackMetadata,
   type LoopPlaybackConfig,
   type MusicScopeAssignments,
+  type SystemAudioConfigDocument,
+  type StagedAudioPackage,
   type UserRole,
   type GameModeScope,
 } from '../core/musicManager.ts';
@@ -40,11 +48,25 @@ export const MusicAdminPanel: React.FC = () => {
   const [loopConfig, setLoopConfig] = useState<LoopPlaybackConfig>(() => musicManager.getLoopConfig());
   const [assignments, setAssignments] = useState<MusicScopeAssignments>(() => musicManager.getAssignments());
   const [previewId, setPreviewId] = useState<string | null>(() => musicManager.getPreviewTrackId());
+  const [sharedConfig, setSharedConfig] = useState<SystemAudioConfigDocument | null>(() =>
+    musicManager.getSharedAudioConfig()
+  );
+  const [stagedPkg, setStagedPkg] = useState<StagedAudioPackage | null>(() =>
+    musicManager.getStagedAudioPackage()
+  );
+  const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(() =>
+    musicManager.isCloudSyncing()
+  );
+  const [sharedSyncError, setSharedSyncError] = useState<string | null>(() =>
+    musicManager.getSharedSyncError()
+  );
 
-  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>('');
   const [selectedStageForAssign, setSelectedStageForAssign] = useState<number>(1);
+  const [manualFileName, setManualFileName] = useState<string>('');
+  const [manualDisplayName, setManualDisplayName] = useState<string>('');
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
@@ -57,6 +79,10 @@ export const MusicAdminPanel: React.FC = () => {
       setLoopConfig(musicManager.getLoopConfig());
       setAssignments(musicManager.getAssignments());
       setPreviewId(musicManager.getPreviewTrackId());
+      setSharedConfig(musicManager.getSharedAudioConfig());
+      setStagedPkg(musicManager.getStagedAudioPackage());
+      setIsCloudSyncing(musicManager.isCloudSyncing());
+      setSharedSyncError(musicManager.getSharedSyncError());
     });
     return unsub;
   }, [musicManager]);
@@ -67,33 +93,108 @@ export const MusicAdminPanel: React.FC = () => {
     return null;
   }
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
+  const handleSelectAudioFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    let uploadedCount = 0;
-    let lastErr = '';
-
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const res = await musicManager.uploadTrack(file);
-      if (res.success) {
-        uploadedCount++;
-      } else {
-        lastErr = res.error || 'Lỗi không xác định';
-      }
-    }
-
-    if (uploadedCount > 0) {
+    const res = await musicManager.stageAudioFileForGitHubPages(file);
+    if (res.success && res.stagedPackage) {
+      setManualFileName(res.stagedPackage.normalizedFileName);
+      setManualDisplayName(res.stagedPackage.displayName);
       setStatusMsg({
-        type: 'success',
-        text: `Đã tải lên thành công ${uploadedCount} bài nhạc vào thư viện (nhạc đang phát hiện tại được giữ nguyên, không bị tự động thay thế).`,
+        type: 'info',
+        text: `Đã kiểm tra hợp lệ file "${res.stagedPackage.originalFileName}" (${res.stagedPackage.detectedFormat}, ${(res.stagedPackage.fileSize / (1024 * 1024)).toFixed(2)} MB). Bạn có thể bấm "Nghe thử" ngay bên dưới, tải file chuẩn hóa "${res.stagedPackage.normalizedFileName}" đặt vào thư mục public/audio/, push lên GitHub nhánh main rồi bấm "Xác Minh & Kích Hoạt Trên GitHub Pages".`,
       });
-    } else if (lastErr) {
-      setStatusMsg({ type: 'error', text: lastErr });
+    } else {
+      setStatusMsg({
+        type: 'error',
+        text: res.error || 'File nhạc không hợp lệ.',
+      });
     }
 
     e.target.value = '';
+  };
+
+  const handleDownloadStagedFile = () => {
+    const downloadInfo = musicManager.getStagedAudioDownloadBlob();
+    if (!downloadInfo) {
+      setStatusMsg({
+        type: 'error',
+        text: 'Không tìm thấy gói file nhạc đã chuẩn bị để tải xuống.',
+      });
+      return;
+    }
+    const url = URL.createObjectURL(downloadInfo.blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = downloadInfo.fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.setTimeout(() => URL.revokeObjectURL(url), 3000);
+  };
+
+  const handleVerifyAndActivateStaged = async () => {
+    setStatusMsg(null);
+    const res = await musicManager.verifyAndActivateStagedAudioOnGitHubPages();
+    if (res.success && res.config) {
+      setStatusMsg({
+        type: 'success',
+        text: `Đã xác minh file ./${res.config.assetPath}?v=${res.config.version} trên GitHub Pages và kích hoạt cấu hình chung Firestore (/system_config/audio) thành công! Toàn bộ người chơi sẽ tải và phát phiên bản v${res.config.version}.`,
+      });
+    } else {
+      setStatusMsg({
+        type: 'error',
+        text:
+          res.error ||
+          'Chưa thể kích hoạt: File chưa có mặt trong public/audio/ trên GitHub Pages.',
+      });
+    }
+  };
+
+  const handleVerifyAndActivateManualAsset = async () => {
+    const cleanFile = manualFileName.trim();
+    if (!cleanFile) {
+      setStatusMsg({
+        type: 'error',
+        text: 'Vui lòng nhập tên file đã đặt trong thư mục public/audio/ (ví dụ: bgm_v1_bantank.mp3).',
+      });
+      return;
+    }
+    setStatusMsg(null);
+    const res = await musicManager.verifyAndActivateGitHubPagesAsset({
+      fileName: cleanFile,
+      displayName: manualDisplayName.trim() || undefined,
+    });
+    if (res.success && res.config) {
+      setStatusMsg({
+        type: 'success',
+        text: `Đã xác minh file ./${res.config.assetPath}?v=${res.config.version} trên GitHub Pages và cập nhật /system_config/audio thành công!`,
+      });
+    } else {
+      setStatusMsg({
+        type: 'error',
+        text:
+          res.error ||
+          `Không tìm thấy hoặc không thể giải mã file public/audio/${cleanFile} trên GitHub Pages.`,
+      });
+    }
+  };
+
+  const handleToggleSharedEnabled = async () => {
+    if (!sharedConfig) return;
+    const nextState = !sharedConfig.isEnabled;
+    const res = await musicManager.setSharedSystemAudioEnabled(nextState);
+    if (res.success) {
+      setStatusMsg({
+        type: 'success',
+        text: nextState
+          ? 'Đã BẬT nhạc nền chung toàn hệ thống (/system_config/audio).'
+          : 'Đã TẮT nhạc nền chung, toàn hệ thống chuyển về nhạc 8-bit mặc định.',
+      });
+    } else {
+      setStatusMsg({ type: 'error', text: res.error || 'Không thể cập nhật trạng thái nhạc nền chung.' });
+    }
   };
 
   const handleReplaceFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,8 +204,8 @@ export const MusicAdminPanel: React.FC = () => {
     const res = await musicManager.replaceTrackFile(replacingTrackId, file);
     if (res.success) {
       setStatusMsg({
-        type: 'success',
-        text: `Đã thay thế file âm thanh cho bài "${res.track?.displayName}" thành công.`,
+        type: 'info',
+        text: `Đã chuẩn bị file mới cho "${res.track?.displayName}". Hãy đặt file vào public/audio/ và xác minh trên GitHub Pages để kích hoạt.`,
       });
     } else {
       setStatusMsg({ type: 'error', text: res.error || 'Lỗi thay thế file.' });
@@ -130,7 +231,7 @@ export const MusicAdminPanel: React.FC = () => {
     if (musicManager.deleteTrack(track.id)) {
       setStatusMsg({
         type: 'success',
-        text: `Đã xóa bài "${track.displayName}" khỏi thư viện và gỡ các phạm vi áp dụng liên quan.`,
+        text: `Đã gỡ cấu hình bài "${track.displayName}" và khôi phục về nhạc nền 8-bit mặc định.`,
       });
     }
   };
@@ -154,17 +255,17 @@ export const MusicAdminPanel: React.FC = () => {
       {/* Top Banner & Role Switcher */}
       <div className="p-3.5 rounded-xl bg-neutral-950 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <Music className="w-4 h-4 text-amber-400" />
             <h3 className="font-extrabold text-sm text-white">
-              Hệ Thống Quản Lý & Upload Nhạc Nền (MusicManager)
+              Quản Lý Nhạc Nền Dùng Chung (GitHub Pages Static Audio + Firestore)
             </h3>
-            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-              Tách biệt Game Core & SFX
+            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              100% Firebase Spark (Không dùng Storage)
             </span>
           </div>
           <p className="text-[11px] text-neutral-400">
-            Hỗ trợ MP3, OGG, WAV • Skip Silence tự động • Seamless Loop & Crossfade • Phân cấp ưu tiên Stage → Mode → Toàn Game
+            Lưu file trực tiếp trong <code className="text-amber-300 font-mono">public/audio/</code> (MP3, OGG, WAV tối đa 25 MB) • Phân phối qua GitHub Pages • Đồng bộ cấu hình qua <code className="text-amber-300 font-mono">/system_config/audio</code>
           </p>
         </div>
 
@@ -173,61 +274,107 @@ export const MusicAdminPanel: React.FC = () => {
           <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
           <span className="text-neutral-300">Vai trò:</span>
           <span className={isSuperAdmin ? 'text-amber-400 font-extrabold' : 'text-sky-400'}>
-            {isSuperAdmin ? 'Super Admin' : 'Người chơi'}
+            {isSuperAdmin ? 'Super Admin (linhnk.online@gmail.com)' : 'Người chơi'}
           </span>
         </div>
       </div>
 
       {/* Status Alert */}
-      {statusMsg && (
+      {(statusMsg || sharedSyncError) && (
         <div
           className={`p-2.5 rounded-lg border flex items-center justify-between gap-2 text-[11px] ${
-            statusMsg.type === 'success'
-              ? 'bg-emerald-950/70 border-emerald-700/60 text-emerald-200'
-              : 'bg-rose-950/70 border-rose-700/60 text-rose-200'
+            sharedSyncError || statusMsg?.type === 'error'
+              ? 'bg-rose-950/70 border-rose-700/60 text-rose-200'
+              : statusMsg?.type === 'info'
+                ? 'bg-sky-950/70 border-sky-700/60 text-sky-200'
+                : 'bg-emerald-950/70 border-emerald-700/60 text-emerald-200'
           }`}
         >
           <div className="flex items-center gap-2">
-            {statusMsg.type === 'success' ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-            ) : (
+            {sharedSyncError || statusMsg?.type === 'error' ? (
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+            ) : (
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             )}
-            <span>{statusMsg.text}</span>
+            <span>{sharedSyncError || statusMsg?.text}</span>
           </div>
           <button
             type="button"
             onClick={() => setStatusMsg(null)}
-            className="text-[10px] underline opacity-75 hover:opacity-100"
+            className="text-[10px] underline opacity-75 hover:opacity-100 shrink-0"
           >
             Đóng
           </button>
         </div>
       )}
 
-      {/* Pixabay Target Track Info Card (Waiting for User 8-Bit File) */}
+      {/* Shared System Audio Status Card */}
       <div className="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="space-y-0.5">
           <div className="flex items-center gap-2 text-amber-300 font-bold">
             <FileAudio className="w-3.5 h-3.5" />
-            <span>Bản nhạc nguồn mục tiêu: {PIXABAY_TARGET_TRACK_SPEC.title}</span>
+            <span>
+              Cấu hình Nhạc Nền Chung Đang Kích Hoạt (/system_config/audio):{' '}
+              {isCloudSyncing
+                ? 'Đang kiểm tra & đồng bộ...'
+                : sharedConfig
+                  ? `${sharedConfig.displayName || sharedConfig.fileName} (v${sharedConfig.version})`
+                  : `Mặc định 8-Bit (${PIXABAY_TARGET_TRACK_SPEC.title})`}
+            </span>
           </div>
           <p className="text-[11px] text-neutral-400">
-            Tác giả: <strong className="text-neutral-200">{PIXABAY_TARGET_TRACK_SPEC.author}</strong> • Thời lượng gốc: <strong className="text-neutral-200">{PIXABAY_TARGET_TRACK_SPEC.durationText}</strong> • Trạng thái: <span className="text-amber-400 font-semibold">Sẵn sàng nhận file MP3/OGG/WAV 8-bit từ máy tính</span>
+            {sharedConfig ? (
+              <>
+                Đường dẫn tĩnh:{' '}
+                <strong className="text-neutral-200 font-mono">
+                  {buildGitHubPagesAudioUrl(sharedConfig.assetPath, sharedConfig.version)}
+                </strong>{' '}
+                ({formatBytes(sharedConfig.fileSize)}) • Cập nhật bởi:{' '}
+                <strong className="text-emerald-400">{sharedConfig.updatedBy}</strong> • Trạng thái:{' '}
+                <strong className={sharedConfig.isEnabled ? 'text-emerald-400' : 'text-amber-400'}>
+                  {sharedConfig.isEnabled ? 'ĐANG BẬT CHO TẤT CẢ NGƯỜI CHƠI' : 'ĐANG TẮT (DÙNG NHẠC 8-BIT MẶC ĐỊNH)'}
+                </strong>
+              </>
+            ) : (
+              <>
+                Chưa kích hoạt file nhạc tĩnh trong <code className="font-mono">public/audio/</code> • Toàn bộ người chơi đang nghe nhạc nền 8-bit mặc định.
+              </>
+            )}
           </p>
         </div>
 
-        <div className="text-[10px] font-mono px-2.5 py-1 rounded bg-neutral-900 border border-neutral-800 text-neutral-300 shrink-0">
-          Đang phát Stage 1: <strong className="text-emerald-400">{effectiveStage1.track ? effectiveStage1.track.displayName : '8-Bit Arcade Mặc Định'}</strong> ({effectiveStage1.resolvedScope})
+        <div className="flex items-center gap-2 shrink-0">
+          {sharedConfig && isSuperAdmin && (
+            <button
+              type="button"
+              onClick={() => void handleToggleSharedEnabled()}
+              className={`px-2.5 py-1 rounded text-[10px] font-extrabold border transition-all cursor-pointer ${
+                sharedConfig.isEnabled
+                  ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/30'
+                  : 'bg-neutral-900 border-neutral-700 text-neutral-300 hover:bg-neutral-800'
+              }`}
+            >
+              {sharedConfig.isEnabled ? 'Tạm Tắt Nhạc Chung' : 'Bật Nhạc Chung'}
+            </button>
+          )}
+          <div className="text-[10px] font-mono px-2.5 py-1 rounded bg-neutral-900 border border-neutral-800 text-neutral-300">
+            Đang phát Stage 1:{' '}
+            <strong className="text-emerald-400">
+              {effectiveStage1.track ? effectiveStage1.track.displayName : '8-Bit Arcade Mặc Định'}
+            </strong>{' '}
+            ({effectiveStage1.resolvedScope})
+          </div>
         </div>
       </div>
 
-      {/* SECTION 1: UPLOAD & LIBRARY LIST */}
+      {/* SECTION 1: 2-STEP GITHUB PAGES STATIC AUDIO WORKFLOW */}
       <div className="p-3.5 rounded-xl bg-neutral-950/70 border border-neutral-800 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 font-bold text-neutral-200">
-            <Upload className="w-4 h-4 text-amber-400" />
-            <span>1. Thư Viện Nhạc Nền Đã Tải Lên ({tracks.length} bài)</span>
+            <FolderGit2 className="w-4 h-4 text-amber-400" />
+            <span>
+              1. Quy Trình Cập Nhật File Nhạc Tĩnh Trên GitHub Pages (public/audio/)
+            </span>
           </div>
 
           {isSuperAdmin ? (
@@ -236,8 +383,7 @@ export const MusicAdminPanel: React.FC = () => {
                 ref={fileInputRef}
                 type="file"
                 accept=".mp3,.ogg,.wav,audio/mpeg,audio/ogg,audio/wav"
-                multiple
-                onChange={handleFileUpload}
+                onChange={handleSelectAudioFile}
                 className="hidden"
               />
               <input
@@ -250,24 +396,181 @@ export const MusicAdminPanel: React.FC = () => {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow active:scale-95 transition-all"
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow active:scale-95 transition-all cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5" />
-                <span>Tải File Nhạc Lên (MP3 / OGG / WAV)</span>
+                <span>Bước 1: Chọn File Nhạc Để Kiểm Tra & Nghe Thử (MP3 / OGG / WAV ≤ 25 MB)</span>
               </button>
             </div>
           ) : (
             <span className="text-[11px] text-rose-400 font-semibold flex items-center gap-1">
-              <Lock className="w-3.5 h-3.5" /> Chỉ Super Admin được tải lên & chỉnh sửa
+              <Lock className="w-3.5 h-3.5" /> Chỉ Super Admin được quản lý nhạc nền
             </span>
           )}
         </div>
 
+        {/* Staged Audio Package Card (when Super Admin selects a local file) */}
+        {stagedPkg && (
+          <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/40 space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded bg-amber-500 text-black font-extrabold text-[10px]">
+                  GÓI NHẠC ĐÃ KIỂM TRA (CHỜ ĐƯA VÀO PUBLIC/AUDIO/)
+                </span>
+                <span className="font-extrabold text-white text-xs">
+                  {stagedPkg.displayName} (Phiên bản dự kiến: v{stagedPkg.targetVersion})
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => musicManager.clearStagedAudioPackage()}
+                className="flex items-center gap-1 text-[11px] text-neutral-400 hover:text-rose-400"
+              >
+                <XCircle className="w-3.5 h-3.5" />
+                <span>Hủy gói nháp</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono bg-neutral-950/90 p-2.5 rounded-lg border border-neutral-800">
+              <div>
+                <span className="text-neutral-400">Tên file gốc:</span>{' '}
+                <strong className="text-neutral-200">{stagedPkg.originalFileName}</strong>
+              </div>
+              <div>
+                <span className="text-neutral-400">Định dạng & Dung lượng:</span>{' '}
+                <strong className="text-emerald-400">
+                  {stagedPkg.detectedFormat} • {formatBytes(stagedPkg.fileSize)} • {formatDuration(stagedPkg.durationSec)}
+                </strong>
+              </div>
+              <div>
+                <span className="text-neutral-400">Đường dẫn mã nguồn (GitHub):</span>{' '}
+                <strong className="text-amber-300">{stagedPkg.repositoryPath}</strong>
+              </div>
+              <div>
+                <span className="text-neutral-400">Đường dẫn sau khi build:</span>{' '}
+                <strong className="text-sky-300">{stagedPkg.distPath}</strong>
+              </div>
+              <div className="sm:col-span-2">
+                <span className="text-neutral-400">URL phát hành GitHub Pages (có cache-busting):</span>{' '}
+                <strong className="text-emerald-300">{stagedPkg.runtimeUrl}</strong>
+              </div>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-neutral-900/90 border border-neutral-800 space-y-1.5 text-[11px] text-neutral-300">
+              <div className="font-bold text-amber-300">
+                Chỉ dẫn chuẩn đưa file lên GitHub Pages (https://github.com/linhnk-hub/bantank - nhánh main):
+              </div>
+              <ol className="list-decimal list-inside space-y-1 text-neutral-300">
+                <li>
+                  Bấm <strong>"Nghe thử bản nháp"</strong> để kiểm tra âm lượng và vòng lặp, sau đó bấm{' '}
+                  <strong>"Tải File Chuẩn Hóa ({stagedPkg.normalizedFileName})"</strong>.
+                </li>
+                <li>
+                  Đặt file vừa tải vào đúng thư mục{' '}
+                  <code className="px-1.5 py-0.5 rounded bg-neutral-950 text-amber-300 font-mono">
+                    {stagedPkg.repositoryPath}
+                  </code>{' '}
+                  trong kho mã nguồn, sau đó commit &amp; push lên nhánh <code className="font-mono text-white">main</code>.
+                </li>
+                <li>
+                  Sau khi GitHub Pages phát hành xong, bấm nút{' '}
+                  <strong>"Bước 2: Xác Minh File Trên GitHub Pages &amp; Kích Hoạt"</strong> bên dưới để hệ thống kiểm tra file thực tế và cập nhật{' '}
+                  <code className="font-mono text-amber-300">/system_config/audio</code> trên Firestore.
+                </li>
+              </ol>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  previewId === STAGED_LOCAL_PREVIEW_BGM_ID
+                    ? musicManager.stopPreview()
+                    : musicManager.previewTrack(STAGED_LOCAL_PREVIEW_BGM_ID)
+                }
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
+                  previewId === STAGED_LOCAL_PREVIEW_BGM_ID
+                    ? 'bg-amber-500 text-black'
+                    : 'bg-neutral-800 hover:bg-neutral-700 text-white'
+                }`}
+              >
+                {previewId === STAGED_LOCAL_PREVIEW_BGM_ID ? (
+                  <>
+                    <Square className="w-3.5 h-3.5 fill-black" />
+                    <span>Dừng nghe thử</span>
+                  </>
+                ) : (
+                  <>
+                    <Play className="w-3.5 h-3.5 fill-current" />
+                    <span>Nghe thử bản nháp</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDownloadStagedFile}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-200 font-extrabold text-xs transition-all cursor-pointer"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Tải File Chuẩn Hóa ({stagedPkg.normalizedFileName})</span>
+              </button>
+
+              <button
+                type="button"
+                disabled={isCloudSyncing}
+                onClick={() => void handleVerifyAndActivateStaged()}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs shadow transition-all cursor-pointer"
+              >
+                <Rocket className="w-3.5 h-3.5" />
+                <span>
+                  {isCloudSyncing
+                    ? 'Đang kiểm tra trên GitHub Pages...'
+                    : `Bước 2: Xác Minh File Trên GitHub Pages & Kích Hoạt (v${stagedPkg.targetVersion})`}
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Direct Activation of Existing File in public/audio/ */}
+        <div className="p-3 rounded-lg bg-neutral-900/70 border border-neutral-800 space-y-2">
+          <div className="font-bold text-neutral-200 text-[11px]">
+            Hoặc kích hoạt trực tiếp file nhạc đã có sẵn trong <code className="text-amber-300 font-mono">public/audio/</code> trên GitHub Pages:
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <input
+              type="text"
+              value={manualFileName}
+              onChange={(e) => setManualFileName(e.target.value)}
+              placeholder="Tên file trong public/audio/ (vd: bgm_v1_bantank.mp3)"
+              className="px-2.5 py-1.5 rounded bg-neutral-950 border border-neutral-700 text-neutral-200 text-xs font-mono"
+            />
+            <input
+              type="text"
+              value={manualDisplayName}
+              onChange={(e) => setManualDisplayName(e.target.value)}
+              placeholder="Tên hiển thị bài nhạc (tùy chọn)"
+              className="px-2.5 py-1.5 rounded bg-neutral-950 border border-neutral-700 text-neutral-200 text-xs"
+            />
+            <button
+              type="button"
+              disabled={isCloudSyncing}
+              onClick={() => void handleVerifyAndActivateManualAsset()}
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-extrabold text-xs transition-all cursor-pointer"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>Kiểm Tra ./audio/&lt;file&gt; &amp; Kích Hoạt</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Active Library List */}
         {tracks.length === 0 ? (
           <div className="p-4 rounded-lg bg-neutral-900/60 border border-neutral-800/80 text-center text-neutral-400 space-y-1">
             <p className="font-semibold text-neutral-300">Chưa có file nhạc nền tùy chỉnh nào trong thư viện.</p>
             <p className="text-[11px]">
-              Game hiện đang sử dụng nhạc nền 8-bit tích hợp mặc định. Nhấn <strong>"Tải File Nhạc Lên"</strong> để thêm file MP3/OGG/WAV (ví dụ bản 8-bit chuyển đổi từ <em>Gaming - Gaming Music</em>).
+              Game hiện đang sử dụng nhạc nền 8-bit tích hợp mặc định. Nhấn <strong>"Bước 1: Chọn File Nhạc Để Kiểm Tra &amp; Nghe Thử"</strong> để chuẩn bị file MP3/OGG/WAV (hỗ trợ cả file &gt; 4 MB, tối đa 25 MB).
             </p>
           </div>
         ) : (
@@ -388,7 +691,7 @@ export const MusicAdminPanel: React.FC = () => {
                           type="button"
                           onClick={() => handleDelete(track)}
                           className="p-1.5 rounded bg-neutral-800 hover:bg-rose-900/60 text-rose-400"
-                          title="Xóa bài nhạc"
+                          title="Gỡ bài nhạc"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
