@@ -7,7 +7,7 @@
       "properties": {
         "uid": {
           "type": "string",
-          "description": "Firebase Auth UID của người chơi (bất biến, khớp ID tài liệu)",
+          "description": "Firebase Auth UID của người chơi (ghi khi tạo mới tx.set, tùy chọn khi tx.update)",
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[a-zA-Z0-9_\\-]+$"
@@ -21,7 +21,7 @@
         },
         "deviceId": {
           "type": "string",
-          "description": "Mã định danh trình duyệt UUID v4 lưu trong localStorage/IndexedDB",
+          "description": "Mã định danh trình duyệt UUID v4 lưu trong localStorage",
           "minLength": 16,
           "maxLength": 64,
           "pattern": "^[a-zA-Z0-9_\\-]+$"
@@ -48,7 +48,6 @@
         }
       },
       "required": [
-        "uid",
         "sessionId",
         "deviceId",
         "isActive",
@@ -79,34 +78,26 @@
       },
       "required": ["uid", "role"]
     },
-    "CoopRoom": {
-      "title": "CoopRoom",
-      "description": "Phòng chơi Co-op Online 2 người chơi thật (Host P1 và Guest P2) sử dụng Firestore cho Signaling & WebRTC DataChannel cho đồng bộ trong trận.",
+    "CoopRoomLobby": {
+      "title": "CoopRoomLobby",
+      "description": "Metadata tối thiểu của phòng chơi Co-op Online (không chứa WebRTC SDP/ICE, ảnh đại diện hay kết quả riêng).",
       "type": "object",
       "properties": {
         "roomCode": { "type": "string", "minLength": 6, "maxLength": 6 },
         "status": { "type": "string", "enum": ["WAITING", "PLAYING", "FINISHED", "ABANDONED", "EXPIRED"] },
         "difficulty": { "type": "string", "enum": ["DEFAULT", "EXTREME"] },
         "hostUid": { "type": "string" },
-        "hostDisplayName": { "type": "string" },
-        "hostPhotoURL": { "type": "string" },
+        "hostDisplayName": { "type": "string", "minLength": 1, "maxLength": 80 },
         "hostReady": { "type": "boolean" },
         "hostLastActiveAt": { "type": "number" },
         "guestUid": { "type": "string" },
-        "guestDisplayName": { "type": "string" },
-        "guestPhotoURL": { "type": "string" },
+        "guestDisplayName": { "type": "string", "minLength": 1, "maxLength": 80 },
         "guestReady": { "type": "boolean" },
         "guestLastActiveAt": { "type": "number" },
-        "rtcOffer": { "type": "string" },
-        "rtcAnswer": { "type": "string" },
-        "hostIceCandidates": { "type": "string" },
-        "guestIceCandidates": { "type": "string" },
         "rtcConnectionState": { "type": "string", "enum": ["NEW", "CONNECTING", "CONNECTED", "DISCONNECTED", "FAILED"] },
-        "finalScore": { "type": "number" },
-        "matchOutcome": { "type": "string", "enum": ["VICTORY", "GAME_OVER"] },
         "createdAt": { "type": "number" },
         "expiresAt": { "type": "number" },
-        "disconnectReason": { "type": "string" }
+        "disconnectReason": { "type": "string", "maxLength": 240 }
       },
       "required": [
         "roomCode",
@@ -114,14 +105,35 @@
         "difficulty",
         "hostUid",
         "hostDisplayName",
-        "hostPhotoURL",
         "hostReady",
         "hostLastActiveAt",
         "guestReady",
         "rtcConnectionState",
-        "finalScore",
         "createdAt",
         "expiresAt"
+      ]
+    },
+    "CoopRoomPrivateSignaling": {
+      "title": "CoopRoomPrivateSignaling",
+      "description": "Tài liệu phụ riêng tư chỉ cho phép Host và Guest đã tham gia phòng đọc/ghi WebRTC SDP/ICE và kết quả trận đấu.",
+      "type": "object",
+      "properties": {
+        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6 },
+        "hostUid": { "type": "string" },
+        "guestUid": { "type": "string" },
+        "rtcOffer": { "type": "string", "maxLength": 16384 },
+        "rtcAnswer": { "type": "string", "maxLength": 16384 },
+        "hostIceCandidates": { "type": "string", "maxLength": 16384 },
+        "guestIceCandidates": { "type": "string", "maxLength": 16384 },
+        "finalScore": { "type": "number" },
+        "matchOutcome": { "type": "string", "enum": ["VICTORY", "GAME_OVER"] },
+        "updatedAt": { "type": "number" }
+      },
+      "required": [
+        "roomCode",
+        "hostUid",
+        "finalScore",
+        "updatedAt"
       ]
     }
   },
@@ -139,8 +151,12 @@
       "description": "Bảng quyền Super Admin chỉ dành cho linhnk.online@gmail.com."
     },
     "/coop_rooms/{roomCode}": {
-      "schema": { "$ref": "#/entities/CoopRoom" },
-      "description": "Phòng chơi Co-op Online tối đa 2 người chơi (Host P1 & Guest P2) dùng cho Signaling WebRTC."
+      "schema": { "$ref": "#/entities/CoopRoomLobby" },
+      "description": "Metadata phòng chờ Co-op Online tối thiểu."
+    },
+    "/coop_rooms/{roomCode}/private/{docId}": {
+      "schema": { "$ref": "#/entities/CoopRoomPrivateSignaling" },
+      "description": "Signaling WebRTC (SDP Offer/Answer, ICE) và kết quả trận đấu riêng tư cho Host & Guest."
     }
   }
 }

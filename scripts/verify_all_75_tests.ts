@@ -58,7 +58,7 @@ const allSuites = [
   { name: 'M6 AI Dispersal, Lag Fix, No FPS/Rotate UI & MusicManager Admin (31 Tests)', results: m6AICorrResults },
   { name: 'M7.1 Firebase Auth & Single-Device Session (35 Tests)', results: m71Results },
   { name: 'M7.2 Ally AI, Co-op, Profile & Typography (10 Tests)', results: m72Results },
-  { name: 'M7.3 FIX Super Admin, Rules, WebRTC Co-op & Base Rules (14 Tests)', results: m73Results },
+  { name: 'M7.3.1 Rules Hardening, WebRTC Co-op & Retry-Safe Finish (29 Tests)', results: m73Results },
 ];
 
 let totalTests = 0;

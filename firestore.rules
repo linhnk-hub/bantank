@@ -69,10 +69,12 @@ service cloud.firestore {
 
     // =========================================================================
     // 2. Validation Helper cho UserSession (Chuẩn M7.1 - Khớp 100% sessionManager.ts)
+    //    - 6 trường lõi luôn bắt buộc: sessionId, deviceId, isActive, userAgentSummary, loginAt, lastActiveAt
+    //    - Trường 'uid' (ghi khi tx.set) và 'expiresAt' (nếu có từ tài liệu M7.1 cũ) là tùy chọn
+    //      để tương thích 100% cả khi tx.update không gửi kèm 'uid'.
     // =========================================================================
     function isValidUserSession(data, uid) {
       return data.keys().hasAll([
-          'uid',
           'sessionId',
           'deviceId',
           'isActive',
@@ -90,8 +92,7 @@ service cloud.firestore {
           'lastActiveAt',
           'expiresAt'
         ])
-        && data.uid == uid
-        && data.uid == request.auth.uid
+        && (!('uid' in data) || (data.uid == uid && data.uid == request.auth.uid))
         && isValidTokenId(data.sessionId)
         && isValidTokenId(data.deviceId)
         && data.isActive is bool
@@ -105,7 +106,8 @@ service cloud.firestore {
 
     // Hành động 1: Heartbeat từ cùng thiết bị & cùng phiên đang hoạt động
     // - Bắt buộc phiên còn hiệu lực (<= 900s) VÀ cách lần cập nhật trước tối thiểu 120s
-    // - Chỉ được phép cập nhật trường 'lastActiveAt' bằng giờ máy chủ (request.time)
+    // - Chỉ được phép cập nhật duy nhất trường 'lastActiveAt' bằng giờ máy chủ (request.time)
+    // - Tuyệt đối không cho phép Heartbeat sửa đổi 'expiresAt'
     function isSameDeviceHeartbeatAction() {
       return existing().isActive == true
         && isExistingSessionStillActive()
@@ -116,11 +118,12 @@ service cloud.firestore {
         && incoming().userAgentSummary == existing().userAgentSummary
         && incoming().isActive == true
         && incoming().lastActiveAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['lastActiveAt', 'expiresAt']);
+        && incoming().diff(existing()).affectedKeys().hasOnly(['lastActiveAt']);
     }
 
     // Hành động 2: Đăng xuất chủ động hoặc giải phóng phiên từ cùng thiết bị & cùng phiên đang hoạt động
     // - Bắt buộc phiên đang ở trạng thái isActive == true chuyển sang isActive == false
+    // - Tuyệt đối không cho phép Logout sửa đổi 'expiresAt'
     function isSameDeviceLogoutAction() {
       return existing().isActive == true
         && incoming().deviceId == existing().deviceId
@@ -129,7 +132,7 @@ service cloud.firestore {
         && incoming().userAgentSummary == existing().userAgentSummary
         && incoming().isActive == false
         && incoming().lastActiveAt == request.time
-        && incoming().diff(existing()).affectedKeys().hasOnly(['isActive', 'lastActiveAt', 'expiresAt']);
+        && incoming().diff(existing()).affectedKeys().hasOnly(['isActive', 'lastActiveAt']);
     }
 
     // Hành động 3: Chiếm phiên đăng nhập mới hợp lệ (First-Active-Session Wins)
@@ -146,6 +149,7 @@ service cloud.firestore {
         && incoming().loginAt == request.time
         && incoming().lastActiveAt == request.time
         && incoming().diff(existing()).affectedKeys().hasOnly([
+          'uid',
           'sessionId',
           'deviceId',
           'isActive',
@@ -173,7 +177,7 @@ service cloud.firestore {
       allow update: if isValidId(uid)
         && isOwner(uid)
         && isValidUserSession(incoming(), uid)
-        && incoming().uid == existing().uid
+        && (!('uid' in existing()) || ('uid' in incoming() && incoming().uid == existing().uid))
         && (
           isSameDeviceHeartbeatAction()
           || isSameDeviceLogoutAction()
@@ -202,31 +206,31 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 6. Validation & Role Helpers cho /coop_rooms/{roomCode} (M7.3 FIX)
-    //    Firestore chỉ dùng cho tạo/vào phòng, Ready, WebRTC Signaling và kết quả cuối trận.
+    // 6. Validation & Role Helpers cho /coop_rooms/{roomCode} (Metadata tối thiểu)
+    //    và /coop_rooms/{roomCode}/private/{docId} (Signaling WebRTC & Kết quả riêng)
     // =========================================================================
-    function isValidCoopRoomSchema(data, roomCode) {
+    // Kiểm tra timestamp dạng millisecond do client gửi phải nằm trong biên ±60 giây (60,000 ms)
+    // so với giờ máy chủ request.time.toMillis() (chặn cả tương lai xa lẫn quá khứ cũ).
+    function isValidClientMillisTimestamp(ts) {
+      return ts is int
+        && ts >= request.time.toMillis() - 60000
+        && ts <= request.time.toMillis() + 60000;
+    }
+
+    function isValidCoopRoomLobbySchema(data, roomCode) {
       return data.keys().hasAll([
           'roomCode',
           'status',
           'difficulty',
           'hostUid',
           'hostDisplayName',
-          'hostPhotoURL',
           'hostReady',
           'hostLastActiveAt',
           'guestUid',
           'guestDisplayName',
-          'guestPhotoURL',
           'guestReady',
           'guestLastActiveAt',
-          'rtcOffer',
-          'rtcAnswer',
-          'hostIceCandidates',
-          'guestIceCandidates',
           'rtcConnectionState',
-          'finalScore',
-          'matchOutcome',
           'createdAt',
           'expiresAt',
           'disconnectReason'
@@ -237,21 +241,13 @@ service cloud.firestore {
           'difficulty',
           'hostUid',
           'hostDisplayName',
-          'hostPhotoURL',
           'hostReady',
           'hostLastActiveAt',
           'guestUid',
           'guestDisplayName',
-          'guestPhotoURL',
           'guestReady',
           'guestLastActiveAt',
-          'rtcOffer',
-          'rtcAnswer',
-          'hostIceCandidates',
-          'guestIceCandidates',
           'rtcConnectionState',
-          'finalScore',
-          'matchOutcome',
           'createdAt',
           'expiresAt',
           'disconnectReason'
@@ -264,25 +260,14 @@ service cloud.firestore {
         && data.hostDisplayName is string
         && data.hostDisplayName.size() >= 1
         && data.hostDisplayName.size() <= 80
-        && data.hostPhotoURL is string
-        && data.hostPhotoURL.size() <= 512
         && data.hostReady is bool
         && data.hostLastActiveAt is int
         && data.hostLastActiveAt > 0
         && (data.guestUid == null || (isValidId(data.guestUid) && data.guestUid != data.hostUid))
         && (data.guestDisplayName == null || (data.guestDisplayName is string && data.guestDisplayName.size() >= 1 && data.guestDisplayName.size() <= 80))
-        && (data.guestPhotoURL == null || (data.guestPhotoURL is string && data.guestPhotoURL.size() <= 512))
         && data.guestReady is bool
         && (data.guestLastActiveAt == null || (data.guestLastActiveAt is int && data.guestLastActiveAt > 0))
-        && (data.rtcOffer == null || (data.rtcOffer is string && data.rtcOffer.size() <= 16384))
-        && (data.rtcAnswer == null || (data.rtcAnswer is string && data.rtcAnswer.size() <= 16384))
-        && (data.hostIceCandidates == null || (data.hostIceCandidates is string && data.hostIceCandidates.size() <= 16384))
-        && (data.guestIceCandidates == null || (data.guestIceCandidates is string && data.guestIceCandidates.size() <= 16384))
         && data.rtcConnectionState in ['NEW', 'CONNECTING', 'CONNECTED', 'DISCONNECTED', 'FAILED']
-        && data.finalScore is int
-        && data.finalScore >= 0
-        && data.finalScore <= 9999999
-        && (data.matchOutcome == null || data.matchOutcome in ['VICTORY', 'GAME_OVER'])
         && data.createdAt is int
         && data.createdAt > 0
         && data.expiresAt is int
@@ -291,178 +276,499 @@ service cloud.firestore {
         && (data.disconnectReason == null || (data.disconnectReason is string && data.disconnectReason.size() <= 240));
     }
 
-    function isCoopRoomNotExpired() {
-      return existing().status != 'EXPIRED'
+    // Kiểm tra thời gian tạo phòng hợp lệ theo giờ máy chủ (request.time):
+    // - createdAt và hostLastActiveAt không được lệch quá ±60 giây so với request.time.toMillis()
+    // - expiresAt phải > createdAt, > request.time.toMillis()
+    // - expiresAt không vượt quá 15 phút (900,000 ms) kể từ cả createdAt lẫn request.time.toMillis()
+    function isValidCoopRoomCreationTime(data) {
+      return isValidClientMillisTimestamp(data.createdAt)
+        && isValidClientMillisTimestamp(data.hostLastActiveAt)
+        && data.expiresAt > data.createdAt
+        && data.expiresAt > request.time.toMillis()
+        && data.expiresAt <= data.createdAt + 900000
+        && data.expiresAt <= request.time.toMillis() + 900000;
+    }
+
+    // Kiểm tra phòng chờ (WAITING) còn hạn 15 phút để Guest tham gia hoặc Host bắt đầu trận
+    function isWaitingRoomNotExpired() {
+      return existing().status == 'WAITING'
         && request.time.toMillis() < existing().expiresAt;
+    }
+
+    // Kiểm tra tài liệu /coop_rooms/{roomCode}/private/signaling đã được Host khởi tạo
+    function signalingDocExists(roomCode) {
+      return exists(/databases/$(database)/documents/coop_rooms/$(roomCode)/private/signaling);
+    }
+
+    // Đọc dữ liệu tài liệu /coop_rooms/{roomCode}/private/signaling (được cache trong cùng 1 lần đánh giá Rules)
+    function signalingDoc(roomCode) {
+      return get(/databases/$(database)/documents/coop_rooms/$(roomCode)/private/signaling).data;
+    }
+
+    // M7.3 FINAL GUARD (Fix 1): Bắt buộc kết quả trận đấu hợp lệ đã được lưu trong private/signaling
+    // trước khi cho phép phòng cha chuyển trạng thái PLAYING -> FINISHED:
+    // - Tài liệu signaling tồn tại
+    // - signaling.roomCode == roomCode
+    // - signaling.hostUid khớp Host của phòng cha
+    // - signaling.guestUid khớp Guest của phòng cha (và guestUid != null)
+    // - signaling.matchOutcome thuộc ['VICTORY', 'GAME_OVER']
+    // - signaling.finalScore là số nguyên từ 0 đến 9999999
+    function hasValidRecordedMatchResult(roomCode) {
+      return signalingDocExists(roomCode)
+        && signalingDoc(roomCode).roomCode == roomCode
+        && signalingDoc(roomCode).hostUid == existing().hostUid
+        && existing().guestUid != null
+        && signalingDoc(roomCode).guestUid == existing().guestUid
+        && signalingDoc(roomCode).matchOutcome in ['VICTORY', 'GAME_OVER']
+        && signalingDoc(roomCode).finalScore is int
+        && signalingDoc(roomCode).finalScore >= 0
+        && signalingDoc(roomCode).finalScore <= 9999999;
     }
 
     function isImmutableCoopCoreUnchanged() {
       return incoming().roomCode == existing().roomCode
         && incoming().hostUid == existing().hostUid
         && incoming().hostDisplayName == existing().hostDisplayName
-        && incoming().hostPhotoURL == existing().hostPhotoURL
         && incoming().difficulty == existing().difficulty
         && incoming().createdAt == existing().createdAt
         && incoming().expiresAt == existing().expiresAt;
     }
 
-    // Nhánh 1: Host (P1) cập nhật trạng thái điều phối phòng, Ready, WebRTC Offer/ICE hoặc kết quả cuối trận
-    // - Không được tự ý ghi đè thông tin Guest hoặc đổi guestUid sang người thứ 3
-    // - Chỉ được chuyển sang PLAYING khi đã có Guest và cả 2 đã Ready
-    function isCoopHostUpdateAction() {
+    function isHostTimestampUpdateValid() {
+      return incoming().hostLastActiveAt == existing().hostLastActiveAt
+        || isValidClientMillisTimestamp(incoming().hostLastActiveAt);
+    }
+
+    function isGuestTimestampUpdateValid() {
+      return incoming().guestLastActiveAt == existing().guestLastActiveAt
+        || (incoming().guestLastActiveAt != null && isValidClientMillisTimestamp(incoming().guestLastActiveAt));
+    }
+
+    // State Machine tường minh cho các chuyển trạng thái của Host (P1):
+    // 1. WAITING -> WAITING: cập nhật hoạt động trong sảnh khi phòng chờ chưa hết hạn
+    // 2. WAITING -> PLAYING: chỉ khi phòng chờ chưa hết hạn, đã có Guest, cả 2 đã Ready,
+    //    cả existing lẫn incoming đều đã CONNECTED, và tài liệu private/signaling đã tồn tại
+    // 3. WAITING -> ABANDONED: Host chủ động hủy/đóng phòng chờ
+    // 4. WAITING -> EXPIRED: chỉ khi thời gian máy chủ đã đạt hoặc vượt expiresAt (request.time.toMillis() >= existing().expiresAt)
+    // 5. PLAYING -> PLAYING: cập nhật trạng thái kết nối trong trận (không dùng expiresAt của phòng chờ để chặn trận đang diễn ra)
+    // 6. PLAYING -> FINISHED: trận đấu kết thúc hợp lệ (bắt buộc hasValidRecordedMatchResult(roomCode) == true;
+    //    cho phép kể cả khi trận kéo dài qua mốc expiresAt của phòng chờ)
+    // 7. PLAYING -> ABANDONED: trận đấu bị gián đoạn hoặc Host rời phòng
+    // Tuyệt đối cấm: PLAYING -> WAITING, WAITING -> FINISHED, hoặc chuyển từ trạng thái kết thúc (FINISHED/ABANDONED/EXPIRED) sang trạng thái khác.
+    function isValidHostStatusTransition(roomCode) {
+      return (
+        // 1. Giữ trạng thái WAITING
+        (
+          existing().status == 'WAITING'
+          && incoming().status == 'WAITING'
+          && request.time.toMillis() < existing().expiresAt
+        )
+        ||
+        // 2. Chuyển WAITING -> PLAYING
+        (
+          existing().status == 'WAITING'
+          && incoming().status == 'PLAYING'
+          && request.time.toMillis() < existing().expiresAt
+          && existing().guestUid != null
+          && existing().hostReady == true
+          && existing().guestReady == true
+          && existing().rtcConnectionState == 'CONNECTED'
+          && incoming().rtcConnectionState == 'CONNECTED'
+          && incoming().hostReady == true
+          && signalingDocExists(roomCode)
+        )
+        ||
+        // 3. Chuyển WAITING -> ABANDONED (Host hủy phòng)
+        (
+          existing().status == 'WAITING'
+          && incoming().status == 'ABANDONED'
+          && incoming().hostReady == existing().hostReady
+        )
+        ||
+        // 4. Chuyển WAITING -> EXPIRED (Chỉ khi thời gian máy chủ đã đạt hoặc vượt expiresAt)
+        (
+          existing().status == 'WAITING'
+          && incoming().status == 'EXPIRED'
+          && request.time.toMillis() >= existing().expiresAt
+          && incoming().hostReady == existing().hostReady
+        )
+        ||
+        // 5. Giữ trạng thái PLAYING (không dùng expiresAt của phòng chờ để chặn thao tác trong trận)
+        (
+          existing().status == 'PLAYING'
+          && incoming().status == 'PLAYING'
+          && incoming().hostReady == existing().hostReady
+        )
+        ||
+        // 6. Chuyển PLAYING -> FINISHED (Kết thúc trận hợp lệ - bắt buộc đã lưu kết quả hợp lệ trong private/signaling)
+        (
+          existing().status == 'PLAYING'
+          && incoming().status == 'FINISHED'
+          && incoming().hostReady == existing().hostReady
+          && hasValidRecordedMatchResult(roomCode)
+        )
+        ||
+        // 7. Chuyển PLAYING -> ABANDONED (Gián đoạn hoặc rời trận)
+        (
+          existing().status == 'PLAYING'
+          && incoming().status == 'ABANDONED'
+          && incoming().hostReady == existing().hostReady
+        )
+      );
+    }
+
+    // Nhánh 1: Host (P1) cập nhật trạng thái điều phối phòng và rtcConnectionState theo đúng State Machine
+    // - Chỉ Host được quyền thay đổi rtcConnectionState
+    // - Giữ nguyên toàn bộ trường của Guest
+    // - Kiểm soát biên timestamp ±60s cho hostLastActiveAt
+    function isCoopHostUpdateAction(roomCode) {
       return request.auth.uid == existing().hostUid
-        && (isCoopRoomNotExpired() || incoming().status in ['ABANDONED', 'EXPIRED', 'FINISHED'])
         && incoming().guestUid == existing().guestUid
         && incoming().guestDisplayName == existing().guestDisplayName
-        && incoming().guestPhotoURL == existing().guestPhotoURL
-        && (
-          incoming().status != 'PLAYING'
-          || existing().status == 'PLAYING'
-          || (
-            existing().status == 'WAITING'
-            && existing().guestUid != null
-            && existing().hostReady == true
-            && existing().guestReady == true
-          )
-        )
+        && incoming().guestReady == existing().guestReady
+        && incoming().guestLastActiveAt == existing().guestLastActiveAt
+        && isHostTimestampUpdateValid()
+        && isValidHostStatusTransition(roomCode)
         && incoming().diff(existing()).affectedKeys().hasOnly([
           'status',
           'hostReady',
           'hostLastActiveAt',
-          'rtcOffer',
-          'hostIceCandidates',
           'rtcConnectionState',
-          'finalScore',
-          'matchOutcome',
           'disconnectReason'
         ]);
     }
 
-    // Nhánh 2: Guest (P2) tham gia vào phòng đang WAITING và chưa có Guest (chặn tuyệt đối người thứ 3)
-    function isCoopGuestJoinAction() {
-      return isCoopRoomNotExpired()
-        && existing().status == 'WAITING'
+    // Nhánh 2: Guest (P2) tham gia vào phòng đang WAITING, chưa hết hạn, chưa có Guest và đã có private/signaling
+    // - Guest chỉ được cập nhật guestUid, guestDisplayName, guestReady và guestLastActiveAt
+    // - Bắt buộc giữ nguyên rtcConnectionState và disconnectReason (chỉ Host được quyền cập nhật rtcConnectionState)
+    function isCoopGuestJoinAction(roomCode) {
+      return isWaitingRoomNotExpired()
         && existing().guestUid == null
         && request.auth.uid != existing().hostUid
         && incoming().guestUid == request.auth.uid
+        && incoming().guestDisplayName is string
         && incoming().status == 'WAITING'
         && incoming().guestReady == false
+        && incoming().guestLastActiveAt != null
+        && isValidClientMillisTimestamp(incoming().guestLastActiveAt)
+        && incoming().rtcConnectionState == existing().rtcConnectionState
+        && incoming().disconnectReason == existing().disconnectReason
         && incoming().diff(existing()).affectedKeys().hasOnly([
           'guestUid',
           'guestDisplayName',
-          'guestPhotoURL',
           'guestReady',
-          'guestLastActiveAt',
-          'rtcAnswer',
-          'guestIceCandidates',
-          'rtcConnectionState',
-          'disconnectReason'
-        ]);
+          'guestLastActiveAt'
+        ])
+        && signalingDocExists(roomCode);
     }
 
-    // Nhánh 3: Guest (P2) đã ở trong phòng cập nhật trạng thái Ready hoặc WebRTC Answer/ICE
-    // - Không được phép sửa status, hostUid, difficulty hoặc các trường của Host
-    function isCoopGuestSignalingOrReadyAction() {
-      return isCoopRoomNotExpired()
-        && existing().status in ['WAITING', 'PLAYING']
-        && existing().guestUid != null
+    // Nhánh 3: Guest (P2) đã ở trong phòng:
+    // - Khi phòng đang WAITING (chưa hết hạn): được cập nhật guestReady và guestLastActiveAt
+    // - Khi phòng đang PLAYING: chỉ được cập nhật guestLastActiveAt (bắt buộc giữ nguyên guestReady)
+    // - Tuyệt đối không được cập nhật rtcConnectionState, disconnectReason, status hoặc các trường của Host
+    function isCoopGuestReadyOrStateAction() {
+      return existing().guestUid != null
         && request.auth.uid == existing().guestUid
         && incoming().guestUid == existing().guestUid
         && incoming().guestDisplayName == existing().guestDisplayName
-        && incoming().guestPhotoURL == existing().guestPhotoURL
         && incoming().status == existing().status
-        && incoming().diff(existing()).affectedKeys().hasOnly([
-          'guestReady',
-          'guestLastActiveAt',
-          'rtcAnswer',
-          'guestIceCandidates',
-          'rtcConnectionState'
-        ]);
+        && incoming().rtcConnectionState == existing().rtcConnectionState
+        && incoming().disconnectReason == existing().disconnectReason
+        && isGuestTimestampUpdateValid()
+        && (
+          (
+            isWaitingRoomNotExpired()
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'guestReady',
+              'guestLastActiveAt'
+            ])
+          )
+          ||
+          (
+            existing().status == 'PLAYING'
+            && incoming().guestReady == existing().guestReady
+            && incoming().diff(existing()).affectedKeys().hasOnly([
+              'guestLastActiveAt'
+            ])
+          )
+        );
     }
 
-    // Nhánh 4: Guest (P2) rời phòng hợp lệ
-    // - Khi phòng đang WAITING: giải phóng slot Guest về null để người khác có thể vào
-    // - Khi phòng đang PLAYING: chuyển trạng thái phòng sang ABANDONED và ghi lý do ngắt kết nối
+    // Nhánh 4: Guest (P2) rời phòng hợp lệ (cho phép cả khi đã quá expiresAt để không kẹt thao tác thoát phòng)
+    // - Không cho phép Guest tự ý thay đổi rtcConnectionState (Host sẽ cập nhật sau khi phát hiện Guest rời)
+    // - Khi phòng đang WAITING: giải phóng slot Guest về null và giữ nguyên rtcConnectionState, disconnectReason
+    // - Khi phòng đang PLAYING: chuyển trạng thái phòng sang ABANDONED kèm lý do và giữ nguyên rtcConnectionState
     function isCoopGuestLeaveAction() {
       return existing().guestUid != null
         && request.auth.uid == existing().guestUid
+        && incoming().rtcConnectionState == existing().rtcConnectionState
         && (
           (
             existing().status == 'WAITING'
             && incoming().status == 'WAITING'
             && incoming().guestUid == null
             && incoming().guestDisplayName == null
-            && incoming().guestPhotoURL == null
             && incoming().guestReady == false
             && incoming().guestLastActiveAt == null
-            && incoming().rtcAnswer == null
-            && incoming().guestIceCandidates == null
+            && incoming().disconnectReason == existing().disconnectReason
             && incoming().diff(existing()).affectedKeys().hasOnly([
               'guestUid',
               'guestDisplayName',
-              'guestPhotoURL',
               'guestReady',
-              'guestLastActiveAt',
-              'rtcAnswer',
-              'guestIceCandidates',
-              'rtcConnectionState',
-              'disconnectReason'
+              'guestLastActiveAt'
             ])
           )
           || (
             existing().status == 'PLAYING'
             && incoming().status == 'ABANDONED'
             && incoming().guestUid == existing().guestUid
+            && incoming().guestDisplayName == existing().guestDisplayName
+            && incoming().guestReady == existing().guestReady
+            && isGuestTimestampUpdateValid()
             && incoming().diff(existing()).affectedKeys().hasOnly([
               'status',
               'guestLastActiveAt',
-              'rtcConnectionState',
               'disconnectReason'
             ])
           )
         );
     }
 
+    function isValidCoopSignalingSchema(data, roomCode) {
+      return data.keys().hasAll([
+          'roomCode',
+          'hostUid',
+          'guestUid',
+          'rtcOffer',
+          'rtcAnswer',
+          'hostIceCandidates',
+          'guestIceCandidates',
+          'finalScore',
+          'matchOutcome',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'roomCode',
+          'hostUid',
+          'guestUid',
+          'rtcOffer',
+          'rtcAnswer',
+          'hostIceCandidates',
+          'guestIceCandidates',
+          'finalScore',
+          'matchOutcome',
+          'updatedAt'
+        ])
+        && roomCode.matches('^[A-Z0-9]{6}$')
+        && data.roomCode == roomCode
+        && isValidId(data.hostUid)
+        && (data.guestUid == null || (isValidId(data.guestUid) && data.guestUid != data.hostUid))
+        && (data.rtcOffer == null || (data.rtcOffer is string && data.rtcOffer.size() <= 16384))
+        && (data.rtcAnswer == null || (data.rtcAnswer is string && data.rtcAnswer.size() <= 16384))
+        && (data.hostIceCandidates == null || (data.hostIceCandidates is string && data.hostIceCandidates.size() <= 16384))
+        && (data.guestIceCandidates == null || (data.guestIceCandidates is string && data.guestIceCandidates.size() <= 16384))
+        && data.finalScore is int
+        && data.finalScore >= 0
+        && data.finalScore <= 9999999
+        && (data.matchOutcome == null || data.matchOutcome in ['VICTORY', 'GAME_OVER'])
+        && data.updatedAt is int
+        && data.updatedAt > 0;
+    }
+
     // =========================================================================
-    // 7. Collection Rules: /coop_rooms/{roomCode}
+    // 7. Collection Rules: /coop_rooms/{roomCode} & /coop_rooms/{roomCode}/private/{docId}
     // =========================================================================
     match /coop_rooms/{roomCode} {
-      // Cho phép đọc trực tiếp theo mã phòng 6 ký tự (get); chặn liệt kê toàn bộ danh sách phòng (list)
-      allow get: if isVerifiedPersonalGmail() && roomCode.matches('^[A-Z0-9]{6}$');
+      // Quyền đọc (get) trên metadata phòng:
+      // - Chỉ cho phép khi:
+      //   (1) Tài liệu chưa tồn tại (resource == null) để kiểm tra mã phòng trống/không tồn tại
+      //   (2) Người đọc là Super Admin, Chủ phòng (hostUid) hoặc Guest đã vào phòng (guestUid)
+      //   (3) Phòng đang ở trạng thái WAITING và chưa có Guest (guestUid == null) để người chơi thứ 2 kiểm tra trước khi vào
+      // - Khi phòng đã đủ 2 người (guestUid != null) hoặc đã bắt đầu/kết thúc, người thứ 3 hoàn toàn không thể đọc được!
+      // - Tài liệu này chỉ chứa metadata tối thiểu (không chứa WebRTC Offer/Answer/ICE, ảnh đại diện hay kết quả riêng).
+      allow get: if isVerifiedPersonalGmail()
+        && roomCode.matches('^[A-Z0-9]{6}$')
+        && (
+          resource == null
+          || isSuperAdmin()
+          || request.auth.uid == resource.data.hostUid
+          || (resource.data.guestUid != null && request.auth.uid == resource.data.guestUid)
+          || (
+            resource.data.status == 'WAITING'
+            && resource.data.guestUid == null
+            && request.time.toMillis() < resource.data.expiresAt
+          )
+        );
+
       allow list: if isSuperAdmin();
 
       // Tạo phòng: Người tạo bắt buộc là Chủ phòng (hostUid == request.auth.uid), trạng thái WAITING, guestUid == null
+      // Kiểm tra chặt createdAt, hostLastActiveAt và expiresAt (<= request.time + 900,000 ms)
       allow create: if isVerifiedPersonalGmail()
-        && isValidCoopRoomSchema(incoming(), roomCode)
+        && isValidCoopRoomLobbySchema(incoming(), roomCode)
+        && isValidCoopRoomCreationTime(incoming())
         && incoming().hostUid == request.auth.uid
         && incoming().status == 'WAITING'
         && incoming().guestUid == null
         && incoming().guestDisplayName == null
-        && incoming().guestPhotoURL == null
         && incoming().guestReady == false
         && incoming().guestLastActiveAt == null
-        && incoming().rtcOffer == null
-        && incoming().rtcAnswer == null
-        && incoming().hostIceCandidates == null
-        && incoming().guestIceCandidates == null
         && incoming().rtcConnectionState == 'NEW'
-        && incoming().finalScore == 0
-        && incoming().matchOutcome == null
-        && incoming().disconnectReason == null
-        && request.time.toMillis() < incoming().expiresAt;
+        && incoming().disconnectReason == null;
 
       // Cập nhật phòng: Kiểm tra schema nghiêm ngặt, khóa các trường bất biến và phân tách quyền theo đúng vai trò
       allow update: if isVerifiedPersonalGmail()
-        && isValidCoopRoomSchema(incoming(), roomCode)
+        && isValidCoopRoomLobbySchema(incoming(), roomCode)
         && isImmutableCoopCoreUnchanged()
         && (
-          isCoopHostUpdateAction()
-          || isCoopGuestJoinAction()
-          || isCoopGuestSignalingOrReadyAction()
+          isCoopHostUpdateAction(roomCode)
+          || isCoopGuestJoinAction(roomCode)
+          || isCoopGuestReadyOrStateAction()
           || isCoopGuestLeaveAction()
         );
 
       allow delete: if isSuperAdmin();
+
+      // Tài liệu phụ riêng tư: /coop_rooms/{roomCode}/private/signaling
+      // Chứa WebRTC Offer, Answer, ICE candidates và kết quả trận đấu (finalScore, matchOutcome).
+      // Người chưa tham gia phòng hoặc người thứ 3 bị chặn ĐỌC và GHI tuyệt đối (100% Private).
+      match /private/{docId} {
+        function parentRoomExists() {
+          return exists(/databases/$(database)/documents/coop_rooms/$(roomCode));
+        }
+
+        function parentRoom() {
+          return get(/databases/$(database)/documents/coop_rooms/$(roomCode)).data;
+        }
+
+        function isRoomHost() {
+          return parentRoomExists()
+            && request.auth.uid == parentRoom().hostUid;
+        }
+
+        function isJoinedRoomGuest() {
+          return parentRoomExists()
+            && parentRoom().guestUid != null
+            && request.auth.uid == parentRoom().guestUid;
+        }
+
+        // Tách thời hạn phòng chờ (WAITING) và thời gian trận đấu (PLAYING):
+        // - Khi phòng cha đang WAITING: bắt buộc request.time.toMillis() < parentRoom().expiresAt
+        // - Khi phòng cha đang PLAYING: không dùng expiresAt của phòng chờ để chặn ghi kết quả hoặc trao đổi kết nối
+        // - Khi phòng cha ở trạng thái terminal (FINISHED, ABANDONED, EXPIRED): khóa mọi cập nhật signaling
+        function isParentRoomActiveForSignaling() {
+          return (
+              parentRoom().status == 'WAITING'
+              && request.time.toMillis() < parentRoom().expiresAt
+            )
+            || parentRoom().status == 'PLAYING';
+        }
+
+        allow get: if isVerifiedPersonalGmail()
+          && roomCode.matches('^[A-Z0-9]{6}$')
+          && docId == 'signaling'
+          && (isSuperAdmin() || isRoomHost() || isJoinedRoomGuest());
+
+        allow list: if false;
+
+        // Khóa quyền CREATE private/signaling theo đúng phòng cha:
+        // 1. Tài liệu phòng cha /coop_rooms/{roomCode} bắt buộc phải tồn tại
+        // 2. Người tạo phải là Host của phòng cha (parentRoom().hostUid == request.auth.uid)
+        // 3. incoming().hostUid == parentRoom().hostUid
+        // 4. Phòng cha đang WAITING, chưa hết hạn và chưa có Guest (parentRoom().guestUid == null)
+        // 5. incoming().guestUid == null và toàn bộ Offer, Answer, ICE ở trạng thái khởi tạo null
+        allow create: if isVerifiedPersonalGmail()
+          && docId == 'signaling'
+          && parentRoomExists()
+          && parentRoom().hostUid == request.auth.uid
+          && parentRoom().status == 'WAITING'
+          && request.time.toMillis() < parentRoom().expiresAt
+          && parentRoom().guestUid == null
+          && isValidCoopSignalingSchema(incoming(), roomCode)
+          && isValidClientMillisTimestamp(incoming().updatedAt)
+          && incoming().hostUid == parentRoom().hostUid
+          && incoming().guestUid == null
+          && incoming().rtcOffer == null
+          && incoming().rtcAnswer == null
+          && incoming().hostIceCandidates == null
+          && incoming().guestIceCandidates == null
+          && incoming().finalScore == 0
+          && incoming().matchOutcome == null;
+
+        // Khóa quyền UPDATE private/signaling theo đúng phòng cha và trạng thái trận đấu:
+        // - Mọi thao tác cập nhật đều yêu cầu phòng cha tồn tại, đang ở trạng thái hoạt động hợp lệ
+        //   (WAITING chưa hết hạn hoặc PLAYING), incoming().hostUid == parentRoom().hostUid,
+        //   incoming().guestUid == parentRoom().guestUid, và incoming().updatedAt nằm trong biên ±60 giây.
+        // - Khi phòng cha đã FINISHED, ABANDONED hoặc EXPIRED: mọi cập nhật signaling đều bị DENY.
+        allow update: if isVerifiedPersonalGmail()
+          && docId == 'signaling'
+          && parentRoomExists()
+          && isParentRoomActiveForSignaling()
+          && isValidCoopSignalingSchema(incoming(), roomCode)
+          && isValidClientMillisTimestamp(incoming().updatedAt)
+          && incoming().roomCode == existing().roomCode
+          && incoming().hostUid == existing().hostUid
+          && incoming().hostUid == parentRoom().hostUid
+          && incoming().guestUid == parentRoom().guestUid
+          && (
+            // Nhánh 1 (Host - WebRTC Signaling / Reset):
+            // Host cập nhật Offer, Host ICE hoặc reset Answer/Guest ICE về null; không đụng vào kết quả trận đấu.
+            (
+              request.auth.uid == parentRoom().hostUid
+              && incoming().finalScore == existing().finalScore
+              && incoming().matchOutcome == existing().matchOutcome
+              && (incoming().rtcAnswer == existing().rtcAnswer || incoming().rtcAnswer == null)
+              && (incoming().guestIceCandidates == existing().guestIceCandidates || incoming().guestIceCandidates == null)
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'guestUid',
+                'rtcOffer',
+                'rtcAnswer',
+                'hostIceCandidates',
+                'guestIceCandidates',
+                'updatedAt'
+              ])
+            )
+            ||
+            // Nhánh 2 (Host - Ghi kết quả trận đấu đúng 1 lần khi phòng cha đang PLAYING):
+            // Chỉ được ghi khi existing().matchOutcome == null && existing().finalScore == 0;
+            // sau khi đã ghi nhận kết quả, không cho phép Host sửa lại kết quả.
+            (
+              request.auth.uid == parentRoom().hostUid
+              && parentRoom().status == 'PLAYING'
+              && existing().matchOutcome == null
+              && existing().finalScore == 0
+              && incoming().matchOutcome in ['VICTORY', 'GAME_OVER']
+              && incoming().rtcOffer == existing().rtcOffer
+              && incoming().rtcAnswer == existing().rtcAnswer
+              && incoming().hostIceCandidates == existing().hostIceCandidates
+              && incoming().guestIceCandidates == existing().guestIceCandidates
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'finalScore',
+                'matchOutcome',
+                'updatedAt'
+              ])
+            )
+            ||
+            // Nhánh 3 (Guest đã tham gia phòng - WebRTC Answer / Guest ICE):
+            // Không được đặt guestUid về null khi vẫn tham gia phòng, không được sửa Offer, Host ICE hay kết quả.
+            (
+              parentRoom().guestUid != null
+              && request.auth.uid == parentRoom().guestUid
+              && incoming().rtcOffer == existing().rtcOffer
+              && incoming().hostIceCandidates == existing().hostIceCandidates
+              && incoming().finalScore == existing().finalScore
+              && incoming().matchOutcome == existing().matchOutcome
+              && incoming().diff(existing()).affectedKeys().hasOnly([
+                'guestUid',
+                'rtcAnswer',
+                'guestIceCandidates',
+                'updatedAt'
+              ])
+            )
+          );
+
+        allow delete: if isSuperAdmin();
+      }
     }
   }
 }

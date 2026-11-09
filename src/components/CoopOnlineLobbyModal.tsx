@@ -91,7 +91,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   };
 
   const handleCopyCode = async () => {
-    if (!room) return;
+    if (!room || !coopManager.isRoomSignalingReady()) return;
     try {
       await navigator.clipboard.writeText(room.roomCode);
       setCopied(true);
@@ -152,8 +152,10 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
     }
   };
 
-  // Nếu chưa ở trong phòng: Hiển thị 2 lựa chọn TẠO PHÒNG và THAM GIA PHÒNG
-  if (!room || room.status === 'ABANDONED' || room.status === 'EXPIRED') {
+  const signalingReady = coopManager.isRoomSignalingReady();
+
+  // Nếu chưa ở trong phòng hoặc signaling chưa sẵn sàng: Hiển thị 2 lựa chọn TẠO PHÒNG và THAM GIA PHÒNG
+  if (!room || !signalingReady || room.status === 'ABANDONED' || room.status === 'EXPIRED') {
     return (
       <div className="space-y-4">
         {room && (room.status === 'ABANDONED' || room.status === 'EXPIRED') && (
@@ -267,7 +269,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
 
   // Đang ở trong phòng chờ (WAITING)
   const bothPresent = Boolean(room.hostUid && room.guestUid);
-  const bothReady = Boolean(bothPresent && room.hostReady && room.guestReady);
+  const p2pConnected = room.rtcConnectionState === 'CONNECTED';
+  const bothReady = Boolean(bothPresent && room.hostReady && room.guestReady && p2pConnected);
   const myReady = role === 'HOST' ? room.hostReady : room.guestReady;
 
   return (
@@ -356,11 +359,11 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
             )}
             <span>
               {room.rtcConnectionState === 'CONNECTED'
-                ? 'Đã thiết lập kênh P2P trực tiếp (WebRTC DataChannel) – Tiết kiệm 100% hạn mức Firestore trong trận!'
+                ? 'Đã thiết lập kênh P2P trực tiếp (WebRTC DataChannel) – Sẵn sàng xuất kích!'
                 : room.rtcConnectionState === 'FAILED'
                   ? coopManager.getWebrtcErrorMessage() ||
                     'Kết nối P2P trực tiếp (WebRTC) thất bại. Vui lòng thử kết nối lại hoặc rời phòng an toàn.'
-                  : 'Đang thiết lập kênh P2P trực tiếp (WebRTC DataChannel) qua Firestore Signaling...'}
+                  : 'Đang thiết lập kênh P2P trực tiếp (WebRTC DataChannel)...'}
             </span>
           </div>
           {room.rtcConnectionState === 'FAILED' && (
@@ -381,18 +384,9 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
         {/* Slot P1: Host */}
         <div className="p-3.5 rounded-xl bg-neutral-950/80 border border-amber-500/40 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            {room.hostPhotoURL ? (
-              <img
-                src={room.hostPhotoURL}
-                alt={room.hostDisplayName}
-                className="w-9 h-9 rounded-full object-cover border border-amber-500/50 shrink-0"
-                referrerPolicy="no-referrer"
-              />
-            ) : (
-              <div className="w-9 h-9 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
-                <UserCheck className="w-4 h-4" />
-              </div>
-            )}
+            <div className="w-9 h-9 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
+              <UserCheck className="w-4 h-4" />
+            </div>
             <div className="min-w-0">
               <div className="text-[10px] font-black uppercase tracking-wider text-amber-400">
                 Người Chơi 1 (Chủ Phòng)
@@ -422,18 +416,9 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
           {room.guestUid ? (
             <>
               <div className="flex items-center gap-2.5 min-w-0">
-                {room.guestPhotoURL ? (
-                  <img
-                    src={room.guestPhotoURL}
-                    alt={room.guestDisplayName || 'P2'}
-                    className="w-9 h-9 rounded-full object-cover border border-emerald-500/50 shrink-0"
-                    referrerPolicy="no-referrer"
-                  />
-                ) : (
-                  <div className="w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-300 shrink-0">
-                    <Users className="w-4 h-4" />
-                  </div>
-                )}
+                <div className="w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-300 shrink-0">
+                  <Users className="w-4 h-4" />
+                </div>
                 <div className="min-w-0">
                   <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
                     Người Chơi 2 (Đồng Đội)
