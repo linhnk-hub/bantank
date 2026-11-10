@@ -1793,6 +1793,114 @@ export function evaluateUserProfileMetadataRule(params: {
  * - Ngược lại (chọn `google`, hoặc avatar danh mục bị ẩn `isActive === false`, hoặc bị xóa,
  *   hoặc lỗi tải URL) -> tự động fallback về `photoURL` của Google hoặc `null` (icon mặc định).
  */
+export interface AvatarFirestoreDiagnosticLog {
+  operation: 'SELECT_GOOGLE_AVATAR' | 'SELECT_CATALOG_AVATAR' | 'UPDATE_DISPLAY_NAME';
+  path: string;
+  errorCode: 'PERMISSION_DENIED' | 'UNAUTHENTICATED' | 'NETWORK_ERROR' | 'INVALID_DATA';
+  firestoreCode: string;
+  timestampMs: number;
+}
+
+/**
+ * Lấy URL ảnh đại diện Google mặc định từ thông tin xác thực hiện tại (`user.photoURL` hoặc `user.providerData` của `google.com`).
+ * Không lưu `downloadURL`, capability token hay ID token vào Firestore (M7.3.6 Mục III.2).
+ */
+export function getGooglePhotoUrlForUser(
+  user:
+    | {
+        photoURL?: string | null;
+        providerData?: ReadonlyArray<{ providerId?: string | null; photoURL?: string | null } | null> | null;
+      }
+    | null
+    | undefined
+): string | null {
+  if (!user) return null;
+  if (typeof user.photoURL === 'string' && user.photoURL.trim().length > 0) {
+    return user.photoURL.trim();
+  }
+  if (Array.isArray(user.providerData)) {
+    for (const provider of user.providerData) {
+      if (
+        provider &&
+        provider.providerId === 'google.com' &&
+        typeof provider.photoURL === 'string' &&
+        provider.photoURL.trim().length > 0
+      ) {
+        return provider.photoURL.trim();
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Phân loại lỗi thao tác lưu lựa chọn avatar / hồ sơ người dùng trên Firestore (M7.3.6 Mục III.4):
+ * - 'PERMISSION_DENIED': Firestore Security Rules từ chối (`permission-denied` / `Missing or insufficient permissions`).
+ * - 'UNAUTHENTICATED': Chưa đăng nhập, token hết hạn hoặc email chưa xác minh (`unauthenticated`).
+ * - 'INVALID_DATA': Dữ liệu gửi lên không hợp lệ (`invalid-argument`).
+ * - 'NETWORK_ERROR': Lỗi mạng, mất kết nối hoặc dịch vụ tạm thời gián đoạn (`unavailable`, `deadline-exceeded`, ...).
+ */
+export function classifyUserProfileFirestoreError(err: unknown): {
+  errorCode: 'PERMISSION_DENIED' | 'UNAUTHENTICATED' | 'NETWORK_ERROR' | 'INVALID_DATA';
+  firestoreCode: string;
+  userMessage: string;
+} {
+  const anyErr = err as { code?: string; message?: string } | null | undefined;
+  const rawCode = String(anyErr?.code || '').trim();
+  const code = rawCode.toLowerCase();
+  const msg = String(anyErr?.message || err || '').toLowerCase();
+
+  if (
+    code.includes('unauthenticated') ||
+    code.includes('user-token-expired') ||
+    code.includes('invalid-user-token') ||
+    msg.includes('unauthenticated') ||
+    msg.includes('user-token-expired')
+  ) {
+    return {
+      errorCode: 'UNAUTHENTICATED',
+      firestoreCode: rawCode || 'unauthenticated',
+      userMessage: 'Phiên đăng nhập Google đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.',
+    };
+  }
+
+  if (
+    code.includes('permission-denied') ||
+    code.includes('permission_denied') ||
+    msg.includes('missing or insufficient permissions') ||
+    msg.includes('permission-denied') ||
+    msg.includes('permission_denied')
+  ) {
+    return {
+      errorCode: 'PERMISSION_DENIED',
+      firestoreCode: rawCode || 'permission-denied',
+      userMessage:
+        'Không đủ quyền lưu lựa chọn ảnh đại diện trên Firestore (PERMISSION_DENIED). Vui lòng kiểm tra tài khoản Gmail đã xác minh và đảm bảo Firestore Rules mới nhất đã được cập nhật.',
+    };
+  }
+
+  if (
+    code.includes('invalid-argument') ||
+    code.includes('invalid_argument') ||
+    code.includes(' invalid_data') ||
+    code === 'invalid_data' ||
+    msg.includes('invalid-argument') ||
+    msg.includes('invalid data')
+  ) {
+    return {
+      errorCode: 'INVALID_DATA',
+      firestoreCode: rawCode || 'invalid-argument',
+      userMessage: 'Dữ liệu lựa chọn ảnh đại diện không hợp lệ với cấu trúc hồ sơ người dùng.',
+    };
+  }
+
+  return {
+    errorCode: 'NETWORK_ERROR',
+    firestoreCode: rawCode || 'unavailable',
+    userMessage: 'Không thể kết nối tới Cloud Firestore do lỗi mạng. Vui lòng kiểm tra kết nối Internet và thử lại.',
+  };
+}
+
 export function resolvePlayerAvatarUrl(params: {
   uid?: string | null;
   userMeta?: UserProfileAvatarMetadata | null;
@@ -2873,13 +2981,20 @@ export class InMemoryAvatarCatalogSystem {
     return { allowed: true, items };
   }
 
+  private lastFirestoreDiagnostic: AvatarFirestoreDiagnosticLog | null = null;
+
+  public getLastFirestoreDiagnostic(): AvatarFirestoreDiagnosticLog | null {
+    return this.lastFirestoreDiagnostic ? { ...this.lastFirestoreDiagnostic } : null;
+  }
+
   /**
    * Người chơi chọn avatar trong danh mục (`avatarType: 'catalog'`) hoặc chuyển về ảnh Google (`avatarType: 'google'`).
-   * Tách biệt hoàn toàn khỏi quyền chỉnh `displayName` và bảo đảm UID bất biến (M7.3.5.3 Mục V):
+   * Tách biệt hoàn toàn khỏi quyền chỉnh `displayName` và bảo đảm UID bất biến (M7.3.5.3 Mục V & M7.3.6 Mục III):
    * - Khi tạo mới (`existing == null`): ghi `['uid', 'avatarType', 'avatarId', 'avatarUpdatedAt']`.
    * - Khi cập nhật tài liệu đã có (`existing != null`): chỉ cập nhật `['avatarType', 'avatarId', 'avatarUpdatedAt']`
-   *   bằng cơ chế merge (`setDoc(..., { merge: true })`) để không đưa `uid` vào `affectedKeys()` và không tự ý bắt buộc
-   *   thêm `uid` nếu tài liệu cũ chưa có trường `uid`.
+   *   bằng cơ chế merge (`setDoc(..., { merge: true })`) để không đưa `uid` vào `affectedKeys()` và không làm mất
+   *   bất kỳ trường hồ sơ nào khác (`email`, `uid`, `role`, `isSuperAdmin`, `xp`, `xu`, `rank`, `displayName`, `createdAt`).
+   * - Chỉ thông báo thành công khi đã đọc lại từ Firestore và xác nhận lưu thành công.
    */
   public playerSelectAvatar(params: {
     targetUid: string;
@@ -2888,8 +3003,57 @@ export class InMemoryAvatarCatalogSystem {
     avatarType: PlayerAvatarType;
     avatarId: string | null;
     extraFields?: Record<string, unknown>;
+    googlePhotoUrl?: string | null;
+    simulatedError?: 'PERMISSION_DENIED' | 'UNAUTHENTICATED' | 'NETWORK_ERROR' | 'INVALID_DATA';
     nowMs: number;
   }): AvatarOperationResult {
+    const docPath = `/users/${params.targetUid}`;
+    const operation =
+      params.avatarType === 'google' ? 'SELECT_GOOGLE_AVATAR' : 'SELECT_CATALOG_AVATAR';
+
+    if (params.simulatedError) {
+      const codeMap: Record<
+        'PERMISSION_DENIED' | 'UNAUTHENTICATED' | 'NETWORK_ERROR' | 'INVALID_DATA',
+        string
+      > = {
+        PERMISSION_DENIED: 'permission-denied',
+        UNAUTHENTICATED: 'unauthenticated',
+        NETWORK_ERROR: 'unavailable',
+        INVALID_DATA: 'invalid-argument',
+      };
+      const classified = classifyUserProfileFirestoreError({
+        code: codeMap[params.simulatedError],
+      });
+      this.lastFirestoreDiagnostic = {
+        operation,
+        path: docPath,
+        errorCode: classified.errorCode,
+        firestoreCode: classified.firestoreCode,
+        timestampMs: params.nowMs,
+      };
+      return {
+        success: false,
+        errorCode: classified.errorCode,
+        message: classified.userMessage,
+      };
+    }
+
+    if (!params.authUid || !params.isVerifiedPersonalGmail) {
+      const classified = classifyUserProfileFirestoreError({ code: 'unauthenticated' });
+      this.lastFirestoreDiagnostic = {
+        operation,
+        path: docPath,
+        errorCode: classified.errorCode,
+        firestoreCode: classified.firestoreCode,
+        timestampMs: params.nowMs,
+      };
+      return {
+        success: false,
+        errorCode: 'FIRESTORE_PERMISSION_DENIED',
+        message: classified.userMessage,
+      };
+    }
+
     const existing = this.userDocs.get(params.targetUid) ?? null;
     const patch: Record<string, unknown> = existing
       ? {
@@ -2927,6 +3091,13 @@ export class InMemoryAvatarCatalogSystem {
     });
 
     if (!allowed) {
+      this.lastFirestoreDiagnostic = {
+        operation,
+        path: docPath,
+        errorCode: 'PERMISSION_DENIED',
+        firestoreCode: 'permission-denied',
+        timestampMs: params.nowMs,
+      };
       return {
         success: false,
         errorCode: 'FIRESTORE_PERMISSION_DENIED',
@@ -2935,10 +3106,34 @@ export class InMemoryAvatarCatalogSystem {
     }
 
     this.userDocs.set(params.targetUid, incoming);
+
+    // Xác nhận đọc lại từ Firestore trước khi báo thành công (M7.3.6 Mục III.4)
+    const verifiedDoc = this.userDocs.get(params.targetUid);
+    if (
+      !verifiedDoc ||
+      verifiedDoc.avatarType !== params.avatarType ||
+      verifiedDoc.avatarId !== params.avatarId
+    ) {
+      this.lastFirestoreDiagnostic = {
+        operation,
+        path: docPath,
+        errorCode: 'NETWORK_ERROR',
+        firestoreCode: 'read-back-mismatch',
+        timestampMs: params.nowMs,
+      };
+      return {
+        success: false,
+        errorCode: 'NETWORK_ERROR',
+        message: 'Không thể xác nhận dữ liệu ảnh đại diện trên Firestore. Vui lòng thử lại.',
+      };
+    }
+
+    this.lastFirestoreDiagnostic = null;
     return {
       success: true,
       avatarType: params.avatarType,
       avatarId: params.avatarId,
+      avatarUrl: params.avatarType === 'google' ? params.googlePhotoUrl ?? null : undefined,
       message:
         params.avatarType === 'google'
           ? 'Đã chuyển về Ảnh đại diện Google.'
@@ -3934,16 +4129,53 @@ export class AvatarManager {
   // THAO TÁC CỦA NGƯỜI CHƠI: CHỌN ẢNH GOOGLE HOẶC CHỌN AVATAR TRONG DANH MỤC
   // ==========================================================================
 
+  private lastFirestoreDiagnostic: AvatarFirestoreDiagnosticLog | null = null;
+
+  public getLastFirestoreDiagnostic(): AvatarFirestoreDiagnosticLog | null {
+    return this.lastFirestoreDiagnostic ? { ...this.lastFirestoreDiagnostic } : null;
+  }
+
+  private recordFirestoreDiagnostic(
+    operation: AvatarFirestoreDiagnosticLog['operation'],
+    path: string,
+    errorCode: AvatarFirestoreDiagnosticLog['errorCode'],
+    firestoreCode: string
+  ): void {
+    const entry: AvatarFirestoreDiagnosticLog = {
+      operation,
+      path,
+      errorCode,
+      firestoreCode,
+      timestampMs: Date.now(),
+    };
+    this.lastFirestoreDiagnostic = entry;
+    console.warn('[AvatarManager][FirestoreDiagnostic]', {
+      operation: entry.operation,
+      path: entry.path,
+      errorCode: entry.errorCode,
+      firestoreCode: entry.firestoreCode,
+    });
+  }
+
   /**
    * Người chơi chọn sử dụng Ảnh Google (`avatarType: "google"`, `avatarId: null`).
-   * Tách biệt với quyền chỉnh `displayName` và bảo đảm UID bất biến (M7.3.5.3 Mục V):
-   * chỉ ghi `['avatarType', 'avatarId', 'avatarUpdatedAt']` qua `setDoc(..., payload, { merge: true })`
-   * để không đưa `uid` vào `affectedKeys()` và không tự ý thêm `uid` vào hồ sơ cũ không có trường `uid`.
+   * Tách biệt với quyền chỉnh `displayName` và bảo đảm UID bất biến (M7.3.5.3 Mục V & M7.3.6 Mục III):
+   * - Lấy ảnh Google từ `getGooglePhotoUrlForUser(currentUser)` (`user.photoURL` hoặc `user.providerData` của `google.com`).
+   * - Chỉ ghi `['avatarType', 'avatarId', 'avatarUpdatedAt']` qua `setDoc(..., payload, { merge: true })`
+   *   để không ghi đè các trường hồ sơ khác (`email`, `uid`, `role`, `isSuperAdmin`, `xp`, `xu`, `rank`, `displayName`)
+   *   và không lưu `downloadURL`, capability token hay ID token vào Firestore.
+   * - Đọc lại từ Firestore (`getDoc`) để xác nhận lưu thành công trước khi thông báo thành công.
    */
   public async selectGoogleAvatar(): Promise<AvatarOperationResult> {
     const auth = AuthManager.getInstance();
     const currentUser = auth.getCurrentUser();
     if (!currentUser || !validatePersonalGmailUser(currentUser).isValid) {
+      this.recordFirestoreDiagnostic(
+        'SELECT_GOOGLE_AVATAR',
+        `/users/${currentUser?.uid || 'unauthenticated'}`,
+        'UNAUTHENTICATED',
+        'unauthenticated'
+      );
       return {
         success: false,
         errorCode: 'UNAUTHENTICATED',
@@ -3962,14 +4194,23 @@ export class AvatarManager {
 
     const db = getFirebaseDb();
     if (!db) {
+      this.recordFirestoreDiagnostic(
+        'SELECT_GOOGLE_AVATAR',
+        `/users/${currentUser.uid}`,
+        'NETWORK_ERROR',
+        'firestore-unavailable'
+      );
       return {
         success: false,
-        errorCode: 'FIRESTORE_UNAVAILABLE',
-        message: 'Chưa kết nối được dịch vụ Cloud Firestore.',
+        errorCode: 'NETWORK_ERROR',
+        message: 'Chưa kết nối được dịch vụ Cloud Firestore. Vui lòng kiểm tra kết nối mạng.',
       };
     }
 
     const existingMeta = this.userMetadataCache.get(currentUser.uid);
+    const googlePhotoUrl = getGooglePhotoUrlForUser(currentUser);
+    const userDocPath = `/users/${currentUser.uid}`;
+    const userRef = doc(db, 'users', currentUser.uid);
     const payload: Record<string, unknown> = {
       avatarType: 'google',
       avatarId: null,
@@ -3977,10 +4218,34 @@ export class AvatarManager {
     };
 
     try {
-      await setDoc(doc(db, 'users', currentUser.uid), payload, { merge: true });
+      await setDoc(userRef, payload, { merge: true });
+      const verifiedSnap = await getDoc(userRef);
+      const verifiedData = verifiedSnap.exists()
+        ? (verifiedSnap.data() as Record<string, unknown>)
+        : null;
+      if (!verifiedData || verifiedData.avatarType !== 'google' || verifiedData.avatarId !== null) {
+        this.recordFirestoreDiagnostic(
+          'SELECT_GOOGLE_AVATAR',
+          userDocPath,
+          'NETWORK_ERROR',
+          'read-back-unconfirmed'
+        );
+        return {
+          success: false,
+          errorCode: 'NETWORK_ERROR',
+          message: 'Không thể xác nhận lưu lựa chọn ảnh Google trên Firestore. Vui lòng thử lại.',
+        };
+      }
+
+      const verifiedDisplayName =
+        typeof verifiedData.displayName === 'string' && verifiedData.displayName.trim().length > 0
+          ? verifiedData.displayName.trim()
+          : existingMeta?.displayName ?? currentUser.displayName ?? null;
+
+      this.lastFirestoreDiagnostic = null;
       this.userMetadataCache.set(currentUser.uid, {
         uid: currentUser.uid,
-        displayName: existingMeta?.displayName ?? currentUser.displayName ?? null,
+        displayName: verifiedDisplayName,
         avatarType: 'google',
         avatarId: null,
         avatarUpdatedAtMs: Date.now(),
@@ -3990,28 +4255,42 @@ export class AvatarManager {
         success: true,
         avatarType: 'google',
         avatarId: null,
-        avatarUrl: currentUser.photoURL,
+        avatarUrl: googlePhotoUrl,
         message: 'Đã chuyển về sử dụng Ảnh đại diện Google.',
       };
     } catch (err: any) {
+      const classified = classifyUserProfileFirestoreError(err);
+      this.recordFirestoreDiagnostic(
+        'SELECT_GOOGLE_AVATAR',
+        userDocPath,
+        classified.errorCode,
+        classified.firestoreCode
+      );
       return {
         success: false,
-        errorCode: err?.code || 'FIRESTORE_WRITE_ERROR',
-        message: 'Không thể lưu lựa chọn ảnh Google lên Firestore. Vui lòng thử lại.',
+        errorCode: classified.errorCode,
+        message: classified.userMessage,
       };
     }
   }
 
   /**
    * Người chơi chọn một avatar đang hoạt động (`isActive === true`) trong Danh mục Avatar chung.
-   * Tách biệt với quyền chỉnh `displayName` và bảo đảm UID bất biến (M7.3.5.3 Mục V):
+   * Tách biệt với quyền chỉnh `displayName` và bảo đảm UID bất biến (M7.3.5.3 Mục V & M7.3.6 Mục III):
    * chỉ ghi `['avatarType', 'avatarId', 'avatarUpdatedAt']` qua `setDoc(..., payload, { merge: true })`
    * để không đưa `uid` vào `affectedKeys()` và không tự ý thêm `uid` vào hồ sơ cũ không có trường `uid`.
+   * Chỉ báo thành công sau khi đọc lại từ Firestore (`getDoc`) xác nhận lưu thành công.
    */
   public async selectCatalogAvatar(avatarId: string): Promise<AvatarOperationResult> {
     const auth = AuthManager.getInstance();
     const currentUser = auth.getCurrentUser();
     if (!currentUser || !validatePersonalGmailUser(currentUser).isValid) {
+      this.recordFirestoreDiagnostic(
+        'SELECT_CATALOG_AVATAR',
+        `/users/${currentUser?.uid || 'unauthenticated'}`,
+        'UNAUTHENTICATED',
+        'unauthenticated'
+      );
       return {
         success: false,
         errorCode: 'UNAUTHENTICATED',
@@ -4042,14 +4321,22 @@ export class AvatarManager {
 
     const db = getFirebaseDb();
     if (!db) {
+      this.recordFirestoreDiagnostic(
+        'SELECT_CATALOG_AVATAR',
+        `/users/${currentUser.uid}`,
+        'NETWORK_ERROR',
+        'firestore-unavailable'
+      );
       return {
         success: false,
-        errorCode: 'FIRESTORE_UNAVAILABLE',
-        message: 'Chưa kết nối được dịch vụ Cloud Firestore.',
+        errorCode: 'NETWORK_ERROR',
+        message: 'Chưa kết nối được dịch vụ Cloud Firestore. Vui lòng kiểm tra kết nối mạng.',
       };
     }
 
     const existingMeta = this.userMetadataCache.get(currentUser.uid);
+    const userDocPath = `/users/${currentUser.uid}`;
+    const userRef = doc(db, 'users', currentUser.uid);
     const payload: Record<string, unknown> = {
       avatarType: 'catalog',
       avatarId: cleanId,
@@ -4057,10 +4344,38 @@ export class AvatarManager {
     };
 
     try {
-      await setDoc(doc(db, 'users', currentUser.uid), payload, { merge: true });
+      await setDoc(userRef, payload, { merge: true });
+      const verifiedSnap = await getDoc(userRef);
+      const verifiedData = verifiedSnap.exists()
+        ? (verifiedSnap.data() as Record<string, unknown>)
+        : null;
+      if (
+        !verifiedData ||
+        verifiedData.avatarType !== 'catalog' ||
+        verifiedData.avatarId !== cleanId
+      ) {
+        this.recordFirestoreDiagnostic(
+          'SELECT_CATALOG_AVATAR',
+          userDocPath,
+          'NETWORK_ERROR',
+          'read-back-unconfirmed'
+        );
+        return {
+          success: false,
+          errorCode: 'NETWORK_ERROR',
+          message: 'Không thể xác nhận lưu lựa chọn avatar trên Firestore. Vui lòng thử lại.',
+        };
+      }
+
+      const verifiedDisplayName =
+        typeof verifiedData.displayName === 'string' && verifiedData.displayName.trim().length > 0
+          ? verifiedData.displayName.trim()
+          : existingMeta?.displayName ?? currentUser.displayName ?? null;
+
+      this.lastFirestoreDiagnostic = null;
       this.userMetadataCache.set(currentUser.uid, {
         uid: currentUser.uid,
-        displayName: existingMeta?.displayName ?? currentUser.displayName ?? null,
+        displayName: verifiedDisplayName,
         avatarType: 'catalog',
         avatarId: cleanId,
         avatarUpdatedAtMs: Date.now(),
@@ -4075,13 +4390,20 @@ export class AvatarManager {
         message: `Đã chọn ảnh đại diện "${targetItem.name}".`,
       };
     } catch (err: any) {
+      const classified = classifyUserProfileFirestoreError(err);
+      this.recordFirestoreDiagnostic(
+        'SELECT_CATALOG_AVATAR',
+        userDocPath,
+        classified.errorCode,
+        classified.firestoreCode
+      );
       return {
         success: false,
-        errorCode: err?.code || 'FIRESTORE_WRITE_ERROR',
+        errorCode: classified.errorCode,
         message:
-          err?.code === 'permission-denied'
-            ? 'Không thể chọn avatar này (có thể avatar vừa bị quản trị viên tạm ẩn).'
-            : 'Lỗi lưu lựa chọn avatar lên Firestore. Vui lòng thử lại.',
+          classified.errorCode === 'PERMISSION_DENIED'
+            ? 'Không thể chọn avatar này do thiếu quyền Firestore (hoặc avatar vừa bị quản trị viên tạm ẩn).'
+            : classified.userMessage,
       };
     }
   }
@@ -4125,15 +4447,24 @@ export class AvatarManager {
     const existingMeta = this.userMetadataCache.get(currentUser.uid);
     const avatarType: PlayerAvatarType = existingMeta?.avatarType ?? 'google';
     const avatarId = avatarType === 'catalog' ? existingMeta?.avatarId ?? null : null;
+    const userRef = doc(db, 'users', currentUser.uid);
 
     try {
       await setDoc(
-        doc(db, 'users', currentUser.uid),
+        userRef,
         {
           displayName: cleanName,
         },
         { merge: true }
       );
+      const verifiedSnap = await getDoc(userRef);
+      if (!verifiedSnap.exists() || verifiedSnap.data()?.displayName !== cleanName) {
+        return {
+          success: false,
+          errorCode: 'NETWORK_ERROR',
+          message: 'Không thể xác nhận tên hiển thị trên Firestore. Vui lòng thử lại.',
+        };
+      }
       this.userMetadataCache.set(currentUser.uid, {
         uid: currentUser.uid,
         displayName: cleanName,
@@ -4149,10 +4480,17 @@ export class AvatarManager {
         message: 'Đã lưu tên hiển thị.',
       };
     } catch (err: any) {
+      const classified = classifyUserProfileFirestoreError(err);
+      this.recordFirestoreDiagnostic(
+        'UPDATE_DISPLAY_NAME',
+        `/users/${currentUser.uid}`,
+        classified.errorCode,
+        classified.firestoreCode
+      );
       return {
         success: false,
-        errorCode: err?.code || 'FIRESTORE_WRITE_ERROR',
-        message: 'Không thể lưu tên hiển thị trên Firestore.',
+        errorCode: classified.errorCode,
+        message: classified.userMessage,
       };
     }
   }

@@ -177,7 +177,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       {/* Main Container */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-6 max-w-4xl mx-auto w-full">
         <div className="w-full max-w-md flex flex-col items-center text-center">
-          {/* Emblem & Stage Banner — Only STAGE 1 */}
+          {/* Emblem & Title Banner */}
           <div className="mb-6">
             <div className="flex justify-center mb-3 p-0 m-0">
               <img
@@ -189,12 +189,9 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 }}
               />
             </div>
-            <h1 className="text-2xl sm:text-4xl font-black text-white tracking-wide font-mono mb-1">
+            <h1 className="text-2xl sm:text-4xl font-black text-white tracking-wide font-mono">
               BẮN TANK ONLINE
             </h1>
-            <p className="text-xs sm:text-sm text-amber-400 font-mono font-bold tracking-widest uppercase">
-              STAGE 1
-            </p>
           </div>
 
           {/* Real Error Alert Card (Only shown if an actual failure occurred, M7.3.4 V.2) */}

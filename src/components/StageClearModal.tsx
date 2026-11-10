@@ -79,7 +79,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
               <div className="flex items-center justify-between text-neutral-300">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-neutral-400" />
-                  Xe Basic (1 XP):
+                  Basic Tank (1 XP):
                 </span>
                 <span>{counts.BASIC} xe = {counts.BASIC * 1} XP</span>
               </div>
@@ -87,7 +87,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
               <div className="flex items-center justify-between text-neutral-300">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-sky-400" />
-                  Xe Fast (2 XP):
+                  Fast Tank (2 XP):
                 </span>
                 <span>{counts.FAST} xe = {counts.FAST * 2} XP</span>
               </div>
@@ -95,7 +95,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
               <div className="flex items-center justify-between text-neutral-300">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-red-400" />
-                  Xe Power (3 XP):
+                  Power Tank (3 XP):
                 </span>
                 <span>{counts.POWER} xe = {counts.POWER * 3} XP</span>
               </div>
@@ -103,7 +103,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
               <div className="flex items-center justify-between text-neutral-300">
                 <span className="flex items-center gap-1.5">
                   <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  Xe Armor (5 XP):
+                  Armor Tank (5 XP):
                 </span>
                 <span>{counts.ARMOR} xe = {counts.ARMOR * 5} XP</span>
               </div>

@@ -42,6 +42,9 @@ import {
   validatePendingUploadRecordNoSecrets,
   BrowserPendingUploadPersistentStore,
   DurableInMemoryPendingUploadStore,
+  InMemoryAvatarCatalogSystem,
+  getGooglePhotoUrlForUser,
+  classifyUserProfileFirestoreError,
   type PendingCatalogMetadataSync,
 } from './avatarManager.ts';
 import { GameEngine } from './gameEngine.ts';
@@ -64,6 +67,7 @@ import {
   evaluateCoopRoomReadAccess,
   hasValidRecordedMatchResultModel,
   classifyGetRoomErrorDuringCreate,
+  buildCreateRoomStepErrorMessage,
   COOP_ONLINE_CONFIG,
   type CoopRoomDocument,
   type CoopRoomLobbyDocument,
@@ -4937,6 +4941,184 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T35: M7.3.5.5 – Kiểm thử schema bản ghi Pending Upload qua F5 (chặn tuyệt đối URL/Token/Base64) & tổng hợp lịch sử version từ 3 nguồn',
       passed,
       details: `validStates=${checkValidInProgress.valid && checkValidConfirmed.valid && checkValidIndeterminate.valid}, secretsRejected=${!rejectDownloadUrl.valid && !rejectCapabilityToken.valid && !rejectIdToken.valid && !rejectOauthToken.valid && !rejectBase64InError.valid && !rejectBinaryBuffer.valid}, nextVerFrom3Sources=${nextAlloc.version}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T36: M7.3.6 – Kiểm thử chọn ảnh Google (phân loại lỗi, xác nhận đọc lại, bảo toàn trường hồ sơ)
+  //           & tạo phòng Co-op Online 6 bước (xác minh signaling tồn tại, rollback ABANDONED, phân loại lỗi từng bước)
+  // =========================================================================
+  {
+    const nowMs = 1_700_000_000_000;
+
+    // 1. Kiểm tra getGooglePhotoUrlForUser (lấy từ user.photoURL hoặc fallback sang providerData của google.com):
+    const directGoogleUrl = getGooglePhotoUrlForUser({
+      photoURL: 'https://lh3.googleusercontent.com/a/default-user=s96-c',
+    });
+    const providerFallbackUrl = getGooglePhotoUrlForUser({
+      photoURL: null,
+      providerData: [
+        {
+          providerId: 'google.com',
+          photoURL: 'https://lh3.googleusercontent.com/a/provider-fallback=s96-c',
+        },
+      ],
+    });
+    const googleUrlExtractionOk =
+      directGoogleUrl === 'https://lh3.googleusercontent.com/a/default-user=s96-c' &&
+      providerFallbackUrl === 'https://lh3.googleusercontent.com/a/provider-fallback=s96-c';
+
+    // 2. Kiểm tra phân loại 4 nhóm lỗi Firestore khi lưu lựa chọn ảnh Google (PERMISSION_DENIED, UNAUTHENTICATED, NETWORK_ERROR, INVALID_DATA):
+    const cPerm = classifyUserProfileFirestoreError({
+      code: 'permission-denied',
+      message: 'Missing or insufficient permissions.',
+    });
+    const cAuth = classifyUserProfileFirestoreError({
+      code: 'unauthenticated',
+      message: 'User is unauthenticated.',
+    });
+    const cNet = classifyUserProfileFirestoreError({
+      code: 'unavailable',
+      message: 'Cloud Firestore is temporarily unavailable.',
+    });
+    const cInvalid = classifyUserProfileFirestoreError({
+      code: 'invalid-argument',
+      message: 'Invalid data payload.',
+    });
+    const avatarErrorClassificationOk =
+      cPerm.errorCode === 'PERMISSION_DENIED' &&
+      cAuth.errorCode === 'UNAUTHENTICATED' &&
+      cNet.errorCode === 'NETWORK_ERROR' &&
+      cInvalid.errorCode === 'INVALID_DATA';
+
+    // 3. Kiểm tra lưu lựa chọn ảnh Google trên hồ sơ mới & hồ sơ cũ (bảo toàn uid, displayName, xp, xu, rank, createdAt; không lưu downloadURL/token):
+    const avSys = new InMemoryAvatarCatalogSystem();
+    avSys.seedLegacyUserProfile('uid_cmd_1', {
+      displayName: 'Commander One',
+      avatarType: 'catalog',
+      avatarId: 'tank_old',
+      avatarUpdatedAt: nowMs - 50_000,
+      xp: 9800,
+      xu: 4200,
+      rank: 'COLONEL',
+      createdAt: nowMs - 500_000,
+    });
+    const selectGoogleRes = avSys.playerSelectAvatar({
+      targetUid: 'uid_cmd_1',
+      authUid: 'uid_cmd_1',
+      isVerifiedPersonalGmail: true,
+      avatarType: 'google',
+      avatarId: null,
+      googlePhotoUrl: directGoogleUrl,
+      nowMs,
+    });
+    const updatedUserDoc = avSys.getUserDoc('uid_cmd_1');
+    const googleSelectionPreservesProfileOk =
+      selectGoogleRes.success === true &&
+      selectGoogleRes.avatarType === 'google' &&
+      selectGoogleRes.avatarId === null &&
+      selectGoogleRes.avatarUrl === directGoogleUrl &&
+      updatedUserDoc !== null &&
+      updatedUserDoc.avatarType === 'google' &&
+      updatedUserDoc.avatarId === null &&
+      updatedUserDoc.uid === 'uid_cmd_1' &&
+      updatedUserDoc.displayName === 'Commander One' &&
+      updatedUserDoc.xp === 9800 &&
+      updatedUserDoc.xu === 4200 &&
+      updatedUserDoc.rank === 'COLONEL' &&
+      !('downloadURL' in updatedUserDoc) &&
+      !('idToken' in updatedUserDoc);
+
+    // Kiểm tra log kỹ thuật khi lỗi PERMISSION_DENIED không chứa token/email nhạy cảm:
+    const simPermFail = avSys.playerSelectAvatar({
+      targetUid: 'uid_cmd_1',
+      authUid: 'uid_cmd_1',
+      isVerifiedPersonalGmail: true,
+      avatarType: 'google',
+      avatarId: null,
+      simulatedError: 'PERMISSION_DENIED',
+      nowMs: nowMs + 1000,
+    });
+    const diagLog = avSys.getLastFirestoreDiagnostic();
+    const diagLogSafeOk =
+      simPermFail.success === false &&
+      simPermFail.errorCode === 'PERMISSION_DENIED' &&
+      diagLog !== null &&
+      diagLog.operation === 'SELECT_GOOGLE_AVATAR' &&
+      diagLog.path === '/users/uid_cmd_1' &&
+      diagLog.errorCode === 'PERMISSION_DENIED' &&
+      !JSON.stringify(diagLog).includes('ya29.') &&
+      !JSON.stringify(diagLog).includes('eyJ');
+
+    // 4. Kiểm tra tạo phòng Co-op Online 6 bước:
+    //    - Bước 4 thất bại (signaling document không tồn tại khi đọc xác minh getSignaling) -> đánh dấu phòng cha ABANDONED, dọn UI, không trả về mã phòng.
+    const verifyFailStorage = new InMemoryCoopStorageAdapter();
+    const verifyFailHost = new CoopOnlineManager(verifyFailStorage);
+    verifyFailStorage.setFailNextGetSignalingVerify(true);
+    const verifyFailRes = verifyFailHost.createRoomSync(
+      verifyFailStorage,
+      {
+        uid: 'uid_host_m736',
+        displayName: 'Host M736',
+        email: 'hostm736@gmail.com',
+        emailVerified: true,
+      },
+      'DEFAULT',
+      nowMs,
+      'VF7360'
+    );
+    const abandonedAfterVerifyFail = verifyFailStorage.getRoomSync('VF7360');
+    const step4VerifyAndRollbackOk =
+      verifyFailRes.success === false &&
+      verifyFailRes.failedStep === 'VERIFY_SIGNALING_DOC' &&
+      verifyFailRes.room === undefined &&
+      verifyFailHost.getCurrentRoom() === null &&
+      verifyFailHost.isRoomSignalingReady() === false &&
+      abandonedAfterVerifyFail !== null &&
+      abandonedAfterVerifyFail.status === 'ABANDONED';
+
+    //    - Bước 2 thất bại (setRoom bị PERMISSION_DENIED) -> phân loại đúng CREATE_PARENT_ROOM + PERMISSION_DENIED:
+    const parentFailStorage = new InMemoryCoopStorageAdapter();
+    const parentFailHost = new CoopOnlineManager(parentFailStorage);
+    parentFailStorage.setFailNextSetRoomError(
+      Object.assign(new Error('Missing or insufficient permissions.'), {
+        code: 'permission-denied',
+      })
+    );
+    const parentFailRes = parentFailHost.createRoomSync(
+      parentFailStorage,
+      {
+        uid: 'uid_host_m736',
+        displayName: 'Host M736',
+        email: 'hostm736@gmail.com',
+        emailVerified: true,
+      },
+      'EXTREME',
+      nowMs,
+      'PF7360'
+    );
+    const step2ClassifyOk =
+      parentFailRes.success === false &&
+      parentFailRes.errorCode === 'PERMISSION_DENIED' &&
+      parentFailRes.failedStep === 'CREATE_PARENT_ROOM' &&
+      parentFailHost.getCurrentRoom() === null &&
+      buildCreateRoomStepErrorMessage('CREATE_PARENT_ROOM', 'PERMISSION_DENIED').includes(
+        'PERMISSION_DENIED'
+      );
+
+    const passed =
+      googleUrlExtractionOk &&
+      avatarErrorClassificationOk &&
+      googleSelectionPreservesProfileOk &&
+      diagLogSafeOk &&
+      step4VerifyAndRollbackOk &&
+      step2ClassifyOk;
+
+    results.push({
+      id: 'M7_3_T36',
+      name: 'T36: M7.3.6 – Sửa lỗi lưu lựa chọn ảnh Google (phân loại 4 nhóm lỗi, xác nhận đọc lại, bảo toàn hồ sơ) & trình tự tạo phòng 6 bước (xác minh signaling tồn tại, rollback ABANDONED)',
+      passed,
+      details: `googleUrlOk=${googleUrlExtractionOk}, avatarErrClassOk=${avatarErrorClassificationOk}, preserveProfileOk=${googleSelectionPreservesProfileOk}, diagSafeOk=${diagLogSafeOk}, step4VerifyRollbackOk=${step4VerifyAndRollbackOk}, step2ClassifyOk=${step2ClassifyOk}`,
     });
   }
 

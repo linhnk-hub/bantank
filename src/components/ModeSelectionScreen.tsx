@@ -191,7 +191,27 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     setFlowStep('SELECT_DIFFICULTY');
   };
 
-  const handleProceedFromDifficulty = () => {
+  const handleConfirmCardMode = (next: SelectionCardMode, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    handleSelectCardMode(next);
+    setFlowStep('SELECT_DIFFICULTY');
+  };
+
+  const handleProceedFromDifficulty = (explicitMode?: SelectionCardMode) => {
+    if (!isSessionActive || isProcessing) return;
+    const activeMode = explicitMode ?? cardMode;
+    if (activeMode === 'SOLO') {
+      onStartMatch('SOLO', 'P2_AI');
+    } else if (activeMode === 'COOP_AI') {
+      onStartMatch('TWO_PLAYERS', 'P2_AI');
+    } else if (activeMode === 'COOP_ONLINE') {
+      setFlowStep('COOP_ONLINE_LOBBY');
+    }
+  };
+
+  const handleConfirmDifficulty = (nextDiff: 'DEFAULT' | 'EXTREME', e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    onDifficultyChange(nextDiff);
     if (!isSessionActive || isProcessing) return;
     if (cardMode === 'SOLO') {
       onStartMatch('SOLO', 'P2_AI');
@@ -294,9 +314,6 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 <h1 className="text-[clamp(1.35rem,5.5vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow-lg uppercase">
                   CHỌN CHẾ ĐỘ CHƠI
                 </h1>
-                <p className="text-xs sm:text-sm text-neutral-300 mt-1 max-w-lg">
-                  Bước 1/2: Chọn chế độ chiến đấu trước khi sang bước thiết lập Độ khó
-                </p>
               </div>
 
               {/* 3 Mode Cards */}
@@ -346,9 +363,19 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </p>
                   </div>
 
-                  <div className="mt-4 pt-2.5 border-t border-neutral-800/80 flex items-center justify-between text-[10px] font-mono text-amber-300">
-                    <span>STAGE 1</span>
-                    <span>Sẵn sàng</span>
+                  <div className="mt-4 pt-3 border-t border-neutral-800/80">
+                    <button
+                      type="button"
+                      onClick={(e) => handleConfirmCardMode('SOLO', e)}
+                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow ${
+                        cardMode === 'SOLO'
+                          ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/25'
+                          : 'bg-neutral-800 hover:bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                      }`}
+                    >
+                      <span>Xác nhận</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
@@ -398,9 +425,19 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </p>
                   </div>
 
-                  <div className="mt-4 pt-2.5 border-t border-neutral-800/80 flex items-center justify-between text-[10px] font-mono text-emerald-300">
-                    <span>STAGE 1</span>
-                    <span>Sẵn sàng</span>
+                  <div className="mt-4 pt-3 border-t border-neutral-800/80">
+                    <button
+                      type="button"
+                      onClick={(e) => handleConfirmCardMode('COOP_AI', e)}
+                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow ${
+                        cardMode === 'COOP_AI'
+                          ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/25'
+                          : 'bg-neutral-800 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                      }`}
+                    >
+                      <span>Xác nhận</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
@@ -450,9 +487,19 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </p>
                   </div>
 
-                  <div className="mt-4 pt-2.5 border-t border-neutral-800/80 flex items-center justify-between text-[10px] font-mono text-sky-300">
-                    <span>STAGE 1</span>
-                    <span>Tối đa 2 người/phòng</span>
+                  <div className="mt-4 pt-3 border-t border-neutral-800/80">
+                    <button
+                      type="button"
+                      onClick={(e) => handleConfirmCardMode('COOP_ONLINE', e)}
+                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow ${
+                        cardMode === 'COOP_ONLINE'
+                          ? 'bg-sky-500 hover:bg-sky-400 text-black shadow-sky-500/25'
+                          : 'bg-neutral-800 hover:bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                      }`}
+                    >
+                      <span>Xác nhận</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -481,7 +528,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
           )}
 
           {/* ===================================================================
-              STEP 2: CHỌN ĐỘ KHÓ (NORMAL / HARD)
+              STEP 2: CHỌN ĐỘ KHÓ (GIẢI TRÍ / THỬ THÁCH)
              =================================================================== */}
           {flowStep === 'SELECT_DIFFICULTY' && (
             <>
@@ -502,13 +549,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 <h1 className="text-[clamp(1.35rem,5.5vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow-lg uppercase">
                   CHỌN ĐỘ KHÓ CHIẾN DỊCH
                 </h1>
-                <p className="text-xs sm:text-sm text-neutral-300 mt-1 max-w-lg">
-                  Bước 2/2: Chọn mức độ thử thách cho trận đấu của bạn
-                </p>
               </div>
 
               <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 text-left">
-                {/* NORMAL / DEFAULT */}
+                {/* NORMAL / DEFAULT -> Giải trí */}
                 <div
                   onClick={() => onDifficultyChange('DEFAULT')}
                   className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
@@ -517,29 +561,38 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700'
                   }`}
                 >
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-black text-amber-300 text-base sm:text-lg font-mono uppercase flex items-center gap-2">
-                        <Shield className="w-4 h-4 text-amber-400" />
-                        <span>NORMAL (MẶC ĐỊNH)</span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-amber-300 text-lg sm:text-xl font-mono flex items-center gap-2.5">
+                      <Shield className="w-5 h-5 text-amber-400" />
+                      <span>Giải trí</span>
+                    </span>
+                    {difficulty === 'DEFAULT' && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500 text-black font-black font-mono">
+                        ĐANG CHỌN
                       </span>
-                      {difficulty === 'DEFAULT' && (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500 text-black font-black font-mono">
-                          ĐANG CHỌN
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-neutral-300 leading-relaxed">
-                      Cân bằng theo chuẩn cổ điển. Tầm phát hiện xe địch 80px, nhịp độ nạp đạn và di chuyển tiêu chuẩn, phù hợp để làm quen hoặc phối hợp giải trí.
-                    </p>
+                    )}
                   </div>
-                  <div className="mt-4 pt-3 border-t border-neutral-800/80 flex items-center justify-between text-[11px] text-neutral-400 font-mono">
-                    <span>STAGE 1</span>
-                    <span className="text-amber-400 font-semibold">Phản xạ AI: Tiêu chuẩn</span>
+
+                  <div className="mt-5 pt-3 border-t border-neutral-800/80">
+                    <button
+                      type="button"
+                      disabled={!isSessionActive || isProcessing}
+                      onClick={(e) => handleConfirmDifficulty('DEFAULT', e)}
+                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 shadow ${
+                        !isSessionActive || isProcessing
+                          ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
+                          : difficulty === 'DEFAULT'
+                          ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/25 cursor-pointer'
+                          : 'bg-neutral-800 hover:bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-pointer'
+                      }`}
+                    >
+                      <span>Xác nhận</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
-                {/* HARD / EXTREME */}
+                {/* HARD / EXTREME -> Thử thách */}
                 <div
                   onClick={() => onDifficultyChange('EXTREME')}
                   className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
@@ -548,25 +601,34 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700'
                   }`}
                 >
-                  <div>
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-black text-rose-300 text-base sm:text-lg font-mono uppercase flex items-center gap-2">
-                        <Flame className="w-4 h-4 text-rose-400" />
-                        <span>HARD (THỬ THÁCH CAO)</span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-rose-300 text-lg sm:text-xl font-mono flex items-center gap-2.5">
+                      <Flame className="w-5 h-5 text-rose-400" />
+                      <span>Thử thách</span>
+                    </span>
+                    {difficulty === 'EXTREME' && (
+                      <span className="text-[10px] px-2 py-0.5 rounded bg-rose-600 text-white font-black font-mono">
+                        ĐANG CHỌN
                       </span>
-                      {difficulty === 'EXTREME' && (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-rose-600 text-white font-black font-mono">
-                          ĐANG CHỌN
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-neutral-300 leading-relaxed">
-                      Xe địch quan sát xa dọc hành lang bản đồ, tốc độ hành quân nhanh hơn 18%, nhịp bắn dồn dập (1.0s – 1.2s), chủ động né đạn vuông góc và gây áp lực mạnh lên căn cứ.
-                    </p>
+                    )}
                   </div>
-                  <div className="mt-4 pt-3 border-t border-neutral-800/80 flex items-center justify-between text-[11px] text-neutral-400 font-mono">
-                    <span>STAGE 1</span>
-                    <span className="text-rose-400 font-semibold">Phản xạ AI: Cao cấp</span>
+
+                  <div className="mt-5 pt-3 border-t border-neutral-800/80">
+                    <button
+                      type="button"
+                      disabled={!isSessionActive || isProcessing}
+                      onClick={(e) => handleConfirmDifficulty('EXTREME', e)}
+                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 shadow ${
+                        !isSessionActive || isProcessing
+                          ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
+                          : difficulty === 'EXTREME'
+                          ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-500/25 cursor-pointer'
+                          : 'bg-neutral-800 hover:bg-rose-500/20 text-rose-300 border border-rose-500/40 cursor-pointer'
+                      }`}
+                    >
+                      <span>Xác nhận</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -584,7 +646,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
                 <button
                   type="button"
-                  onClick={handleProceedFromDifficulty}
+                  onClick={() => handleProceedFromDifficulty()}
                   disabled={!isSessionActive || isProcessing}
                   className={`w-full sm:w-2/3 py-4 px-8 rounded-2xl font-black text-sm sm:text-base tracking-wider uppercase transition-all shadow-2xl flex items-center justify-center gap-3 transform active:scale-98 ${
                     isSessionActive && !isProcessing
@@ -597,10 +659,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     {!isSessionActive
                       ? 'CẦN KẾT NỐI MÁY CHỦ ĐỂ TIẾP TỤC'
                       : cardMode === 'COOP_ONLINE'
-                      ? `TIẾP TỤC VÀO PHÒNG ONLINE (${difficulty === 'EXTREME' ? 'HARD' : 'NORMAL'})`
+                      ? `XÁC NHẬN (${difficulty === 'EXTREME' ? 'THỬ THÁCH' : 'GIẢI TRÍ'})`
                       : cardMode === 'COOP_AI'
-                      ? `BẮT ĐẦU CO-OP AI (${difficulty === 'EXTREME' ? 'HARD' : 'NORMAL'})`
-                      : `BẮT ĐẦU TRẬN ĐẤU (${difficulty === 'EXTREME' ? 'HARD' : 'NORMAL'})`}
+                      ? `XÁC NHẬN CO-OP AI (${difficulty === 'EXTREME' ? 'THỬ THÁCH' : 'GIẢI TRÍ'})`
+                      : `XÁC NHẬN BẮT ĐẦU (${difficulty === 'EXTREME' ? 'THỬ THÁCH' : 'GIẢI TRÍ'})`}
                   </span>
                 </button>
               </div>
@@ -616,9 +678,6 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 <h1 className="text-[clamp(1.25rem,5vw,2.2rem)] font-black text-transparent bg-clip-text bg-gradient-to-b from-sky-200 via-sky-400 to-sky-600 font-mono uppercase">
                   KẾT NỐI PHÒNG CO-OP ONLINE
                 </h1>
-                <p className="text-xs text-neutral-400 mt-1">
-                  Tạo phòng mới (P1) hoặc nhập mã phòng 6 ký tự từ bạn bè (P2)
-                </p>
               </div>
 
               <CoopOnlineLobbyPanel

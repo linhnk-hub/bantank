@@ -372,9 +372,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <h2 className="text-sm font-extrabold text-white flex items-center gap-2 uppercase tracking-wide">
                 CÀI ĐẶT
               </h2>
-              <p className="text-[11px] text-neutral-400">
-                Quản lý Tài khoản &amp; Danh mục Avatar • Tùy chỉnh Nhạc nền (BGM) &amp; Hiệu ứng âm thanh (SFX)
-              </p>
             </div>
           </div>
 
@@ -469,11 +466,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           }`
                         : 'Ảnh tài khoản Google'}
                     </div>
-                    <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">
-                      {selectedAvatarType === 'catalog' && !isSelectedCatalogActive
-                        ? 'Avatar danh mục đã chọn hiện đang tạm ẩn, hệ thống tự động hiển thị Ảnh Google dự phòng.'
-                        : 'Chọn Ảnh Google mặc định hoặc một biểu tượng chiến xa trong Danh mục Avatar chung bên dưới.'}
-                    </p>
+                    {selectedAvatarType === 'catalog' && !isSelectedCatalogActive && (
+                      <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">
+                        Avatar danh mục đã chọn hiện đang tạm ẩn, hệ thống tự động hiển thị Ảnh Google dự phòng.
+                      </p>
+                    )}
                   </div>
                 </div>
 

@@ -192,13 +192,6 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
               <h3 className="text-base font-black uppercase tracking-wider text-white">
                 Tạo Phòng Mới
               </h3>
-              <p className="text-xs text-neutral-400 leading-relaxed">
-                Khởi tạo phòng chơi Co-op Online với độ khó{' '}
-                <strong className={difficulty === 'EXTREME' ? 'text-rose-400' : 'text-amber-300'}>
-                  {difficulty === 'EXTREME' ? 'HARD' : 'NORMAL'}
-                </strong>{' '}
-                và nhận mã phòng 6 ký tự để gửi cho đồng đội.
-              </p>
             </div>
 
             <button
@@ -228,9 +221,6 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
               <h3 className="text-base font-black uppercase tracking-wider text-white">
                 Tham Gia Phòng
               </h3>
-              <p className="text-xs text-neutral-400 leading-relaxed">
-                Nhập mã phòng 6 ký tự từ Chủ phòng (P1) để kết nối vào chiến trường với vai trò Chiến xa P2.
-              </p>
               <div className="pt-1">
                 <input
                   type="text"
@@ -295,11 +285,11 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
               >
                 {room.difficulty === 'EXTREME' ? (
                   <>
-                    <Flame className="w-3 h-3" /> HARD
+                    <Flame className="w-3 h-3" /> Thử thách
                   </>
                 ) : (
                   <>
-                    <Shield className="w-3 h-3" /> NORMAL
+                    <Shield className="w-3 h-3" /> Giải trí
                   </>
                 )}
               </span>

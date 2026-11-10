@@ -45,9 +45,6 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
               <h2 id="support-modal-title" className="text-sm font-black uppercase tracking-wider text-white">
                 Trung Tâm Hỗ Trợ & Hướng Dẫn
               </h2>
-              <p className="text-[11px] text-neutral-400">
-                Hướng dẫn cách chơi, điều khiển Bàn phím PC / Cảm ứng Mobile &amp; Tablet và khắc phục sự cố
-              </p>
             </div>
           </div>
           <button

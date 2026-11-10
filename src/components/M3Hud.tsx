@@ -264,7 +264,13 @@ export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy, onPa
                               : 'text-red-400'
                           }`}
                         >
-                          {e.enemyType}
+                          {e.enemyType === 'BASIC'
+                            ? 'Basic Tank'
+                            : e.enemyType === 'FAST'
+                            ? 'Fast Tank'
+                            : e.enemyType === 'POWER'
+                            ? 'Power Tank'
+                            : 'Armor Tank'}
                         </span>
                         <span className="text-neutral-500">HP:{e.hp}/{e.maxHp}</span>
                       </div>

@@ -1224,7 +1224,99 @@ async function verifyM735SharedAvatarCatalogAsyncSuite() {
     );
   }
 
-  console.log('[M7.3.5.5 Firebase Storage Shared Avatar Catalog & F5 Pending Recovery E2E Verification] 21/21 MANDATORY CASES PASS');
+  // 22. M7.3.6: Kiểm tra UI Cleanup, Tên hiển thị các loại Tank (Basic/Fast/Power/Armor Tank),
+  //     Lưu lựa chọn Ảnh Google và Trình tự 6 bước tạo phòng Co-op Online: PASS
+  const mainMenuSrc = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/components/MainMenuScreen.tsx'),
+    'utf-8'
+  );
+  const settingsModalSrc = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/components/SettingsModal.tsx'),
+    'utf-8'
+  );
+  const supportModalSrc = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/components/SupportModal.tsx'),
+    'utf-8'
+  );
+  const modeSelectionSrc = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/components/ModeSelectionScreen.tsx'),
+    'utf-8'
+  );
+  const coopLobbySrc = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/components/CoopOnlineLobbyModal.tsx'),
+    'utf-8'
+  );
+  const stageClearSrc = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/components/StageClearModal.tsx'),
+    'utf-8'
+  );
+  const gameOverSrc = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/components/GameOverModal.tsx'),
+    'utf-8'
+  );
+  const m3HudSrc = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/components/M3Hud.tsx'),
+    'utf-8'
+  );
+
+  // II.1: MainMenuScreen không còn hiển thị Stage 1
+  if (/STAGE\s*1/i.test(mainMenuSrc)) {
+    throw new Error('Case 22.1 failed: MainMenuScreen.tsx must not display Stage 1');
+  }
+  // II.2 & II.3: SettingsModal không còn dòng mô tả phụ dưới CÀI ĐẶT và Chọn ảnh Google mặc định
+  if (
+    settingsModalSrc.includes('Quản lý Tài khoản & Danh mục Avatar') ||
+    settingsModalSrc.includes('Chọn Ảnh Google mặc định hoặc')
+  ) {
+    throw new Error(
+      'Case 22.2/22.3 failed: SettingsModal.tsx must not display redundant subtitle descriptions'
+    );
+  }
+  // II.4: SupportModal không còn dòng mô tả phụ Hướng dẫn cách chơi, điều khiển
+  if (supportModalSrc.includes('Hướng dẫn cách chơi, điều khiển')) {
+    throw new Error(
+      'Case 22.4 failed: SupportModal.tsx must not display redundant subtitle description'
+    );
+  }
+  // II.5, II.6, II.7: ModeSelectionScreen & CoopOnlineLobbyModal
+  if (
+    modeSelectionSrc.includes('Bước 1/2') ||
+    modeSelectionSrc.includes('Bước 2/2') ||
+    modeSelectionSrc.includes('Normal (mặc định)') ||
+    modeSelectionSrc.includes('Hard (thử thách cao)') ||
+    !modeSelectionSrc.includes('Giải trí') ||
+    !modeSelectionSrc.includes('Thử thách') ||
+    !modeSelectionSrc.includes('Xác nhận') ||
+    !coopLobbySrc.includes('Giải trí') ||
+    !coopLobbySrc.includes('Thử thách')
+  ) {
+    throw new Error(
+      'Case 22.5/22.6/22.7 failed: ModeSelectionScreen.tsx and CoopOnlineLobbyModal.tsx must use Giải trí, Thử thách, Xác nhận buttons and omit step subtitles'
+    );
+  }
+  // V: Đổi tên hiển thị các loại Tank trên toàn bộ giao diện (không còn Xe Basic/Fast/Power/Armor/Amor)
+  const allTankUiSrc = [stageClearSrc, gameOverSrc, m3HudSrc, supportModalSrc].join('\n');
+  if (
+    /Xe\s+(Basic|Fast|Power|Armor|Amor)/i.test(allTankUiSrc) ||
+    !stageClearSrc.includes('Basic Tank') ||
+    !stageClearSrc.includes('Fast Tank') ||
+    !stageClearSrc.includes('Power Tank') ||
+    !stageClearSrc.includes('Armor Tank') ||
+    !gameOverSrc.includes('Basic Tank') ||
+    !gameOverSrc.includes('Fast Tank') ||
+    !gameOverSrc.includes('Power Tank') ||
+    !gameOverSrc.includes('Armor Tank') ||
+    !m3HudSrc.includes('Basic Tank') ||
+    !m3HudSrc.includes('Fast Tank') ||
+    !m3HudSrc.includes('Power Tank') ||
+    !m3HudSrc.includes('Armor Tank')
+  ) {
+    throw new Error(
+      'Case 22.V failed: All UI components must display Basic Tank, Fast Tank, Power Tank, Armor Tank'
+    );
+  }
+
+  console.log('[M7.3.6 UI Cleanup, Tank Labels, Google Avatar & 6-Step Room Creation E2E Verification] 22/22 MANDATORY CASES PASS');
 }
 
 async function runAllAsyncVerifications() {
