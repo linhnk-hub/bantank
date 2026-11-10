@@ -9,12 +9,14 @@ import {
   HelpCircle,
   Gamepad2,
   Smartphone,
+  Tablet,
   Shield,
   Users,
   Bot,
   Globe,
   Wifi,
   CheckCircle2,
+  Keyboard,
 } from 'lucide-react';
 
 interface SupportModalProps {
@@ -44,7 +46,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
                 Trung Tâm Hỗ Trợ & Hướng Dẫn
               </h2>
               <p className="text-[11px] text-neutral-400">
-                Hướng dẫn cách chơi, điều khiển và khắc phục sự cố cơ bản
+                Hướng dẫn cách chơi, điều khiển Bàn phím PC / Cảm ứng Mobile &amp; Tablet và khắc phục sự cố
               </p>
             </div>
           </div>
@@ -63,7 +65,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
           <div className="bg-neutral-950/70 border border-neutral-800 rounded-xl p-3.5 space-y-2">
             <div className="flex items-center gap-2 text-amber-400 font-black uppercase tracking-wider">
               <Shield className="w-4 h-4 shrink-0" />
-              <span>1. Luật Chơi & Mục Tiêu Chiến Dịch</span>
+              <span>1. Luật Chơi &amp; Mục Tiêu Chiến Dịch</span>
             </div>
             <ul className="space-y-1.5 text-neutral-300 pl-1">
               <li className="flex items-start gap-2">
@@ -87,30 +89,62 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
             </ul>
           </div>
 
-          {/* 2. Điều khiển trên PC & Điện thoại / Tablet */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="bg-neutral-950/70 border border-neutral-800 rounded-xl p-3.5 space-y-2">
-              <div className="flex items-center gap-2 text-sky-400 font-black uppercase tracking-wider">
-                <Gamepad2 className="w-4 h-4 shrink-0" />
-                <span>2A. Điều Khiển Máy Tính (PC)</span>
-              </div>
-              <ul className="space-y-1 text-[11px] text-neutral-300">
-                <li>• <strong>Di chuyển:</strong> Phím <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">W A S D</kbd> hoặc <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">↑ ↓ ← →</kbd></li>
-                <li>• <strong>Khai hỏa:</strong> Phím <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">SPACE</kbd> hoặc <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">J</kbd> (giữ để bắn liên thanh)</li>
-                <li>• <strong>Tạm dừng:</strong> Phím <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">P</kbd> hoặc <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">ESC</kbd></li>
-              </ul>
+          {/* 2. Hướng dẫn điều khiển đầy đủ: Bàn phím PC, Cảm ứng Mobile, Cảm ứng Tablet (M7.3.4 V.3) */}
+          <div className="bg-neutral-950/70 border border-neutral-800 rounded-xl p-3.5 space-y-3">
+            <div className="flex items-center gap-2 text-amber-400 font-black uppercase tracking-wider">
+              <Gamepad2 className="w-4 h-4 shrink-0" />
+              <span>2. Hướng Dẫn Điều Khiển (PC, Điện Thoại &amp; Máy Tính Bảng)</span>
             </div>
 
-            <div className="bg-neutral-950/70 border border-neutral-800 rounded-xl p-3.5 space-y-2">
-              <div className="flex items-center gap-2 text-emerald-400 font-black uppercase tracking-wider">
-                <Smartphone className="w-4 h-4 shrink-0" />
-                <span>2B. Điện Thoại & Máy Tính Bảng</span>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+              {/* 2A. Bàn phím PC */}
+              <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-sky-400 font-bold">
+                  <Keyboard className="w-3.5 h-3.5 shrink-0" />
+                  <span>Bàn Phím PC</span>
+                </div>
+                <ul className="space-y-1 text-[11px] text-neutral-300">
+                  <li>
+                    • <strong>Di chuyển:</strong>{' '}
+                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">WASD</kbd> hoặc{' '}
+                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">Mũi tên</kbd>
+                  </li>
+                  <li>
+                    • <strong>Bắn đạn:</strong>{' '}
+                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">Space</kbd> hoặc{' '}
+                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">J</kbd>
+                  </li>
+                  <li>
+                    • <strong>Tạm dừng:</strong>{' '}
+                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">P</kbd> hoặc{' '}
+                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">ESC</kbd>
+                  </li>
+                </ul>
               </div>
-              <ul className="space-y-1 text-[11px] text-neutral-300">
-                <li>• <strong>Cần gạt ảo (Joystick trái):</strong> Chạm và kéo theo 4 hướng Lên, Xuống, Trái, Phải để điều hướng xe tăng.</li>
-                <li>• <strong>Nút KHAI HỎA (Phải):</strong> Chạm hoặc nhấn giữ nút đỏ để bắn đạn liên tục.</li>
-                <li>• <strong>Tạm dừng / Cài đặt:</strong> Nhấn biểu tượng trên thanh công cụ phía trên bản đồ.</li>
-              </ul>
+
+              {/* 2B. Cảm ứng Mobile */}
+              <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
+                  <Smartphone className="w-3.5 h-3.5 shrink-0" />
+                  <span>Cảm Ứng Mobile</span>
+                </div>
+                <ul className="space-y-1 text-[11px] text-neutral-300">
+                  <li>• <strong>Chế độ Dọc:</strong> Cụm phím ảo Joystick trái + Nút Khai Hỏa phải tách biệt bên dưới bản đồ.</li>
+                  <li>• <strong>Chế độ Ngang:</strong> Bố cục 3 cột tiện dụng (Joystick bên trái, bản đồ ở giữa, nút Bắn bên phải).</li>
+                </ul>
+              </div>
+
+              {/* 2C. Cảm ứng Tablet */}
+              <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1.5">
+                <div className="flex items-center gap-1.5 text-amber-400 font-bold">
+                  <Tablet className="w-3.5 h-3.5 shrink-0" />
+                  <span>Cảm Ứng Tablet</span>
+                </div>
+                <ul className="space-y-1 text-[11px] text-neutral-300">
+                  <li>• <strong>Cụm điều khiển lớn:</strong> Tự động mở rộng kích thước cần gạt Joystick và nút Khai Hỏa phù hợp màn hình lớn.</li>
+                  <li>• <strong>Xoay tự động:</strong> Tương thích mượt mà cả chiều dọc (Portrait) và chiều ngang (Landscape).</li>
+                </ul>
+              </div>
             </div>
           </div>
 
@@ -155,7 +189,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
           <div className="bg-neutral-950/70 border border-neutral-800 rounded-xl p-3.5 space-y-1.5">
             <div className="flex items-center gap-2 text-amber-400 font-black uppercase tracking-wider">
               <Wifi className="w-4 h-4 shrink-0" />
-              <span>4. Xử Lý Sự Cố Đăng Nhập & Kết Nối</span>
+              <span>4. Xử Lý Sự Cố Đăng Nhập &amp; Kết Nối</span>
             </div>
             <ul className="space-y-1 text-[11px] text-neutral-300">
               <li>• <strong>Không mở được cửa sổ đăng nhập Google:</strong> Hãy kiểm tra và cho phép trình duyệt mở cửa sổ bật lên (Popup) trên trang <strong>bantank.online</strong>.</li>
@@ -171,7 +205,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
             onClick={onClose}
             className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs uppercase tracking-wider transition-all shadow active:scale-95"
           >
-            Đã Hiểu & Đóng
+            Đã Hiểu &amp; Đóng
           </button>
         </div>
       </div>

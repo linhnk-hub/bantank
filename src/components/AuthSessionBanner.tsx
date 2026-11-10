@@ -82,7 +82,7 @@ export function getSessionBadgeInfo(
       return {
         label: 'Đang kiểm tra tài khoản...',
         badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
-        dotStyle: 'bg-amber-400 animate-spin',
+        dotStyle: 'bg-amber-400 animate-pulse',
       };
     case 'ACTIVE':
       if (isHeartbeatInFlight) {
@@ -92,7 +92,6 @@ export function getSessionBadgeInfo(
           dotStyle: 'bg-sky-400 animate-pulse',
         };
       }
-      // M7.3: Loại bỏ hoàn toàn hiển thị trạng thái "Đang trực tuyến"
       return {
         label: '',
         badgeStyle: 'hidden',
@@ -117,18 +116,18 @@ export function getSessionBadgeInfo(
         badgeStyle: 'bg-rose-950/80 text-rose-300 border-rose-800/80',
         dotStyle: 'bg-rose-500',
       };
+    case 'NO_SESSION':
+      return {
+        label: 'Chưa kết nối máy chủ',
+        badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
+        dotStyle: 'bg-amber-400',
+      };
     case 'HEARTBEAT_REJECTED_UNCLASSIFIED':
+    default:
       return {
         label: 'Cần xác thực',
         badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
         dotStyle: 'bg-amber-400 animate-pulse',
-      };
-    case 'NO_SESSION':
-    default:
-      return {
-        label: 'Chưa kết nối máy chủ',
-        badgeStyle: 'bg-neutral-800 text-neutral-300 border-neutral-700',
-        dotStyle: 'bg-amber-400',
       };
   }
 }

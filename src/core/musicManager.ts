@@ -1568,12 +1568,15 @@ export class MusicManager {
       };
     }
 
-    const previousConfig =
-      this.sharedAudioConfig ?? (await this.cloudAdapter.getSystemAudioConfig().catch(() => null));
+    const remoteExisting = await this.cloudAdapter.getSystemAudioConfig().catch(() => null);
+    const highestKnownVersion = Math.max(
+      this.sharedAudioConfig?.version ?? 0,
+      remoteExisting?.version ?? 0
+    );
     const nextVersion =
-      typeof params.targetVersion === 'number' && params.targetVersion > (previousConfig?.version ?? 0)
+      typeof params.targetVersion === 'number' && params.targetVersion > highestKnownVersion
         ? Math.floor(params.targetVersion)
-        : (previousConfig?.version ?? 0) + 1;
+        : highestKnownVersion + 1;
 
     this.isCloudSyncInProgress = true;
     this.sharedSyncError = null;
@@ -1655,8 +1658,11 @@ export class MusicManager {
       : lowerName.endsWith('.wav')
       ? 'audio/wav'
       : 'audio/mpeg';
-    const contentType = (params.contentType || inferredMime).slice(0, 120);
-    const writeTimeMs = params.nowMs ?? Date.now();
+    const rawContentType = (params.contentType || inferredMime).split(';')[0].trim().toLowerCase();
+    const contentType = /^audio\/(mpeg|mp3|ogg|wav|x-wav|wave)$/.test(rawContentType)
+      ? rawContentType
+      : inferredMime;
+    const writeTimeMs = Math.round(params.nowMs ?? Date.now());
     const cleanDisplayName =
       (
         params.displayName ||
@@ -1664,21 +1670,21 @@ export class MusicManager {
       )
         .trim()
         .slice(0, 120) || 'Nhạc Nền Hệ Thống';
-    const durationSec = Number(decodedBuffer.duration.toFixed(2));
+    const durationSec = Math.max(0.01, Number(decodedBuffer.duration.toFixed(2)));
 
     const nextConfig: SystemAudioConfigDocument = {
       assetPath: pathCheck.normalizedAssetPath,
       fileName: pathCheck.normalizedFileName,
       contentType,
-      fileSize: deployedBinary.byteLength,
+      fileSize: Math.round(deployedBinary.byteLength),
       updatedAt: writeTimeMs,
       updatedBy: SUPER_ADMIN_EMAIL,
-      version: nextVersion,
+      version: Math.round(nextVersion),
       isEnabled: true,
       displayName: cleanDisplayName,
       durationSec,
-      trimStartSec: trimBounds.trimStartSec,
-      trimEndSec: trimBounds.trimEndSec,
+      trimStartSec: Number(Math.max(0, trimBounds.trimStartSec).toFixed(2)),
+      trimEndSec: Number(Math.max(0, trimBounds.trimEndSec).toFixed(2)),
       loopGapMs: 0,
       fadeOutMs: Math.round(this.loopConfig.crossfadeDurationSec * 1000),
     };
@@ -1691,11 +1697,17 @@ export class MusicManager {
       const errText =
         firestoreErr?.message ||
         'Xác minh file trên GitHub Pages thành công nhưng ghi cấu hình Firestore (/system_config/audio) thất bại.';
-      this.sharedSyncError = errText;
+      const isPermErr =
+        String(firestoreErr?.code || '').toLowerCase().includes('permission') ||
+        String(errText).toLowerCase().includes('missing or insufficient permissions');
+      const detailedError = isPermErr
+        ? `Cập nhật Firestore thất bại (giữ nguyên cấu hình nhạc nền hiện tại): ${errText}. Vui lòng đảm bảo bạn đang đăng nhập bằng Super Admin (${SUPER_ADMIN_EMAIL}) và đã publish file firestore.rules mới nhất (có khối match /system_config/{docId}) lên Firebase Console (bantank-bd525).`
+        : `Cập nhật Firestore thất bại (giữ nguyên cấu hình nhạc nền hiện tại): ${errText}`;
+      this.sharedSyncError = detailedError;
       this.notify();
       return {
         success: false,
-        error: `Cập nhật Firestore thất bại (giữ nguyên cấu hình nhạc nền hiện tại): ${errText}`,
+        error: detailedError,
       };
     }
 

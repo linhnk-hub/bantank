@@ -27,6 +27,14 @@ import {
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
+import {
+  ref as storageRef,
+  uploadBytes,
+  deleteObject,
+  getBytes,
+  listAll,
+  updateMetadata,
+} from 'firebase/storage';
 
 export const DEMO_PROJECT_ID = 'demo-bantank-m7-3';
 
@@ -52,6 +60,18 @@ function parseEmulatorHostPort(): { host: string; port: number } {
   return { host: '127.0.0.1', port: 8088 };
 }
 
+function parseStorageEmulatorHostPort(): { host: string; port: number } {
+  const envHost = process.env.FIREBASE_STORAGE_EMULATOR_HOST;
+  if (envHost && envHost.includes(':')) {
+    const [h, p] = envHost.split(':');
+    const parsedPort = Number(p);
+    if (h && Number.isInteger(parsedPort) && parsedPort > 0) {
+      return { host: h, port: parsedPort };
+    }
+  }
+  return { host: '127.0.0.1', port: 9199 };
+}
+
 function checkTcpPortReachable(host: string, port: number, timeoutMs: number = 1500): Promise<boolean> {
   return new Promise((resolve) => {
     const socket = new net.Socket();
@@ -72,27 +92,37 @@ function checkTcpPortReachable(host: string, port: number, timeoutMs: number = 1
 
 async function main(): Promise<void> {
   const rulesPath = path.resolve(process.cwd(), 'firestore.rules');
+  const storageRulesPath = path.resolve(process.cwd(), 'storage.rules');
   if (!fs.existsSync(rulesPath)) {
     console.error(`[ERROR] Không tìm thấy file firestore.rules tại: ${rulesPath}`);
     process.exit(1);
   }
+  if (!fs.existsSync(storageRulesPath)) {
+    console.error(`[ERROR] Không tìm thấy file storage.rules tại: ${storageRulesPath}`);
+    process.exit(1);
+  }
   const rulesContent = fs.readFileSync(rulesPath, 'utf8');
+  const storageRulesContent = fs.readFileSync(storageRulesPath, 'utf8');
   const { host, port } = parseEmulatorHostPort();
+  const storageEndpoint = parseStorageEmulatorHostPort();
 
   console.log('===================================================================');
-  console.log('--- M7.3.1 FIRESTORE SECURITY RULES EMULATOR TEST SUITE ---');
-  console.log(`Project ID : ${DEMO_PROJECT_ID}`);
-  console.log(`Emulator   : ${host}:${port}`);
-  console.log(`Rules File : ${rulesPath} (${rulesContent.length} bytes)`);
+  console.log('--- M7.3.5.1 FIRESTORE & STORAGE SECURITY RULES EMULATOR SUITE ---');
+  console.log(`Project ID      : ${DEMO_PROJECT_ID}`);
+  console.log(`Firestore Emul  : ${host}:${port}`);
+  console.log(`Storage Emul    : ${storageEndpoint.host}:${storageEndpoint.port}`);
+  console.log(`Firestore Rules : ${rulesPath} (${rulesContent.length} bytes)`);
+  console.log(`Storage Rules   : ${storageRulesPath} (${storageRulesContent.length} bytes)`);
   console.log('===================================================================');
 
   const reachable = await checkTcpPortReachable(host, port);
+  const storageReachable = await checkTcpPortReachable(storageEndpoint.host, storageEndpoint.port);
   if (!reachable) {
     console.error(
-      `[NOT VERIFIED] Firestore Rules Emulator chưa lắng nghe tại ${host}:${port} (thiếu Java Runtime hoặc chưa bật emulators:exec).`
+      `[NOT VERIFIED] Firebase Rules Emulator chưa lắng nghe tại ${host}:${port} (môi trường hiện tại thiếu Java Runtime JRE/JDK nên không thể khởi chạy tiến trình Emulator).`
     );
     console.error(
-      `Hướng dẫn chạy trên máy có cài Java (JDK 11+):\n  npx firebase-tools emulators:exec --only firestore --project ${DEMO_PROJECT_ID} "npx tsx scripts/test_firestore_rules_m7_3.ts"`
+      `Hướng dẫn chạy trên máy có cài Java (JDK 11+):\n  npx firebase-tools emulators:exec --only firestore,storage --project ${DEMO_PROJECT_ID} "npx tsx scripts/test_firestore_rules_m7_3.ts"`
     );
     process.exit(2);
   }
@@ -106,9 +136,18 @@ async function main(): Promise<void> {
         port,
         rules: rulesContent,
       },
+      ...(storageReachable
+        ? {
+            storage: {
+              host: storageEndpoint.host,
+              port: storageEndpoint.port,
+              rules: storageRulesContent,
+            },
+          }
+        : {}),
     });
   } catch (err: any) {
-    console.error('[FAIL] Không thể khởi tạo môi trường RulesTestEnvironment hoặc biên dịch firestore.rules thất bại:');
+    console.error('[FAIL] Không thể khởi tạo môi trường RulesTestEnvironment hoặc biên dịch firestore.rules / storage.rules thất bại:');
     console.error(err?.message || err);
     process.exit(1);
   }
@@ -846,6 +885,547 @@ async function main(): Promise<void> {
       'firestore.rules: match /system_config/{docId} allow get: if isVerifiedPersonalGmail()',
       () => getDoc(doc(unverifiedDb, 'system_config', 'audio'))
     );
+
+    // =========================================================================
+    // Nhóm 19: Danh mục Avatar chung /avatar_catalog/{avatarId} & Lựa chọn Avatar /users/{uid} (M7.3.5)
+    // =========================================================================
+    const validCatalogAvatarDoc = {
+      avatarId: 'tank_01',
+      name: 'Chiến Xa Đại Bàng Vàng',
+      storagePath: 'avatar_catalog/tank_01/v1/gold_tank.png',
+      contentType: 'image/png',
+      fileSize: 4096,
+      version: 1,
+      sortOrder: 10,
+      isActive: true,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      updatedBy: 'linhnk.online@gmail.com',
+    };
+
+    const inactiveCatalogAvatarDoc = {
+      avatarId: 'tank_hidden',
+      name: 'Chiến Xa Tạm Ẩn',
+      storagePath: 'avatar_catalog/tank_hidden/v1/hidden_tank.png',
+      contentType: 'image/png',
+      fileSize: 4096,
+      version: 1,
+      sortOrder: 20,
+      isActive: false,
+      createdAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+      updatedBy: 'linhnk.online@gmail.com',
+    };
+
+    await checkRule(
+      'R19_ALLOW_SUPER_ADMIN_CREATE_CATALOG_AVATAR',
+      19,
+      'ALLOW',
+      'Super Admin (linhnk.online@gmail.com) tạo avatar đang hoạt động trong /avatar_catalog/tank_01',
+      'firestore.rules: match /avatar_catalog/{avatarId} allow create: if isSuperAdmin() && isValidAvatarCatalogDoc(incoming(), avatarId)',
+      async () => {
+        await setDoc(doc(superAdminDb, 'avatar_catalog', 'tank_01'), validCatalogAvatarDoc);
+        await setDoc(doc(superAdminDb, 'avatar_catalog', 'tank_hidden'), inactiveCatalogAvatarDoc);
+      }
+    );
+
+    await checkRule(
+      'R19_DENY_PLAYER_CREATE_CATALOG_AVATAR',
+      19,
+      'DENY',
+      'Người chơi thường bị chặn tạo/sửa tài liệu trong /avatar_catalog',
+      'firestore.rules: match /avatar_catalog/{avatarId} allow create, update, delete: if isSuperAdmin()',
+      () =>
+        setDoc(doc(hostDb, 'avatar_catalog', 'tank_hack'), {
+          ...validCatalogAvatarDoc,
+          avatarId: 'tank_hack',
+          storagePath: 'avatar_catalog/tank_hack/v1/gold_tank.png',
+        })
+    );
+
+    await checkRule(
+      'R19_ALLOW_OWNER_SELECT_ACTIVE_CATALOG_AVATAR',
+      19,
+      'ALLOW',
+      'Chính chủ (uid_host_1) chọn avatar đang hoạt động (tank_01) trong /users/uid_host_1',
+      'firestore.rules: match /users/{uid} allow create: if isOwner(uid) && isActiveCatalogAvatar(incoming().avatarId)',
+      () =>
+        setDoc(doc(hostDb, 'users', 'uid_host_1'), {
+          uid: 'uid_host_1',
+          avatarType: 'catalog',
+          avatarId: 'tank_01',
+          avatarUpdatedAt: serverTimestamp(),
+        })
+    );
+
+    await checkRule(
+      'R19_DENY_OWNER_SELECT_INACTIVE_CATALOG_AVATAR',
+      19,
+      'DENY',
+      'Chính chủ bị chặn chọn avatar không hoạt động (tank_hidden, isActive == false)',
+      'firestore.rules: isActiveCatalogAvatar requires get(/avatar_catalog/$(avatarId)).data.isActive == true',
+      () =>
+        setDoc(doc(hostDb, 'users', 'uid_host_1'), {
+          uid: 'uid_host_1',
+          avatarType: 'catalog',
+          avatarId: 'tank_hidden',
+          avatarUpdatedAt: serverTimestamp(),
+        })
+    );
+
+    await checkRule(
+      'R19_ALLOW_OWNER_SWITCH_TO_GOOGLE_AVATAR',
+      19,
+      'ALLOW',
+      'Chính chủ chuyển lại ảnh Google (avatarType == "google", avatarId == null)',
+      'firestore.rules: match /users/{uid} allow update: if isOwner(uid) && incoming().avatarType == "google" && incoming().avatarId == null',
+      () =>
+        setDoc(doc(hostDb, 'users', 'uid_host_1'), {
+          uid: 'uid_host_1',
+          avatarType: 'google',
+          avatarId: null,
+          avatarUpdatedAt: serverTimestamp(),
+        })
+    );
+
+    await checkRule(
+      'R19_DENY_OTHER_USER_UPDATE_PROFILE',
+      19,
+      'DENY',
+      'Người chơi khác (uid_guest_2) bị chặn sửa metadata /users/uid_host_1',
+      'firestore.rules: match /users/{uid} allow update: if isOwner(uid)',
+      () =>
+        setDoc(doc(guestDb, 'users', 'uid_host_1'), {
+          uid: 'uid_host_1',
+          avatarType: 'google',
+          avatarId: null,
+          avatarUpdatedAt: serverTimestamp(),
+        })
+    );
+
+    await checkRule(
+      'R19_ALLOW_PLAYER_READ_AVATAR_CATALOG',
+      19,
+      'ALLOW',
+      'Người chơi Gmail đã xác minh đọc được tài liệu trong /avatar_catalog',
+      'firestore.rules: match /avatar_catalog/{avatarId} allow get, list: if isVerifiedPersonalGmail()',
+      () => getDoc(doc(hostDb, 'avatar_catalog', 'tank_01'))
+    );
+
+    await checkRule(
+      'R19_DENY_PRIVILEGE_ESCALATION_FIELDS_ON_USERS',
+      19,
+      'DENY',
+      'Chính chủ bị chặn chèn các trường cấm (role, isSuperAdmin, xp, xu, rank, email) vào /users/{uid}',
+      'firestore.rules: isValidUserProfileCreate / isValidUserProfileUpdate',
+      () =>
+        setDoc(doc(hostDb, 'users', 'uid_host_1'), {
+          uid: 'uid_host_1',
+          avatarType: 'google',
+          avatarId: null,
+          avatarUpdatedAt: serverTimestamp(),
+          role: 'SUPER_ADMIN',
+          isSuperAdmin: true,
+          xp: 999999,
+        })
+    );
+
+    // Khởi tạo hồ sơ cũ có sẵn xp, xu, rank, createdAt (bằng withSecurityRulesDisabled) rồi kiểm tra chính chủ đổi avatar hoặc đổi displayName tách biệt
+    await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
+      const bypassDb = adminCtx.firestore();
+      await setDoc(doc(bypassDb, 'users', 'uid_guest_2'), {
+        uid: 'uid_guest_2',
+        displayName: 'Veteran Guest 2',
+        avatarType: 'google',
+        avatarId: null,
+        avatarUpdatedAt: Timestamp.now(),
+        xp: 8500,
+        xu: 2100,
+        rank: 'MAJOR',
+        createdAt: Timestamp.now(),
+      });
+    });
+
+    await checkRule(
+      'R19_ALLOW_UPDATE_AVATAR_PRESERVING_LEGACY_PROFILE_FIELDS',
+      19,
+      'ALLOW',
+      'Cập nhật avatar qua setDoc(..., { merge: true }) không gửi/sửa uid, không làm mất và không bị chặn bởi các trường hồ sơ cũ hợp lệ (xp, xu, rank, createdAt)',
+      'firestore.rules: isUserAvatarSelectionUpdate -> incoming().diff(existing()).affectedKeys().hasOnly(["avatarType", "avatarId", "avatarUpdatedAt"])',
+      () =>
+        setDoc(
+          doc(guestDb, 'users', 'uid_guest_2'),
+          {
+            avatarType: 'catalog',
+            avatarId: 'tank_01',
+            avatarUpdatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        )
+    );
+
+    await checkRule(
+      'R19_ALLOW_UPDATE_DISPLAY_NAME_SEPARATELY',
+      19,
+      'ALLOW',
+      'Cập nhật riêng displayName qua setDoc(..., { merge: true }) giữ nguyên uid, avatar và các trường hồ sơ cũ',
+      'firestore.rules: isUserDisplayNameUpdate -> incoming().diff(existing()).affectedKeys().hasOnly(["displayName"])',
+      () =>
+        setDoc(
+          doc(guestDb, 'users', 'uid_guest_2'),
+          {
+            displayName: 'Commander Guest 2',
+          },
+          { merge: true }
+        )
+    );
+
+    await checkRule(
+      'R19_DENY_USER_MUTATING_UID_ON_UPDATE',
+      19,
+      'DENY',
+      'Chặn người chơi thay đổi trường uid trong /users/{uid} khi cập nhật hồ sơ',
+      'firestore.rules: isValidExistingUserUpdate(uid) -> !affectedKeys().hasAny(["uid", ...])',
+      () =>
+        setDoc(
+          doc(guestDb, 'users', 'uid_guest_2'),
+          {
+            uid: 'uid_hacked_999',
+            avatarType: 'google',
+            avatarId: null,
+            avatarUpdatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        )
+    );
+
+    await checkRule(
+      'R19_DENY_COMBINED_DISPLAY_NAME_AND_AVATAR_UPDATE',
+      19,
+      'DENY',
+      'Chặn gộp đồng thời chỉnh displayName và đổi avatar trong cùng 1 request do đã tách quyền',
+      'firestore.rules: isUserAvatarSelectionUpdate || isUserDisplayNameUpdate',
+      () =>
+        setDoc(
+          doc(guestDb, 'users', 'uid_guest_2'),
+          {
+            displayName: 'Mixed Update Name',
+            avatarType: 'google',
+            avatarId: null,
+            avatarUpdatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        )
+    );
+
+    // Khởi tạo hồ sơ cũ KHÔNG có trường uid (/users/uid_host_1) rồi kiểm tra:
+    // - User khác (uid_guest_2) cố cập nhật hồ sơ cũ không có uid của uid_host_1 -> DENY
+    // - Chính chủ (uid_host_1) cập nhật avatar trên hồ sơ cũ không có uid -> ALLOW
+    // - Chính chủ (uid_host_1) cố chèn uid vào hồ sơ cũ khi update -> DENY
+    await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
+      const bypassDb = adminCtx.firestore();
+      await setDoc(doc(bypassDb, 'users', 'uid_host_1'), {
+        displayName: 'Legacy Host Without UID',
+        avatarType: 'google',
+        avatarId: null,
+        avatarUpdatedAt: Timestamp.now(),
+        xp: 6400,
+        xu: 1500,
+        rank: 'CAPTAIN',
+        createdAt: Timestamp.now(),
+      });
+    });
+
+    await checkRule(
+      'R19_DENY_OTHER_USER_UPDATE_LEGACY_PROFILE_WITHOUT_UID',
+      19,
+      'DENY',
+      'Chặn User A (uid_guest_2) cập nhật hồ sơ User B (uid_host_1) kể cả khi hồ sơ cũ của User B chưa có trường uid',
+      'firestore.rules: allow update & isValidExistingUserUpdate(uid) -> uid == request.auth.uid',
+      () =>
+        setDoc(
+          doc(guestDb, 'users', 'uid_host_1'),
+          {
+            avatarType: 'catalog',
+            avatarId: 'tank_01',
+            avatarUpdatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        )
+    );
+
+    await checkRule(
+      'R19_ALLOW_OWNER_UPDATE_LEGACY_PROFILE_WITHOUT_UID',
+      19,
+      'ALLOW',
+      'Cho phép chính chủ (uid_host_1) cập nhật avatar trên hồ sơ cũ chưa có trường uid mà không bắt buộc thêm uid',
+      'firestore.rules: !("uid" in existing()) && !("uid" in incoming()) && uid == request.auth.uid',
+      () =>
+        setDoc(
+          doc(hostDb, 'users', 'uid_host_1'),
+          {
+            avatarType: 'catalog',
+            avatarId: 'tank_01',
+            avatarUpdatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        )
+    );
+
+    await checkRule(
+      'R19_ALLOW_OWNER_UPDATE_DISPLAY_NAME_LEGACY_PROFILE_WITHOUT_UID',
+      19,
+      'ALLOW',
+      'Cho phép chính chủ (uid_host_1) cập nhật displayName trên hồ sơ cũ chưa có trường uid mà không bắt buộc thêm uid',
+      'firestore.rules: !("uid" in existing()) && !("uid" in incoming()) && uid == request.auth.uid && displayName is string',
+      () =>
+        setDoc(
+          doc(hostDb, 'users', 'uid_host_1'),
+          {
+            displayName: 'Host Updated Legacy',
+          },
+          { merge: true }
+        )
+    );
+
+    await checkRule(
+      'R19_DENY_OWNER_INJECT_UID_INTO_LEGACY_PROFILE_ON_UPDATE',
+      19,
+      'DENY',
+      'Chặn chèn thêm trường uid mới vào hồ sơ cũ chưa có uid trong thao tác update',
+      'firestore.rules: !("uid" in existing()) && !("uid" in incoming())',
+      () =>
+        setDoc(
+          doc(hostDb, 'users', 'uid_host_1'),
+          {
+            uid: 'uid_host_1',
+            avatarType: 'google',
+            avatarId: null,
+            avatarUpdatedAt: serverTimestamp(),
+          },
+          { merge: true }
+        )
+    );
+
+    // =========================================================================
+    // Nhóm 20: 14 ca kiểm thử Firebase Storage Security Rules (M7.3.5.2 Mục VI)
+    // =========================================================================
+    if (storageReachable) {
+      const unauthCtx = testEnv.unauthenticatedContext();
+      const superAdminStorage = superAdminCtx.storage();
+      const playerStorage = hostCtx.storage();
+      const unauthStorage = unauthCtx.storage();
+      const samplePayload = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+      const over5MbPayload = new Uint8Array(5 * 1024 * 1024 + 16);
+
+      // 1. Super Admin upload JPEG hợp lệ: PASS
+      await checkRule(
+        'R20_01_ALLOW_ADMIN_UPLOAD_JPEG',
+        20,
+        'ALLOW',
+        '1. Super Admin upload JPEG hợp lệ (allow create)',
+        'storage.rules: allow create -> isValidCatalogCreate (image/jpeg)',
+        () =>
+          uploadBytes(
+            storageRef(superAdminStorage, 'avatar_catalog/tank_01/v1/gold.jpg'),
+            samplePayload,
+            { contentType: 'image/jpeg' }
+          )
+      );
+
+      // 2. Super Admin upload PNG hợp lệ: PASS
+      await checkRule(
+        'R20_02_ALLOW_ADMIN_UPLOAD_PNG',
+        20,
+        'ALLOW',
+        '2. Super Admin upload PNG hợp lệ (allow create)',
+        'storage.rules: allow create -> isValidCatalogCreate (image/png)',
+        () =>
+          uploadBytes(
+            storageRef(superAdminStorage, 'avatar_catalog/tank_01/v1/gold.png'),
+            samplePayload,
+            { contentType: 'image/png' }
+          )
+      );
+
+      // 3. Super Admin upload WebP hợp lệ: PASS
+      await checkRule(
+        'R20_03_ALLOW_ADMIN_UPLOAD_WEBP',
+        20,
+        'ALLOW',
+        '3. Super Admin upload WebP hợp lệ (allow create)',
+        'storage.rules: allow create -> isValidCatalogCreate (image/webp)',
+        () =>
+          uploadBytes(
+            storageRef(superAdminStorage, 'avatar_catalog/tank_01/v1/gold.webp'),
+            samplePayload,
+            { contentType: 'image/webp' }
+          )
+      );
+
+      // 4. Gmail Admin đã xác minh, Google provider: get PASS
+      await checkRule(
+        'R20_04_ALLOW_ADMIN_GET_CATALOG_IMAGE',
+        20,
+        'ALLOW',
+        '4. Super Admin Gmail đã xác minh đọc ảnh trong avatar_catalog (allow get)',
+        'storage.rules: allow get: if isVerifiedPersonalGmail() && isValidCatalogPath(...)',
+        () => getBytes(storageRef(superAdminStorage, 'avatar_catalog/tank_01/v1/gold.png'))
+      );
+
+      // 5. Người chơi Gmail đã xác minh, Google provider: get PASS
+      await checkRule(
+        'R20_05_ALLOW_PLAYER_GET_CATALOG_IMAGE',
+        20,
+        'ALLOW',
+        '5. Người chơi Gmail đã xác minh đọc ảnh trong avatar_catalog (allow get)',
+        'storage.rules: allow get: if isVerifiedPersonalGmail() && isValidCatalogPath(...)',
+        () => getBytes(storageRef(playerStorage, 'avatar_catalog/tank_01/v1/gold.png'))
+      );
+
+      // 6. Người chưa đăng nhập: get DENIED
+      await checkRule(
+        'R20_06_DENY_UNAUTH_GET_CATALOG_IMAGE',
+        20,
+        'DENY',
+        '6. Người chưa đăng nhập bị từ chối đọc ảnh (get DENIED)',
+        'storage.rules: allow get -> isVerifiedPersonalGmail()',
+        () => getBytes(storageRef(unauthStorage, 'avatar_catalog/tank_01/v1/gold.png'))
+      );
+
+      // 7. Người chơi thường: upload DENIED
+      await checkRule(
+        'R20_07_DENY_PLAYER_UPLOAD',
+        20,
+        'DENY',
+        '7. Người chơi thường upload bị từ chối',
+        'storage.rules: allow create -> isSuperAdmin()',
+        () =>
+          uploadBytes(
+            storageRef(playerStorage, 'avatar_catalog/tank_hack/v1/hack.png'),
+            samplePayload,
+            { contentType: 'image/png' }
+          )
+      );
+
+      // 8. File lớn hơn 5 MiB: DENIED
+      await checkRule(
+        'R20_08_DENY_OVER_5MB_UPLOAD',
+        20,
+        'DENY',
+        '8. File > 5 MiB bị từ chối',
+        'storage.rules: request.resource.size <= 5 * 1024 * 1024',
+        () =>
+          uploadBytes(
+            storageRef(superAdminStorage, 'avatar_catalog/tank_big/v1/big.png'),
+            over5MbPayload,
+            { contentType: 'image/png' }
+          )
+      );
+
+      // 9. MIME không hợp lệ (image/svg+xml): DENIED
+      await checkRule(
+        'R20_09_DENY_INVALID_CONTENT_TYPE',
+        20,
+        'DENY',
+        '9. MIME không hợp lệ (image/svg+xml) bị từ chối',
+        'storage.rules: request.resource.contentType.matches("^image/(jpeg|png|webp)$")',
+        () =>
+          uploadBytes(
+            storageRef(superAdminStorage, 'avatar_catalog/tank_svg/v1/bad.png'),
+            samplePayload,
+            { contentType: 'image/svg+xml' }
+          )
+      );
+
+      // 10. list/listAll: DENIED
+      await checkRule(
+        'R20_10_DENY_LIST_ALL_CATALOG',
+        20,
+        'DENY',
+        '10. Liệt kê list/listAll bị từ chối (allow list: if false)',
+        'storage.rules: allow list: if false',
+        () => listAll(storageRef(playerStorage, 'avatar_catalog/tank_01/v1'))
+      );
+
+      // 11. Đường dẫn ngoài avatar_catalog: DENIED
+      await checkRule(
+        'R20_11_DENY_OUTSIDE_CATALOG',
+        20,
+        'DENY',
+        '11. Đường dẫn ngoài avatar_catalog bị từ chối',
+        'storage.rules: match /{allPaths=**} allow read, write: if false',
+        () =>
+          uploadBytes(
+            storageRef(superAdminStorage, 'custom_uploads/tank_01/v1/gold.png'),
+            samplePayload,
+            { contentType: 'image/png' }
+          )
+      );
+
+      // 12. Admin tạo version mới (v2): PASS
+      await checkRule(
+        'R20_12_ALLOW_ADMIN_CREATE_NEW_VERSION',
+        20,
+        'ALLOW',
+        '12. Super Admin tạo version mới (v2) thành công',
+        'storage.rules: allow create (resource == null trên v2)',
+        () =>
+          uploadBytes(
+            storageRef(superAdminStorage, 'avatar_catalog/tank_01/v2/gold_v2.png'),
+            samplePayload,
+            { contentType: 'image/png' }
+          )
+      );
+
+      // 13. Admin upload lần hai cùng đường dẫn (resource != null trong allow create): DENIED
+      await checkRule(
+        'R20_13_DENY_ADMIN_SECOND_UPLOAD_SAME_PATH',
+        20,
+        'DENY',
+        '13. Super Admin upload lần thứ hai vào chính đường dẫn đã tạo bị từ chối',
+        'storage.rules: allow create requires resource == null & allow update: if false',
+        () =>
+          uploadBytes(
+            storageRef(superAdminStorage, 'avatar_catalog/tank_01/v1/gold.png'),
+            samplePayload,
+            { contentType: 'image/png' }
+          )
+      );
+
+      // 14. Admin cập nhật metadata object cũ (allow update: if false): DENIED
+      await checkRule(
+        'R20_14_DENY_ADMIN_UPDATE_METADATA',
+        20,
+        'DENY',
+        '14. Super Admin cập nhật metadata object cũ bị từ chối (allow update: if false)',
+        'storage.rules: allow update: if false',
+        () =>
+          updateMetadata(storageRef(superAdminStorage, 'avatar_catalog/tank_01/v1/gold.png'), {
+            cacheControl: 'no-cache',
+          })
+      );
+
+      // 15. Người chơi xóa object: DENIED
+      await checkRule(
+        'R20_15_DENY_PLAYER_DELETE_OBJECT',
+        20,
+        'DENY',
+        '15. Người chơi xóa object bị từ chối',
+        'storage.rules: allow delete -> isSuperAdmin()',
+        () => deleteObject(storageRef(playerStorage, 'avatar_catalog/tank_01/v1/gold.jpg'))
+      );
+
+      // 16. Admin xóa object: PASS
+      await checkRule(
+        'R20_16_ALLOW_ADMIN_DELETE_OBJECT',
+        20,
+        'ALLOW',
+        '16. Super Admin xóa object hợp lệ',
+        'storage.rules: allow delete (resource != null && request.resource == null)',
+        () => deleteObject(storageRef(superAdminStorage, 'avatar_catalog/tank_01/v1/gold.jpg'))
+      );
+    }
   } finally {
     await testEnv.cleanup();
   }

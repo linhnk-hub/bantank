@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { SessionStateSnapshot } from '../core/sessionManager.ts';
 import { getUserDisplayLabel } from '../core/authManager.ts';
+import { AvatarManager } from '../core/avatarManager.ts';
 import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
 import { CoopOnlineLobbyPanel } from './CoopOnlineLobbyModal.tsx';
 import type { CoopRoomDocument } from '../core/coopOnlineManager.ts';
@@ -16,8 +17,6 @@ import {
   ArrowRight,
   Settings,
   Wrench,
-  Maximize,
-  Minimize,
   UserCheck,
   User,
   Bot,
@@ -50,9 +49,6 @@ export interface ModeSelectionScreenProps {
   onOpenSettings: () => void;
   onOpenSupport?: () => void;
   onOpenDevTools: () => void;
-  isFullscreen: boolean;
-  onToggleFullscreen: () => void;
-  onOpenProfile?: () => void;
   selectedMode?: GameModeType;
   onSelectedModeChange?: (mode: GameModeType) => void;
   twoPlayerOption?: TwoPlayerOption;
@@ -127,9 +123,6 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   onDifficultyChange,
   onOpenSettings,
   onOpenDevTools,
-  isFullscreen,
-  onToggleFullscreen,
-  onOpenProfile,
   selectedMode: controlledMode,
   onSelectedModeChange,
   twoPlayerOption: controlledTwoPlayerOption,
@@ -145,11 +138,31 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
   const [cardMode, setCardMode] = useState<SelectionCardMode>(deriveInitialCardMode);
   const [flowStep, setFlowStep] = useState<SelectionFlowStep>('SELECT_MODE');
+  const avatarManager = AvatarManager.getInstance();
+  const effectiveUid = user.uid || firebaseUser?.uid || '';
   const [avatarError, setAvatarError] = useState(false);
+  const [, setAvatarTick] = useState(0);
+
+  useEffect(() => {
+    avatarManager.observeCatalog();
+    if (effectiveUid) {
+      avatarManager.observeUserMetadata(effectiveUid);
+    }
+    const unsub = avatarManager.subscribe(() => {
+      setAvatarTick((t) => t + 1);
+      setAvatarError(false);
+    });
+    return unsub;
+  }, [avatarManager, effectiveUid]);
+
+  const resolvedAvatarUrl = avatarManager.getEffectivePlayerAvatarUrl({
+    uid: effectiveUid,
+    photoURL: user?.photoURL,
+  });
 
   useEffect(() => {
     setAvatarError(false);
-  }, [user?.photoURL]);
+  }, [resolvedAvatarUrl]);
 
   const handleSelectCardMode = (next: SelectionCardMode) => {
     setCardMode(next);
@@ -205,7 +218,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.18),rgba(255,255,255,0))] pointer-events-none" />
       <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
 
-      {/* Top Header Bar — M7.3.2: Removed mini logo on Top Menu */}
+      {/* Top Header Bar — M7.3.4: Simplified without mini logo, Fullscreen or duplicate Profile button */}
       <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-3 sm:px-4 py-2.5">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
           {/* Left: Back Button */}
@@ -221,12 +234,12 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
             </button>
           </div>
 
-          {/* Right: User Profile (Avatar + Display Name Only) & Actions */}
+          {/* Right: User Profile (Avatar + Display Name Only) & Unified Cài đặt */}
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-neutral-800/80 border border-neutral-700/80 text-xs">
-              {user.photoURL && user.photoURL.trim() && !avatarError ? (
+              {resolvedAvatarUrl && !avatarError ? (
                 <img
-                  src={user.photoURL.trim()}
+                  src={resolvedAvatarUrl}
                   alt={displayLabel}
                   className="w-5 h-5 rounded-full object-cover border border-amber-400/60 shrink-0"
                   onError={() => setAvatarError(true)}
@@ -244,38 +257,14 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               )}
             </div>
 
-            {onOpenProfile && (
-              <button
-                type="button"
-                onClick={onOpenProfile}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-semibold shadow transition-all cursor-pointer active:scale-95"
-                title="Cập nhật hồ sơ tài khoản (tên hiển thị, avatar)"
-              >
-                <UserCheck className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                <span className="hidden sm:inline">Cập Nhật Hồ Sơ</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={onToggleFullscreen}
-              className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 transition-all shadow cursor-pointer"
-              title={isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}
-            >
-              {isFullscreen ? (
-                <Minimize className="w-3.5 h-3.5 text-amber-400" />
-              ) : (
-                <Maximize className="w-3.5 h-3.5 text-amber-400" />
-              )}
-            </button>
-
             <button
               type="button"
               onClick={onOpenSettings}
-              className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 transition-all shadow cursor-pointer"
-              title="Cấu hình Âm thanh & Hiển thị"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow cursor-pointer"
+              title="Cài đặt Tài khoản & Âm thanh"
             >
               <Settings className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Cài đặt</span>
             </button>
 
             {isSuperAdmin && (

@@ -4,14 +4,7 @@
  */
 
 import React from 'react';
-import {
-  Wrench,
-  Settings,
-  Maximize,
-  Minimize,
-  AlertCircle,
-  CheckCircle2,
-} from 'lucide-react';
+import { AlertCircle, CheckCircle2 } from 'lucide-react';
 
 export interface WelcomeScreenProps {
   onSignIn: () => Promise<void>;
@@ -19,11 +12,6 @@ export interface WelcomeScreenProps {
   errorMessage: string | null;
   successMessage: string | null;
   onClearFeedback: () => void;
-  onOpenDevTools?: () => void;
-  onOpenSettings?: () => void;
-  isFullscreen?: boolean;
-  onToggleFullscreen?: () => void;
-  isSuperAdmin?: boolean;
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
@@ -32,11 +20,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   errorMessage,
   successMessage,
   onClearFeedback,
-  onOpenDevTools,
-  onOpenSettings,
-  isFullscreen,
-  onToggleFullscreen,
-  isSuperAdmin = false,
 }) => {
   return (
     <div className="relative min-h-screen w-full flex flex-col bg-neutral-950 text-neutral-100 select-none overflow-x-hidden">
@@ -44,55 +27,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.15),rgba(255,255,255,0))] pointer-events-none" />
       <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
 
-      {/* Top Header Bar (M7.3.2: Removed mini logo on Top Menu) */}
-      <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-4 py-2.5">
-        <div className="max-w-6xl mx-auto flex items-center justify-end">
-          <div className="flex items-center gap-2 text-xs">
-            {onToggleFullscreen && (
-              <button
-                type="button"
-                onClick={onToggleFullscreen}
-                className="p-2 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 transition-all active:scale-95 shadow"
-                title={isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}
-                aria-label="Toàn màn hình"
-              >
-                {isFullscreen ? (
-                  <Minimize className="w-4 h-4 text-amber-400" />
-                ) : (
-                  <Maximize className="w-4 h-4 text-amber-400" />
-                )}
-              </button>
-            )}
-
-            {onOpenSettings && (
-              <button
-                type="button"
-                onClick={onOpenSettings}
-                className="p-2 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 transition-all active:scale-95 shadow"
-                title="Cấu hình & Âm thanh"
-                aria-label="Cấu hình"
-              >
-                <Settings className="w-4 h-4 text-amber-400" />
-              </button>
-            )}
-
-            {isSuperAdmin && onOpenDevTools && (
-              <button
-                type="button"
-                onClick={onOpenDevTools}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800/80 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 font-semibold transition-all active:scale-95 shadow"
-                title="Bảng Kiểm thử & QA (Super Admin)"
-              >
-                <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">QA Suite</span>
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
-
       {/* Notifications: Logout notice / Error alert */}
-      <div className="relative z-20 max-w-xl mx-auto w-full px-4 pt-4">
+      <div className="relative z-20 max-w-xl mx-auto w-full px-4 pt-6">
         {successMessage && (
           <div className="mb-2 p-3.5 rounded-xl bg-emerald-950/90 border border-emerald-800 text-emerald-200 text-xs sm:text-sm flex items-center justify-between shadow-xl animate-fade-in">
             <div className="flex items-center gap-2.5">
@@ -124,7 +60,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         )}
       </div>
 
-      {/* Main Welcome Content */}
+      {/* Main Welcome Content (M7.3.4 V.1: Clean welcome screen without Top Menu) */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-8 max-w-4xl mx-auto w-full">
         <div className="flex flex-col items-center text-center max-w-2xl">
           {/* Official Game Logo Hero */}

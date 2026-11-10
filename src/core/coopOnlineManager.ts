@@ -193,17 +193,15 @@ export const COOP_ONLINE_CONFIG = {
 } as const;
 
 /**
- * Phân loại lỗi phát sinh từ `getRoom(roomCode)` trong bước kiểm tra trùng mã phòng khi tạo phòng (M7.3.2.1):
+ * Phân loại lỗi phát sinh từ `getRoom(roomCode)` hoặc `setRoom` khi tạo phòng (M7.3.4):
  * - 'UNAUTHENTICATED': Token hết hạn, chưa đăng nhập hoặc lỗi xác thực -> dừng ngay, không sinh mã mới.
+ * - 'PERMISSION_DENIED': Lỗi `permission-denied` (`Missing or insufficient permissions`) -> dừng ngay ở lần đầu tiên,
+ *   tuyệt đối không coi là trùng mã phòng và không retry 5 lần.
  * - 'NETWORK_ERROR': Mất mạng, offline, timeout, unavailable -> dừng ngay, không sinh mã mới.
- * - 'COLLISION_OR_PERMISSION_DENIED': Lỗi `permission-denied` (`Missing or insufficient permissions`).
- *   Trong `firestore.rules`, nếu mã phòng ngẫu nhiên trùng với một phòng ĐÃ ĐÓNG hoặc ĐANG CHƠI của người khác,
- *   `allow get` trả về `false` (`permission-denied`). Cho phép thử mã mới tối đa 5 lần; nếu cả 5 lần đều bị
- *   `permission-denied`, hệ thống kết luận lỗi phân quyền thật sự và dừng ngay với `PERMISSION_DENIED`.
  */
 export function classifyGetRoomErrorDuringCreate(
   err: unknown
-): 'COLLISION_OR_PERMISSION_DENIED' | 'NETWORK_ERROR' | 'UNAUTHENTICATED' {
+): 'PERMISSION_DENIED' | 'NETWORK_ERROR' | 'UNAUTHENTICATED' {
   const anyErr = err as { code?: string; message?: string } | null | undefined;
   const code = String(anyErr?.code || '').toLowerCase();
   const msg = String(anyErr?.message || err || '').toLowerCase();
@@ -226,7 +224,7 @@ export function classifyGetRoomErrorDuringCreate(
     msg.includes('permission-denied') ||
     msg.includes('permission_denied')
   ) {
-    return 'COLLISION_OR_PERMISSION_DENIED';
+    return 'PERMISSION_DENIED';
   }
 
   return 'NETWORK_ERROR';
@@ -1148,6 +1146,7 @@ export class InMemoryCoopStorageAdapter implements CoopStorageAdapter {
   private failNextServerRead: boolean = false;
   private simulatedGetRoomError: Error | null = null;
   private simulatedGetRoomErrorRemainingCount: number = 0;
+  private simulatedCollisionRemainingCount: number = 0;
 
   public setFailNextSetSignaling(fail: boolean): void {
     this.failNextSetSignaling = fail;
@@ -1164,6 +1163,10 @@ export class InMemoryCoopStorageAdapter implements CoopStorageAdapter {
   public setSimulatedGetRoomError(err: Error | null, count: number = 1): void {
     this.simulatedGetRoomError = err;
     this.simulatedGetRoomErrorRemainingCount = err ? Math.max(1, count) : 0;
+  }
+
+  public setSimulatedCollisionCount(count: number = 1): void {
+    this.simulatedCollisionRemainingCount = Math.max(0, count);
   }
 
   /**
@@ -1200,6 +1203,26 @@ export class InMemoryCoopStorageAdapter implements CoopStorageAdapter {
         this.simulatedGetRoomError = null;
       }
       throw errToThrow;
+    }
+    if (this.simulatedCollisionRemainingCount > 0) {
+      this.simulatedCollisionRemainingCount--;
+      return {
+        roomCode,
+        status: 'WAITING',
+        difficulty: 'DEFAULT',
+        hostUid: 'uid_existing_host',
+        hostDisplayName: 'Existing Host',
+        hostReady: false,
+        hostLastActiveAt: 1_700_000_000_000,
+        guestUid: null,
+        guestDisplayName: null,
+        guestReady: false,
+        guestLastActiveAt: null,
+        rtcConnectionState: 'NEW',
+        createdAt: 1_700_000_000_000,
+        expiresAt: 1_700_000_810_000,
+        disconnectReason: null,
+      };
     }
     const r = this.rooms.get(roomCode);
     return r ? JSON.parse(JSON.stringify(r)) : null;
@@ -1758,7 +1781,6 @@ export class CoopOnlineManager {
     const triedCodes = new Set<string>();
     let roomCode = generateRoomCode(triedCodes);
     let foundAvailableCode = false;
-    let lastPermissionDeniedError: unknown = null;
 
     try {
       for (
@@ -1772,7 +1794,6 @@ export class CoopOnlineManager {
           // Bắt buộc chỉ dùng mã phòng CHƯA TỒN TẠI (!existing) để setDoc luôn đi vào nhánh allow create
           if (!existing) {
             foundAvailableCode = true;
-            lastPermissionDeniedError = null;
             break;
           }
         } catch (getErr: any) {
@@ -1786,33 +1807,26 @@ export class CoopOnlineManager {
                 'Phiên xác thực Firebase Auth không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.',
             };
           }
-          if (classification === 'NETWORK_ERROR') {
+          if (classification === 'PERMISSION_DENIED') {
+            const errMsg = String(getErr?.message || getErr);
             return {
               success: false,
-              errorCode: 'NETWORK_ERROR',
-              message:
-                getErr?.message ||
-                'Lỗi kết nối mạng khi kiểm tra mã phòng trên Firestore. Vui lòng kiểm tra kết nối Internet.',
+              errorCode: 'PERMISSION_DENIED',
+              message: `Không đủ quyền truy cập Firestore khi tạo phòng (${errMsg}). Vui lòng kiểm tra tài khoản Gmail cá nhân đã xác minh và đảm bảo Firestore Rules mới nhất đã được publish trên Firebase Console.`,
             };
           }
-          // classification === 'COLLISION_OR_PERMISSION_DENIED':
-          // Có thể trùng ngẫu nhiên với 1 phòng đã đóng/đang chơi của người khác; ghi nhận lỗi và thử mã mới.
-          lastPermissionDeniedError = getErr;
+          return {
+            success: false,
+            errorCode: 'NETWORK_ERROR',
+            message:
+              getErr?.message ||
+              'Lỗi kết nối mạng khi kiểm tra mã phòng trên Firestore. Vui lòng kiểm tra kết nối Internet.',
+          };
         }
         roomCode = generateRoomCode(triedCodes);
       }
 
       if (!foundAvailableCode) {
-        if (lastPermissionDeniedError) {
-          const errMsg = String(
-            (lastPermissionDeniedError as any)?.message || lastPermissionDeniedError
-          );
-          return {
-            success: false,
-            errorCode: 'PERMISSION_DENIED',
-            message: `Không đủ quyền truy cập Firestore khi tạo phòng (${errMsg}). Vui lòng kiểm tra tài khoản Gmail cá nhân đã xác minh và Firestore Rules.`,
-          };
-        }
         return {
           success: false,
           errorCode: 'ROOM_FULL',
@@ -1876,9 +1890,10 @@ export class CoopOnlineManager {
         this.currentSignaling = null;
         this.role = null;
         this.notifyListeners();
+        const sigClass = classifyGetRoomErrorDuringCreate(sigErr);
         return {
           success: false,
-          errorCode: 'NETWORK_ERROR',
+          errorCode: sigClass === 'PERMISSION_DENIED' ? 'PERMISSION_DENIED' : 'NETWORK_ERROR',
           message:
             sigErr?.message ||
             'Không thể khởi tạo dữ liệu bảo mật của phòng (private/signaling). Vui lòng thử tạo phòng lại.',
@@ -1904,10 +1919,7 @@ export class CoopOnlineManager {
       const classification = classifyGetRoomErrorDuringCreate(err);
       return {
         success: false,
-        errorCode:
-          classification === 'COLLISION_OR_PERMISSION_DENIED'
-            ? 'PERMISSION_DENIED'
-            : classification,
+        errorCode: classification,
         message: err?.message || 'Không thể tạo phòng Co-op Online do lỗi kết nối.',
       };
     }
@@ -2513,7 +2525,6 @@ export class CoopOnlineManager {
     const triedCodes = new Set<string>();
     let roomCode = explicitRoomCode ?? generateRoomCode(triedCodes);
     let foundAvailableCode = Boolean(explicitRoomCode);
-    let lastPermissionDeniedError: unknown = null;
 
     if (!explicitRoomCode) {
       for (
@@ -2526,7 +2537,6 @@ export class CoopOnlineManager {
           const existing = storage.getRoomSync(roomCode);
           if (!existing) {
             foundAvailableCode = true;
-            lastPermissionDeniedError = null;
             break;
           }
         } catch (getErr: any) {
@@ -2540,31 +2550,26 @@ export class CoopOnlineManager {
                 'Phiên xác thực Firebase Auth không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.',
             };
           }
-          if (classification === 'NETWORK_ERROR') {
+          if (classification === 'PERMISSION_DENIED') {
+            const errMsg = String(getErr?.message || getErr);
             return {
               success: false,
-              errorCode: 'NETWORK_ERROR',
-              message:
-                getErr?.message ||
-                'Lỗi kết nối mạng khi kiểm tra mã phòng trên Firestore. Vui lòng kiểm tra kết nối Internet.',
+              errorCode: 'PERMISSION_DENIED',
+              message: `Không đủ quyền truy cập Firestore khi tạo phòng (${errMsg}).`,
             };
           }
-          lastPermissionDeniedError = getErr;
+          return {
+            success: false,
+            errorCode: 'NETWORK_ERROR',
+            message:
+              getErr?.message ||
+              'Lỗi kết nối mạng khi kiểm tra mã phòng trên Firestore. Vui lòng kiểm tra kết nối Internet.',
+          };
         }
         roomCode = generateRoomCode(triedCodes);
       }
 
       if (!foundAvailableCode) {
-        if (lastPermissionDeniedError) {
-          const errMsg = String(
-            (lastPermissionDeniedError as any)?.message || lastPermissionDeniedError
-          );
-          return {
-            success: false,
-            errorCode: 'PERMISSION_DENIED',
-            message: `Không đủ quyền truy cập Firestore khi tạo phòng (${errMsg}).`,
-          };
-        }
         return {
           success: false,
           errorCode: 'ROOM_FULL',
@@ -2625,9 +2630,10 @@ export class CoopOnlineManager {
         this.currentSignaling = null;
         this.role = null;
         this.notifyListeners();
+        const sigClass = classifyGetRoomErrorDuringCreate(sigErr);
         return {
           success: false,
-          errorCode: 'NETWORK_ERROR',
+          errorCode: sigClass === 'PERMISSION_DENIED' ? 'PERMISSION_DENIED' : 'NETWORK_ERROR',
           message:
             sigErr?.message ||
             'Không thể khởi tạo dữ liệu bảo mật của phòng (private/signaling). Vui lòng thử tạo phòng lại.',
@@ -2652,10 +2658,7 @@ export class CoopOnlineManager {
       const classification = classifyGetRoomErrorDuringCreate(err);
       return {
         success: false,
-        errorCode:
-          classification === 'COLLISION_OR_PERMISSION_DENIED'
-            ? 'PERMISSION_DENIED'
-            : classification,
+        errorCode: classification,
         message: err?.message || 'Không thể tạo phòng Co-op Online do lỗi kết nối.',
       };
     }

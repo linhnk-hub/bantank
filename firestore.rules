@@ -58,7 +58,10 @@ service cloud.firestore {
     // M7.3: Chỉ định Super Admin chính thức và duy nhất của hệ thống
     function isSuperAdmin() {
       return isVerifiedPersonalGmail()
-        && request.auth.token.email == 'linhnk.online@gmail.com';
+        && (
+          request.auth.token.email == 'linhnk.online@gmail.com'
+          || request.auth.token.email.lower() == 'linhnk.online@gmail.com'
+        );
     }
 
     // Kiểm tra phiên hiện tại có còn hiệu lực trong vòng 900 giây (15 phút) theo giờ máy chủ hay không
@@ -197,12 +200,239 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 5. Collection Rules: /users/{uid} (Khóa ghi tuyệt đối trong M7.1)
+    // 5. Collection Rules: /avatar_catalog/{avatarId} & /users/{uid}
+    //    (M7.3.5: Danh mục Avatar dùng chung trên Firebase Storage + Firestore)
+    //    - /avatar_catalog/{avatarId}:
+    //      + Đọc (get, list): người chơi Gmail cá nhân đã xác minh (isVerifiedPersonalGmail()).
+    //      + Tạo, sửa, xóa: chỉ Super Admin duy nhất (linhnk.online@gmail.com).
+    //      + Dùng Firestore Timestamp nhất quán (createdAt, updatedAt).
+    //    - /users/{uid}:
+    //      + Người chơi chỉ được cập nhật lựa chọn avatar của chính mình (isOwner(uid)).
+    //      + Chỉ cho phép các trường: avatarType ('google' | 'catalog'), avatarId (string | null),
+    //        avatarUpdatedAt (Timestamp == request.time), và tùy chọn uid, displayName.
+    //      + Chặn tuyệt đối sửa role, isSuperAdmin, email, xp, xu, rank.
+    //      + Khi avatarType == 'catalog', bắt buộc tài liệu /avatar_catalog/{avatarId} tồn tại
+    //        và có isActive == true.
     // =========================================================================
+    function isValidCatalogAvatarId(avatarId) {
+      return avatarId is string
+        && avatarId.size() >= 1
+        && avatarId.size() <= 64
+        && avatarId.matches('^[A-Za-z0-9_-]+$');
+    }
+
+    function isValidAvatarCatalogDoc(data, avatarId) {
+      return data.keys().hasAll([
+          'avatarId',
+          'name',
+          'storagePath',
+          'contentType',
+          'fileSize',
+          'version',
+          'sortOrder',
+          'isActive',
+          'createdAt',
+          'updatedAt',
+          'updatedBy'
+        ])
+        && data.keys().hasOnly([
+          'avatarId',
+          'name',
+          'storagePath',
+          'contentType',
+          'fileSize',
+          'version',
+          'sortOrder',
+          'isActive',
+          'createdAt',
+          'updatedAt',
+          'updatedBy'
+        ])
+        && isValidCatalogAvatarId(avatarId)
+        && data.avatarId == avatarId
+        && data.name is string
+        && data.name.size() >= 1
+        && data.name.size() <= 60
+        && data.version is int
+        && data.version >= 1
+        && data.storagePath is string
+        && data.storagePath.size() >= 20
+        && data.storagePath.size() <= 260
+        && data.storagePath.matches('^avatar_catalog/[A-Za-z0-9_-]+/v[1-9][0-9]*/[A-Za-z0-9._-]+\\.(jpg|jpeg|png|webp)$')
+        && data.storagePath.matches('^avatar_catalog/' + avatarId + '/v' + string(data.version) + '/[A-Za-z0-9._-]+\\.(jpg|jpeg|png|webp)$')
+        && data.contentType in ['image/jpeg', 'image/png', 'image/webp']
+        && data.fileSize is int
+        && data.fileSize > 0
+        && data.fileSize <= 5242880
+        && data.sortOrder is int
+        && data.sortOrder >= 0
+        && data.sortOrder <= 999999
+        && data.isActive is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp
+        && data.updatedBy == 'linhnk.online@gmail.com';
+    }
+
+    function isActiveCatalogAvatar(avatarId) {
+      return isValidCatalogAvatarId(avatarId)
+        && exists(/databases/$(database)/documents/avatar_catalog/$(avatarId))
+        && get(/databases/$(database)/documents/avatar_catalog/$(avatarId)).data.isActive == true;
+    }
+
+    match /avatar_catalog/{avatarId} {
+      allow get, list: if isVerifiedPersonalGmail();
+
+      allow create: if isSuperAdmin()
+        && isValidAvatarCatalogDoc(incoming(), avatarId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isSuperAdmin()
+        && isValidAvatarCatalogDoc(incoming(), avatarId)
+        && incoming().avatarId == existing().avatarId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && incoming().version >= existing().version;
+
+      allow delete: if isSuperAdmin()
+        && isValidCatalogAvatarId(avatarId);
+    }
+
+    function isValidUserDisplayNameField(data) {
+      return ('displayName' in data)
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 40;
+    }
+
+    function isValidUserAvatarFields(data, uid) {
+      return data.keys().hasAll([
+          'avatarType',
+          'avatarId',
+          'avatarUpdatedAt'
+        ])
+        && (!('uid' in data) || (data.uid == uid && data.uid == request.auth.uid))
+        && data.avatarType in ['google', 'catalog']
+        && (
+          (data.avatarType == 'google' && data.avatarId == null)
+          || (data.avatarType == 'catalog' && isActiveCatalogAvatar(data.avatarId))
+        )
+        && data.avatarUpdatedAt is timestamp
+        && data.avatarUpdatedAt == request.time;
+    }
+
+    // Khởi tạo tài liệu /users/{uid} lần đầu:
+    // - Trường 'uid' là tùy chọn nhưng nếu có mặt thì bắt buộc incoming().uid == uid && incoming().uid == request.auth.uid.
+    // - Tách biệt rõ 2 nhánh quyền:
+    //   (1) Khởi tạo khi chọn avatar: chỉ chứa ['avatarType', 'avatarId', 'avatarUpdatedAt'] (và tùy chọn 'uid')
+    //   (2) Khởi tạo khi đặt tên hiển thị: chỉ chứa ['displayName'] (và tùy chọn 'uid')
+    function isValidUserProfileCreate(data, uid) {
+      return (!('uid' in data) || (data.uid == uid && data.uid == request.auth.uid))
+        && (
+          (
+            isValidUserAvatarFields(data, uid)
+            && data.keys().hasOnly([
+              'uid',
+              'avatarType',
+              'avatarId',
+              'avatarUpdatedAt'
+            ])
+          )
+          ||
+          (
+            isValidUserDisplayNameField(data)
+            && data.keys().hasOnly([
+              'uid',
+              'displayName'
+            ])
+          )
+        );
+    }
+
+    // Nhánh cập nhật 1: Quyền chọn avatar (tách biệt hoàn toàn khỏi quyền chỉnh displayName)
+    // - Bắt buộc kiểm tra quyền sở hữu hồ sơ theo đường dẫn tài liệu: uid == request.auth.uid.
+    // - Không cho phép 'uid' xuất hiện trong affectedKeys().hasOnly(...).
+    function isUserAvatarSelectionUpdate(uid) {
+      return isOwner(uid)
+        && uid == request.auth.uid
+        && isValidUserAvatarFields(incoming(), uid)
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'avatarType',
+          'avatarId',
+          'avatarUpdatedAt'
+        ]);
+    }
+
+    // Nhánh cập nhật 2: Quyền chỉnh tên hiển thị displayName (tách biệt hoàn toàn khỏi quyền chọn avatar)
+    // - Bắt buộc kiểm tra quyền sở hữu hồ sơ theo đường dẫn tài liệu: uid == request.auth.uid.
+    // - Không cho phép 'uid' xuất hiện trong affectedKeys().hasOnly(...).
+    function isUserDisplayNameUpdate(uid) {
+      return isOwner(uid)
+        && uid == request.auth.uid
+        && isValidUserDisplayNameField(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName'
+        ]);
+    }
+
+    // Khi cập nhật tài liệu /users/{uid} đã tồn tại (kể cả hồ sơ cũ có hoặc không có trường 'uid', có xp, xu, rank, createdAt...):
+    // 1. Điều kiện sở hữu hồ sơ bắt buộc cho MỌI trường hợp (kể cả hồ sơ cũ chưa có trường 'uid'):
+    //    uid == request.auth.uid && isOwner(uid).
+    // 2. UID bất biến tuyệt đối:
+    //    - Nếu tài liệu cũ có trường 'uid': bắt buộc incoming().uid == existing().uid && incoming().uid == uid && incoming().uid == request.auth.uid.
+    //    - Nếu tài liệu cũ chưa có trường 'uid': không bắt buộc thêm 'uid' và không cho phép chèn 'uid' mới trong thao tác update
+    //      (!('uid' in incoming())), nhưng vẫn bắt buộc kiểm tra uid == request.auth.uid theo đường dẫn tài liệu.
+    //    - Không cho phép 'uid' xuất hiện trong incoming().diff(existing()).affectedKeys().
+    // 3. Ngăn xóa trường cũ: incoming().keys().hasAll(existing().keys()).
+    // 4. Ngăn sửa giá trị trường ngoài phạm vi cho phép: kết hợp !affectedKeys().hasAny([...])
+    //    và affectedKeys().hasOnly(['avatarType', 'avatarId', 'avatarUpdatedAt']) hoặc affectedKeys().hasOnly(['displayName']).
+    function isValidExistingUserUpdate(uid) {
+      return isOwner(uid)
+        && uid == request.auth.uid
+        && (
+          (
+            ('uid' in existing())
+            && ('uid' in incoming())
+            && incoming().uid == existing().uid
+            && incoming().uid == uid
+            && incoming().uid == request.auth.uid
+          )
+          ||
+          (
+            !('uid' in existing())
+            && !('uid' in incoming())
+            && uid == request.auth.uid
+          )
+        )
+        && incoming().keys().hasAll(existing().keys())
+        && !incoming().diff(existing()).affectedKeys().hasAny([
+          'uid',
+          'role',
+          'isSuperAdmin',
+          'email',
+          'xp',
+          'xu',
+          'rank',
+          'createdAt'
+        ])
+        && (
+          isUserAvatarSelectionUpdate(uid)
+          || isUserDisplayNameUpdate(uid)
+        );
+    }
+
     match /users/{uid} {
-      allow get: if isValidId(uid) && isOwner(uid);
-      allow list: if false;
-      allow create, update, delete: if false;
+      allow get: if isValidId(uid) && isVerifiedPersonalGmail();
+      allow list: if isSuperAdmin();
+      allow create: if isValidId(uid)
+        && isOwner(uid)
+        && uid == request.auth.uid
+        && isValidUserProfileCreate(incoming(), uid);
+      allow update: if isValidId(uid)
+        && isOwner(uid)
+        && uid == request.auth.uid
+        && isValidExistingUserUpdate(uid);
+      allow delete: if false;
     }
 
     // =========================================================================

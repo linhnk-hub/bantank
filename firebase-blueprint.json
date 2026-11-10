@@ -58,15 +58,47 @@
     },
     "UserProfile": {
       "title": "UserProfile",
-      "description": "Hồ sơ người chơi BanTank Online (khóa ghi trong M7.1).",
+      "description": "Metadata hồ sơ và lựa chọn ảnh đại diện của người chơi (M7.3.5: Ảnh Google hoặc Danh mục Avatar chung). Không lưu nội dung ảnh hay quyền hạn.",
       "type": "object",
       "properties": {
-        "uid": { "type": "string" },
-        "totalXp": { "type": "number" },
-        "xuBalance": { "type": "number" },
-        "rankLevel": { "type": "number" }
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "avatarType": { "type": "string", "enum": ["google", "catalog"] },
+        "avatarId": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "avatarUpdatedAt": { "type": "string", "format": "date-time" }
       },
-      "required": ["uid", "totalXp", "xuBalance", "rankLevel"]
+      "required": ["avatarType", "avatarId", "avatarUpdatedAt"]
+    },
+    "AvatarCatalogItem": {
+      "title": "AvatarCatalogItem",
+      "description": "Metadata danh mục avatar dùng chung lưu trên Firebase Storage (M7.3.5), chỉ Super Admin linhnk.online@gmail.com quản lý.",
+      "type": "object",
+      "properties": {
+        "avatarId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "storagePath": { "type": "string", "minLength": 20, "maxLength": 260, "pattern": "^avatar_catalog/[A-Za-z0-9_-]+/v[1-9][0-9]*/[A-Za-z0-9._-]+\\.(jpg|jpeg|png|webp)$" },
+        "contentType": { "type": "string", "enum": ["image/jpeg", "image/png", "image/webp"] },
+        "fileSize": { "type": "number" },
+        "version": { "type": "number" },
+        "sortOrder": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": [
+        "avatarId",
+        "name",
+        "storagePath",
+        "contentType",
+        "fileSize",
+        "version",
+        "sortOrder",
+        "isActive",
+        "createdAt",
+        "updatedAt",
+        "updatedBy"
+      ]
     },
     "AdminRecord": {
       "title": "AdminRecord",
@@ -175,7 +207,11 @@
     },
     "/users/{uid}": {
       "schema": { "$ref": "#/entities/UserProfile" },
-      "description": "Hồ sơ người chơi (khóa ghi trong M7.1)."
+      "description": "Metadata lựa chọn avatar và tên hiển thị người chơi (M7.3.5)."
+    },
+    "/avatar_catalog/{avatarId}": {
+      "schema": { "$ref": "#/entities/AvatarCatalogItem" },
+      "description": "Danh mục avatar dùng chung lưu trên Firebase Storage (M7.3.5)."
     },
     "/admins/{uid}": {
       "schema": { "$ref": "#/entities/AdminRecord" },

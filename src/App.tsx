@@ -16,7 +16,6 @@ import {
   VirtualShootButton,
   type ActiveDirection,
 } from './components/TouchControls.tsx';
-import { FullscreenGuideModal } from './components/FullscreenGuideModal.tsx';
 import { DevToolsDrawer } from './components/DevToolsDrawer.tsx';
 import { SettingsModal } from './components/SettingsModal.tsx';
 import { SupportModal } from './components/SupportModal.tsx';
@@ -31,7 +30,6 @@ import {
   type CoopPlayerRole,
 } from './core/coopOnlineManager.ts';
 import { useOrientation } from './hooks/useOrientation.ts';
-import { useFullscreen } from './hooks/useFullscreen.ts';
 import { useViewportLayout } from './hooks/useViewportLayout.ts';
 import type { GameCoreState, InputState } from './core/types.ts';
 import { AuthSessionBanner } from './components/AuthSessionBanner.tsx';
@@ -41,7 +39,6 @@ import { WelcomeScreen } from './components/WelcomeScreen.tsx';
 import { MainMenuScreen } from './components/MainMenuScreen.tsx';
 import { ModeSelectionScreen } from './components/ModeSelectionScreen.tsx';
 import { SessionAlertModal } from './components/SessionAlertModal.tsx';
-import { UserProfileModal } from './components/UserProfileModal.tsx';
 import {
   RotateCcw,
   Pause,
@@ -52,9 +49,6 @@ import {
   Play,
   Heart,
   Trophy,
-  Monitor,
-  Maximize,
-  Minimize,
   Settings,
   HelpCircle,
   AlertTriangle,
@@ -74,7 +68,6 @@ export default function App() {
   const [authProcessing, setAuthProcessing] = useState<boolean>(false);
   const [authErrorMsg, setAuthErrorMsg] = useState<string | null>(null);
   const [logoutSuccessNotice, setLogoutSuccessNotice] = useState<string | null>(null);
-  const [isProfileModalOpen, setIsProfileModalOpen] = useState<boolean>(false);
   const [isSupportOpen, setIsSupportOpen] = useState<boolean>(false);
   const [onlineDisconnectMsg, setOnlineDisconnectMsg] = useState<string | null>(null);
 
@@ -130,14 +123,6 @@ export default function App() {
 
   // Passive orientation detection hook (responds to physical OS rotation only)
   useOrientation();
-
-  // Fullscreen hook for mobile & cross-platform
-  const {
-    isFullscreen,
-    toggleFullscreen,
-    showFullscreenGuide,
-    dismissGuide: dismissFsGuide,
-  } = useFullscreen();
 
   // Collapsible Menu & Developer Tools state
   const [isMenuExpanded, setIsMenuExpanded] = useState<boolean>(false);
@@ -467,30 +452,15 @@ export default function App() {
     gameState && gameState.matchState === 'STAGE_CLEAR'
   );
 
-  // View 1: Welcome Screen (Unauthenticated user or initial landing)
+  const handleProfileUpdated = useCallback(() => {
+    setCurrentUser(authManager.getCurrentUser());
+    setProfileRevision((r) => r + 1);
+  }, [authManager]);
+
+  // View 1: Welcome Screen (Unauthenticated user or initial landing - V.1: Clean screen without Top Menu)
   if (!currentUser || appScreen === 'WELCOME') {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
-        <FullscreenGuideModal isOpen={showFullscreenGuide} onClose={dismissFsGuide} />
-
-        {isSuperAdmin && (
-          <DevToolsDrawer
-            isOpen={isDevDrawerOpen}
-            onClose={() => setIsDevDrawerOpen(false)}
-            validation={validation}
-          />
-        )}
-
-        <SettingsModal
-          isOpen={isSettingsOpen}
-          onClose={() => setIsSettingsOpen(false)}
-          difficulty={difficulty}
-          onDifficultyChange={handleDifficultyChange}
-          isSuperAdmin={isSuperAdmin}
-        />
-
-        <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
-
         <WelcomeScreen
           onSignIn={handleSignIn}
           isProcessing={authProcessing}
@@ -500,11 +470,6 @@ export default function App() {
             setAuthErrorMsg(null);
             setLogoutSuccessNotice(null);
           }}
-          onOpenDevTools={() => setIsDevDrawerOpen(true)}
-          onOpenSettings={() => setIsSettingsOpen(true)}
-          isFullscreen={isFullscreen}
-          onToggleFullscreen={toggleFullscreen}
-          isSuperAdmin={isSuperAdmin}
         />
       </div>
     );
@@ -514,8 +479,6 @@ export default function App() {
   if (appScreen === 'MAIN_MENU') {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
-        <FullscreenGuideModal isOpen={showFullscreenGuide} onClose={dismissFsGuide} />
-
         {isSuperAdmin && (
           <DevToolsDrawer
             isOpen={isDevDrawerOpen}
@@ -530,12 +493,15 @@ export default function App() {
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
           isSuperAdmin={isSuperAdmin}
+          user={currentUser}
+          onProfileUpdated={handleProfileUpdated}
         />
 
         <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
 
         <MainMenuScreen
           user={{
+            uid: currentUser.uid,
             email: currentUser.email,
             displayName: currentUser.displayName,
             photoURL: currentUser.photoURL,
@@ -551,20 +517,7 @@ export default function App() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenSupport={() => setIsSupportOpen(true)}
           onOpenDevTools={() => setIsDevDrawerOpen(true)}
-          isFullscreen={isFullscreen}
-          onToggleFullscreen={toggleFullscreen}
-          onOpenProfile={() => setIsProfileModalOpen(true)}
           isSuperAdmin={isSuperAdmin}
-        />
-
-        <UserProfileModal
-          isOpen={isProfileModalOpen}
-          onClose={() => setIsProfileModalOpen(false)}
-          user={currentUser}
-          onProfileUpdated={() => {
-            setCurrentUser(authManager.getCurrentUser());
-            setProfileRevision((r) => r + 1);
-          }}
         />
 
         {/* Protective Interruption Modal if displaced while on menu */}
@@ -583,8 +536,6 @@ export default function App() {
   if (appScreen === 'MODE_SELECTION') {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
-        <FullscreenGuideModal isOpen={showFullscreenGuide} onClose={dismissFsGuide} />
-
         {isSuperAdmin && (
           <DevToolsDrawer
             isOpen={isDevDrawerOpen}
@@ -599,12 +550,15 @@ export default function App() {
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
           isSuperAdmin={isSuperAdmin}
+          user={currentUser}
+          onProfileUpdated={handleProfileUpdated}
         />
 
         <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
 
         <ModeSelectionScreen
           user={{
+            uid: currentUser.uid,
             email: currentUser.email,
             displayName: currentUser.displayName,
             photoURL: currentUser.photoURL,
@@ -623,24 +577,11 @@ export default function App() {
           onOpenSettings={() => setIsSettingsOpen(true)}
           onOpenSupport={() => setIsSupportOpen(true)}
           onOpenDevTools={() => setIsDevDrawerOpen(true)}
-          isFullscreen={isFullscreen}
-          onToggleFullscreen={toggleFullscreen}
-          onOpenProfile={() => setIsProfileModalOpen(true)}
           selectedMode={selectedMode}
           onSelectedModeChange={setSelectedMode}
           twoPlayerOption={twoPlayerOption}
           onTwoPlayerOptionChange={setTwoPlayerOption}
           isSuperAdmin={isSuperAdmin}
-        />
-
-        <UserProfileModal
-          isOpen={isProfileModalOpen}
-          onClose={() => setIsProfileModalOpen(false)}
-          user={currentUser}
-          onProfileUpdated={() => {
-            setCurrentUser(authManager.getCurrentUser());
-            setProfileRevision((r) => r + 1);
-          }}
         />
 
         {/* Protective Interruption Modal if displaced while on mode selection */}
@@ -658,9 +599,6 @@ export default function App() {
   // View 3: Battle Arena with Canvas (Only mounted when player clicked "Chơi ngay")
   return (
     <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
-      {/* Fallback Fullscreen API Guide Modal (iOS Safari & Restricted Browsers) */}
-      <FullscreenGuideModal isOpen={showFullscreenGuide} onClose={dismissFsGuide} />
-
       {/* Developer & QA Test Suite Drawer (Super Admin Only) */}
       {isSuperAdmin && (
         <DevToolsDrawer
@@ -670,13 +608,15 @@ export default function App() {
         />
       )}
 
-      {/* Settings & Audio Modal */}
+      {/* Unified Settings Modal (Account + Sound) */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
         difficulty={difficulty}
         onDifficultyChange={handleDifficultyChange}
         isSuperAdmin={isSuperAdmin}
+        user={currentUser}
+        onProfileUpdated={handleProfileUpdated}
       />
 
       {/* Support Modal */}
@@ -751,16 +691,6 @@ export default function App() {
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={toggleFullscreen}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
-                title={isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}
-              >
-                {isFullscreen ? <Minimize className="w-3 h-3 text-amber-400" /> : <Maximize className="w-3 h-3 text-amber-400" />}
-                <span className="hidden sm:inline">{isFullscreen ? 'Thu nhỏ' : 'Toàn MH'}</span>
-              </button>
-
-              <button
-                type="button"
                 onClick={isPaused ? handleResume : handlePause}
                 className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold shadow"
               >
@@ -772,10 +702,10 @@ export default function App() {
                 type="button"
                 onClick={() => setIsSettingsOpen(true)}
                 className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
-                title="Cấu hình & Âm thanh"
+                title="Cài đặt"
               >
                 <Settings className="w-3 h-3 text-amber-400" />
-                <span className="hidden sm:inline">Cấu hình</span>
+                <span className="hidden sm:inline">Cài đặt</span>
               </button>
 
               {isSuperAdmin && (
@@ -915,20 +845,20 @@ export default function App() {
             <div className="flex items-center gap-1.5">
               <button
                 type="button"
-                onClick={toggleFullscreen}
+                onClick={() => setIsSettingsOpen(true)}
                 className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300"
-                title={isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}
+                title="Cài đặt"
               >
-                {isFullscreen ? <Minimize className="w-3.5 h-3.5 text-amber-400" /> : <Maximize className="w-3.5 h-3.5 text-amber-400" />}
+                <Settings className="w-3.5 h-3.5 text-amber-400" />
               </button>
 
               <button
                 type="button"
-                onClick={() => setIsSettingsOpen(true)}
-                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300"
-                title="Cấu hình & Âm thanh"
+                onClick={() => setIsSupportOpen(true)}
+                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-sky-500 text-neutral-300"
+                title="Hỗ trợ & Hướng dẫn điều khiển"
               >
-                <Settings className="w-3.5 h-3.5 text-amber-400" />
+                <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
               </button>
 
               {isSuperAdmin && (
@@ -1026,7 +956,7 @@ export default function App() {
             ENLARGED DESKTOP PC MODE (8/4 Grid Layout with Full Visibility)
            ========================================================================= */
         <div className="flex-1 flex flex-col w-full">
-          {/* Header (M7.3.2: Removed mini logo on top menu) */}
+          {/* Header (M7.3.2: Removed mini logo on top menu; M7.3.4 V.4: Removed Fullscreen button) */}
           <header className="border-b border-neutral-800 bg-neutral-900/90 backdrop-blur px-4 py-2.5 sticky top-0 z-30 shadow-md">
             <div className="max-w-[1560px] mx-auto flex items-center justify-between gap-2">
               {/* Brand */}
@@ -1043,29 +973,19 @@ export default function App() {
               <div className="flex items-center gap-1.5 text-xs">
                 <button
                   type="button"
-                  onClick={toggleFullscreen}
-                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 hover:border-amber-500 font-semibold transition-all active:scale-95 shadow"
-                  title={isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}
-                >
-                  {isFullscreen ? <Minimize className="w-3.5 h-3.5 text-amber-400" /> : <Maximize className="w-3.5 h-3.5 text-amber-400" />}
-                  <span className="text-xs hidden sm:inline">{isFullscreen ? 'Thu nhỏ' : 'Toàn MH'}</span>
-                </button>
-
-                <button
-                  type="button"
                   onClick={() => setIsSettingsOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow"
-                  title="Cấu hình & Âm thanh"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
+                  title="Cài đặt Tài khoản & Âm thanh"
                 >
                   <Settings className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">Cấu hình</span>
+                  <span className="hidden sm:inline">Cài đặt</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setIsSupportOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-sky-500 text-neutral-200 font-semibold transition-all shadow"
-                  title="Hỗ trợ & Hướng dẫn"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-sky-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
+                  title="Hỗ trợ & Hướng dẫn điều khiển"
                 >
                   <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
                   <span className="hidden sm:inline">Hỗ trợ</span>
@@ -1075,7 +995,7 @@ export default function App() {
                   <button
                     type="button"
                     onClick={() => setIsDevDrawerOpen(true)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow"
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
                   >
                     <Wrench className="w-3.5 h-3.5 text-amber-400" />
                     <span className="hidden sm:inline">QA Suite</span>
@@ -1096,13 +1016,6 @@ export default function App() {
             {/* Mobile Expanded Menu Strip */}
             {isMenuExpanded && (
               <div className="mt-2.5 pt-2 border-t border-neutral-800 flex flex-wrap items-center justify-between gap-2 sm:hidden text-xs animate-fade-in">
-                <button
-                  onClick={toggleFullscreen}
-                  className="flex items-center gap-1.5 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-200 font-semibold text-xs"
-                >
-                  {isFullscreen ? <Minimize className="w-3.5 h-3.5 text-amber-400" /> : <Maximize className="w-3.5 h-3.5 text-amber-400" />}
-                  <span>{isFullscreen ? 'Thu nhỏ cửa sổ' : 'Toàn màn hình'}</span>
-                </button>
                 {isSuperAdmin && (
                   <button
                     onClick={() => {
@@ -1214,19 +1127,16 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Viewport Footer */}
-                <div className="bg-neutral-950 px-4 py-2.5 border-t border-neutral-800 flex flex-wrap items-center justify-between text-xs gap-2">
-                  <div className="flex items-center gap-3 text-neutral-400 text-[11px]">
-                    <span className="flex items-center gap-1 text-neutral-300">
-                      <Monitor className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Bàn phím PC:</span>
-                    </span>
-                    <span>Di chuyển: <strong className="text-white">WASD / Mũi tên</strong></span>
-                    <span>•</span>
-                    <span>Bắn: <strong className="text-white">Space / J</strong></span>
-                    <span>•</span>
-                    <span>Tạm dừng: <strong className="text-white">P / ESC</strong></span>
-                  </div>
+                {/* Viewport Footer (M7.3.4 V.3: Control guide moved to SupportModal) */}
+                <div className="bg-neutral-950 px-4 py-2 border-t border-neutral-800 flex flex-wrap items-center justify-between text-xs gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsSupportOpen(true)}
+                    className="flex items-center gap-1.5 text-neutral-400 hover:text-sky-400 text-[11px] transition-colors cursor-pointer"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Xem hướng dẫn điều khiển trong mục Hỗ trợ</span>
+                  </button>
                   <div className="text-[11px] text-neutral-500 font-mono">
                     60 FPS
                   </div>

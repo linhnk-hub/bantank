@@ -21,6 +21,29 @@ import {
   type SystemAudioConfigDocument,
 } from './musicManager.ts';
 import { getSessionBadgeInfo } from '../components/AuthSessionBanner.tsx';
+import {
+  AVATAR_LIMITS,
+  STORAGE_OVERWRITE_ENFORCEMENT_CLASSIFICATION,
+  PRODUCTION_BUCKET_OBJECT_VERSIONING_STATUS,
+  DEFAULT_STORAGE_IMAGE_FETCH_MODE,
+  validateCatalogAvatarFileClientSide,
+  evaluateUserProfileMetadataRule,
+  evaluateAvatarCatalogRule,
+  evaluateStorageCatalogRule,
+  buildCatalogStoragePath,
+  generateUniqueCatalogFileName,
+  allocateUniqueCatalogStoragePath,
+  syncHighestVersionMapsFromCatalogRecords,
+  SECOND_UPLOAD_SAME_PATH_STORAGE_RULE_STATUS,
+  getSecondUploadSamePathStorageEnforcementVerdict,
+  resolvePlayerAvatarUrl,
+  BlobObjectUrlCacheManager,
+  AvatarManager,
+  validatePendingUploadRecordNoSecrets,
+  BrowserPendingUploadPersistentStore,
+  DurableInMemoryPendingUploadStore,
+  type PendingCatalogMetadataSync,
+} from './avatarManager.ts';
 import { GameEngine } from './gameEngine.ts';
 import { TILE_TYPES as TileType } from './types.ts';
 import {
@@ -3610,14 +3633,11 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
         incoming: maxSkewRoom,
       });
 
-    // 2. Phân loại lỗi getRoom(roomCode) trong createRoom:
-    // 2a. Lỗi permission-denied đơn lẻ ở lần thử 1 (va chạm mã phòng đóng của người khác) -> thử mã thứ 2 và thành công
+    // 2. Phân loại lỗi getRoom(roomCode) trong createRoom (M7.3.4):
+    // 2a. Va chạm mã phòng thực tế ở lần thử 1 (existing !== null) -> thử mã thứ 2 và thành công
     const collisionStorage = new InMemoryCoopStorageAdapter();
     const collisionHost = new CoopOnlineManager(collisionStorage);
-    collisionStorage.setSimulatedGetRoomError(
-      new Error('FirebaseError: Missing or insufficient permissions (permission-denied)'),
-      1
-    );
+    collisionStorage.setSimulatedCollisionCount(1);
     const collisionRetryRes = collisionHost.createRoomSync(
       collisionStorage,
       validUser,
@@ -3627,7 +3647,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const collisionRetryOk =
       collisionRetryRes.success === true && collisionStorage.getReadCount() >= 2;
 
-    // 2b. Lỗi permission-denied cả 5 lần thử -> dừng ngay với PERMISSION_DENIED, tuyệt đối không gọi setRoom (writeCount == 0)
+    // 2b. Lỗi permission-denied -> dừng ngay lập tức ở lần thử 1 (readCount == 1, writeCount == 0), KHÔNG hiểu nhầm là va chạm mã phòng và KHÔNG lặp 5 lần
     const permStorage = new InMemoryCoopStorageAdapter();
     const permHost = new CoopOnlineManager(permStorage);
     permStorage.setSimulatedGetRoomError(
@@ -3643,7 +3663,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const permDeniedHandledOk =
       permDeniedRes.success === false &&
       permDeniedRes.errorCode === 'PERMISSION_DENIED' &&
-      permStorage.getReadCount() === 5 &&
+      permStorage.getReadCount() === 1 &&
       permStorage.getWriteCount() === 0 &&
       permHost.getCurrentRoom() === null;
 
@@ -3789,14 +3809,13 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       invalidAssetPathDeny === false &&
       capabilityUrlFieldDeny === false &&
       storageErrorsClassifiedOk === true &&
-      classifyGetRoomErrorDuringCreate({ code: 'permission-denied' }) ===
-        'COLLISION_OR_PERMISSION_DENIED';
+      classifyGetRoomErrorDuringCreate({ code: 'permission-denied' }) === 'PERMISSION_DENIED';
 
     results.push({
       id: 'M7_3_T32',
-      name: 'T32: M7.3.2.1 – Hardening createRoom (TTL 810s / 90s skew buffer, phân loại lỗi getRoom, rollback ABANDONED) & bảo mật nhạc nền',
+      name: 'T32: M7.3.2.1 / M7.3.4 – Hardening createRoom (TTL 810s / 90s skew buffer, dừng ngay khi permission-denied, retry khi collision, rollback ABANDONED) & bảo mật nhạc nền',
       passed,
-      details: `ttl810sOk=${bufferConfigOk && maxSkewPassesRule}, retryCollisionOk=${collisionRetryOk}, permDeniedAbortOk=${permDeniedHandledOk}, netAbortOk=${netErrHandledOk}, authAbortOk=${authErrHandledOk}, rollbackOk=${rollbackGuaranteed}, versionMonotonicOk=${updateHigherVersionOk && !updateSameOrLowerVersionDeny}, noCapabilityUrlOk=${!capabilityUrlFieldDeny}`,
+      details: `ttl810sOk=${bufferConfigOk && maxSkewPassesRule}, retryCollisionOk=${collisionRetryOk}, permDeniedAbortAttempt1Ok=${permDeniedHandledOk}, netAbortOk=${netErrHandledOk}, authAbortOk=${authErrHandledOk}, rollbackOk=${rollbackGuaranteed}, versionMonotonicOk=${updateHigherVersionOk && !updateSameOrLowerVersionDeny}, noCapabilityUrlOk=${!capabilityUrlFieldDeny}`,
     });
   }
 
@@ -3956,6 +3975,968 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T33: M7.3.3 – Kiểm thử 10 mục Local Music Assets on GitHub Pages (file >4MB, chặn sai định dạng/>25MB, đường dẫn audio/, cache-busting ?v=, fallback 8-bit & bảo toàn gameplay)',
       passed,
       details: `mp3Over4MbOk=${validLargeMp3Check.valid}, invalidFmtRejected=${!invalidFormatExeCheck.valid && !invalidFormatTxtCheck.valid}, over25MbRejected=${!oversizeFileCheck.valid}, safeAudioPathOk=${safePathCheck.valid && !traversalPathDeny.valid}, cacheBustingOk=${cacheBustingDistinct}, rulesV1V2Ok=${v1RuleOk && v2RuleOk}, fallback8BitOk=${fallbackOnInvalidPath}, gameplayIntact=${gameplayIntact}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T34: M7.3.5 – Kiểm thử Firebase Storage Shared Avatar Catalog (JPEG/PNG/WebP <= 5MB, <= 2048px),
+  //           Storage & Firestore Rules (/avatar_catalog/{avatarId}, /users/{uid}) & Fallback
+  // =========================================================================
+  {
+    const nowMs = 1_700_000_000_000;
+
+    // Helper tạo header PNG hợp lệ với chiều rộng w và chiều cao h
+    const makePngBytes = (w: number, h: number, byteLen: number = 128): Uint8Array => {
+      const b = new Uint8Array(Math.max(byteLen, 33));
+      const sig = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+      sig.forEach((v, i) => (b[i] = v));
+      b[8] = 0;
+      b[9] = 0;
+      b[10] = 0;
+      b[11] = 13;
+      b[12] = 0x49;
+      b[13] = 0x48;
+      b[14] = 0x44;
+      b[15] = 0x52;
+      b[16] = (w >>> 24) & 0xff;
+      b[17] = (w >>> 16) & 0xff;
+      b[18] = (w >>> 8) & 0xff;
+      b[19] = w & 0xff;
+      b[20] = (h >>> 24) & 0xff;
+      b[21] = (h >>> 16) & 0xff;
+      b[22] = (h >>> 8) & 0xff;
+      b[23] = h & 0xff;
+      b[24] = 8;
+      b[25] = 6;
+      return b;
+    };
+
+    // Helper tạo header JPEG hợp lệ với SOF0 (0xFF 0xC0) tại chiều rộng w và chiều cao h
+    const makeJpegBytes = (w: number, h: number, byteLen: number = 128): Uint8Array => {
+      const b = new Uint8Array(Math.max(byteLen, 32));
+      b[0] = 0xff;
+      b[1] = 0xd8;
+      b[2] = 0xff;
+      b[3] = 0xe0;
+      b[4] = 0x00;
+      b[5] = 0x10;
+      b[20] = 0xff;
+      b[21] = 0xc0;
+      b[22] = 0x00;
+      b[23] = 0x11;
+      b[24] = 0x08;
+      b[25] = (h >>> 8) & 0xff;
+      b[26] = h & 0xff;
+      b[27] = (w >>> 8) & 0xff;
+      b[28] = w & 0xff;
+      return b;
+    };
+
+    // Helper tạo header WebP (VP8X) hợp lệ với chiều rộng w và chiều cao h
+    const makeWebpBytes = (w: number, h: number, byteLen: number = 64): Uint8Array => {
+      const b = new Uint8Array(Math.max(byteLen, 32));
+      // 'RIFF'
+      b[0] = 0x52;
+      b[1] = 0x49;
+      b[2] = 0x46;
+      b[3] = 0x46;
+      // 'WEBP'
+      b[8] = 0x57;
+      b[9] = 0x45;
+      b[10] = 0x42;
+      b[11] = 0x50;
+      // 'VP8X'
+      b[12] = 0x56;
+      b[13] = 0x50;
+      b[14] = 0x38;
+      b[15] = 0x58;
+      const wMinus1 = Math.max(0, w - 1);
+      const hMinus1 = Math.max(0, h - 1);
+      b[24] = wMinus1 & 0xff;
+      b[25] = (wMinus1 >>> 8) & 0xff;
+      b[26] = (wMinus1 >>> 16) & 0xff;
+      b[27] = hMinus1 & 0xff;
+      b[28] = (hMinus1 >>> 8) & 0xff;
+      b[29] = (hMinus1 >>> 16) & 0xff;
+      return b;
+    };
+
+    const inspectCatalogBinary = (bytes: Uint8Array, fileName: string, mimeType: string) =>
+      validateCatalogAvatarFileClientSide({
+        fileName,
+        mimeType,
+        sizeBytes: bytes.byteLength,
+        arrayBuffer: bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength
+        ) as ArrayBuffer,
+      });
+
+    // 1. JPEG, PNG, WebP hợp lệ <= 5 MiB, <= 2048px -> PASS
+    const validPng = inspectCatalogBinary(makePngBytes(512, 512, 4096), 'tank_gold.png', 'image/png');
+    const validJpg = inspectCatalogBinary(makeJpegBytes(1024, 1024, 4096), 'tank_red.jpg', 'image/jpeg');
+    const validWebp = inspectCatalogBinary(makeWebpBytes(2048, 2048, 4096), 'tank_emerald.webp', 'image/webp');
+
+    // 2. Từ chối file > 5 MiB (5 * 1024 * 1024 + 1 bytes) -> PASS
+    const over5MiB = inspectCatalogBinary(
+      makePngBytes(512, 512, AVATAR_LIMITS.MAX_FILE_SIZE_BYTES + 1),
+      'large.png',
+      'image/png'
+    );
+    // 3. Từ chối ảnh > 2048 px (2049x1024 và 1024x2049) -> PASS
+    const overWidth = inspectCatalogBinary(makePngBytes(2049, 1024, 256), 'wide.png', 'image/png');
+    const overHeight = inspectCatalogBinary(makePngBytes(1024, 2049, 256), 'tall.png', 'image/png');
+
+    // 4. Từ chối SVG, HTML, EXE giả mạo đuôi .png/.jpg/.webp -> PASS
+    const svgSpoof = inspectCatalogBinary(
+      new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
+      'spoof.png',
+      'image/png'
+    );
+    const htmlSpoof = inspectCatalogBinary(
+      new TextEncoder().encode('<!DOCTYPE html><html><script>alert(1)</script></html>'),
+      'spoof.jpg',
+      'image/jpeg'
+    );
+    const exeSpoof = inspectCatalogBinary(
+      new Uint8Array([0x4d, 0x5a, 0x90, 0x00, 0x03, 0, 0, 0, 0, 0, 0, 0]),
+      'trojan.webp',
+      'image/webp'
+    );
+
+    // 5. Kiểm tra đủ 12 ca Storage Rules (M7.3.5.1 Mục V):
+    const storagePathJpgV1 = buildCatalogStoragePath('tank_01', 1, 'gold_tank.jpg');
+    const storagePathPngV1 = buildCatalogStoragePath('tank_01', 1, 'gold_tank.png');
+    const storagePathWebpV1 = buildCatalogStoragePath('tank_01', 1, 'gold_tank.webp');
+    const storagePathPngV2 = buildCatalogStoragePath('tank_01', 2, 'gold_tank_v2.png');
+
+    // (1) Super Admin upload JPEG hợp lệ: PASS
+    // (1) Super Admin upload JPEG hợp lệ (allow create, resource == null): PASS
+    const sr1AdminUploadJpegPass = evaluateStorageCatalogRule({
+      method: 'create',
+      storagePath: storagePathJpgV1,
+      authEmail: SUPER_ADMIN_EMAIL,
+      isVerifiedPersonalGmail: true,
+      signInProvider: 'google.com',
+      resourceExists: false,
+      contentType: 'image/jpeg',
+      sizeBytes: 4096,
+    });
+    // (2) Super Admin upload PNG hợp lệ (allow create, resource == null): PASS
+    const sr2AdminUploadPngPass = evaluateStorageCatalogRule({
+      method: 'create',
+      storagePath: storagePathPngV1,
+      authEmail: SUPER_ADMIN_EMAIL,
+      isVerifiedPersonalGmail: true,
+      signInProvider: 'google.com',
+      resourceExists: false,
+      contentType: 'image/png',
+      sizeBytes: 4096,
+    });
+    // (3) Super Admin upload WebP hợp lệ (allow create, resource == null): PASS
+    const sr3AdminUploadWebpPass = evaluateStorageCatalogRule({
+      method: 'create',
+      storagePath: storagePathWebpV1,
+      authEmail: SUPER_ADMIN_EMAIL,
+      isVerifiedPersonalGmail: true,
+      signInProvider: 'google.com',
+      resourceExists: false,
+      contentType: 'image/webp',
+      sizeBytes: 4096,
+    });
+    // (4) Người chơi thường upload (create): DENIED
+    const sr4PlayerUploadDenied = evaluateStorageCatalogRule({
+      method: 'create',
+      storagePath: storagePathPngV1,
+      authEmail: 'player1@gmail.com',
+      isVerifiedPersonalGmail: true,
+      signInProvider: 'google.com',
+      resourceExists: false,
+      contentType: 'image/png',
+      sizeBytes: 4096,
+    });
+    // (5) Người chưa đăng nhập đọc (get) hoặc upload (create): DENIED
+    const sr5UnauthGetAndUploadDenied =
+      evaluateStorageCatalogRule({
+        method: 'get',
+        storagePath: storagePathPngV1,
+        authEmail: null,
+        isVerifiedPersonalGmail: false,
+      }) === false &&
+      evaluateStorageCatalogRule({
+        method: 'create',
+        storagePath: storagePathPngV1,
+        authEmail: null,
+        isVerifiedPersonalGmail: false,
+        resourceExists: false,
+        contentType: 'image/png',
+        sizeBytes: 4096,
+      }) === false;
+    // (6) File > 5 MB: DENIED
+    const sr6Over5MbDenied = evaluateStorageCatalogRule({
+      method: 'create',
+      storagePath: storagePathPngV1,
+      authEmail: SUPER_ADMIN_EMAIL,
+      isVerifiedPersonalGmail: true,
+      resourceExists: false,
+      contentType: 'image/png',
+      sizeBytes: AVATAR_LIMITS.MAX_FILE_SIZE_BYTES + 1,
+    });
+    // (7) Sai contentType (SVG / GIF): DENIED
+    const sr7InvalidContentTypeDenied =
+      evaluateStorageCatalogRule({
+        method: 'create',
+        storagePath: storagePathPngV1,
+        authEmail: SUPER_ADMIN_EMAIL,
+        isVerifiedPersonalGmail: true,
+        resourceExists: false,
+        contentType: 'image/svg+xml',
+        sizeBytes: 4096,
+      }) === false &&
+      evaluateStorageCatalogRule({
+        method: 'create',
+        storagePath: storagePathPngV1,
+        authEmail: SUPER_ADMIN_EMAIL,
+        isVerifiedPersonalGmail: true,
+        resourceExists: false,
+        contentType: 'image/gif',
+        sizeBytes: 4096,
+      }) === false;
+    // (8) Đường dẫn ngoài avatar_catalog: DENIED (cả get và create)
+    const sr8OutsideCatalogDenied =
+      evaluateStorageCatalogRule({
+        method: 'get',
+        storagePath: 'user_uploads/uid_123/v1/avatar.png',
+        authEmail: SUPER_ADMIN_EMAIL,
+        isVerifiedPersonalGmail: true,
+      }) === false &&
+      evaluateStorageCatalogRule({
+        method: 'create',
+        storagePath: 'user_uploads/uid_123/v1/avatar.png',
+        authEmail: SUPER_ADMIN_EMAIL,
+        isVerifiedPersonalGmail: true,
+        resourceExists: false,
+        contentType: 'image/png',
+        sizeBytes: 4096,
+      }) === false;
+    // (9) Super Admin tạo version mới (v2, resourceExists == false): PASS
+    const sr9AdminCreateNewVersionPass = evaluateStorageCatalogRule({
+      method: 'create',
+      storagePath: storagePathPngV2,
+      authEmail: SUPER_ADMIN_EMAIL,
+      isVerifiedPersonalGmail: true,
+      resourceExists: false,
+      contentType: 'image/png',
+      sizeBytes: 4096,
+    });
+    // (10) Super Admin xóa object (allow delete, resourceExists == true, request.resource == null): PASS
+    const sr10AdminDeletePass = evaluateStorageCatalogRule({
+      method: 'delete',
+      storagePath: storagePathPngV1,
+      authEmail: SUPER_ADMIN_EMAIL,
+      isVerifiedPersonalGmail: true,
+      resourceExists: true,
+      contentType: null,
+      sizeBytes: null,
+    });
+    // (11) Người chơi xóa object: DENIED
+    const sr11PlayerDeleteDenied = evaluateStorageCatalogRule({
+      method: 'delete',
+      storagePath: storagePathPngV1,
+      authEmail: 'player1@gmail.com',
+      isVerifiedPersonalGmail: true,
+      resourceExists: true,
+      contentType: null,
+      sizeBytes: null,
+    });
+    // (12) UploadBytes lần thứ 2 vào cùng đường dẫn trên Storage Rules khi chưa chạy Emulator/Production:
+    //      M7.3.5.4 Mục II & III: Không giả lập DENIED trong bộ nhớ chỉ vì resource == null; phân loại rõ là 'NOT_PROVEN'
+    const sr12SecondUploadSamePathNotProven =
+      getSecondUploadSamePathStorageEnforcementVerdict(false) === 'NOT_PROVEN' &&
+      SECOND_UPLOAD_SAME_PATH_STORAGE_RULE_STATUS === 'NOT_PROVEN';
+    // (13) Super Admin cập nhật metadata object cũ (allow update: if false): DENIED
+    const sr13AdminUpdateMetadataDenied = evaluateStorageCatalogRule({
+      method: 'update',
+      storagePath: storagePathPngV1,
+      authEmail: SUPER_ADMIN_EMAIL,
+      isVerifiedPersonalGmail: true,
+      resourceExists: true,
+      contentType: 'image/png',
+      sizeBytes: 4096,
+    });
+    // (14) Liệt kê list / listAll (allow list: if false) đối với cả Admin và Người chơi: DENIED, trong khi get đối với Admin & Người chơi Gmail đã xác minh: PASS
+    const sr14GetPassAndListDenied =
+      evaluateStorageCatalogRule({
+        method: 'get',
+        storagePath: storagePathPngV1,
+        authEmail: SUPER_ADMIN_EMAIL,
+        isVerifiedPersonalGmail: true,
+        signInProvider: 'google.com',
+      }) === true &&
+      evaluateStorageCatalogRule({
+        method: 'get',
+        storagePath: storagePathPngV1,
+        authEmail: 'player1@gmail.com',
+        isVerifiedPersonalGmail: true,
+        signInProvider: 'google.com',
+      }) === true &&
+      evaluateStorageCatalogRule({
+        method: 'list',
+        storagePath: storagePathPngV1,
+        authEmail: SUPER_ADMIN_EMAIL,
+        isVerifiedPersonalGmail: true,
+        signInProvider: 'google.com',
+      }) === false &&
+      evaluateStorageCatalogRule({
+        method: 'list',
+        storagePath: storagePathPngV1,
+        authEmail: 'player1@gmail.com',
+        isVerifiedPersonalGmail: true,
+        signInProvider: 'google.com',
+      }) === false;
+
+    const all14StorageRulesOk =
+      sr1AdminUploadJpegPass === true &&
+      sr2AdminUploadPngPass === true &&
+      sr3AdminUploadWebpPass === true &&
+      sr4PlayerUploadDenied === false &&
+      sr5UnauthGetAndUploadDenied === true &&
+      sr6Over5MbDenied === false &&
+      sr7InvalidContentTypeDenied === true &&
+      sr8OutsideCatalogDenied === true &&
+      sr9AdminCreateNewVersionPass === true &&
+      sr10AdminDeletePass === true &&
+      sr11PlayerDeleteDenied === false &&
+      sr12SecondUploadSamePathNotProven === true &&
+      sr13AdminUpdateMetadataDenied === false &&
+      sr14GetPassAndListDenied === true;
+
+    // 6. Kiểm tra đủ các ca Firestore Rules cho /avatar_catalog/{avatarId} và /users/{uid} (M7.3.5.2 Mục V & VI):
+    const catalogDocV1 = {
+      avatarId: 'tank_01',
+      name: 'Chiến Xa Vàng',
+      storagePath: storagePathPngV1,
+      contentType: 'image/png',
+      fileSize: 4096,
+      version: 1,
+      sortOrder: 10,
+      isActive: true,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+      updatedBy: SUPER_ADMIN_EMAIL,
+    };
+
+    // FR-1: Người chơi đọc avatar_catalog: PASS
+    const fr1PlayerReadCatalogPass =
+      evaluateAvatarCatalogRule({
+        action: 'get',
+        avatarId: 'tank_01',
+        authEmail: 'player1@gmail.com',
+        isVerifiedPersonalGmail: true,
+        requestTimeMs: nowMs,
+      }) === true &&
+      evaluateAvatarCatalogRule({
+        action: 'list',
+        avatarId: 'tank_01',
+        authEmail: 'player1@gmail.com',
+        isVerifiedPersonalGmail: true,
+        requestTimeMs: nowMs,
+      }) === true;
+
+    const catalogLookup = (id: string) => ({
+      exists: id === 'tank_01' || id === 'tank_hidden',
+      isActive: id === 'tank_01',
+    });
+
+    // FR-2: Người chơi chọn avatar đang active (tách biệt với displayName): PASS
+    const fr2SelectActiveCatalogPass = evaluateUserProfileMetadataRule({
+      action: 'create',
+      uid: 'uid_p1',
+      authUid: 'uid_p1',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs,
+      incoming: {
+        uid: 'uid_p1',
+        avatarType: 'catalog',
+        avatarId: 'tank_01',
+        avatarUpdatedAt: nowMs,
+      },
+      catalogLookup,
+    });
+
+    // FR-3: Người chơi chọn avatar không active: DENIED
+    const fr3SelectInactiveCatalogDenied = evaluateUserProfileMetadataRule({
+      action: 'update',
+      uid: 'uid_p1',
+      authUid: 'uid_p1',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 1000,
+      existing: {
+        uid: 'uid_p1',
+        displayName: 'Commander P1',
+        avatarType: 'catalog',
+        avatarId: 'tank_01',
+        avatarUpdatedAt: nowMs,
+      },
+      incoming: {
+        uid: 'uid_p1',
+        displayName: 'Commander P1',
+        avatarType: 'catalog',
+        avatarId: 'tank_hidden',
+        avatarUpdatedAt: nowMs + 1000,
+      },
+      catalogLookup,
+    });
+
+    // FR-4: Người chơi sửa hồ sơ người khác: DENIED
+    const fr4OtherUserWriteDenied = evaluateUserProfileMetadataRule({
+      action: 'update',
+      uid: 'uid_p1',
+      authUid: 'uid_attacker',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 2000,
+      existing: {
+        uid: 'uid_p1',
+        displayName: 'Commander P1',
+        avatarType: 'catalog',
+        avatarId: 'tank_01',
+        avatarUpdatedAt: nowMs,
+      },
+      incoming: {
+        uid: 'uid_p1',
+        displayName: 'Commander P1',
+        avatarType: 'google',
+        avatarId: null,
+        avatarUpdatedAt: nowMs + 2000,
+      },
+      catalogLookup,
+    });
+
+    // FR-5: Người chơi sửa role/isSuperAdmin/email/xp/xu/rank: DENIED
+    const fr5PrivilegeFieldsDenied =
+      evaluateUserProfileMetadataRule({
+        action: 'create',
+        uid: 'uid_p1',
+        authUid: 'uid_p1',
+        isVerifiedPersonalGmail: true,
+        requestTimeMs: nowMs,
+        incoming: {
+          uid: 'uid_p1',
+          avatarType: 'google',
+          avatarId: null,
+          avatarUpdatedAt: nowMs,
+          role: 'SUPER_ADMIN',
+        },
+      }) === false &&
+      evaluateUserProfileMetadataRule({
+        action: 'update',
+        uid: 'uid_p1',
+        authUid: 'uid_p1',
+        isVerifiedPersonalGmail: true,
+        requestTimeMs: nowMs + 1000,
+        existing: {
+          uid: 'uid_p1',
+          avatarType: 'google',
+          avatarId: null,
+          avatarUpdatedAt: nowMs,
+          xp: 1200,
+          xu: 500,
+          rank: 'CAPTAIN',
+        },
+        incoming: {
+          uid: 'uid_p1',
+          avatarType: 'google',
+          avatarId: null,
+          avatarUpdatedAt: nowMs + 1000,
+          xp: 999999,
+          xu: 500,
+          rank: 'CAPTAIN',
+        },
+      }) === false;
+
+    // FR-6: Super Admin quản lý avatar_catalog (create/update/delete), người chơi thường bị chặn: PASS
+    const fr6AdminManageCatalogPass =
+      evaluateAvatarCatalogRule({
+        action: 'create',
+        avatarId: 'tank_01',
+        authEmail: SUPER_ADMIN_EMAIL,
+        isVerifiedPersonalGmail: true,
+        requestTimeMs: nowMs,
+        incoming: catalogDocV1,
+      }) === true &&
+      evaluateAvatarCatalogRule({
+        action: 'create',
+        avatarId: 'tank_01',
+        authEmail: 'player1@gmail.com',
+        isVerifiedPersonalGmail: true,
+        requestTimeMs: nowMs,
+      }) === false;
+
+    // FR-7: Bảo toàn toàn bộ trường hợp lệ cũ (xp, xu, rank, createdAt, displayName),
+    // chặn xóa trường cũ, và tách quyền chỉnh displayName khỏi quyền chọn avatar: PASS
+    const legacyExistingProfile = {
+      uid: 'uid_p1',
+      displayName: 'Veteran P1',
+      avatarType: 'google',
+      avatarId: null,
+      avatarUpdatedAt: nowMs - 10_000,
+      xp: 4500,
+      xu: 1800,
+      rank: 'MAJOR',
+      createdAt: nowMs - 86_400_000,
+    };
+    const fr7aUpdateAvatarOnlyPass = evaluateUserProfileMetadataRule({
+      action: 'update',
+      uid: 'uid_p1',
+      authUid: 'uid_p1',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 2000,
+      existing: legacyExistingProfile,
+      incoming: {
+        ...legacyExistingProfile,
+        avatarType: 'catalog',
+        avatarId: 'tank_01',
+        avatarUpdatedAt: nowMs + 2000,
+      },
+      catalogLookup,
+    });
+    const fr7bUpdateDisplayNameOnlyPass = evaluateUserProfileMetadataRule({
+      action: 'update',
+      uid: 'uid_p1',
+      authUid: 'uid_p1',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 2000,
+      existing: legacyExistingProfile,
+      incoming: {
+        ...legacyExistingProfile,
+        displayName: 'Commander Elite',
+      },
+      catalogLookup,
+    });
+    // Gộp cả đổi displayName và đổi avatarId trong cùng 1 thao tác bị từ chối do tách quyền:
+    const fr7cCombinedNameAndAvatarDenied = evaluateUserProfileMetadataRule({
+      action: 'update',
+      uid: 'uid_p1',
+      authUid: 'uid_p1',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 2000,
+      existing: legacyExistingProfile,
+      incoming: {
+        ...legacyExistingProfile,
+        displayName: 'Commander Elite',
+        avatarType: 'catalog',
+        avatarId: 'tank_01',
+        avatarUpdatedAt: nowMs + 2000,
+      },
+      catalogLookup,
+    });
+    // Cố tình xóa mất trường xp của hồ sơ cũ bị từ chối:
+    const fr7dDropExistingFieldDenied = evaluateUserProfileMetadataRule({
+      action: 'update',
+      uid: 'uid_p1',
+      authUid: 'uid_p1',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 2000,
+      existing: legacyExistingProfile,
+      incoming: {
+        uid: 'uid_p1',
+        displayName: 'Veteran P1',
+        avatarType: 'catalog',
+        avatarId: 'tank_01',
+        avatarUpdatedAt: nowMs + 2000,
+      },
+      catalogLookup,
+    });
+
+    // Cố tình thay đổi uid sang giá trị khác hoặc thêm uid vào tài liệu cũ không có uid đều bị từ chối (M7.3.5.3 Mục V):
+    const fr7eMutateUidDenied = evaluateUserProfileMetadataRule({
+      action: 'update',
+      uid: 'uid_p1',
+      authUid: 'uid_p1',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 2000,
+      existing: legacyExistingProfile,
+      incoming: {
+        ...legacyExistingProfile,
+        uid: 'uid_other_spoof',
+        avatarType: 'catalog',
+        avatarId: 'tank_01',
+        avatarUpdatedAt: nowMs + 2000,
+      },
+      catalogLookup,
+    });
+
+    const legacyWithoutUidProfile = {
+      displayName: 'Legacy No UID',
+      avatarType: 'google',
+      avatarId: null,
+      avatarUpdatedAt: nowMs - 10_000,
+      xp: 3200,
+      xu: 900,
+      rank: 'CAPTAIN',
+      createdAt: nowMs - 86_400_000,
+    };
+    // Tài liệu cũ không có trường uid: cập nhật avatar hoặc displayName mà không thêm uid -> PASS
+    const fr7fLegacyNoUidUpdateAvatarPass = evaluateUserProfileMetadataRule({
+      action: 'update',
+      uid: 'uid_p1',
+      authUid: 'uid_p1',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 2000,
+      existing: legacyWithoutUidProfile,
+      incoming: {
+        ...legacyWithoutUidProfile,
+        avatarType: 'catalog',
+        avatarId: 'tank_01',
+        avatarUpdatedAt: nowMs + 2000,
+      },
+      catalogLookup,
+    });
+    const fr7gLegacyNoUidUpdateNamePass = evaluateUserProfileMetadataRule({
+      action: 'update',
+      uid: 'uid_p1',
+      authUid: 'uid_p1',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 2000,
+      existing: legacyWithoutUidProfile,
+      incoming: {
+        ...legacyWithoutUidProfile,
+        displayName: 'Legacy Renamed',
+      },
+      catalogLookup,
+    });
+    // Tài liệu cũ không có trường uid nhưng request cố tình tự thêm trường uid vào affectedKeys() -> DENIED
+    const fr7hLegacyNoUidInjectUidDenied = evaluateUserProfileMetadataRule({
+      action: 'update',
+      uid: 'uid_p1',
+      authUid: 'uid_p1',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 2000,
+      existing: legacyWithoutUidProfile,
+      incoming: {
+        ...legacyWithoutUidProfile,
+        uid: 'uid_p1',
+        avatarType: 'catalog',
+        avatarId: 'tank_01',
+        avatarUpdatedAt: nowMs + 2000,
+      },
+      catalogLookup,
+    });
+    // M7.3.5.4 Mục IV & V (Case 3): User A (uid_attacker) cố cập nhật hồ sơ User B (uid_p1) là hồ sơ cũ KHÔNG có trường uid -> DENIED
+    const fr7iOtherUserLegacyNoUidWriteDenied =
+      evaluateUserProfileMetadataRule({
+        action: 'update',
+        uid: 'uid_p1',
+        authUid: 'uid_attacker',
+        isVerifiedPersonalGmail: true,
+        requestTimeMs: nowMs + 2000,
+        existing: legacyWithoutUidProfile,
+        incoming: {
+          ...legacyWithoutUidProfile,
+          avatarType: 'catalog',
+          avatarId: 'tank_01',
+          avatarUpdatedAt: nowMs + 2000,
+        },
+        catalogLookup,
+      }) === false &&
+      evaluateUserProfileMetadataRule({
+        action: 'update',
+        uid: 'uid_p1',
+        authUid: 'uid_attacker',
+        isVerifiedPersonalGmail: true,
+        requestTimeMs: nowMs + 2000,
+        existing: legacyWithoutUidProfile,
+        incoming: {
+          ...legacyWithoutUidProfile,
+          displayName: 'Hacked By Attacker',
+        },
+        catalogLookup,
+      }) === false;
+
+    const fr7PreserveAndSeparationOk =
+      fr7aUpdateAvatarOnlyPass === true &&
+      fr7bUpdateDisplayNameOnlyPass === true &&
+      fr7cCombinedNameAndAvatarDenied === false &&
+      fr7dDropExistingFieldDenied === false &&
+      fr7eMutateUidDenied === false &&
+      fr7fLegacyNoUidUpdateAvatarPass === true &&
+      fr7gLegacyNoUidUpdateNamePass === true &&
+      fr7hLegacyNoUidInjectUidDenied === false &&
+      fr7iOtherUserLegacyNoUidWriteDenied === true;
+
+    const all7FirestoreRulesOk =
+      fr1PlayerReadCatalogPass === true &&
+      fr2SelectActiveCatalogPass === true &&
+      fr3SelectInactiveCatalogDenied === false &&
+      fr4OtherUserWriteDenied === false &&
+      fr5PrivilegeFieldsDenied === true &&
+      fr6AdminManageCatalogPass === true &&
+      fr7PreserveAndSeparationOk === true;
+
+    // 7. Kiểm tra chống tái sử dụng storagePath ở tầng ứng dụng, tên file gắn UUID & khởi tạo highestVersion từ catalog hiện có (M7.3.5.4 Mục III):
+    const uuidFile1 = generateUniqueCatalogFileName('gold.png', 'image/png');
+    const uuidFile2 = generateUniqueCatalogFileName('gold.png', 'image/png');
+    const usedPathsSet = new Set<string>(['avatar_catalog/tank_01/v1/gold.png']);
+    const allocCollision = allocateUniqueCatalogStoragePath({
+      avatarId: 'tank_01',
+      existingVersion: 0,
+      highestKnownVersion: 0,
+      rawFileName: 'gold.png',
+      contentType: 'image/png',
+      usedStoragePaths: usedPathsSet,
+      useUuidFileName: false,
+    });
+    // Kiểm tra khởi tạo highestVersionMap từ dữ liệu catalog hiện có khi vừa tải lại trang (RAM trống):
+    const reloadedHighestMap = new Map<string, number>();
+    const reloadedUsedPaths = new Set<string>();
+    syncHighestVersionMapsFromCatalogRecords({
+      catalogRecords: [
+        {
+          avatarId: 'tank_01',
+          version: 4,
+          storagePath: 'avatar_catalog/tank_01/v4/gold_v4.png',
+        },
+      ],
+      highestVersionMap: reloadedHighestMap,
+      usedPathsSet: reloadedUsedPaths,
+    });
+    const allocAfterReload = allocateUniqueCatalogStoragePath({
+      avatarId: 'tank_01',
+      existingVersion: 0,
+      highestKnownVersion: reloadedHighestMap.get('tank_01') ?? 0,
+      rawFileName: 'gold.png',
+      contentType: 'image/png',
+      usedStoragePaths: reloadedUsedPaths,
+      useUuidFileName: true,
+    });
+    const appImmutabilityAndModeOk =
+      STORAGE_OVERWRITE_ENFORCEMENT_CLASSIFICATION ===
+        'APP-LEVEL IMMUTABLE PATH – BEST EFFORT, NOT ABSOLUTE STORAGE ENFORCEMENT' &&
+      PRODUCTION_BUCKET_OBJECT_VERSIONING_STATUS === 'UNKNOWN' &&
+      SECOND_UPLOAD_SAME_PATH_STORAGE_RULE_STATUS === 'NOT_PROVEN' &&
+      DEFAULT_STORAGE_IMAGE_FETCH_MODE === 'COMPAT_DOWNLOAD_URL' &&
+      AvatarManager.getInstance().getStorageFetchMode() === 'COMPAT_DOWNLOAD_URL' &&
+      uuidFile1 !== uuidFile2 &&
+      AVATAR_LIMITS.FILE_NAME_REGEX.test(uuidFile1) &&
+      allocCollision.version === 2 &&
+      allocCollision.storagePath !== 'avatar_catalog/tank_01/v1/gold.png' &&
+      AVATAR_LIMITS.STORAGE_PATH_REGEX.test(allocCollision.storagePath) &&
+      reloadedHighestMap.get('tank_01') === 4 &&
+      reloadedUsedPaths.has('avatar_catalog/tank_01/v4/gold_v4.png') &&
+      allocAfterReload.version === 5;
+
+    // 8. Kiểm tra BlobObjectUrlCacheManager quản lý cache & thu hồi URL đúng lúc (chống rò rỉ bộ nhớ):
+    const revokedUrls: string[] = [];
+    const blobCache = new BlobObjectUrlCacheManager(4, (u) => revokedUrls.push(u));
+    blobCache.set('avatar_catalog/tank_01/v1/a.png', 'blob:mock-v1', true, 1000);
+    blobCache.set('avatar_catalog/tank_01/v2/a.png', 'blob:mock-v2', true, 2000);
+    const obsoleteRevoked = blobCache.revokeObsoleteVersionsForAvatar(
+      'tank_01',
+      'avatar_catalog/tank_01/v2/a.png'
+    );
+    const allRevokedOnSignOut = blobCache.revokeAll();
+    const blobCacheLifecycleOk =
+      obsoleteRevoked === 1 &&
+      revokedUrls.includes('blob:mock-v1') &&
+      allRevokedOnSignOut === 1 &&
+      revokedUrls.includes('blob:mock-v2') &&
+      blobCache.size() === 0;
+
+    // 9. Kiểm tra tự động fallback về Ảnh Google khi avatar danh mục bị ẩn (isActive == false):
+    const fallbackUrl = resolvePlayerAvatarUrl({
+      uid: 'uid_p1',
+      userMeta: {
+        uid: 'uid_p1',
+        avatarType: 'catalog',
+        avatarId: 'tank_hidden',
+        avatarUpdatedAtMs: nowMs,
+      },
+      catalogItems: [
+        {
+          avatarId: 'tank_hidden',
+          name: 'Tank Tạm Ẩn',
+          storagePath: 'avatar_catalog/tank_hidden/v1/tank.png',
+          contentType: 'image/png',
+          fileSize: 4096,
+          version: 1,
+          sortOrder: 10,
+          isActive: false,
+          createdAtMs: nowMs,
+          updatedAtMs: nowMs,
+          updatedBy: SUPER_ADMIN_EMAIL,
+        },
+      ],
+      resolvedStorageUrls: new Map([
+        ['avatar_catalog/tank_hidden/v1/tank.png', 'https://firebasestorage.example.com/tank.png'],
+      ]),
+      photoURL: 'https://lh3.googleusercontent.com/a/default-user',
+    });
+
+    const activeBadge = getSessionBadgeInfo('ACTIVE', false, false, true);
+    const acquiringBadge = getSessionBadgeInfo('ACQUIRING', false, false, true);
+    const cleanBadgeOnNormalSync =
+      activeBadge.label === '' &&
+      !acquiringBadge.label.includes('Chưa đồng bộ kết nối máy chủ Firestore') &&
+      !acquiringBadge.label.includes('Đang đồng bộ');
+
+    const passed =
+      validPng.valid === true &&
+      validJpg.valid === true &&
+      validWebp.valid === true &&
+      over5MiB.valid === false &&
+      overWidth.valid === false &&
+      overHeight.valid === false &&
+      svgSpoof.valid === false &&
+      htmlSpoof.valid === false &&
+      exeSpoof.valid === false &&
+      all14StorageRulesOk === true &&
+      all7FirestoreRulesOk === true &&
+      appImmutabilityAndModeOk === true &&
+      blobCacheLifecycleOk === true &&
+      fallbackUrl === 'https://lh3.googleusercontent.com/a/default-user' &&
+      cleanBadgeOnNormalSync === true;
+
+    results.push({
+      id: 'M7_3_T34',
+      name: 'T34: M7.3.5.3 – Kiểm thử 14 ca Storage Rules, UID bất biến (không trong affectedKeys), chống tái sử dụng path & chế độ tải COMPAT_DOWNLOAD_URL / STRICT_BLOB',
+      passed,
+      details: `formatsOk=${validPng.valid && validJpg.valid && validWebp.valid}, storage14CasesOk=${all14StorageRulesOk}, firestoreUidImmutableOk=${all7FirestoreRulesOk}, appImmutablePathOk=${appImmutabilityAndModeOk}, blobCacheOk=${blobCacheLifecycleOk}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T35: M7.3.5.5 – Kiểm thử Unit cho bản ghi phục hồi Pending Upload qua F5 (cấm lưu token/URL/Base64 & tổng hợp version từ 3 nguồn)
+  // =========================================================================
+  {
+    const nowMs = 1_700_000_000_000;
+    const validBaseRecord: PendingCatalogMetadataSync = {
+      ownerUid: 'uid_super_admin',
+      avatarId: 'tank_phoenix',
+      name: 'Chiến Xa Phượng Hoàng',
+      storagePath: 'avatar_catalog/tank_phoenix/v1/12345678-1234-4123-8123-123456789abc_phoenix.png',
+      fileName: '12345678-1234-4123-8123-123456789abc_phoenix.png',
+      contentType: 'image/png',
+      fileSize: 4096,
+      version: 1,
+      sortOrder: 10,
+      isActive: true,
+      updatedBy: SUPER_ADMIN_EMAIL,
+      isUpdate: false,
+      uploadOperationId: 'op_uuid_1234567890',
+      createdAt: nowMs,
+      status: 'UPLOAD_IN_PROGRESS',
+      failedAtMs: nowMs,
+      errorMessage: '',
+    };
+
+    const checkValidInProgress = validatePendingUploadRecordNoSecrets(validBaseRecord);
+    const checkValidConfirmed = validatePendingUploadRecordNoSecrets({
+      ...validBaseRecord,
+      status: 'UPLOAD_CONFIRMED_METADATA_PENDING',
+    });
+    const checkValidIndeterminate = validatePendingUploadRecordNoSecrets({
+      ...validBaseRecord,
+      status: 'UPLOAD_INDETERMINATE',
+    });
+
+    // Kiểm tra từ chối tuyệt đối khi bản ghi chứa downloadURL, token, idToken, oauthToken, base64, nhị phân:
+    const rejectDownloadUrl = validatePendingUploadRecordNoSecrets({
+      ...validBaseRecord,
+      downloadURL: 'https://firebasestorage.googleapis.com/v0/b/bantank/o/a.png?alt=media&token=123',
+    });
+    const rejectCapabilityToken = validatePendingUploadRecordNoSecrets({
+      ...validBaseRecord,
+      token: 'secret_capability_token_xyz',
+    });
+    const rejectIdToken = validatePendingUploadRecordNoSecrets({
+      ...validBaseRecord,
+      idToken: 'eyJhbGciOiJSUzI1NiIsImtpZCI6IjEifQ.payload.sig',
+    });
+    const rejectOauthToken = validatePendingUploadRecordNoSecrets({
+      ...validBaseRecord,
+      oauthToken: 'ya29.a0AfH6SMBx...',
+    });
+    const rejectBase64InError = validatePendingUploadRecordNoSecrets({
+      ...validBaseRecord,
+      errorMessage: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUA',
+    });
+    const rejectBinaryBuffer = validatePendingUploadRecordNoSecrets({
+      ...validBaseRecord,
+      arrayBuffer: new Uint8Array([1, 2, 3]).buffer,
+    });
+
+    // Kiểm tra tổng hợp version và storagePath từ cả 3 nguồn (Firestore catalog, pending records, used paths):
+    const aggHighest = new Map<string, number>();
+    const aggPaths = new Set<string>();
+    syncHighestVersionMapsFromCatalogRecords({
+      catalogRecords: [
+        {
+          avatarId: 'tank_phoenix',
+          version: 2,
+          storagePath: 'avatar_catalog/tank_phoenix/v2/p2.png',
+        },
+      ],
+      pendingRecords: [
+        {
+          ...validBaseRecord,
+          version: 3,
+          storagePath: 'avatar_catalog/tank_phoenix/v3/p3.png',
+          status: 'UPLOAD_INDETERMINATE',
+        },
+      ],
+      persistedUsedPaths: [
+        {
+          avatarId: 'tank_phoenix',
+          version: 4,
+          storagePath: 'avatar_catalog/tank_phoenix/v4/p4.png',
+          uploadOperationId: 'op_v4_12345678',
+          recordedAt: nowMs,
+        },
+      ],
+      highestVersionMap: aggHighest,
+      usedPathsSet: aggPaths,
+    });
+
+    const nextAlloc = allocateUniqueCatalogStoragePath({
+      avatarId: 'tank_phoenix',
+      existingVersion: 2,
+      highestKnownVersion: aggHighest.get('tank_phoenix') ?? 0,
+      rawFileName: 'phoenix.png',
+      contentType: 'image/png',
+      usedStoragePaths: aggPaths,
+      useUuidFileName: true,
+    });
+
+    const browserStore = new BrowserPendingUploadPersistentStore();
+    const durableMemStore = new DurableInMemoryPendingUploadStore();
+    const backendTypeOk =
+      (browserStore.getBackendType() === 'INDEXED_DB' ||
+        (browserStore.getBackendType() === 'LOCAL_STORAGE_FALLBACK' &&
+          Boolean(browserStore.getFallbackTechnicalReason()))) &&
+      durableMemStore.getBackendType() === 'DURABLE_MEMORY_SIMULATION';
+
+    const passed =
+      checkValidInProgress.valid === true &&
+      checkValidConfirmed.valid === true &&
+      checkValidIndeterminate.valid === true &&
+      rejectDownloadUrl.valid === false &&
+      rejectCapabilityToken.valid === false &&
+      rejectIdToken.valid === false &&
+      rejectOauthToken.valid === false &&
+      rejectBase64InError.valid === false &&
+      rejectBinaryBuffer.valid === false &&
+      aggHighest.get('tank_phoenix') === 4 &&
+      aggPaths.has('avatar_catalog/tank_phoenix/v2/p2.png') &&
+      aggPaths.has('avatar_catalog/tank_phoenix/v3/p3.png') &&
+      aggPaths.has('avatar_catalog/tank_phoenix/v4/p4.png') &&
+      nextAlloc.version === 5 &&
+      backendTypeOk === true;
+
+    results.push({
+      id: 'M7_3_T35',
+      name: 'T35: M7.3.5.5 – Kiểm thử schema bản ghi Pending Upload qua F5 (chặn tuyệt đối URL/Token/Base64) & tổng hợp lịch sử version từ 3 nguồn',
+      passed,
+      details: `validStates=${checkValidInProgress.valid && checkValidConfirmed.valid && checkValidIndeterminate.valid}, secretsRejected=${!rejectDownloadUrl.valid && !rejectCapabilityToken.valid && !rejectIdToken.valid && !rejectOauthToken.valid && !rejectBase64InError.valid && !rejectBinaryBuffer.valid}, nextVerFrom3Sources=${nextAlloc.version}`,
     });
   }
 

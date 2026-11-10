@@ -6,6 +6,7 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 export const firebaseConfig = {
   apiKey: "AIzaSyCDYsQ0hZfMEoV7-9KlD6gfgHxjFICGW_g",
@@ -20,6 +21,7 @@ export const firebaseConfig = {
 let appInstance: FirebaseApp;
 let authInstance: Auth;
 let dbInstance: Firestore;
+let storageInstance: FirebaseStorage;
 
 export function getFirebaseApp(): FirebaseApp {
   if (!appInstance) {
@@ -46,6 +48,16 @@ export function getFirebaseDb(): Firestore {
     dbInstance = getFirestore(getFirebaseApp(), '(default)');
   }
   return dbInstance;
+}
+
+export function getFirebaseStorage(): FirebaseStorage {
+  if (!storageInstance) {
+    storageInstance = getStorage(
+      getFirebaseApp(),
+      `gs://${firebaseConfig.storageBucket}`
+    );
+  }
+  return storageInstance;
 }
 
 export interface FirestoreErrorInfo {
