@@ -7,8 +7,14 @@ import {
   SUPER_ADMIN_EMAIL,
   isSuperAdminUser,
   getUserDisplayLabel,
+  resolveUserRole,
+  setVerifiedServerRoleForUid,
+  clearVerifiedServerRoles,
+  getRoleNameFrameClasses,
+  getRoleDisplayInfo,
   type ValidatedUserAccount,
 } from './authManager.ts';
+import { SoundManager } from './audio.ts';
 import {
   MusicManager,
   InMemorySharedMusicCloudAdapter,
@@ -45,6 +51,7 @@ import {
   InMemoryAvatarCatalogSystem,
   getGooglePhotoUrlForUser,
   classifyUserProfileFirestoreError,
+  verifyStorageObjectBeforeMetadataActivation,
   type PendingCatalogMetadataSync,
 } from './avatarManager.ts';
 import { GameEngine } from './gameEngine.ts';
@@ -55,6 +62,13 @@ import {
   createInMemoryP2PChannelPair,
   generateRoomCode,
   validateRoomCodeFormat,
+  validateRoomPassword,
+  computeRoomPasswordDigest,
+  encodeHostDisplayNameWithLock,
+  decodeHostDisplayNameAndLock,
+  verifyRoomPassword,
+  getPublicQuickJoinSlotCodesForBucket,
+  getPublicQuickJoinCandidateCodes,
   sanitizeAndValidateInputPacket,
   buildAuthoritativeSnapshot,
   evaluateJoinRoomCandidate,
@@ -5122,6 +5136,620 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     });
   }
 
+  // =========================================================================
+  // M7_3_T37: M7.3.7 (Hạng mục 1, 2, 3, 4) – Xác minh 5 bước Storage Object trước khi kích hoạt metadata,
+  //           phân biệt màu khung tên theo quyền (SUPER_ADMIN/ADMIN/MOD/PLAYER) & Single-BGM Audio/MusicManager
+  // =========================================================================
+  {
+    const testPathV2 = 'avatar_catalog/tank_gold/v2/gold_v2.png';
+    // 1. Hạng mục 1: Kiểm tra 5 điều kiện verifyStorageObjectBeforeMetadataActivation
+    const vOk = verifyStorageObjectBeforeMetadataActivation({
+      objectExists: true,
+      storagePath: testPathV2,
+      actualSize: 4096,
+      expectedFileSize: 4096,
+      actualContentType: 'image/png',
+      expectedContentType: 'image/png',
+      customMetadata: {
+        uploadOperationId: 'op_123',
+        avatarId: 'tank_gold',
+        version: '2',
+      },
+      expectedUploadOperationId: 'op_123',
+      expectedAvatarId: 'tank_gold',
+      expectedVersion: 2,
+      imageDecodable: true,
+    });
+    const vMissingObj = verifyStorageObjectBeforeMetadataActivation({
+      objectExists: false,
+      storagePath: testPathV2,
+      actualSize: 0,
+      expectedFileSize: 4096,
+      actualContentType: 'image/png',
+      expectedContentType: 'image/png',
+      customMetadata: null,
+      expectedUploadOperationId: 'op_123',
+      expectedAvatarId: 'tank_gold',
+      expectedVersion: 2,
+      imageDecodable: true,
+    });
+    const vBadSize = verifyStorageObjectBeforeMetadataActivation({
+      objectExists: true,
+      storagePath: testPathV2,
+      actualSize: 2048,
+      expectedFileSize: 4096,
+      actualContentType: 'image/png',
+      expectedContentType: 'image/png',
+      customMetadata: {
+        uploadOperationId: 'op_123',
+        avatarId: 'tank_gold',
+        version: '2',
+      },
+      expectedUploadOperationId: 'op_123',
+      expectedAvatarId: 'tank_gold',
+      expectedVersion: 2,
+      imageDecodable: true,
+    });
+    const vBadMime = verifyStorageObjectBeforeMetadataActivation({
+      objectExists: true,
+      storagePath: testPathV2,
+      actualSize: 4096,
+      expectedFileSize: 4096,
+      actualContentType: 'text/html',
+      expectedContentType: 'image/png',
+      customMetadata: {
+        uploadOperationId: 'op_123',
+        avatarId: 'tank_gold',
+        version: '2',
+      },
+      expectedUploadOperationId: 'op_123',
+      expectedAvatarId: 'tank_gold',
+      expectedVersion: 2,
+      imageDecodable: true,
+    });
+    const vBadOpId = verifyStorageObjectBeforeMetadataActivation({
+      objectExists: true,
+      storagePath: testPathV2,
+      actualSize: 4096,
+      expectedFileSize: 4096,
+      actualContentType: 'image/png',
+      expectedContentType: 'image/png',
+      customMetadata: {
+        uploadOperationId: 'op_other_999',
+        avatarId: 'tank_gold',
+        version: '2',
+      },
+      expectedUploadOperationId: 'op_123',
+      expectedAvatarId: 'tank_gold',
+      expectedVersion: 2,
+      imageDecodable: true,
+    });
+    const vUndecodable = verifyStorageObjectBeforeMetadataActivation({
+      objectExists: true,
+      storagePath: testPathV2,
+      actualSize: 4096,
+      expectedFileSize: 4096,
+      actualContentType: 'image/png',
+      expectedContentType: 'image/png',
+      customMetadata: {
+        uploadOperationId: 'op_123',
+        avatarId: 'tank_gold',
+        version: '2',
+      },
+      expectedUploadOperationId: 'op_123',
+      expectedAvatarId: 'tank_gold',
+      expectedVersion: 2,
+      imageDecodable: false,
+    });
+    const storage5StepVerificationOk =
+      vOk.verified === true &&
+      vMissingObj.verified === false &&
+      vBadSize.verified === false &&
+      vBadMime.verified === false &&
+      vBadOpId.verified === false &&
+      vUndecodable.verified === false;
+
+    // 2. Hạng mục 2: Kiểm tra phân quyền và màu khung tên theo quyền (SUPER_ADMIN/ADMIN/MOD/PLAYER) & chống giả mạo từ client
+    clearVerifiedServerRoles();
+    const superAdminRole = resolveUserRole({
+      uid: 'uid_sa',
+      email: SUPER_ADMIN_EMAIL,
+      emailVerified: true,
+      providerIds: ['google.com'],
+    });
+    // Cố tình truyền đối tượng có trường giả mạo nhưng chưa được server xác thực -> vẫn phải là PLAYER
+    const spoofedClientObj: any = {
+      uid: 'uid_spoof',
+      email: 'normal.user@gmail.com',
+      emailVerified: true,
+      providerIds: ['google.com'],
+      role: 'SUPER_ADMIN',
+      isSuperAdmin: true,
+    };
+    const roleBeforeServerSync = resolveUserRole(spoofedClientObj);
+    setVerifiedServerRoleForUid('uid_admin_1', 'ADMIN');
+    setVerifiedServerRoleForUid('uid_mod_1', 'MOD');
+    // Cố tình gán SUPER_ADMIN qua setVerifiedServerRoleForUid cho tài khoản thường -> phải bị bỏ qua (chỉ linhnk.online@gmail.com mới là SUPER_ADMIN)
+    setVerifiedServerRoleForUid('uid_spoof', 'SUPER_ADMIN');
+    const adminRole = resolveUserRole({
+      uid: 'uid_admin_1',
+      email: 'admin1@gmail.com',
+      emailVerified: true,
+      providerIds: ['google.com'],
+    });
+    const modRole = resolveUserRole({
+      uid: 'uid_mod_1',
+      email: 'mod1@gmail.com',
+      emailVerified: true,
+      providerIds: ['google.com'],
+    });
+    const spoofedSuperAdminBlocked = resolveUserRole(spoofedClientObj);
+    const frameColorsOk =
+      superAdminRole === 'SUPER_ADMIN' &&
+      roleBeforeServerSync === 'PLAYER' &&
+      adminRole === 'ADMIN' &&
+      modRole === 'MOD' &&
+      spoofedSuperAdminBlocked === 'PLAYER' &&
+      getRoleNameFrameClasses('SUPER_ADMIN').includes('border-red-500') &&
+      getRoleNameFrameClasses('ADMIN').includes('border-emerald-500') &&
+      getRoleNameFrameClasses('MOD').includes('border-sky-500') &&
+      getRoleNameFrameClasses('PLAYER').includes('border-neutral-700/80') &&
+      getRoleDisplayInfo('SUPER_ADMIN').label === 'Super Admin';
+    clearVerifiedServerRoles();
+
+    // 3. Hạng mục 3: Kiểm tra đồng bộ Single-BGM giữa MusicManager và SoundManager
+    const sm = SoundManager.getInstance();
+    sm.stopBgm();
+    sm.setCustomBgmActive(true);
+    // Khi customBgmActive = true, gọi startBgm() hoặc updateSettings({ bgmEnabled: true }) của SoundManager KHÔNG ĐƯỢC tự bật nhạc 8-bit procedural
+    sm.startBgm();
+    sm.updateSettings({ bgmEnabled: true });
+    const proceduralBlockedWhenCustomActive =
+      sm.isCustomBgmActive() === true && sm.isProceduralBgmPlaying() === false;
+    sm.setCustomBgmActive(false);
+    sm.stopBgm();
+
+    const passed =
+      storage5StepVerificationOk && frameColorsOk && proceduralBlockedWhenCustomActive;
+
+    results.push({
+      id: 'M7_3_T37',
+      name: 'T37: M7.3.7 (Hạng mục 1, 2, 3) – Xác minh 5 bước Storage Object, phân biệt màu khung tên theo quyền (SUPER_ADMIN/ADMIN/MOD/PLAYER) & chặn phát chồng nhạc nền',
+      passed,
+      details: `storage5StepOk=${storage5StepVerificationOk}, roleFramesOk=${frameColorsOk}, singleBgmGuardOk=${proceduralBlockedWhenCustomActive}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T38: M7.3.7 (Hạng mục 5) – Luồng Tạo phòng (Có mật khẩu mặc định / Không mật khẩu)
+  //           & Tham gia phòng (Vào nhanh / Vào bằng mã phòng) + Đồng bộ độ khó phòng
+  // =========================================================================
+  {
+    const nowMs = 1_700_000_000_000;
+    const storage = new InMemoryCoopStorageAdapter();
+    const hostA = new CoopOnlineManager(storage);
+    const hostB = new CoopOnlineManager(storage);
+    const guest1 = new CoopOnlineManager(storage);
+    const guest2 = new CoopOnlineManager(storage);
+
+    const hostUserA = {
+      uid: 'uid_host_a',
+      displayName: 'Host Alpha',
+      email: 'host.alpha@gmail.com',
+      emailVerified: true,
+    };
+    const hostUserB = {
+      uid: 'uid_host_b',
+      displayName: 'Host Bravo',
+      email: 'host.bravo@gmail.com',
+      emailVerified: true,
+    };
+    const guestUser1 = {
+      uid: 'uid_guest_1',
+      displayName: 'Guest One',
+      email: 'guest.one@gmail.com',
+    };
+    const guestUser2 = {
+      uid: 'uid_guest_2',
+      displayName: 'Guest Two',
+      email: 'guest.two@gmail.com',
+    };
+
+    // Case 1 & 2: Chọn "Có mật khẩu" nhưng để trống mật khẩu -> bị chặn, báo lỗi rõ ràng
+    const emptyPwCheck = validateRoomPassword('');
+    const shortPwCheck = validateRoomPassword('12');
+    const createEmptyPwRes = hostA.createRoomSync(
+      storage,
+      hostUserA,
+      'DEFAULT',
+      nowMs,
+      'PWERR1',
+      { hasPassword: true, password: '   ' }
+    );
+    const passwordValidationOk =
+      emptyPwCheck.valid === false &&
+      shortPwCheck.valid === false &&
+      createEmptyPwRes.success === false &&
+      createEmptyPwRes.errorCode === 'INVALID_PASSWORD';
+
+    // Case 4: Khi chưa có phòng công khai nào -> Vào nhanh báo đúng "Hiện chưa có phòng trống"
+    const quickJoinWhenEmpty = guest1.quickJoinRoomSync(storage, guestUser1, nowMs + 100);
+    const quickJoinEmptyMsgOk =
+      quickJoinWhenEmpty.success === false &&
+      quickJoinWhenEmpty.errorCode === 'NO_AVAILABLE_PUBLIC_ROOM' &&
+      quickJoinWhenEmpty.message === 'Hiện chưa có phòng trống';
+
+    // Case 1 & 5: Tạo phòng CÓ MẬT KHẨU ("tank2026", độ khó EXTREME) -> tạo thành công, KHÔNG bị Vào nhanh chọn nhầm
+    const createProtectedRes = hostA.createRoomSync(
+      storage,
+      hostUserA,
+      'EXTREME',
+      nowMs + 200,
+      'LOCK88',
+      { hasPassword: true, password: 'tank2026' }
+    );
+    const rawLockedLobby = storage.getRoomSync('LOCK88');
+    // Kiểm tra mật khẩu không lưu cleartext trên Firestore và hoàn toàn tương thích với evaluateCoopRoomRuleCreate:
+    const lockedRuleCheck = rawLockedLobby
+      ? evaluateCoopRoomRuleCreate({
+          authUid: hostUserA.uid,
+          isVerifiedPersonalGmail: true,
+          requestTimeMs: nowMs + 200,
+          roomCode: 'LOCK88',
+          incoming: rawLockedLobby,
+        })
+      : false;
+    const quickJoinSkipsPasswordRoom = guest1.quickJoinRoomSync(
+      storage,
+      guestUser1,
+      nowMs + 300
+    );
+    const protectedRoomOk =
+      createProtectedRes.success === true &&
+      createProtectedRes.room?.hasPassword === true &&
+      createProtectedRes.room?.difficulty === 'EXTREME' &&
+      rawLockedLobby !== null &&
+      !JSON.stringify(rawLockedLobby).includes('tank2026') &&
+      lockedRuleCheck === true &&
+      quickJoinSkipsPasswordRoom.success === false &&
+      quickJoinSkipsPasswordRoom.errorCode === 'NO_AVAILABLE_PUBLIC_ROOM';
+
+    // Case 9 & 10: Vào bằng mã phòng có mật khẩu -> nhập thiếu hoặc sai mật khẩu bị từ chối; nhập đúng mật khẩu vào thành công
+    const joinProtectedMissingPw = guest1.joinRoomSync(
+      storage,
+      'LOCK88',
+      guestUser1,
+      nowMs + 400
+    );
+    const joinProtectedWrongPw = guest1.joinRoomSync(
+      storage,
+      'LOCK88',
+      guestUser1,
+      nowMs + 450,
+      { password: 'wrong999' }
+    );
+    const joinProtectedRightPw = guest1.joinRoomSync(
+      storage,
+      'LOCK88',
+      guestUser1,
+      nowMs + 500,
+      { password: 'tank2026' }
+    );
+    const joinByCodePasswordChecksOk =
+      joinProtectedMissingPw.success === false &&
+      joinProtectedMissingPw.errorCode === 'PASSWORD_REQUIRED' &&
+      joinProtectedWrongPw.success === false &&
+      joinProtectedWrongPw.errorCode === 'WRONG_PASSWORD' &&
+      joinProtectedRightPw.success === true &&
+      joinProtectedRightPw.room?.guestUid === guestUser1.uid &&
+      joinProtectedRightPw.room?.difficulty === 'EXTREME';
+
+    // Case 3, 4, 6, 7: Tạo phòng KHÔNG MẬT KHẨU (công khai) -> Vào nhanh tìm thấy và vào thành công;
+    //                   nếu 2 người cùng bấm Vào nhanh vào 1 phòng trống cuối cùng -> chỉ 1 người vào được, người còn lại nhận lỗi sạch
+    const guest3 = new CoopOnlineManager(storage);
+    const createPublicRes = hostB.createRoomSync(
+      storage,
+      hostUserB,
+      'DEFAULT',
+      nowMs + 600,
+      undefined,
+      { hasPassword: false }
+    );
+    const publicQuickJoin1 = guest2.quickJoinRoomSync(storage, guestUser2, nowMs + 700);
+    const publicQuickJoin2Race = guest3.quickJoinRoomSync(
+      storage,
+      {
+        uid: 'uid_guest_3',
+        displayName: 'Guest Three',
+        email: 'guest.three@gmail.com',
+      },
+      nowMs + 750
+    );
+    const publicRoomAndQuickJoinRaceOk =
+      createPublicRes.success === true &&
+      createPublicRes.room?.hasPassword === false &&
+      publicQuickJoin1.success === true &&
+      publicQuickJoin1.room?.roomCode === createPublicRes.room?.roomCode &&
+      publicQuickJoin1.room?.guestUid === guestUser2.uid &&
+      publicQuickJoin2Race.success === false &&
+      publicQuickJoin2Race.errorCode === 'NO_AVAILABLE_PUBLIC_ROOM';
+
+    const passed =
+      passwordValidationOk &&
+      quickJoinEmptyMsgOk &&
+      protectedRoomOk &&
+      joinByCodePasswordChecksOk &&
+      publicRoomAndQuickJoinRaceOk;
+
+    results.push({
+      id: 'M7_3_T38',
+      name: 'T38: M7.3.7 (Hạng mục 5) – Tạo phòng Có mật khẩu (mặc định) / Không mật khẩu, Vào nhanh & Vào bằng mã phòng',
+      passed,
+      details: `pwValOk=${passwordValidationOk}, emptyMsgOk=${quickJoinEmptyMsgOk}, protectedRoomOk=${protectedRoomOk}, codePwChecksOk=${joinByCodePasswordChecksOk}, quickJoinRaceOk=${publicRoomAndQuickJoinRaceOk}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T39: M7.3.7 (Hạng mục 6) – Kiểm thử đủ 12 trường hợp bắt buộc TC-01 .. TC-12
+  //           cho lỗi P2 bấm Sẵn sàng, đồng bộ trạng thái phòng chờ và bắt đầu trận
+  // =========================================================================
+  {
+    const nowMs = 1_700_000_000_000;
+    const storage = new InMemoryCoopStorageAdapter();
+    const p1Manager = new CoopOnlineManager(storage);
+    const p2Manager = new CoopOnlineManager(storage);
+
+    const p1User = {
+      uid: 'uid_tc_p1',
+      displayName: 'Chỉ Huy P1',
+      email: 'p1.cmd@gmail.com',
+      emailVerified: true,
+    };
+    const p2User = {
+      uid: 'uid_tc_p2',
+      displayName: 'Chiến Binh P2',
+      email: 'p2.warrior@gmail.com',
+    };
+
+    // TC-01: P1 tạo phòng -> hostUid == P1.uid, guestUid == null, hostReady == false, guestReady == false, status == "WAITING"
+    const tc01Res = p1Manager.createRoomSync(
+      storage,
+      p1User,
+      'EXTREME',
+      nowMs,
+      'TC0199',
+      { hasPassword: false }
+    );
+    const p1AfterTc01 = p1Manager.getCurrentRoom();
+    const tc01Pass =
+      tc01Res.success === true &&
+      p1AfterTc01 !== null &&
+      p1AfterTc01.hostUid === p1User.uid &&
+      p1AfterTc01.guestUid === null &&
+      p1AfterTc01.hostReady === false &&
+      p1AfterTc01.guestReady === false &&
+      p1AfterTc01.status === 'WAITING';
+
+    // TC-02: P1 bấm Sẵn sàng trước khi P2 vào -> hostReady == true, vẫn hiển thị đang chờ P2 tham gia (guestUid == null)
+    const tc02Res = p1Manager.setPlayerReadySync(storage, true, nowMs + 100);
+    const p1AfterTc02 = p1Manager.getCurrentRoom();
+    const tc02Pass =
+      tc02Res.success === true &&
+      p1AfterTc02?.hostReady === true &&
+      p1AfterTc02?.guestUid === null;
+
+    // TC-03: P2 tham gia phòng -> guestUid == P2.uid (KHÔNG bị ghi đè thành null bởi signaling.guestUid!),
+    //        cả hai màn hình không còn hiển thị "Đang chờ người chơi 2 nhập mã phòng"
+    const tc03Res = p2Manager.joinRoomSync(storage, 'TC0199', p2User, nowMs + 200);
+    const p1AfterTc03 = p1Manager.getCurrentRoom();
+    const p2AfterTc03 = p2Manager.getCurrentRoom();
+    const sigDocAfterJoin = storage.getSignalingSync('TC0199');
+    const tc03Pass =
+      tc03Res.success === true &&
+      p1AfterTc03?.guestUid === p2User.uid &&
+      p2AfterTc03?.guestUid === p2User.uid &&
+      p1AfterTc03?.guestDisplayName === p2User.displayName &&
+      p2AfterTc03?.guestDisplayName === p2User.displayName &&
+      p2AfterTc03?.hostReady === true &&
+      p2AfterTc03?.guestReady === false &&
+      sigDocAfterJoin?.guestUid === p2User.uid;
+
+    // TC-04: P2 bấm Sẵn sàng sau khi vào phòng -> guestReady == true trên Firestore, cả P1 và P2 đều thấy P2 đã Sẵn sàng
+    const tc04Res = p2Manager.setPlayerReadySync(storage, true, nowMs + 300);
+    const rawLobbyAfterP2Ready = storage.getRoomSync('TC0199');
+    const p1AfterTc04 = p1Manager.getCurrentRoom();
+    const p2AfterTc04 = p2Manager.getCurrentRoom();
+    const tc04Pass =
+      tc04Res.success === true &&
+      rawLobbyAfterP2Ready?.guestReady === true &&
+      p1AfterTc04?.guestReady === true &&
+      p2AfterTc04?.guestReady === true;
+
+    // TC-05: P2 vào phòng trước khi P1 bấm Sẵn sàng, P2 bấm Sẵn sàng trước -> guestReady == true, sau đó P1 bấm Sẵn sàng -> hostReady == true
+    p1Manager.setPlayerReadySync(storage, false, nowMs + 350);
+    p2Manager.setPlayerReadySync(storage, false, nowMs + 360);
+    const tc05P2First = p2Manager.setPlayerReadySync(storage, true, nowMs + 370);
+    const tc05P1Second = p1Manager.setPlayerReadySync(storage, true, nowMs + 380);
+    const p1AfterTc05 = p1Manager.getCurrentRoom();
+    const p2AfterTc05 = p2Manager.getCurrentRoom();
+    const tc05Pass =
+      tc05P2First.success === true &&
+      tc05P1Second.success === true &&
+      p1AfterTc05?.hostReady === true &&
+      p1AfterTc05?.guestReady === true &&
+      p2AfterTc05?.hostReady === true &&
+      p2AfterTc05?.guestReady === true;
+
+    // TC-06: P1 hoặc P2 bấm Hủy sẵn sàng -> Trường Ready tương ứng về false, chưa bắt đầu trận (evaluateStartMatchCandidate từ chối)
+    const tc06P2Unready = p2Manager.setPlayerReadySync(storage, false, nowMs + 400);
+    const tc06StartBlocked = p1Manager.startOnlineMatchSync(
+      storage,
+      p1User.uid,
+      undefined,
+      nowMs + 410
+    );
+    const p1AfterTc06 = p1Manager.getCurrentRoom();
+    const p2AfterTc06 = p2Manager.getCurrentRoom();
+    const tc06Pass =
+      tc06P2Unready.success === true &&
+      p1AfterTc06?.guestReady === false &&
+      p2AfterTc06?.guestReady === false &&
+      tc06StartBlocked.success === false;
+
+    // TC-12: Người chơi bấm nút Sẵn sàng nhiều lần liên tiếp -> Không gửi chồng request lỗi và đồng bộ trạng thái cuối cùng chính xác
+    const tc12Rapid1 = p2Manager.setPlayerReadySync(storage, true, nowMs + 420);
+    const tc12Rapid2Duplicate = p2Manager.setPlayerReadySync(storage, true, nowMs + 421);
+    const p1AfterTc12 = p1Manager.getCurrentRoom();
+    const p2AfterTc12 = p2Manager.getCurrentRoom();
+    const tc12Pass =
+      tc12Rapid1.success === true &&
+      tc12Rapid2Duplicate.success === true &&
+      p2AfterTc12?.guestReady === true &&
+      p1AfterTc12?.guestReady === true;
+
+    // TC-07: Cả P1 và P2 đều Sẵn sàng -> Chuyển sang kết nối/bắt đầu trận và vào màn chơi thành công
+    const lobbyBeforeStart = storage.getRoomSync('TC0199')!;
+    storage.setRoomSync('TC0199', {
+      ...lobbyBeforeStart,
+      rtcConnectionState: 'CONNECTED',
+      hostLastActiveAt: nowMs + 450,
+    });
+    const tc07StartRes = p1Manager.startOnlineMatchSync(
+      storage,
+      p1User.uid,
+      undefined,
+      nowMs + 500
+    );
+    const p1AfterTc07 = p1Manager.getCurrentRoom();
+    const p2AfterTc07 = p2Manager.getCurrentRoom();
+    const tc07Pass =
+      tc07StartRes.success === true &&
+      p1AfterTc07?.status === 'PLAYING' &&
+      p2AfterTc07?.status === 'PLAYING' &&
+      p1AfterTc07?.difficulty === 'EXTREME' &&
+      p2AfterTc07?.difficulty === 'EXTREME';
+
+    // TC-08: Người chơi thứ 3 cố bấm Sẵn sàng hoặc sửa guestReady của phòng không thuộc về mình -> Bị từ chối bởi Firestore Rules
+    const currentLobbyForTc08 = storage.getRoomSync('TC0199')!;
+    const tc08RuleEval = evaluateCoopRoomRuleUpdate({
+      authUid: 'uid_attacker_tc08',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 510,
+      existing: { ...currentLobbyForTc08, status: 'WAITING' },
+      incoming: {
+        ...currentLobbyForTc08,
+        status: 'WAITING',
+        guestReady: false,
+        guestLastActiveAt: nowMs + 510,
+      },
+    });
+    const tc08Pass = tc08RuleEval.allowed === false;
+
+    // TC-09: P2 cố sửa hostReady, difficulty, hostUid hoặc ép status = PLAYING -> Bị từ chối bởi Firestore Rules
+    const waitingLobbyForTc09: CoopRoomLobbyDocument = {
+      ...currentLobbyForTc08,
+      status: 'WAITING',
+      hostReady: false,
+      guestReady: true,
+    };
+    const tc09MutateHostReady = evaluateCoopRoomRuleUpdate({
+      authUid: p2User.uid,
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 520,
+      existing: waitingLobbyForTc09,
+      incoming: {
+        ...waitingLobbyForTc09,
+        hostReady: true,
+        guestLastActiveAt: nowMs + 520,
+      },
+    });
+    const tc09MutateDifficulty = evaluateCoopRoomRuleUpdate({
+      authUid: p2User.uid,
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 520,
+      existing: waitingLobbyForTc09,
+      incoming: {
+        ...waitingLobbyForTc09,
+        difficulty: 'DEFAULT',
+        guestLastActiveAt: nowMs + 520,
+      },
+    });
+    const tc09ForcePlaying = evaluateCoopRoomRuleUpdate({
+      authUid: p2User.uid,
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: nowMs + 520,
+      existing: { ...waitingLobbyForTc09, hostReady: true },
+      incoming: {
+        ...waitingLobbyForTc09,
+        hostReady: true,
+        status: 'PLAYING',
+        guestLastActiveAt: nowMs + 520,
+      },
+    });
+    const tc09Pass =
+      tc09MutateHostReady.allowed === false &&
+      tc09MutateDifficulty.allowed === false &&
+      tc09ForcePlaying.allowed === false;
+
+    // TC-10: P2 rời phòng khi đang ở phòng chờ -> guestUid == null, guestReady == false, phòng quay lại chờ P2 nếu P1 vẫn ở phòng
+    const leaveLobbyStorage = new InMemoryCoopStorageAdapter();
+    const hostTc10 = new CoopOnlineManager(leaveLobbyStorage);
+    const guestTc10 = new CoopOnlineManager(leaveLobbyStorage);
+    hostTc10.createRoomSync(leaveLobbyStorage, p1User, 'DEFAULT', nowMs, 'TC1000', {
+      hasPassword: false,
+    });
+    guestTc10.joinRoomSync(leaveLobbyStorage, 'TC1000', p2User, nowMs + 100);
+    guestTc10.setPlayerReadySync(leaveLobbyStorage, true, nowMs + 200);
+    guestTc10.leaveRoomSync(leaveLobbyStorage, 'P2 rời phòng chờ', nowMs + 300);
+    const roomAfterTc10Leave = leaveLobbyStorage.getRoomSync('TC1000');
+    const tc10Pass =
+      roomAfterTc10Leave !== null &&
+      roomAfterTc10Leave.status === 'WAITING' &&
+      roomAfterTc10Leave.hostUid === p1User.uid &&
+      roomAfterTc10Leave.guestUid === null &&
+      roomAfterTc10Leave.guestDisplayName === null &&
+      roomAfterTc10Leave.guestReady === false;
+
+    // TC-11: Phòng hết hạn (expiresAt <= now) -> Không cho bấm Sẵn sàng, hiển thị thông báo phòng đã hết hạn
+    const expiredLobbyStorage = new InMemoryCoopStorageAdapter();
+    const hostTc11 = new CoopOnlineManager(expiredLobbyStorage);
+    const guestTc11 = new CoopOnlineManager(expiredLobbyStorage);
+    hostTc11.createRoomSync(expiredLobbyStorage, p1User, 'DEFAULT', nowMs, 'TC1100', {
+      hasPassword: false,
+    });
+    guestTc11.joinRoomSync(expiredLobbyStorage, 'TC1100', p2User, nowMs + 100);
+    const expiredNow = nowMs + COOP_ONLINE_CONFIG.ROOM_TTL_MS + 5000;
+    const tc11ReadyAfterExpire = guestTc11.setPlayerReadySync(
+      expiredLobbyStorage,
+      true,
+      expiredNow
+    );
+    const tc11Pass =
+      tc11ReadyAfterExpire.success === false &&
+      tc11ReadyAfterExpire.errorCode === 'ROOM_EXPIRED';
+
+    const passed =
+      tc01Pass &&
+      tc02Pass &&
+      tc03Pass &&
+      tc04Pass &&
+      tc05Pass &&
+      tc06Pass &&
+      tc07Pass &&
+      tc08Pass &&
+      tc09Pass &&
+      tc10Pass &&
+      tc11Pass &&
+      tc12Pass;
+
+    results.push({
+      id: 'M7_3_T39',
+      name: 'T39: M7.3.7 (Hạng mục 6) – Kiểm thử đủ 12 ca TC-01..TC-12: P2 bấm Sẵn sàng, không bị signaling.guestUid=null ghi đè, P2 rời phòng & bắt đầu trận',
+      passed,
+      details: `TC01=${tc01Pass}, TC02=${tc02Pass}, TC03=${tc03Pass}, TC04=${tc04Pass}, TC05=${tc05Pass}, TC06=${tc06Pass}, TC07=${tc07Pass}, TC08=${tc08Pass}, TC09=${tc09Pass}, TC10=${tc10Pass}, TC11=${tc11Pass}, TC12=${tc12Pass}`,
+    });
+  }
+
   return {
     total: results.length,
     passed: results.filter((r) => r.passed).length,
@@ -5129,4 +5757,6 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     results,
   };
 }
+
+
 

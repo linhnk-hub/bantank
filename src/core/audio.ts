@@ -39,6 +39,7 @@ export class SoundManager {
 
   private isUnlocked: boolean = false;
   private isBgmPlaying: boolean = false;
+  private customBgmActive: boolean = false;
   private bgmTimer: number | null = null;
   private bgmStep: number = 0;
   private processedEventIds: Set<string> = new Set();
@@ -53,6 +54,21 @@ export class SoundManager {
       SoundManager.instance = new SoundManager();
     }
     return SoundManager.instance;
+  }
+
+  public setCustomBgmActive(active: boolean): void {
+    this.customBgmActive = active;
+    if (active && this.isBgmPlaying) {
+      this.stopBgm();
+    }
+  }
+
+  public isCustomBgmActive(): boolean {
+    return this.customBgmActive;
+  }
+
+  public isProceduralBgmPlaying(): boolean {
+    return this.isBgmPlaying;
   }
 
   private loadSettings(): void {
@@ -97,7 +113,12 @@ export class SoundManager {
 
     if (!this.settings.bgmEnabled && this.isBgmPlaying) {
       this.pauseBgm();
-    } else if (this.settings.bgmEnabled && !this.isBgmPlaying && this.isUnlocked) {
+    } else if (
+      this.settings.bgmEnabled &&
+      !this.isBgmPlaying &&
+      this.isUnlocked &&
+      !this.customBgmActive
+    ) {
       this.startBgm();
     }
   }
@@ -156,7 +177,7 @@ export class SoundManager {
     if (ctx.state === 'suspended') {
       ctx.resume().then(() => {
         this.isUnlocked = true;
-        if (this.settings.bgmEnabled && !this.isBgmPlaying) {
+        if (this.settings.bgmEnabled && !this.isBgmPlaying && !this.customBgmActive) {
           this.startBgm();
         }
       }).catch(() => {
@@ -164,7 +185,7 @@ export class SoundManager {
       });
     } else {
       this.isUnlocked = true;
-      if (this.settings.bgmEnabled && !this.isBgmPlaying) {
+      if (this.settings.bgmEnabled && !this.isBgmPlaying && !this.customBgmActive) {
         this.startBgm();
       }
     }
@@ -499,7 +520,7 @@ export class SoundManager {
   ];
 
   public startBgm(): void {
-    if (!this.settings.bgmEnabled || this.isBgmPlaying) return;
+    if (!this.settings.bgmEnabled || this.isBgmPlaying || this.customBgmActive) return;
     this.initContext();
     if (!this.ctx || this.ctx.state !== 'running') return;
 

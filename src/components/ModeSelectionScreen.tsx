@@ -6,13 +6,16 @@
 import React, { useState, useEffect } from 'react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { SessionStateSnapshot } from '../core/sessionManager.ts';
-import { getUserDisplayLabel } from '../core/authManager.ts';
+import {
+  getUserDisplayLabel,
+  resolveUserRole,
+  getRoleNameFrameClasses,
+} from '../core/authManager.ts';
 import { AvatarManager } from '../core/avatarManager.ts';
 import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
 import { CoopOnlineLobbyPanel } from './CoopOnlineLobbyModal.tsx';
 import type { CoopRoomDocument } from '../core/coopOnlineManager.ts';
 import {
-  Play,
   ArrowLeft,
   ArrowRight,
   Settings,
@@ -35,8 +38,10 @@ export interface ModeSelectionScreenProps {
   user: {
     uid?: string;
     email: string | null;
+    emailVerified?: boolean;
     displayName?: string | null;
     photoURL?: string | null;
+    role?: string | null;
   };
   firebaseUser?: FirebaseUser | null;
   session: SessionStateSnapshot;
@@ -179,6 +184,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
   const isSessionActive = session.status === 'ACTIVE';
   const displayLabel = getUserDisplayLabel(user);
+  const userRole = resolveUserRole(user);
+  const roleFrameClasses = getRoleNameFrameClasses(userRole);
 
   const badgeInfo = getSessionBadgeInfo(
     session.status,
@@ -187,25 +194,14 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     Boolean(user)
   );
 
-  const handleContinueFromMode = () => {
-    setFlowStep('SELECT_DIFFICULTY');
-  };
-
   const handleConfirmCardMode = (next: SelectionCardMode, e?: React.MouseEvent) => {
     e?.stopPropagation();
     handleSelectCardMode(next);
-    setFlowStep('SELECT_DIFFICULTY');
-  };
-
-  const handleProceedFromDifficulty = (explicitMode?: SelectionCardMode) => {
-    if (!isSessionActive || isProcessing) return;
-    const activeMode = explicitMode ?? cardMode;
-    if (activeMode === 'SOLO') {
-      onStartMatch('SOLO', 'P2_AI');
-    } else if (activeMode === 'COOP_AI') {
-      onStartMatch('TWO_PLAYERS', 'P2_AI');
-    } else if (activeMode === 'COOP_ONLINE') {
+    if (next === 'COOP_ONLINE') {
+      // M7.3.7 Mục VI.5.1: Khi chọn 3. CO-OP ONLINE, mở trực tiếp màn hình Tạo phòng / Tham gia phòng
       setFlowStep('COOP_ONLINE_LOBBY');
+    } else {
+      setFlowStep('SELECT_DIFFICULTY');
     }
   };
 
@@ -224,7 +220,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
   const handleTopBack = () => {
     if (flowStep === 'COOP_ONLINE_LOBBY') {
-      setFlowStep('SELECT_DIFFICULTY');
+      setFlowStep('SELECT_MODE');
     } else if (flowStep === 'SELECT_DIFFICULTY') {
       setFlowStep('SELECT_MODE');
     } else {
@@ -238,7 +234,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.18),rgba(255,255,255,0))] pointer-events-none" />
       <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
 
-      {/* Top Header Bar — M7.3.4: Simplified without mini logo, Fullscreen or duplicate Profile button */}
+      {/* Top Header Bar */}
       <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-3 sm:px-4 py-2.5">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
           {/* Left: Back Button */}
@@ -254,9 +250,11 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
             </button>
           </div>
 
-          {/* Right: User Profile (Avatar + Display Name Only) & Unified Cài đặt */}
+          {/* Right: User Profile (Avatar + Display Name with Role Border Color) & Unified Cài đặt */}
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-neutral-800/80 border border-neutral-700/80 text-xs">
+            <div
+              className={`flex items-center gap-2 px-2.5 py-1 rounded-lg bg-neutral-800/80 text-xs ${roleFrameClasses}`}
+            >
               {resolvedAvatarUrl && !avatarError ? (
                 <img
                   src={resolvedAvatarUrl}
@@ -483,7 +481,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     <p className="text-xs text-neutral-300 leading-relaxed">
-                      Tạo phòng hoặc nhập mã phòng 6 ký tự để phối hợp trực tuyến giữa Người chơi 1 (Chủ phòng) và Người chơi 2 qua Internet.
+                      Tạo phòng (có mật khẩu hoặc công khai) hoặc Tham gia phòng (Vào nhanh / Mã phòng) để phối hợp trực tuyến giữa 2 người chơi.
                     </p>
                   </div>
 
@@ -504,24 +502,15 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 </div>
               </div>
 
-              {/* Step 1 Navigation Buttons */}
-              <div className="w-full flex flex-col sm:flex-row items-center gap-3">
+              {/* Step 1 Navigation Button (Hạng mục 4 - M7.3.7 Mục V.4.1: Chỉ giữ nút Quay lại, đã bỏ nút Tiếp tục ngoài khung) */}
+              <div className="w-full flex items-center justify-center">
                 <button
                   type="button"
                   onClick={onBack}
-                  className="w-full sm:w-1/3 py-4 px-6 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 font-bold text-sm sm:text-base border border-neutral-700 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow"
+                  className="w-full sm:w-auto min-w-[220px] py-3.5 px-6 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 font-bold text-sm border border-neutral-700 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   <span>QUAY LẠI MENU</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleContinueFromMode}
-                  className="w-full sm:w-2/3 py-4 px-8 rounded-2xl font-black text-sm sm:text-base tracking-wider uppercase transition-all shadow-2xl flex items-center justify-center gap-3 transform active:scale-98 bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black shadow-amber-500/30 cursor-pointer"
-                >
-                  <span>TIẾP TỤC CHỌN ĐỘ KHÓ</span>
-                  <ArrowRight className="w-5 h-5" />
                 </button>
               </div>
             </>
@@ -633,37 +622,15 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 </div>
               </div>
 
-              {/* Step 2 Navigation Buttons */}
-              <div className="w-full flex flex-col sm:flex-row items-center gap-3">
+              {/* Step 2 Navigation Button (Hạng mục 4 - M7.3.7 Mục V.4.2: Chỉ giữ nút Đổi chế độ chơi, đã bỏ nút Xác nhận trùng ngoài khung) */}
+              <div className="w-full flex items-center justify-center">
                 <button
                   type="button"
                   onClick={() => setFlowStep('SELECT_MODE')}
-                  className="w-full sm:w-1/3 py-4 px-6 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 font-bold text-sm sm:text-base border border-neutral-700 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow"
+                  className="w-full sm:w-auto min-w-[220px] py-3.5 px-6 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 font-bold text-sm border border-neutral-700 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   <span>ĐỔI CHẾ ĐỘ CHƠI</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleProceedFromDifficulty()}
-                  disabled={!isSessionActive || isProcessing}
-                  className={`w-full sm:w-2/3 py-4 px-8 rounded-2xl font-black text-sm sm:text-base tracking-wider uppercase transition-all shadow-2xl flex items-center justify-center gap-3 transform active:scale-98 ${
-                    isSessionActive && !isProcessing
-                      ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black shadow-amber-500/30 cursor-pointer'
-                      : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
-                  }`}
-                >
-                  <Play className={`w-5 h-5 ${isSessionActive ? 'fill-black' : 'fill-neutral-500'}`} />
-                  <span>
-                    {!isSessionActive
-                      ? 'CẦN KẾT NỐI MÁY CHỦ ĐỂ TIẾP TỤC'
-                      : cardMode === 'COOP_ONLINE'
-                      ? `XÁC NHẬN (${difficulty === 'EXTREME' ? 'THỬ THÁCH' : 'GIẢI TRÍ'})`
-                      : cardMode === 'COOP_AI'
-                      ? `XÁC NHẬN CO-OP AI (${difficulty === 'EXTREME' ? 'THỬ THÁCH' : 'GIẢI TRÍ'})`
-                      : `XÁC NHẬN BẮT ĐẦU (${difficulty === 'EXTREME' ? 'THỬ THÁCH' : 'GIẢI TRÍ'})`}
-                  </span>
                 </button>
               </div>
             </>
@@ -683,7 +650,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               <CoopOnlineLobbyPanel
                 user={firebaseUser ?? (user as any)}
                 difficulty={difficulty}
-                onBackToDifficulty={() => setFlowStep('SELECT_DIFFICULTY')}
+                onDifficultyChange={onDifficultyChange}
+                onBackToDifficulty={() => setFlowStep('SELECT_MODE')}
                 onOnlineMatchStarted={(room, role) => {
                   if (onStartOnlineMatch) {
                     onStartOnlineMatch(room, role);

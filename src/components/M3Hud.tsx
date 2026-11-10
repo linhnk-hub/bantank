@@ -186,7 +186,13 @@ export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy, onPa
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* P1 State Card */}
-            <div className="bg-neutral-950 p-3 rounded border border-neutral-800 space-y-1.5 font-mono text-[11px]">
+            <div
+              className={`bg-neutral-950 p-3 rounded space-y-1.5 font-mono text-[11px] ${
+                isSuperAdmin
+                  ? 'border-2 border-red-500 ring-1 ring-red-500/40 shadow-sm shadow-red-500/20'
+                  : 'border border-neutral-800'
+              }`}
+            >
               <div className="flex items-center justify-between border-b border-neutral-800/80 pb-1.5">
                 <span className="font-bold text-amber-400 flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5" />

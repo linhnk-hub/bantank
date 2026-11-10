@@ -1316,7 +1316,37 @@ async function verifyM735SharedAvatarCatalogAsyncSuite() {
     );
   }
 
-  console.log('[M7.3.6 UI Cleanup, Tank Labels, Google Avatar & 6-Step Room Creation E2E Verification] 22/22 MANDATORY CASES PASS');
+  // 23. M7.3.7: Kiểm tra tách tab SettingsModal, bỏ nút Tiếp tục trùng lặp trên ModeSelectionScreen,
+  //     màu khung tên theo quyền, và giao diện Tạo phòng / Tham gia phòng (Vào nhanh / Vào bằng mã phòng): PASS
+  const authSessionBannerSrc = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/components/AuthSessionBanner.tsx'),
+    'utf-8'
+  );
+  if (
+    modeSelectionSrc.includes('TIẾP TỤC CHỌN ĐỘ KHÓ') ||
+    modeSelectionSrc.includes('XÁC NHẬN (') ||
+    !settingsModalSrc.includes('Tài khoản cá nhân') ||
+    !settingsModalSrc.includes('Cài đặt hình ảnh') ||
+    !settingsModalSrc.includes('Cài đặt âm thanh') ||
+    !settingsModalSrc.includes('Cài đặt chế độ chơi') ||
+    !settingsModalSrc.includes('Quản trị & Phân quyền') ||
+    !coopLobbySrc.includes('1. TẠO PHÒNG') ||
+    !coopLobbySrc.includes('2. THAM GIA PHÒNG') ||
+    !coopLobbySrc.includes('Có mật khẩu') ||
+    !coopLobbySrc.includes('Không mật khẩu') ||
+    !coopLobbySrc.includes('A. VÀO NHANH') ||
+    !coopLobbySrc.includes('B. VÀO BẰNG MÃ PHÒNG') ||
+    !mainMenuSrc.includes('getRoleNameFrameClasses') ||
+    !modeSelectionSrc.includes('getRoleNameFrameClasses') ||
+    !authSessionBannerSrc.includes('getRoleNameFrameClasses') ||
+    !coopLobbySrc.includes('getRoleNameFrameClasses')
+  ) {
+    throw new Error(
+      'Case 23 failed: M7.3.7 UI components must satisfy all tab separation, duplicate button removal, role frame, and Co-op room flow requirements'
+    );
+  }
+
+  console.log('[M7.3.6 & M7.3.7 UI Cleanup, Avatar Recovery, Role Frames, Single-BGM & Co-op Online E2E Verification] 23/23 MANDATORY CASES PASS');
 }
 
 async function runAllAsyncVerifications() {
@@ -1329,6 +1359,7 @@ runAllAsyncVerifications().catch((err) => {
   console.error('[Async E2E Verification FAIL]', err);
   process.exit(1);
 });
+
 
 
 

@@ -4,7 +4,12 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { AuthManager, getUserDisplayLabel } from '../core/authManager.ts';
+import {
+  AuthManager,
+  getUserDisplayLabel,
+  resolveUserRole,
+  getRoleNameFrameClasses,
+} from '../core/authManager.ts';
 import { SessionManager, type SessionStateSnapshot, type SessionStateStatus } from '../core/sessionManager.ts';
 import {
   LogIn,
@@ -242,7 +247,11 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
       <div className="bg-neutral-950/90 border-b border-neutral-800/80 px-3 py-1.5 flex items-center justify-between text-xs text-neutral-300 shrink-0">
         <div className="flex items-center gap-2">
           {user ? (
-            <div className="flex items-center gap-1.5">
+            <div
+              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-neutral-900/90 ${getRoleNameFrameClasses(
+                resolveUserRole(user)
+              )}`}
+            >
               {user.photoURL ? (
                 <img
                   src={user.photoURL}

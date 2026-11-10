@@ -5,7 +5,11 @@
 
 import React, { useEffect, useState } from 'react';
 import type { SessionStateSnapshot } from '../core/sessionManager.ts';
-import { getUserDisplayLabel } from '../core/authManager.ts';
+import {
+  getUserDisplayLabel,
+  resolveUserRole,
+  getRoleNameFrameClasses,
+} from '../core/authManager.ts';
 import { AvatarManager } from '../core/avatarManager.ts';
 import { getSessionBadgeInfo, formatAccountStatusMessage } from './AuthSessionBanner.tsx';
 import {
@@ -23,6 +27,8 @@ export interface MainMenuScreenProps {
   user: {
     uid?: string;
     email: string | null;
+    emailVerified?: boolean;
+    providerIds?: string[];
     displayName?: string | null;
     photoURL?: string | null;
   };
@@ -86,6 +92,8 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   );
 
   const displayLabel = getUserDisplayLabel(user);
+  const userRole = resolveUserRole(user);
+  const roleFrameClasses = getRoleNameFrameClasses(userRole);
 
   // Chỉ hiển thị thông báo lỗi thật sự khi quá trình kết nối phiên thất bại và có thông điệp lỗi cụ thể
   const hasRealSessionFailure =
@@ -114,7 +122,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-3 sm:px-4 py-2.5">
         <div className="max-w-6xl mx-auto flex items-center justify-end gap-2">
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-2 px-2.5 py-1 rounded-lg bg-neutral-800/80 border border-neutral-700/80 text-xs">
+            <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg bg-neutral-800/80 text-xs ${roleFrameClasses}`}>
               {resolvedAvatarUrl && !avatarError ? (
                 <img
                   src={resolvedAvatarUrl}

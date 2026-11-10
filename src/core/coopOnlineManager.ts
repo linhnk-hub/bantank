@@ -116,12 +116,22 @@ export interface CoopRoomSignalingDocument {
  * Trạng thái phòng hợp nhất trong bộ nhớ của Host / Guest sau khi đã vào phòng.
  */
 export interface CoopRoomDocument extends CoopRoomLobbyDocument {
+  hasPassword?: boolean;
   rtcOffer?: string | null;
   rtcAnswer?: string | null;
   hostIceCandidates?: string | null;
   guestIceCandidates?: string | null;
   finalScore?: number;
   matchOutcome?: 'VICTORY' | 'GAME_OVER' | null;
+}
+
+export interface CoopCreateRoomOptions {
+  hasPassword?: boolean;
+  password?: string;
+}
+
+export interface CoopJoinRoomOptions {
+  password?: string;
 }
 
 export type CoopRoomCreateStep =
@@ -146,6 +156,11 @@ export interface CoopActionResult {
     | 'PERMISSION_DENIED'
     | 'INVALID_DATA'
     | 'INVALID_CODE_FORMAT'
+    | 'INVALID_PASSWORD'
+    | 'PASSWORD_REQUIRED'
+    | 'WRONG_PASSWORD'
+    | 'NO_AVAILABLE_PUBLIC_ROOM'
+    | 'INVALID_ROOM_STATE'
     | 'ROOM_NOT_FOUND'
     | 'ROOM_EXPIRED'
     | 'ROOM_FULL'
@@ -182,6 +197,7 @@ export interface CoopStorageAdapter {
     onUpdate: (sig: CoopRoomSignalingDocument | null) => void,
     onError?: (err: Error) => void
   ): () => void;
+  listRooms?: () => Promise<CoopRoomLobbyDocument[]>;
 }
 
 export interface CoopP2PChannelAdapter {
@@ -312,6 +328,161 @@ export function validateRoomCodeFormat(rawCode: string): { valid: boolean; norma
 }
 
 /**
+ * Kiểm tra tính hợp lệ của mật khẩu phòng Co-op Online (M7.3.7 Mục VI.5.2):
+ * - Khi chọn "Có mật khẩu": bắt buộc từ 3 đến 32 ký tự (sau khi trim), không chỉ gồm khoảng trắng.
+ */
+export function validateRoomPassword(rawPassword?: string | null): {
+  valid: boolean;
+  normalized: string;
+  message?: string;
+} {
+  const normalized = typeof rawPassword === 'string' ? rawPassword.trim() : '';
+  if (normalized.length === 0) {
+    return {
+      valid: false,
+      normalized: '',
+      message: 'Vui lòng nhập mật khẩu phòng (tối thiểu 3 ký tự) hoặc chọn "Không mật khẩu".',
+    };
+  }
+  if (normalized.length < 3 || normalized.length > 32) {
+    return {
+      valid: false,
+      normalized,
+      message: 'Mật khẩu phòng phải có độ dài từ 3 đến 32 ký tự.',
+    };
+  }
+  return { valid: true, normalized };
+}
+
+/**
+ * Băm mật khẩu phòng có muối theo `roomCode` (16 ký tự hex, không lưu mật khẩu dạng rõ).
+ */
+export function computeRoomPasswordDigest(roomCode: string, rawPassword: string): string {
+  const cleanCode = (roomCode || '').trim().toUpperCase();
+  const cleanPass = (rawPassword || '').trim();
+  const input = `BANTANK_M737_LOCK::${cleanCode}::${cleanPass}`;
+  let h1 = 0xdeadbeef ^ input.length;
+  let h2 = 0x41c6ce57 ^ input.length;
+  for (let i = 0; i < input.length; i++) {
+    const ch = input.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761);
+    h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  const hex1 = (h1 >>> 0).toString(16).padStart(8, '0');
+  const hex2 = (h2 >>> 0).toString(16).padStart(8, '0');
+  return `${hex1}${hex2}`.toLowerCase();
+}
+
+const ROOM_LOCK_TAG_REGEX = /^(.*?)\s*\[LOCK:([0-9a-f]{16})\]$/i;
+
+/**
+ * Mã hóa dấu khóa mật khẩu vào `hostDisplayName` (giữ đúng 15 trường của `/coop_rooms/{roomCode}`
+ * trên Firestore Production mà không cần thêm trường mới hay công bố lại `firestore.rules`).
+ */
+export function encodeHostDisplayNameWithLock(
+  cleanDisplayName: string,
+  roomCode: string,
+  hasPassword: boolean,
+  rawPassword?: string
+): string {
+  const baseName = (cleanDisplayName || 'Commander')
+    .replace(ROOM_LOCK_TAG_REGEX, '$1')
+    .trim();
+  if (!hasPassword || !rawPassword) {
+    return (baseName || 'Commander').slice(0, 80);
+  }
+  const digest = computeRoomPasswordDigest(roomCode, rawPassword);
+  const clippedName = (baseName || 'Commander').slice(0, 55);
+  return `${clippedName} [LOCK:${digest}]`;
+}
+
+/**
+ * Giải mã `hostDisplayName` để lấy tên hiển thị sạch và thông tin khóa mật khẩu.
+ */
+export function decodeHostDisplayNameAndLock(rawHostDisplayName: string): {
+  cleanDisplayName: string;
+  hasPassword: boolean;
+  passwordDigest: string | null;
+} {
+  const raw = typeof rawHostDisplayName === 'string' ? rawHostDisplayName : 'Commander';
+  const match = raw.match(ROOM_LOCK_TAG_REGEX);
+  if (!match) {
+    return {
+      cleanDisplayName: raw,
+      hasPassword: false,
+      passwordDigest: null,
+    };
+  }
+  return {
+    cleanDisplayName: (match[1] || 'Commander').trim() || 'Commander',
+    hasPassword: true,
+    passwordDigest: match[2].toLowerCase(),
+  };
+}
+
+export function verifyRoomPassword(
+  roomCode: string,
+  candidatePassword: string | undefined | null,
+  expectedDigest: string | null
+): boolean {
+  if (!expectedDigest) return true;
+  if (!candidatePassword || candidatePassword.trim().length === 0) return false;
+  const actual = computeRoomPasswordDigest(roomCode, candidatePassword);
+  return actual === expectedDigest.toLowerCase();
+}
+
+/**
+ * Sinh danh sách mã phòng định danh theo khung thời gian 5 phút cho các phòng công khai (Không mật khẩu),
+ * giúp "Vào nhanh" tìm phòng trống bằng `getDoc` (tuân thủ `allow get` trên Firestore Production mà không cần `list`)
+ * đồng thời không tái sử dụng mã phòng cũ để luôn thỏa mãn `allow create`.
+ */
+export function getPublicQuickJoinSlotCodesForBucket(bucketIndex: number): string[] {
+  const base36 = Math.max(0, Math.floor(bucketIndex))
+    .toString(36)
+    .toUpperCase()
+    .padStart(4, '2')
+    .slice(-4);
+  const slotChars = ['2', '3', '4', '5', '6'];
+  return slotChars.map((s) => `Q${base36}${s}`);
+}
+
+export function getPublicQuickJoinCandidateCodes(nowMs: number = Date.now()): string[] {
+  const currentBucket = Math.floor(nowMs / (5 * 60 * 1000));
+  return [
+    ...getPublicQuickJoinSlotCodesForBucket(currentBucket),
+    ...getPublicQuickJoinSlotCodesForBucket(currentBucket - 1),
+    ...getPublicQuickJoinSlotCodesForBucket(currentBucket - 2),
+  ];
+}
+
+/**
+ * Hợp nhất an toàn tài liệu phòng cha (`CoopRoomLobbyDocument`) và tài liệu signaling (`CoopRoomSignalingDocument`).
+ * QUAN TRỌNG (Sửa lỗi Hạng mục 6 - M7.3.7):
+ * - Tài liệu phòng cha `/coop_rooms/{roomCode}` LUÔN là nguồn chuẩn cho `guestUid`, `guestDisplayName`,
+ *   `guestReady`, `guestLastActiveAt`, `hostReady`, `status`, `difficulty`, `rtcConnectionState`.
+ * - Tuyệt đối không để `sig.guestUid` (`null` lúc mới tạo phòng) ghi đè `lobby.guestUid` sau khi P2 đã vào phòng!
+ */
+export function mergeLobbyAndSignaling(
+  lobby: CoopRoomLobbyDocument,
+  sig?: CoopRoomSignalingDocument | null
+): CoopRoomDocument {
+  const decodedHost = decodeHostDisplayNameAndLock(lobby.hostDisplayName);
+  return {
+    ...lobby,
+    hostDisplayName: decodedHost.cleanDisplayName,
+    hasPassword: decodedHost.hasPassword,
+    rtcOffer: sig ? sig.rtcOffer : null,
+    rtcAnswer: sig ? sig.rtcAnswer : null,
+    hostIceCandidates: sig ? sig.hostIceCandidates : null,
+    guestIceCandidates: sig ? sig.guestIceCandidates : null,
+    finalScore: sig ? sig.finalScore : 0,
+    matchOutcome: sig ? sig.matchOutcome : null,
+  };
+}
+
+/**
  * Kiểm tra và chuẩn hóa gói tin điều khiển (Input Packet) từ Guest (P2).
  * Chống dữ liệu sai định dạng hoặc xung đột hướng di chuyển.
  */
@@ -411,7 +582,8 @@ export function evaluateJoinRoomCandidate(
   rawRoomCode: string,
   user: { uid: string; displayName?: string | null; email?: string | null; photoURL?: string | null } | null,
   nowMs: number = Date.now(),
-  signalingExists: boolean = true
+  signalingExists: boolean = true,
+  options?: CoopJoinRoomOptions
 ): CoopActionResult {
   if (!user || !user.uid) {
     return {
@@ -481,6 +653,26 @@ export function evaluateJoinRoomCandidate(
       errorCode: 'MATCH_ALREADY_STARTED',
       message: 'Trận đấu trong phòng này đã bắt đầu.',
     };
+  }
+
+  const decodedLock = decodeHostDisplayNameAndLock(room.hostDisplayName);
+  const requiresPassword = Boolean(room.hasPassword || decodedLock.hasPassword);
+  if (requiresPassword && decodedLock.passwordDigest) {
+    const providedPass = options?.password?.trim() || '';
+    if (!providedPass) {
+      return {
+        success: false,
+        errorCode: 'PASSWORD_REQUIRED',
+        message: 'Phòng này có mật khẩu bảo vệ. Vui lòng nhập mật khẩu để vào phòng.',
+      };
+    }
+    if (!verifyRoomPassword(normalized, providedPass, decodedLock.passwordDigest)) {
+      return {
+        success: false,
+        errorCode: 'WRONG_PASSWORD',
+        message: 'Mật khẩu phòng không chính xác. Vui lòng kiểm tra lại.',
+      };
+    }
   }
 
   return { success: true, room };
@@ -1325,6 +1517,17 @@ export class InMemoryCoopStorageAdapter implements CoopStorageAdapter {
     if (!existing) {
       throw new Error(`Room ${roomCode} does not exist`);
     }
+    // Atomic Guest Join check (M7.3.7 Mục VI.5.5: ngăn 2 người chơi cùng vào vị trí P2 của 1 phòng trống)
+    if (
+      partial.guestUid !== undefined &&
+      partial.guestUid !== null &&
+      existing.guestUid !== null &&
+      existing.guestUid !== partial.guestUid
+    ) {
+      const err = new Error('ROOM_FULL: Phòng đã đủ 2 người chơi.');
+      (err as any).code = 'permission-denied';
+      throw err;
+    }
     // Enforce M7.3 FINAL GUARD Fix 1: PLAYING -> FINISHED requires valid recorded match result in private/signaling
     if (existing.status === 'PLAYING' && partial.status === 'FINISHED') {
       const sig = this.signalingDocs.get(roomCode);
@@ -1345,6 +1548,15 @@ export class InMemoryCoopStorageAdapter implements CoopStorageAdapter {
       this.commitUpdateRoomThenLoseResponse = false;
       throw new Error('Simulated response loss after Firebase committed updateRoom');
     }
+  }
+
+  public listRoomsSync(): CoopRoomLobbyDocument[] {
+    this.readCount++;
+    return Array.from(this.rooms.values()).map((r) => JSON.parse(JSON.stringify(r)));
+  }
+
+  public async listRooms(): Promise<CoopRoomLobbyDocument[]> {
+    return this.listRoomsSync();
   }
 
   public async getRoom(roomCode: string): Promise<CoopRoomLobbyDocument | null> {
@@ -1840,7 +2052,8 @@ export class CoopOnlineManager {
       photoURL?: string | null;
     } | null,
     difficulty: 'DEFAULT' | 'EXTREME',
-    explicitNowMs?: number
+    explicitNowMs?: number,
+    options?: CoopCreateRoomOptions
   ): Promise<CoopActionResult> {
     // Bước 1: Kiểm tra người chơi đã đăng nhập hợp lệ và dữ liệu đầu vào hợp lệ
     if (!user || !user.uid || typeof user.uid !== 'string' || user.uid.trim().length === 0) {
@@ -1886,6 +2099,21 @@ export class CoopOnlineManager {
       };
     }
 
+    const usePassword = Boolean(options?.hasPassword);
+    let normalizedPassword = '';
+    if (usePassword) {
+      const pwdCheck = validateRoomPassword(options?.password);
+      if (!pwdCheck.valid) {
+        return {
+          success: false,
+          errorCode: 'INVALID_PASSWORD',
+          failedStep: 'AUTH_PRECHECK',
+          message: pwdCheck.message || 'Mật khẩu phòng không hợp lệ.',
+        };
+      }
+      normalizedPassword = pwdCheck.normalized;
+    }
+
     if (this.adapter instanceof FirestoreCoopStorageAdapter) {
       const sessionSnap = SessionManager.getInstance().getSnapshot();
       if (
@@ -1911,8 +2139,15 @@ export class CoopOnlineManager {
     this.currentSignaling = null;
     this.role = null;
 
+    const lobbyWriteMs = explicitNowMs ?? Date.now();
     const triedCodes = new Set<string>();
-    let roomCode = generateRoomCode(triedCodes);
+    // Nếu là phòng công khai (options?.hasPassword === false được truyền tường minh), ưu tiên kiểm tra các slot Quick Join của bucket hiện tại trước
+    const publicSlotCandidates =
+      options?.hasPassword === false
+        ? getPublicQuickJoinSlotCodesForBucket(Math.floor(lobbyWriteMs / (5 * 60 * 1000)))
+        : [];
+    let roomCode =
+      publicSlotCandidates.length > 0 ? publicSlotCandidates[0] : generateRoomCode(triedCodes);
     let foundAvailableCode = false;
 
     try {
@@ -1944,7 +2179,8 @@ export class CoopOnlineManager {
             message: buildCreateRoomStepErrorMessage('PRECHECK_ROOM_CODE', classification),
           };
         }
-        roomCode = generateRoomCode(triedCodes);
+        const nextPublicSlot = publicSlotCandidates.find((c) => !triedCodes.has(c));
+        roomCode = nextPublicSlot ?? generateRoomCode(triedCodes);
       }
 
       if (!foundAvailableCode) {
@@ -1956,17 +2192,22 @@ export class CoopOnlineManager {
         };
       }
 
-      const lobbyWriteMs = explicitNowMs ?? Date.now();
       const safeTtlMs =
         COOP_ONLINE_CONFIG.ROOM_TTL_MS - COOP_ONLINE_CONFIG.CLOCK_SKEW_BUFFER_MS;
-      const safeHostDisplayName = (getUserDisplayLabel(user) || 'Commander').trim().slice(0, 80);
+      const cleanHostName = (getUserDisplayLabel(user) || 'Commander').trim().slice(0, 80);
+      const encodedHostDisplayName = encodeHostDisplayNameWithLock(
+        cleanHostName,
+        roomCode,
+        usePassword,
+        normalizedPassword
+      );
 
       const newLobby: CoopRoomLobbyDocument = {
         roomCode,
         status: 'WAITING',
         difficulty,
         hostUid: user.uid,
-        hostDisplayName: safeHostDisplayName,
+        hostDisplayName: encodedHostDisplayName,
         hostReady: false,
         hostLastActiveAt: lobbyWriteMs,
         guestUid: null,
@@ -2117,7 +2358,7 @@ export class CoopOnlineManager {
       // Bước 5: Chỉ sau khi xác minh hoàn tất mới công bố mã phòng và trạng thái sẵn sàng
       this.lastCreateRoomDiagnostic = null;
       this.currentSignaling = verifiedSig;
-      this.currentRoom = { ...newLobby, ...verifiedSig };
+      this.currentRoom = mergeLobbyAndSignaling(newLobby, verifiedSig);
       this.role = 'HOST';
       this.resetSyncCounters();
       this.listenToRoom(roomCode);
@@ -2153,11 +2394,13 @@ export class CoopOnlineManager {
    * - Guest chỉ cập nhật `guestUid`, `guestDisplayName`, `guestReady` và `guestLastActiveAt`
    *   (giữ nguyên `rtcConnectionState` và `disconnectReason`, chỉ Host mới cập nhật `rtcConnectionState`).
    * - Bắt buộc `private/signaling` phải tồn tại (Rules kiểm tra `signalingDocExists(roomCode)` và client xác nhận `getSignaling`).
+   * - Nếu phòng có mật khẩu (`hasPassword === true`), bắt buộc kiểm tra mật khẩu trước khi cập nhật `guestUid`.
    */
   public async joinRoom(
     rawRoomCode: string,
     user: { uid: string; displayName?: string | null; email?: string | null; photoURL?: string | null } | null,
-    nowMs: number = Date.now()
+    nowMs: number = Date.now(),
+    options?: CoopJoinRoomOptions
   ): Promise<CoopActionResult> {
     if (!user || !user.uid) {
       return {
@@ -2178,7 +2421,7 @@ export class CoopOnlineManager {
 
     try {
       const room = await this.adapter.getRoom(normalized);
-      const joinCandidate = evaluateJoinRoomCandidate(room, normalized, user, nowMs, true);
+      const joinCandidate = evaluateJoinRoomCandidate(room, normalized, user, nowMs, true, options);
       if (!joinCandidate.success || !room) {
         return joinCandidate;
       }
@@ -2194,7 +2437,33 @@ export class CoopOnlineManager {
         guestLastActiveAt: nowMs,
       };
 
-      await this.adapter.updateRoom(normalized, updatedFields);
+      try {
+        await this.adapter.updateRoom(normalized, updatedFields);
+      } catch (updateErr: any) {
+        const msg = String(updateErr?.message || '');
+        if (msg.includes('ROOM_FULL') || String(updateErr?.code || '').includes('permission-denied')) {
+          return {
+            success: false,
+            errorCode: 'ROOM_FULL',
+            message: 'Phòng đã đủ 2 người chơi hoặc vừa có người chơi khác tham gia.',
+          };
+        }
+        throw updateErr;
+      }
+
+      // Kiểm tra lại trạng thái trên máy chủ để đảm bảo vị trí P2 thuộc về user.uid (chống 2 người vào cùng lúc)
+      try {
+        const serverCheck = await this.adapter.getRoomFromServer(normalized);
+        if (serverCheck && serverCheck.guestUid !== user.uid) {
+          return {
+            success: false,
+            errorCode: 'ROOM_FULL',
+            message: 'Phòng vừa được người chơi khác tham gia trước bạn.',
+          };
+        }
+      } catch {
+        // Ignore transient server check failure if updateRoom succeeded
+      }
 
       // Fix 3: Xác minh tài liệu private/signaling đã tồn tại sau khi vào phòng
       const existingSig = await this.adapter.getSignaling(normalized);
@@ -2216,13 +2485,27 @@ export class CoopOnlineManager {
         };
       }
 
-      const updatedRoom: CoopRoomDocument = {
+      const syncedSig: CoopRoomSignalingDocument = {
+        ...existingSig,
+        guestUid: user.uid,
+        updatedAt: nowMs,
+      };
+      try {
+        await this.adapter.updateSignaling(normalized, {
+          guestUid: user.uid,
+          updatedAt: nowMs,
+        });
+      } catch {
+        // Host will also sync guestUid on signaling when creating WebRTC offer
+      }
+
+      const mergedLobby: CoopRoomLobbyDocument = {
         ...room,
         ...updatedFields,
-        ...existingSig,
       };
+      const updatedRoom: CoopRoomDocument = mergeLobbyAndSignaling(mergedLobby, syncedSig);
 
-      this.currentSignaling = existingSig;
+      this.currentSignaling = syncedSig;
       this.currentRoom = updatedRoom;
       this.role = 'GUEST';
       this.rtcState = 'CONNECTING';
@@ -2245,22 +2528,164 @@ export class CoopOnlineManager {
   }
 
   /**
-   * Đặt trạng thái Sẵn sàng (Ready) cho P1 (Host) hoặc P2 (Guest).
+   * Vào nhanh (Quick Join - M7.3.7 Mục VI.5.3.A):
+   * - Chỉ tìm phòng công khai (Không mật khẩu) thỏa mãn đồng thời:
+   *   1. `status === 'WAITING'`
+   *   2. `!hasPassword`
+   *   3. `guestUid === null` (mới có P1, chưa có P2)
+   *   4. `nowMs < expiresAt` (chưa hết hạn)
+   *   5. Có signaling hợp lệ
+   *   6. `hostUid !== user.uid`
+   * - Nếu không có phòng thỏa điều kiện -> trả về `NO_AVAILABLE_PUBLIC_ROOM` ("Hiện chưa có phòng trống").
+   */
+  public async quickJoinRoom(
+    user: { uid: string; displayName?: string | null; email?: string | null; photoURL?: string | null } | null,
+    nowMs: number = Date.now()
+  ): Promise<CoopActionResult> {
+    if (!user || !user.uid) {
+      return {
+        success: false,
+        errorCode: 'UNAUTHENTICATED',
+        message: 'Vui lòng đăng nhập Google trước khi tham gia phòng Co-op Online.',
+      };
+    }
+
+    try {
+      const candidateRooms: CoopRoomLobbyDocument[] = [];
+      const seenCodes = new Set<string>();
+
+      if (typeof this.adapter.listRooms === 'function') {
+        const allRooms = await this.adapter.listRooms();
+        for (const r of allRooms) {
+          if (r && r.roomCode && !seenCodes.has(r.roomCode)) {
+            seenCodes.add(r.roomCode);
+            candidateRooms.push(r);
+          }
+        }
+      }
+
+      const publicCodes = getPublicQuickJoinCandidateCodes(nowMs);
+      for (const code of publicCodes) {
+        if (seenCodes.has(code)) continue;
+        seenCodes.add(code);
+        try {
+          const r = await this.adapter.getRoom(code);
+          if (r) {
+            candidateRooms.push(r);
+          }
+        } catch {
+          // Ignore individual slot read error
+        }
+      }
+
+      const eligibleRooms = candidateRooms
+        .filter((r) => {
+          const lockInfo = decodeHostDisplayNameAndLock(r.hostDisplayName);
+          return (
+            r.status === 'WAITING' &&
+            !lockInfo.hasPassword &&
+            r.guestUid === null &&
+            nowMs < r.expiresAt &&
+            r.hostUid !== user.uid
+          );
+        })
+        .sort((a, b) => a.createdAt - b.createdAt);
+
+      if (eligibleRooms.length === 0) {
+        return {
+          success: false,
+          errorCode: 'NO_AVAILABLE_PUBLIC_ROOM',
+          message: 'Hiện chưa có phòng trống',
+        };
+      }
+
+      for (const candidate of eligibleRooms) {
+        const joinRes = await this.joinRoom(candidate.roomCode, user, nowMs);
+        if (joinRes.success) {
+          return joinRes;
+        }
+      }
+
+      return {
+        success: false,
+        errorCode: 'NO_AVAILABLE_PUBLIC_ROOM',
+        message: 'Hiện chưa có phòng trống',
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        errorCode: 'NETWORK_ERROR',
+        message: err?.message || 'Lỗi kết nối khi tìm phòng trống.',
+      };
+    }
+  }
+
+  /**
+   * Đặt trạng thái Sẵn sàng (Ready) cho P1 (Host) hoặc P2 (Guest) (Sửa lỗi Hạng mục 6 - M7.3.7).
    */
   public async setPlayerReady(ready: boolean, nowMs: number = Date.now()): Promise<CoopActionResult> {
     if (!this.currentRoom || !this.role) {
-      return { success: false, message: 'Chưa ở trong phòng Co-op Online.' };
+      return {
+        success: false,
+        errorCode: 'ROOM_NOT_FOUND',
+        message: 'Chưa ở trong phòng Co-op Online.',
+      };
     }
 
     const code = this.currentRoom.roomCode;
-    const partial: Partial<CoopRoomLobbyDocument> =
-      this.role === 'HOST'
-        ? { hostReady: ready, hostLastActiveAt: nowMs }
-        : { guestReady: ready, guestLastActiveAt: nowMs };
-
     try {
+      const latestRoom = await this.adapter.getRoom(code);
+      if (!latestRoom) {
+        return {
+          success: false,
+          errorCode: 'ROOM_NOT_FOUND',
+          message: 'Không tìm thấy phòng chơi trên hệ thống.',
+        };
+      }
+
+      if (
+        latestRoom.status === 'EXPIRED' ||
+        latestRoom.status === 'ABANDONED' ||
+        latestRoom.status === 'FINISHED' ||
+        (latestRoom.status === 'WAITING' && nowMs >= latestRoom.expiresAt)
+      ) {
+        return {
+          success: false,
+          errorCode: 'ROOM_EXPIRED',
+          message: 'Phòng chờ đã hết hạn hoặc đã đóng.',
+        };
+      }
+
+      if (latestRoom.status !== 'WAITING') {
+        return {
+          success: false,
+          errorCode: 'MATCH_ALREADY_STARTED',
+          message: 'Trận đấu đã bắt đầu, không thể thay đổi trạng thái Sẵn sàng.',
+        };
+      }
+
+      if (this.role === 'GUEST') {
+        if (!latestRoom.guestUid || latestRoom.guestUid !== this.currentRoom.guestUid) {
+          return {
+            success: false,
+            errorCode: 'INVALID_ROOM_STATE',
+            message: 'Người chơi 2 chưa được ghi nhận hợp lệ trong phòng.',
+          };
+        }
+      }
+
+      const nextReady = Boolean(ready);
+      const partial: Partial<CoopRoomLobbyDocument> =
+        this.role === 'HOST'
+          ? { hostReady: nextReady, hostLastActiveAt: nowMs }
+          : { guestReady: nextReady, guestLastActiveAt: nowMs };
+
       await this.adapter.updateRoom(code, partial);
-      this.currentRoom = { ...this.currentRoom, ...partial };
+      const mergedLobby: CoopRoomLobbyDocument = {
+        ...latestRoom,
+        ...partial,
+      };
+      this.currentRoom = mergeLobbyAndSignaling(mergedLobby, this.currentSignaling);
       this.notifyListeners();
       return { success: true, room: this.currentRoom };
     } catch (err: any) {
@@ -2710,7 +3135,8 @@ export class CoopOnlineManager {
     } | null,
     difficulty: 'DEFAULT' | 'EXTREME',
     nowMs: number = Date.now(),
-    explicitRoomCode?: string
+    explicitRoomCode?: string,
+    options?: CoopCreateRoomOptions
   ): CoopActionResult {
     if (!user || !user.uid) {
       return {
@@ -2739,6 +3165,30 @@ export class CoopOnlineManager {
       };
     }
 
+    if (difficulty !== 'DEFAULT' && difficulty !== 'EXTREME') {
+      return {
+        success: false,
+        errorCode: 'INVALID_DATA',
+        failedStep: 'AUTH_PRECHECK',
+        message: buildCreateRoomStepErrorMessage('AUTH_PRECHECK', 'INVALID_DATA'),
+      };
+    }
+
+    const usePassword = Boolean(options?.hasPassword);
+    let normalizedPassword = '';
+    if (usePassword) {
+      const pwdCheck = validateRoomPassword(options?.password);
+      if (!pwdCheck.valid) {
+        return {
+          success: false,
+          errorCode: 'INVALID_PASSWORD',
+          failedStep: 'AUTH_PRECHECK',
+          message: pwdCheck.message || 'Mật khẩu phòng không hợp lệ.',
+        };
+      }
+      normalizedPassword = pwdCheck.normalized;
+    }
+
     this.cleanupSubscription();
     this.closeWebRTC();
     this.currentRoom = null;
@@ -2746,7 +3196,13 @@ export class CoopOnlineManager {
     this.role = null;
 
     const triedCodes = new Set<string>();
-    let roomCode = explicitRoomCode ?? generateRoomCode(triedCodes);
+    const publicSlotCandidates =
+      !explicitRoomCode && options?.hasPassword === false
+        ? getPublicQuickJoinSlotCodesForBucket(Math.floor(nowMs / (5 * 60 * 1000)))
+        : [];
+    let roomCode =
+      explicitRoomCode ??
+      (publicSlotCandidates.length > 0 ? publicSlotCandidates[0] : generateRoomCode(triedCodes));
     let foundAvailableCode = Boolean(explicitRoomCode);
 
     if (!explicitRoomCode) {
@@ -2777,7 +3233,8 @@ export class CoopOnlineManager {
             message: buildCreateRoomStepErrorMessage('PRECHECK_ROOM_CODE', classification),
           };
         }
-        roomCode = generateRoomCode(triedCodes);
+        const nextPublicSlot = publicSlotCandidates.find((c) => !triedCodes.has(c));
+        roomCode = nextPublicSlot ?? generateRoomCode(triedCodes);
       }
 
       if (!foundAvailableCode) {
@@ -2792,14 +3249,20 @@ export class CoopOnlineManager {
 
     const safeTtlMs =
       COOP_ONLINE_CONFIG.ROOM_TTL_MS - COOP_ONLINE_CONFIG.CLOCK_SKEW_BUFFER_MS;
-    const safeHostDisplayName = (getUserDisplayLabel(user) || 'Commander').trim().slice(0, 80);
+    const cleanHostName = (getUserDisplayLabel(user) || 'Commander').trim().slice(0, 80);
+    const encodedHostDisplayName = encodeHostDisplayNameWithLock(
+      cleanHostName,
+      roomCode,
+      usePassword,
+      normalizedPassword
+    );
 
     const newLobby: CoopRoomLobbyDocument = {
       roomCode,
       status: 'WAITING',
       difficulty,
       hostUid: user.uid,
-      hostDisplayName: safeHostDisplayName,
+      hostDisplayName: encodedHostDisplayName,
       hostReady: false,
       hostLastActiveAt: nowMs,
       guestUid: null,
@@ -2949,7 +3412,7 @@ export class CoopOnlineManager {
       // Bước 5: Chỉ sau khi xác minh hoàn tất mới công bố mã phòng và trạng thái sẵn sàng
       this.lastCreateRoomDiagnostic = null;
       this.currentSignaling = verifiedSig;
-      this.currentRoom = { ...newLobby, ...verifiedSig };
+      this.currentRoom = mergeLobbyAndSignaling(newLobby, verifiedSig);
       this.role = 'HOST';
       this.resetSyncCounters();
       this.listenToRoom(roomCode);
@@ -2974,13 +3437,14 @@ export class CoopOnlineManager {
   }
 
   /**
-   * Phiên bản đồng bộ phục vụ kiểm thử tự động với InMemoryCoopStorageAdapter cho quy trình tham gia phòng (Fix 1 & Fix 3).
+   * Phiên bản đồng bộ phục vụ kiểm thử tự động với InMemoryCoopStorageAdapter cho quy trình tham gia phòng (Fix 1 & Fix 3 & M7.3.7).
    */
   public joinRoomSync(
     storage: InMemoryCoopStorageAdapter,
     rawRoomCode: string,
     user: { uid: string; displayName?: string | null; email?: string | null; photoURL?: string | null } | null,
-    nowMs: number = Date.now()
+    nowMs: number = Date.now(),
+    options?: CoopJoinRoomOptions
   ): CoopActionResult {
     if (!user || !user.uid) {
       return {
@@ -3001,7 +3465,7 @@ export class CoopOnlineManager {
 
     const room = storage.getRoomSync(normalized);
     const sigExists = storage.getSignalingSync(normalized) !== null;
-    const joinCandidate = evaluateJoinRoomCandidate(room, normalized, user, nowMs, sigExists);
+    const joinCandidate = evaluateJoinRoomCandidate(room, normalized, user, nowMs, sigExists, options);
     if (!joinCandidate.success || !room) {
       return joinCandidate;
     }
@@ -3016,7 +3480,24 @@ export class CoopOnlineManager {
       guestLastActiveAt: nowMs,
     };
 
-    storage.updateRoomSync(normalized, updatedFields);
+    try {
+      storage.updateRoomSync(normalized, updatedFields);
+    } catch (updateErr: any) {
+      const msg = String(updateErr?.message || '');
+      if (msg.includes('ROOM_FULL') || String(updateErr?.code || '').includes('permission-denied')) {
+        return {
+          success: false,
+          errorCode: 'ROOM_FULL',
+          message: 'Phòng đã đủ 2 người chơi hoặc vừa có người chơi khác tham gia.',
+        };
+      }
+      return {
+        success: false,
+        errorCode: 'NETWORK_ERROR',
+        message: msg || 'Không thể tham gia phòng do lỗi kết nối.',
+      };
+    }
+
     const existingSig = storage.getSignalingSync(normalized);
     if (!existingSig) {
       storage.updateRoomSync(normalized, {
@@ -3032,8 +3513,26 @@ export class CoopOnlineManager {
       };
     }
 
-    this.currentSignaling = existingSig;
-    this.currentRoom = { ...room, ...updatedFields, ...existingSig };
+    const syncedSig: CoopRoomSignalingDocument = {
+      ...existingSig,
+      guestUid: user.uid,
+      updatedAt: nowMs,
+    };
+    try {
+      storage.updateSignalingSync(normalized, {
+        guestUid: user.uid,
+        updatedAt: nowMs,
+      });
+    } catch {
+      // Ignore optional signaling guestUid sync failure
+    }
+
+    const mergedLobby: CoopRoomLobbyDocument = {
+      ...room,
+      ...updatedFields,
+    };
+    this.currentSignaling = syncedSig;
+    this.currentRoom = mergeLobbyAndSignaling(mergedLobby, syncedSig);
     this.role = 'GUEST';
     this.resetSyncCounters();
     this.listenToRoom(normalized);
@@ -3043,6 +3542,261 @@ export class CoopOnlineManager {
       success: true,
       room: this.currentRoom,
     };
+  }
+
+  /**
+   * Phiên bản đồng bộ phục vụ kiểm thử tự động cho tính năng "Vào nhanh" (Quick Join - M7.3.7 Mục VI.5.3.A).
+   */
+  public quickJoinRoomSync(
+    storage: InMemoryCoopStorageAdapter,
+    user: { uid: string; displayName?: string | null; email?: string | null; photoURL?: string | null } | null,
+    nowMs: number = Date.now()
+  ): CoopActionResult {
+    if (!user || !user.uid) {
+      return {
+        success: false,
+        errorCode: 'UNAUTHENTICATED',
+        message: 'Vui lòng đăng nhập Google trước khi tham gia phòng Co-op Online.',
+      };
+    }
+
+    const allRooms = storage.listRoomsSync();
+    const eligibleRooms = allRooms
+      .filter((r) => {
+        const lockInfo = decodeHostDisplayNameAndLock(r.hostDisplayName);
+        const sigExists = storage.getSignalingSync(r.roomCode) !== null;
+        return (
+          r.status === 'WAITING' &&
+          !lockInfo.hasPassword &&
+          r.guestUid === null &&
+          nowMs < r.expiresAt &&
+          r.hostUid !== user.uid &&
+          sigExists
+        );
+      })
+      .sort((a, b) => a.createdAt - b.createdAt);
+
+    if (eligibleRooms.length === 0) {
+      return {
+        success: false,
+        errorCode: 'NO_AVAILABLE_PUBLIC_ROOM',
+        message: 'Hiện chưa có phòng trống',
+      };
+    }
+
+    for (const candidate of eligibleRooms) {
+      const joinRes = this.joinRoomSync(storage, candidate.roomCode, user, nowMs);
+      if (joinRes.success) {
+        return joinRes;
+      }
+    }
+
+    return {
+      success: false,
+      errorCode: 'NO_AVAILABLE_PUBLIC_ROOM',
+      message: 'Hiện chưa có phòng trống',
+    };
+  }
+
+  /**
+   * Phiên bản đồng bộ phục vụ kiểm thử tự động cho thao tác bấm Sẵn sàng / Hủy sẵn sàng của P1 & P2 (Hạng mục 6 - M7.3.7).
+   */
+  public setPlayerReadySync(
+    storage: InMemoryCoopStorageAdapter,
+    ready: boolean,
+    nowMs: number = Date.now()
+  ): CoopActionResult {
+    if (!this.currentRoom || !this.role) {
+      return {
+        success: false,
+        errorCode: 'ROOM_NOT_FOUND',
+        message: 'Chưa ở trong phòng Co-op Online.',
+      };
+    }
+
+    const code = this.currentRoom.roomCode;
+    const latestRoom = storage.getRoomSync(code);
+    if (!latestRoom) {
+      return {
+        success: false,
+        errorCode: 'ROOM_NOT_FOUND',
+        message: 'Không tìm thấy phòng chơi trên hệ thống.',
+      };
+    }
+
+    if (
+      latestRoom.status === 'EXPIRED' ||
+      latestRoom.status === 'ABANDONED' ||
+      latestRoom.status === 'FINISHED' ||
+      (latestRoom.status === 'WAITING' && nowMs >= latestRoom.expiresAt)
+    ) {
+      return {
+        success: false,
+        errorCode: 'ROOM_EXPIRED',
+        message: 'Phòng chờ đã hết hạn hoặc đã đóng.',
+      };
+    }
+
+    if (latestRoom.status !== 'WAITING') {
+      return {
+        success: false,
+        errorCode: 'MATCH_ALREADY_STARTED',
+        message: 'Trận đấu đã bắt đầu, không thể thay đổi trạng thái Sẵn sàng.',
+      };
+    }
+
+    if (this.role === 'GUEST') {
+      if (!latestRoom.guestUid || latestRoom.guestUid !== this.currentRoom.guestUid) {
+        return {
+          success: false,
+          errorCode: 'INVALID_ROOM_STATE',
+          message: 'Người chơi 2 chưa được ghi nhận hợp lệ trong phòng.',
+        };
+      }
+    }
+
+    const nextReady = Boolean(ready);
+    const partial: Partial<CoopRoomLobbyDocument> =
+      this.role === 'HOST'
+        ? { hostReady: nextReady, hostLastActiveAt: nowMs }
+        : { guestReady: nextReady, guestLastActiveAt: nowMs };
+
+    try {
+      storage.updateRoomSync(code, partial);
+      const mergedLobby: CoopRoomLobbyDocument = {
+        ...latestRoom,
+        ...partial,
+      };
+      this.currentRoom = mergeLobbyAndSignaling(mergedLobby, this.currentSignaling);
+      this.notifyListeners();
+      return { success: true, room: this.currentRoom };
+    } catch (err: any) {
+      return {
+        success: false,
+        errorCode: 'NETWORK_ERROR',
+        message: err?.message || 'Lỗi cập nhật trạng thái Sẵn sàng.',
+      };
+    }
+  }
+
+  /**
+   * Phiên bản đồng bộ phục vụ kiểm thử tự động cho thao tác bắt đầu trận đấu của Host (P1).
+   */
+  public startOnlineMatchSync(
+    storage: InMemoryCoopStorageAdapter,
+    callerUid: string,
+    initialGameState?: Readonly<GameCoreState>,
+    nowMs: number = Date.now()
+  ): CoopActionResult {
+    const latestLobby = this.currentRoom ? storage.getRoomSync(this.currentRoom.roomCode) : null;
+    if (latestLobby) {
+      this.currentRoom = mergeLobbyAndSignaling(latestLobby, this.currentSignaling);
+    }
+    const sigExists = Boolean(
+      this.currentRoom && storage.getSignalingSync(this.currentRoom.roomCode) !== null
+    );
+    const check = evaluateStartMatchCandidate(
+      this.currentRoom,
+      callerUid,
+      this.role,
+      nowMs,
+      sigExists
+    );
+    if (!check.success || !this.currentRoom) {
+      return check;
+    }
+
+    if (this.rtcState === 'FAILED') {
+      return {
+        success: false,
+        errorCode: 'WEBRTC_NOT_CONNECTED',
+        message:
+          this.webrtcErrorMessage ||
+          'Kết nối P2P trực tiếp (WebRTC) chưa sẵn sàng. Vui lòng nhấn "Thử kết nối lại P2P".',
+      };
+    }
+
+    this.resetSyncCounters();
+    this.lastPeerP2PActiveAt = nowMs;
+
+    const partial: Partial<CoopRoomLobbyDocument> = {
+      status: 'PLAYING',
+      hostLastActiveAt: nowMs,
+      disconnectReason: null,
+    };
+
+    try {
+      storage.updateRoomSync(this.currentRoom.roomCode, partial);
+      const updatedLobby = storage.getRoomSync(this.currentRoom.roomCode);
+      if (updatedLobby) {
+        this.currentRoom = mergeLobbyAndSignaling(updatedLobby, this.currentSignaling);
+      }
+
+      if (initialGameState && this.isP2PDataChannelOpen()) {
+        this.hostOutgoingSnapshotSeq = 1;
+        const initialSnapshot = buildAuthoritativeSnapshot(initialGameState, 1, nowMs);
+        this.sendOverDataChannel({ type: 'HOST_SNAPSHOT', snapshot: initialSnapshot });
+      }
+
+      this.notifyListeners();
+      return { success: true, room: this.currentRoom || undefined };
+    } catch (err: any) {
+      return {
+        success: false,
+        errorCode: 'NETWORK_ERROR',
+        message: err?.message || 'Không thể bắt đầu trận đấu do lỗi mạng.',
+      };
+    }
+  }
+
+  /**
+   * Phiên bản đồng bộ phục vụ kiểm thử tự động cho thao tác rời phòng của P1 hoặc P2.
+   */
+  public leaveRoomSync(
+    storage: InMemoryCoopStorageAdapter,
+    reason?: string,
+    nowMs: number = Date.now()
+  ): void {
+    const room = this.currentRoom;
+    const currentRole = this.role;
+    this.cleanupSubscription();
+    this.closeWebRTC();
+    this.currentRoom = null;
+    this.currentSignaling = null;
+    this.role = null;
+    this.resetSyncCounters();
+    this.notifyListeners();
+
+    if (!room || !currentRole) return;
+
+    try {
+      if (currentRole === 'HOST') {
+        storage.updateRoomSync(room.roomCode, {
+          status: 'ABANDONED',
+          rtcConnectionState: 'DISCONNECTED',
+          hostLastActiveAt: nowMs,
+          disconnectReason:
+            reason || 'Chủ phòng (P1) đã rời phòng. Trận đấu kết thúc an toàn.',
+        });
+      } else if (currentRole === 'GUEST') {
+        if (room.status === 'WAITING') {
+          storage.updateRoomSync(room.roomCode, {
+            guestUid: null,
+            guestDisplayName: null,
+            guestReady: false,
+            guestLastActiveAt: null,
+          });
+        } else {
+          storage.updateRoomSync(room.roomCode, {
+            status: 'ABANDONED',
+            guestLastActiveAt: nowMs,
+            disconnectReason: reason || 'Người chơi 2 (P2) đã rời trận đấu.',
+          });
+        }
+      }
+    } catch {
+      // Ignore cleanup error
+    }
   }
 
   /**
@@ -3557,10 +4311,7 @@ export class CoopOnlineManager {
       if (!updatedLobby) {
         this.currentRoom = null;
       } else {
-        this.currentRoom = {
-          ...updatedLobby,
-          ...(this.currentSignaling || {}),
-        };
+        this.currentRoom = mergeLobbyAndSignaling(updatedLobby, this.currentSignaling);
         this.coordinateWebRTCSignaling();
       }
       this.notifyListeners();
@@ -3571,7 +4322,12 @@ export class CoopOnlineManager {
       if (this.currentRoom && updatedSig) {
         this.currentRoom = {
           ...this.currentRoom,
-          ...updatedSig,
+          rtcOffer: updatedSig.rtcOffer,
+          rtcAnswer: updatedSig.rtcAnswer,
+          hostIceCandidates: updatedSig.hostIceCandidates,
+          guestIceCandidates: updatedSig.guestIceCandidates,
+          finalScore: updatedSig.finalScore,
+          matchOutcome: updatedSig.matchOutcome,
         };
         this.coordinateWebRTCSignaling();
       }

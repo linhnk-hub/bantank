@@ -759,8 +759,10 @@ export class MusicManager {
   // Web Audio nodes for custom track playback & crossfading
   private currentSource: AudioBufferSourceNode | null = null;
   private currentGain: GainNode | null = null;
-  private nextCrossfadeTimer: number | null = null;
-  private activeSources: Set<AudioBufferSourceNode> = new Set();
+  private nextCrossfadeTimer: ReturnType<typeof setTimeout> | null = null;
+  private activeSources: Set<{ stop: () => void; disconnect: () => void; onended?: ((...args: any[]) => any) | null }> = new Set();
+  private playbackGenerationId: number = 0;
+  private snapshotRequestToken: number = 0;
 
   private listeners: Set<() => void> = new Set();
 
@@ -1003,6 +1005,7 @@ export class MusicManager {
   public async applySharedAudioConfigSnapshot(
     config: SystemAudioConfigDocument | null
   ): Promise<void> {
+    const requestToken = ++this.snapshotRequestToken;
     this.sharedAudioConfig = config ? { ...config } : null;
 
     if (!config || !config.isEnabled || !config.assetPath) {
@@ -1063,6 +1066,9 @@ export class MusicManager {
       return;
     }
 
+    // Dừng ngay bài nhạc cũ đang phát khi bắt đầu chuyển sang bài nhạc mới để không phát chồng
+    this.stopAllCustomSources();
+    SoundManager.getInstance().stopBgm();
     this.isCloudSyncInProgress = true;
     this.sharedSyncError = null;
     this.notify();
@@ -1072,6 +1078,9 @@ export class MusicManager {
         safeAssetPath,
         config.version
       );
+      if (requestToken !== this.snapshotRequestToken) {
+        return;
+      }
 
       let decodedBuffer: {
         duration: number;
@@ -1087,6 +1096,10 @@ export class MusicManager {
         if (ctx) {
           decodedBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
         }
+      }
+
+      if (requestToken !== this.snapshotRequestToken) {
+        return;
       }
 
       if (!decodedBuffer || decodedBuffer.duration <= 0) {
@@ -1131,6 +1144,8 @@ export class MusicManager {
         storagePathOrUrl: runtimeUrl,
       };
 
+      this.previewTrackId = null;
+      this.stopAllCustomSources();
       this.tracks.set(SHARED_SYSTEM_BGM_ID, sharedMeta);
       if (typeof AudioBuffer !== 'undefined' && decodedBuffer instanceof AudioBuffer) {
         this.audioBuffers.set(SHARED_SYSTEM_BGM_ID, decodedBuffer);
@@ -1148,7 +1163,11 @@ export class MusicManager {
       this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
       this.notify();
     } catch (err: any) {
+      if (requestToken !== this.snapshotRequestToken) {
+        return;
+      }
       // Fallback an toàn về nhạc 8-bit mặc định nếu không tải/giải mã được file nhạc chung
+      this.stopAllCustomSources();
       this.isCloudSyncInProgress = false;
       this.sharedSyncError =
         err?.message || 'Không thể tải nhạc nền từ GitHub Pages; hệ thống đã chuyển về nhạc 8-bit mặc định.';
@@ -2092,6 +2111,8 @@ export class MusicManager {
     this.tracks.set(id, metadata);
     if (typeof AudioBuffer !== 'undefined' && params.audioBuffer instanceof AudioBuffer) {
       this.audioBuffers.set(id, params.audioBuffer);
+    } else {
+      this.audioBuffers.set(id, params.audioBuffer as unknown as AudioBuffer);
     }
 
     this.savePersistedState();
@@ -2235,6 +2256,15 @@ export class MusicManager {
     };
 
     this.tracks.set(trackId, updated);
+    if (typeof AudioBuffer !== 'undefined' && params.audioBuffer instanceof AudioBuffer) {
+      this.audioBuffers.set(trackId, params.audioBuffer);
+    } else {
+      this.audioBuffers.set(trackId, params.audioBuffer as unknown as AudioBuffer);
+    }
+    if (this.activeTrackId === trackId && this.isPlaying && !this.isPaused) {
+      this.stopAllCustomSources();
+      this.startTrackBufferPlayback(trackId);
+    }
     this.savePersistedState();
     this.notify();
     return true;
@@ -2504,22 +2534,26 @@ export class MusicManager {
 
   /**
    * Synchronizes BGM playback when transitioning stages or changing modes.
-   * Guarantees zero overlapping BGM instances.
+   * Guarantees zero overlapping BGM instances (M7.3.7 Section IV).
    */
   public syncPlaybackWithContext(
     stageId: number,
     mode: GameModeScope = 'SOLO'
   ): void {
     this.activeContext = { stageId, mode };
+    this.previewTrackId = null;
     const resolved = this.resolveEffectiveTrack(stageId, mode);
     const soundManager = SoundManager.getInstance();
     const audioSettings = soundManager.getSettings();
 
     this.activeTrackId = resolved.trackId;
 
+    // Always stop all previous custom BGM sources and procedural BGM first
+    this.stopAllCustomSources();
+
     if (!audioSettings.bgmEnabled || this.isPaused) {
-      this.stopAllCustomSources();
-      soundManager.pauseBgm();
+      soundManager.setCustomBgmActive(Boolean(resolved.trackId));
+      soundManager.stopBgm();
       this.isPlaying = false;
       this.notify();
       return;
@@ -2527,14 +2561,14 @@ export class MusicManager {
 
     // If a custom track is resolved AND we have its decoded AudioBuffer
     if (resolved.trackId && this.audioBuffers.has(resolved.trackId)) {
-      // Stop procedural BGM so two BGM tracks never overlap
-      soundManager.pauseBgm();
-      this.stopAllCustomSources();
+      // Lock procedural BGM off so two BGM tracks can never overlap even on pointerdown/keydown unlock()
+      soundManager.setCustomBgmActive(true);
+      soundManager.stopBgm();
       this.isPlaying = true;
       this.startTrackBufferPlayback(resolved.trackId);
     } else {
       // Fallback safely to built-in procedural BGM
-      this.stopAllCustomSources();
+      soundManager.setCustomBgmActive(false);
       this.isPlaying = true;
       soundManager.resumeBgm();
     }
@@ -2543,20 +2577,41 @@ export class MusicManager {
   }
 
   private startTrackBufferPlayback(trackId: string, withFadeIn: boolean = false): void {
+    // Ensure any previous source is completely stopped before starting a new source
+    this.stopAllCustomSources();
+    const myGenId = ++this.playbackGenerationId;
+
     const buffer = this.audioBuffers.get(trackId);
     const meta = this.tracks.get(trackId);
     const soundManager = SoundManager.getInstance();
     const ctx = soundManager.initContext();
 
-    if (!buffer || !meta || !ctx) {
-      // Safe fallback if buffer is unavailable
+    if (!buffer || !meta) {
+      soundManager.setCustomBgmActive(false);
       soundManager.resumeBgm();
       return;
     }
 
-    // Tôn trọng chính sách autoplay của trình duyệt:
-    // Nếu AudioContext đang bị trình duyệt tạm hoãn (suspended) trước tương tác đầu tiên,
-    // chờ tương tác hợp lệ đầu tiên rồi tự động phát.
+    // Lock procedural BGM off while custom track is active
+    soundManager.setCustomBgmActive(true);
+    soundManager.stopBgm();
+
+    // Headless / Node test environment where Web Audio API AudioContext is unavailable:
+    // Track a single virtual active source so anti-overlap & lifecycle invariants can be verified deterministically.
+    if (!ctx) {
+      const virtualSource = {
+        stop: () => {
+          this.activeSources.delete(virtualSource);
+        },
+        disconnect: () => {
+          this.activeSources.delete(virtualSource);
+        },
+        onended: null as (() => void) | null,
+      };
+      this.activeSources.add(virtualSource);
+      return;
+    }
+
     if ((ctx as AudioContext).state === 'suspended') {
       this.ensureAutoplayInteractionUnlock();
     }
@@ -2576,7 +2631,6 @@ export class MusicManager {
 
       const now = ctx.currentTime;
 
-      // Apply smooth crossfade if enabled and loop duration is long enough
       const canCrossfade =
         this.loopConfig.loop &&
         this.loopConfig.crossfade &&
@@ -2591,7 +2645,6 @@ export class MusicManager {
           gainNode.gain.setValueAtTime(targetVol, now);
         }
 
-        // Schedule fade-out at end of playDuration
         const fadeOutStart = now + playDuration - fadeSec;
         gainNode.gain.setValueAtTime(targetVol, fadeOutStart);
         gainNode.gain.linearRampToValueAtTime(0.001, now + playDuration);
@@ -2604,18 +2657,21 @@ export class MusicManager {
         this.currentSource = source;
         this.currentGain = gainNode;
 
-        // Schedule next iteration slightly before end for seamless crossfade overlap
         if (this.nextCrossfadeTimer !== null) {
-          window.clearTimeout(this.nextCrossfadeTimer);
+          clearTimeout(this.nextCrossfadeTimer);
         }
         const nextTriggerMs = Math.max(50, (playDuration - fadeSec) * 1000);
-        this.nextCrossfadeTimer = window.setTimeout(() => {
-          if (this.isPlaying && !this.isPaused && this.activeTrackId === trackId) {
+        this.nextCrossfadeTimer = setTimeout(() => {
+          if (
+            this.playbackGenerationId === myGenId &&
+            this.isPlaying &&
+            !this.isPaused &&
+            (this.previewTrackId === trackId || (!this.previewTrackId && this.activeTrackId === trackId))
+          ) {
             this.startTrackBufferPlayback(trackId, true);
           }
         }, nextTriggerMs);
       } else {
-        // Native Web Audio hardware-accurate seamless loop with loopStart / loopEnd
         gainNode.gain.setValueAtTime(targetVol, now);
         source.loop = this.loopConfig.loop;
         if (this.loopConfig.loop && this.loopConfig.seamlessLoop) {
@@ -2641,18 +2697,21 @@ export class MusicManager {
         this.activeSources.delete(source);
       };
     } catch {
-      // Safe fallback on any browser Web Audio error
+      this.stopAllCustomSources();
+      soundManager.setCustomBgmActive(false);
       soundManager.resumeBgm();
     }
   }
 
   public stopAllCustomSources(): void {
+    this.playbackGenerationId++;
     if (this.nextCrossfadeTimer !== null) {
-      window.clearTimeout(this.nextCrossfadeTimer);
+      clearTimeout(this.nextCrossfadeTimer);
       this.nextCrossfadeTimer = null;
     }
     for (const src of this.activeSources) {
       try {
+        src.onended = null;
         src.stop();
         src.disconnect();
       } catch {
@@ -2660,6 +2719,13 @@ export class MusicManager {
       }
     }
     this.activeSources.clear();
+    if (this.currentGain) {
+      try {
+        this.currentGain.disconnect();
+      } catch {
+        // ignore
+      }
+    }
     this.currentSource = null;
     this.currentGain = null;
   }
@@ -2667,8 +2733,9 @@ export class MusicManager {
   public pause(): void {
     this.isPaused = true;
     this.isPlaying = false;
+    this.previewTrackId = null;
     this.stopAllCustomSources();
-    SoundManager.getInstance().pauseBgm();
+    SoundManager.getInstance().stopBgm();
     this.notify();
   }
 
@@ -2678,29 +2745,39 @@ export class MusicManager {
   }
 
   public onVolumeOrToggleChanged(): void {
-    const settings = SoundManager.getInstance().getSettings();
+    const soundManager = SoundManager.getInstance();
+    const settings = soundManager.getSettings();
     if (!settings.bgmEnabled) {
       this.stopAllCustomSources();
+      soundManager.stopBgm();
       this.isPlaying = false;
+      this.notify();
       return;
     }
     if (this.currentGain && this.currentSource) {
-      const ctx = SoundManager.getInstance().initContext();
+      const ctx = soundManager.initContext();
       if (ctx) {
         this.currentGain.gain.setValueAtTime(settings.bgmVolume, ctx.currentTime);
       }
     } else if (!this.isPaused) {
-      this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
+      if (this.previewTrackId && this.tracks.has(this.previewTrackId)) {
+        this.previewTrack(this.previewTrackId);
+      } else {
+        this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
+      }
     }
   }
 
   /**
    * Preview a specific track in the Admin Manager without changing scope assignments.
+   * Stops any currently playing BGM or preview before starting the requested preview track.
    */
   public previewTrack(trackId: string): boolean {
     if (!this.tracks.has(trackId)) return false;
-    SoundManager.getInstance().unlock();
-    SoundManager.getInstance().pauseBgm();
+    const soundManager = SoundManager.getInstance();
+    soundManager.setCustomBgmActive(true);
+    soundManager.unlock();
+    soundManager.stopBgm();
     this.stopAllCustomSources();
 
     this.previewTrackId = trackId;
@@ -2723,6 +2800,14 @@ export class MusicManager {
 
   public getPreviewTrackId(): string | null {
     return this.previewTrackId;
+  }
+
+  public getActiveTrackId(): string | null {
+    return this.previewTrackId ?? this.activeTrackId;
+  }
+
+  public getPlaybackGenerationId(): number {
+    return this.playbackGenerationId;
   }
 
   /**

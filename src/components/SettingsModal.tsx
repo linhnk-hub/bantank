@@ -25,6 +25,8 @@ import {
   EyeOff,
   Sparkles,
   Image as ImageIcon,
+  Gamepad2,
+  Shield,
 } from 'lucide-react';
 import { SoundManager, type AudioSettings } from '../core/audio.ts';
 import { MusicManager } from '../core/musicManager.ts';
@@ -34,9 +36,23 @@ import {
   type StagedCatalogAvatarFile,
   type UserProfileAvatarMetadata,
   type PendingCatalogMetadataSync,
+  type AvatarUploadUiStatus,
 } from '../core/avatarManager.ts';
-import { AuthManager, SUPER_ADMIN_EMAIL } from '../core/authManager.ts';
+import {
+  AuthManager,
+  SUPER_ADMIN_EMAIL,
+  resolveUserRole,
+  getRoleNameFrameClasses,
+  getRoleDisplayInfo,
+} from '../core/authManager.ts';
 import { MusicAdminPanel } from './MusicAdminPanel.tsx';
+
+export type SettingsTabId =
+  | 'ACCOUNT'
+  | 'IMAGE_SETTINGS'
+  | 'AUDIO_SETTINGS'
+  | 'GAME_MODE_SETTINGS'
+  | 'ADMIN_OTHER';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -47,8 +63,10 @@ export interface SettingsModalProps {
   user?: {
     uid?: string;
     email: string | null;
+    emailVerified?: boolean;
     displayName?: string | null;
     photoURL?: string | null;
+    role?: string | null;
   } | null;
   onProfileUpdated?: () => void;
 }
@@ -56,6 +74,8 @@ export interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
+  difficulty = 'DEFAULT',
+  onDifficultyChange,
   isSuperAdmin = false,
   user: propUser,
   onProfileUpdated,
@@ -71,10 +91,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     isSuperAdmin &&
     Boolean(currentUser?.email && currentUser.email.toLowerCase() === SUPER_ADMIN_EMAIL);
 
+  const userRole = resolveUserRole(currentUser);
+  const roleInfo = getRoleDisplayInfo(userRole);
+  const roleFrameClasses = getRoleNameFrameClasses(userRole);
+
+  const [activeTab, setActiveTab] = useState<SettingsTabId>('ACCOUNT');
+
   const [audioSettings, setAudioSettings] = useState<AudioSettings>(() =>
     soundManager.getSettings()
   );
-  const [showMusicAdmin, setShowMusicAdmin] = useState<boolean>(false);
+  const [showMusicAdmin, setShowMusicAdmin] = useState<boolean>(true);
 
   // Account & Player Avatar selection state
   const [displayName, setDisplayName] = useState<string>('');
@@ -105,6 +131,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [uploadProgressPct, setUploadProgressPct] = useState<number | null>(() =>
     avatarManager.getUploadProgressPct()
   );
+  const [uploadUiStatus, setUploadUiStatus] = useState<AvatarUploadUiStatus>(() =>
+    avatarManager.getUploadUiStatus()
+  );
+  const [uploadUiStatusLabel, setUploadUiStatusLabel] = useState<string | null>(() =>
+    avatarManager.getUploadUiStatusLabelVi()
+  );
   const [catalogNameInput, setCatalogNameInput] = useState<string>('');
   const [catalogSortOrderInput, setCatalogSortOrderInput] = useState<number>(10);
   const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
@@ -125,7 +157,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setDisplayName(meta?.displayName || authUser?.displayName || '');
     setAvatarLoadError(false);
     setFeedback(null);
-  }, [isOpen, currentUid]);
+    // Reset to ACCOUNT tab if current tab is admin-only and user is not Super Admin
+    if (
+      !isVerifiedSuperAdmin &&
+      (activeTab === 'IMAGE_SETTINGS' || activeTab === 'ADMIN_OTHER')
+    ) {
+      setActiveTab('ACCOUNT');
+    }
+  }, [isOpen, currentUid, isVerifiedSuperAdmin]);
 
   useEffect(() => {
     const unsub = avatarManager.subscribe(() => {
@@ -136,6 +175,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setStagedCatalogFile(avatarManager.getStagedCatalogFile());
       setPendingCatalogSync(avatarManager.getPendingCatalogSync());
       setUploadProgressPct(avatarManager.getUploadProgressPct());
+      setUploadUiStatus(avatarManager.getUploadUiStatus());
+      setUploadUiStatusLabel(avatarManager.getUploadUiStatusLabelVi());
       setRenderTick((t) => t + 1);
     });
     return unsub;
@@ -156,6 +197,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const isSelectedCatalogActive = Boolean(
     selectedCatalogId && activeCatalog.some((item) => item.avatarId === selectedCatalogId)
   );
+
+  const plannedVersionInfo = isVerifiedSuperAdmin
+    ? avatarManager.getPlannedUploadVersionInfo({
+        replaceAvatarId: replaceTargetId,
+      })
+    : null;
 
   const handleBgmToggle = () => {
     soundManager.unlock();
@@ -257,7 +304,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           text: res.error || 'File ảnh không hợp lệ.',
         });
       } else {
-        if (!catalogNameInput.trim()) {
+        if (
+          pendingCatalogSync &&
+          pendingCatalogSync.status === 'UPLOAD_INDETERMINATE' &&
+          !replaceTargetId
+        ) {
+          setReplaceTargetId(pendingCatalogSync.avatarId);
+          if (!catalogNameInput.trim()) {
+            setCatalogNameInput(pendingCatalogSync.name || 'Chiến Xa Tank');
+          }
+          setCatalogSortOrderInput(pendingCatalogSync.sortOrder ?? 10);
+        } else if (!catalogNameInput.trim()) {
           const defaultLabel = file.name.replace(/\.[^.]+$/, '').slice(0, 40);
           setCatalogNameInput(defaultLabel || 'Chiến Xa Tank');
         }
@@ -359,6 +416,49 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
+  const availableTabs: Array<{
+    id: SettingsTabId;
+    label: string;
+    icon: React.ReactNode;
+    adminOnly?: boolean;
+  }> = [
+    {
+      id: 'ACCOUNT',
+      label: 'Tài khoản cá nhân',
+      icon: <User className="w-3.5 h-3.5" />,
+    },
+    ...(isVerifiedSuperAdmin
+      ? [
+          {
+            id: 'IMAGE_SETTINGS' as SettingsTabId,
+            label: 'Cài đặt hình ảnh',
+            icon: <ImageIcon className="w-3.5 h-3.5" />,
+            adminOnly: true,
+          },
+        ]
+      : []),
+    {
+      id: 'AUDIO_SETTINGS',
+      label: 'Cài đặt âm thanh',
+      icon: <Music className="w-3.5 h-3.5" />,
+    },
+    {
+      id: 'GAME_MODE_SETTINGS',
+      label: 'Cài đặt chế độ chơi',
+      icon: <Gamepad2 className="w-3.5 h-3.5" />,
+    },
+    ...(isVerifiedSuperAdmin
+      ? [
+          {
+            id: 'ADMIN_OTHER' as SettingsTabId,
+            label: 'Quản trị & Phân quyền',
+            icon: <Shield className="w-3.5 h-3.5" />,
+            adminOnly: true,
+          },
+        ]
+      : []),
+  ];
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in select-none">
       <div className="bg-neutral-900 border border-neutral-700 rounded-2xl w-full max-w-2xl max-h-[90dvh] flex flex-col shadow-2xl overflow-hidden">
@@ -370,7 +470,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             <div>
               <h2 className="text-sm font-extrabold text-white flex items-center gap-2 uppercase tracking-wide">
-                CÀI ĐẶT
+                CÀI ĐẶT HỆ THỐNG
               </h2>
             </div>
           </div>
@@ -385,8 +485,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
 
+        {/* Navigation Tabs (Hạng mục 2 - M7.3.7 Mục III.2.1: Tách các mục cài đặt riêng biệt) */}
+        <div className="bg-neutral-950/90 px-3 py-2 border-b border-neutral-800 flex items-center gap-1.5 overflow-x-auto shrink-0">
+          {availableTabs.map((tab) => {
+            const isSelected = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => {
+                  setFeedback(null);
+                  setActiveTab(tab.id);
+                }}
+                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
+                  isSelected
+                    ? tab.adminOnly
+                      ? 'bg-red-500/20 text-red-200 border border-red-500 shadow-sm'
+                      : 'bg-amber-500 text-black border border-amber-400 shadow-sm'
+                    : tab.adminOnly
+                      ? 'bg-neutral-900 text-red-300/80 border border-red-900/40 hover:border-red-500/50'
+                      : 'bg-neutral-900 text-neutral-300 border border-neutral-800 hover:border-neutral-700'
+                }`}
+              >
+                {tab.icon}
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
         {/* Settings Body */}
-        <div className="p-4 sm:p-5 overflow-y-auto space-y-5 text-xs scrollbar-thin">
+        <div className="p-4 sm:p-5 overflow-y-auto space-y-5 text-xs scrollbar-thin flex-1">
           {/* Feedback Banner */}
           {feedback && (
             <div
@@ -415,21 +544,34 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* =========================================================================
-              PHẦN 1: TÀI KHOẢN (CHỌN ẢNH GOOGLE HOẶC DANH MỤC AVATAR CHUNG, TÊN, EMAIL)
+              TAB 1: TÀI KHOẢN CÁ NHÂN (MỌI NGƯỜI CHƠI)
              ========================================================================= */}
-          {currentUser && (
+          {activeTab === 'ACCOUNT' && currentUser && (
             <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-4 space-y-4">
-              <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
+              <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
                   <User className="w-4 h-4 text-amber-400" />
-                  <span>1. TÀI KHOẢN</span>
+                  <span>TÀI KHOẢN CÁ NHÂN</span>
                 </div>
-                <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-mono">
-                  <ShieldCheck className="w-3.5 h-3.5" /> Đã xác thực Google
-                </span>
+                <div className="flex items-center gap-2">
+                  {/* Khung tên người chơi có màu viền phân quyền (M7.3.7 Mục III.2.2) */}
+                  <div
+                    className={`px-2.5 py-1 rounded-lg bg-neutral-900 flex items-center gap-1.5 ${roleFrameClasses}`}
+                  >
+                    <span className="text-xs font-extrabold text-white truncate max-w-[150px]">
+                      {userMeta?.displayName || currentUser.displayName || 'Commander'}
+                    </span>
+                    <span className="text-[10px] font-mono font-bold text-amber-300">
+                      [{roleInfo.label}]
+                    </span>
+                  </div>
+                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-mono">
+                    <ShieldCheck className="w-3.5 h-3.5" /> Đã xác thực Google
+                  </span>
+                </div>
               </div>
 
-              {/* Khu vực ẢNH ĐẠI DIỆN NGƯỜI CHƠI (M7.3.5 Mục 6: Chọn Ảnh Google hoặc Danh mục Avatar chung) */}
+              {/* Khu vực ẢNH ĐẠI DIỆN NGƯỜI CHƠI (Chọn Ảnh Google hoặc Danh mục Avatar chung) */}
               <div className="p-3.5 rounded-xl bg-neutral-900/80 border border-neutral-800 space-y-3.5">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-1.5 font-bold text-amber-300">
@@ -570,293 +712,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 )}
               </div>
 
-              {/* =====================================================================
-                  QUẢN LÝ DANH MỤC AVATAR (CHỈ HIỂN THỊ CHO SUPER ADMIN linhnk.online@gmail.com)
-                 ===================================================================== */}
-              {isVerifiedSuperAdmin && (
-                <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/40 space-y-3.5">
-                  <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/20 pb-2">
-                    <div className="flex items-center gap-1.5 font-extrabold text-amber-300 uppercase">
-                      <Sparkles className="w-4 h-4 text-amber-400" />
-                      <span>QUẢN LÝ DANH MỤC AVATAR (SUPER ADMIN)</span>
-                    </div>
-                    <span className="text-[10px] text-amber-200/80 font-mono">
-                      JPEG / PNG / WebP • ≤ 5 MB • ≤ 2048×2048 px
-                    </span>
-                  </div>
-
-                  <input
-                    ref={adminFileInputRef}
-                    type="file"
-                    accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                    onChange={handleAdminPickCatalogFile}
-                    className="hidden"
-                  />
-
-                  {/* Pending Firestore Metadata Sync / Indeterminate F5 Recovery Alert */}
-                  {pendingCatalogSync && (
-                    <div
-                      className={`p-3 rounded-lg space-y-2 border ${
-                        pendingCatalogSync.status === 'UPLOAD_CONFIRMED_METADATA_PENDING'
-                          ? 'bg-sky-950/60 border-sky-500/50'
-                          : 'bg-amber-950/60 border-amber-500/50'
-                      }`}
-                    >
-                      <div className="text-[11px] font-semibold text-white">
-                        {pendingCatalogSync.status === 'UPLOAD_CONFIRMED_METADATA_PENDING' ? (
-                          <span className="text-sky-200">
-                            [UPLOAD_CONFIRMED_METADATA_PENDING] File{' '}
-                            <span className="font-mono text-white">
-                              {pendingCatalogSync.storagePath}
-                            </span>{' '}
-                            (v{pendingCatalogSync.version}) đã được xác nhận trên Firebase Storage nhưng chưa ghi được metadata lên Firestore.
-                          </span>
-                        ) : (
-                          <span className="text-amber-200">
-                            [{pendingCatalogSync.status}] Tiến trình upload tại{' '}
-                            <span className="font-mono text-white">
-                              {pendingCatalogSync.storagePath}
-                            </span>{' '}
-                            (v{pendingCatalogSync.version}) bị ngắt bởi F5/mất kết nối và chưa xác minh được object hoàn chỉnh trên Storage. Đường dẫn này đã được khóa chống ghi đè; vui lòng chọn file để tải lên mới (hệ thống tự động cấp v{pendingCatalogSync.version + 1}).
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        {pendingCatalogSync.status === 'UPLOAD_CONFIRMED_METADATA_PENDING' && (
-                          <button
-                            type="button"
-                            disabled={isBusy}
-                            onClick={handleAdminRetryCatalogSync}
-                            className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-black font-extrabold text-xs flex items-center gap-1.5 cursor-pointer"
-                          >
-                            <RefreshCw className={`w-3.5 h-3.5 ${isBusy ? 'animate-spin' : ''}`} />
-                            <span>ĐỒNG BỘ LẠI METADATA DANH MỤC (KHÔNG UPLOAD LẠI)</span>
-                          </button>
-                        )}
-                        {pendingCatalogSync.status === 'UPLOAD_INDETERMINATE' && (
-                          <button
-                            type="button"
-                            disabled={isBusy}
-                            onClick={() => void avatarManager.discardPendingCatalogUpload()}
-                            className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-amber-200 border border-amber-500/40 font-bold text-xs cursor-pointer"
-                          >
-                            ĐÃ HIỂU (GIỮ KHÓA PATH v{pendingCatalogSync.version})
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Staged Catalog File Upload Form */}
-                  {stagedCatalogFile ? (
-                    <div className="p-3 rounded-xl bg-neutral-900/90 border border-amber-500/40 space-y-3">
-                      <div className="flex items-center gap-3">
-                        {stagedCatalogFile.previewObjectUrl && (
-                          <img
-                            src={stagedCatalogFile.previewObjectUrl}
-                            alt="Xem trước"
-                            className="w-14 h-14 rounded-full object-cover border border-amber-400 shrink-0"
-                          />
-                        )}
-                        <div className="text-[11px] space-y-0.5">
-                          <div className="font-bold text-white">
-                            {replaceTargetId
-                              ? `Thay thế ảnh cho mã: ${replaceTargetId}`
-                              : `Thêm mới: ${stagedCatalogFile.sanitizedFileName}`}
-                          </div>
-                          <div className="text-neutral-300 font-mono">
-                            {stagedCatalogFile.format} • {stagedCatalogFile.width}×
-                            {stagedCatalogFile.height} px •{' '}
-                            {formatFileSize(stagedCatalogFile.sizeBytes)}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                        <div className="sm:col-span-2">
-                          <label className="block text-[10px] text-neutral-400 mb-1">
-                            Tên hiển thị avatar (1–60 ký tự)
-                          </label>
-                          <input
-                            type="text"
-                            maxLength={60}
-                            value={catalogNameInput}
-                            onChange={(e) => setCatalogNameInput(e.target.value)}
-                            placeholder="VD: Chiến Xa Đại Bàng Vàng"
-                            className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-950 border border-neutral-700 text-white text-xs"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] text-neutral-400 mb-1">
-                            Thứ tự sắp xếp (sortOrder)
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            max={999999}
-                            value={catalogSortOrderInput}
-                            onChange={(e) =>
-                              setCatalogSortOrderInput(Math.max(0, parseInt(e.target.value, 10) || 0))
-                            }
-                            className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-950 border border-neutral-700 text-white text-xs font-mono"
-                          />
-                        </div>
-                      </div>
-
-                      {uploadProgressPct !== null && (
-                        <div className="space-y-1">
-                          <div className="flex justify-between text-[10px] font-mono text-amber-300">
-                            <span>Đang tải lên Firebase Storage...</span>
-                            <span>{uploadProgressPct}%</span>
-                          </div>
-                          <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-amber-400 transition-all"
-                              style={{ width: `${uploadProgressPct}%` }}
-                            />
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={handleAdminUploadCatalog}
-                          className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                          <span>
-                            {isBusy
-                              ? 'ĐANG UPLOAD...'
-                              : replaceTargetId
-                              ? 'XÁC NHẬN THAY ẢNH (v+1)'
-                              : 'TẢI LÊN FIREBASE STORAGE'}
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={handleAdminCancelStaged}
-                          className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 font-bold text-xs flex items-center gap-1 cursor-pointer"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                          <span>HỦY</span>
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between flex-wrap gap-2">
-                      <span className="text-[11px] text-neutral-300">
-                        Tải ảnh đại diện mới lên Firebase Storage để mọi người chơi lựa chọn.
-                      </span>
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() => {
-                          setReplaceTargetId(null);
-                          adminFileInputRef.current?.click();
-                        }}
-                        className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>THÊM AVATAR VÀO DANH MỤC</span>
-                      </button>
-                    </div>
-                  )}
-
-                  {/* Admin Catalog Items Table / List */}
-                  {allCatalog.length > 0 && (
-                    <div className="space-y-2 pt-2 border-t border-amber-500/20">
-                      <div className="text-[11px] font-bold text-amber-200">
-                        Danh sách toàn bộ Avatar trong Danh mục ({allCatalog.length})
-                      </div>
-                      <div className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
-                        {allCatalog.map((item) => {
-                          const itemUrl = avatarManager.getCatalogItemUrl(item.storagePath);
-                          return (
-                            <div
-                              key={item.avatarId}
-                              className="p-2 rounded-lg bg-neutral-900/90 border border-neutral-800 flex items-center justify-between gap-2"
-                            >
-                              <div className="flex items-center gap-2.5 min-w-0">
-                                <div className="w-9 h-9 rounded-full overflow-hidden border border-neutral-700 bg-neutral-950 shrink-0 flex items-center justify-center">
-                                  {itemUrl ? (
-                                    <img
-                                      src={itemUrl}
-                                      alt={item.name}
-                                      className="w-full h-full object-cover"
-                                    />
-                                  ) : (
-                                    <ImageIcon className="w-4 h-4 text-neutral-500" />
-                                  )}
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="text-xs font-bold text-white truncate">
-                                    {item.name}{' '}
-                                    <span className="text-[10px] font-mono text-amber-400">
-                                      (v{item.version} • #{item.sortOrder})
-                                    </span>
-                                  </div>
-                                  <div className="text-[10px] font-mono text-neutral-400 truncate">
-                                    {item.storagePath} • {formatFileSize(item.fileSize)}
-                                  </div>
-                                </div>
-                              </div>
-
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() => handleAdminToggleActive(item)}
-                                  className={`px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer ${
-                                    item.isActive
-                                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                      : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
-                                  }`}
-                                  title={item.isActive ? 'Đang kích hoạt (Nhấn để Ẩn)' : 'Đang ẩn (Nhấn để Kích hoạt)'}
-                                >
-                                  {item.isActive ? (
-                                    <>
-                                      <Eye className="w-3 h-3" />
-                                      <span>Hiện</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <EyeOff className="w-3 h-3" />
-                                      <span>Ẩn</span>
-                                    </>
-                                  )}
-                                </button>
-
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() => handleAdminStartReplace(item)}
-                                  className="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold cursor-pointer"
-                                  title="Thay thế ảnh bằng phiên bản mới (v+1)"
-                                >
-                                  Thay ảnh
-                                </button>
-
-                                <button
-                                  type="button"
-                                  disabled={isBusy}
-                                  onClick={() => handleAdminDeleteCatalogItem(item)}
-                                  className="p-1 rounded bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/60 cursor-pointer"
-                                  title="Xóa khỏi danh mục (Chỉ xóa khi không có người chơi đang dùng)"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-
               {/* Tên hiển thị & Email tài khoản Google */}
               <form onSubmit={handleSaveDisplayName} className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
@@ -902,119 +757,611 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* =========================================================================
-              PHẦN 2: ÂM THANH (NHẠC NỀN BGM & HIỆU ỨNG SFX)
+              TAB 2: CÀI ĐẶT HÌNH ẢNH (CHỈ DÀNH CHO SUPER ADMIN linhnk.online@gmail.com)
              ========================================================================= */}
-          <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-4 space-y-4">
-            <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
-              <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
-                <Music className="w-4 h-4 text-amber-400" />
-                <span>2. ÂM THANH</span>
-              </div>
-              <span className="text-[10px] text-neutral-400 font-mono">BGM &amp; SFX Độc Lập</span>
-            </div>
-
-            {/* BGM Toggle & Slider */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-neutral-200 font-semibold">
-                  {audioSettings.bgmEnabled ? (
-                    <Volume2 className="w-4 h-4 text-amber-400" />
-                  ) : (
-                    <VolumeX className="w-4 h-4 text-neutral-500" />
-                  )}
-                  <span>Nhạc nền (BGM)</span>
+          {activeTab === 'IMAGE_SETTINGS' && isVerifiedSuperAdmin && (
+            <section className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/40 space-y-4">
+              <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/20 pb-2.5">
+                <div className="flex items-center gap-1.5 font-extrabold text-amber-300 uppercase">
+                  <Sparkles className="w-4 h-4 text-amber-400" />
+                  <span>CÀI ĐẶT HÌNH ẢNH • QUẢN LÝ DANH MỤC AVATAR (SUPER ADMIN)</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleBgmToggle}
-                  className={`px-3 py-1 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer ${
-                    audioSettings.bgmEnabled
-                      ? 'bg-amber-500 text-black'
-                      : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200'
+                <span className="text-[10px] text-amber-200/80 font-mono">
+                  JPEG / PNG / WebP • ≤ 5 MB • ≤ 2048×2048 px
+                </span>
+              </div>
+
+              <input
+                ref={adminFileInputRef}
+                type="file"
+                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                onChange={handleAdminPickCatalogFile}
+                className="hidden"
+              />
+
+              {/* Live Upload Status Badge (M7.3.7 Mục II.1.2.E) */}
+              {uploadUiStatusLabel && (
+                <div
+                  className={`px-3 py-2 rounded-lg border flex items-center justify-between gap-2 text-xs font-bold ${
+                    uploadUiStatus === 'SUCCESS'
+                      ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-200'
+                      : uploadUiStatus === 'FAILED_NEEDS_NEW_VERSION' ||
+                          uploadUiStatus === 'INTERRUPTED'
+                        ? 'bg-amber-950/80 border-amber-500/50 text-amber-200'
+                        : 'bg-sky-950/80 border-sky-500/50 text-sky-200'
                   }`}
                 >
-                  {audioSettings.bgmEnabled ? 'ĐANG BẬT' : 'ĐANG TẮT'}
-                </button>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <span className="text-[11px] text-neutral-400 w-28 shrink-0">Âm lượng nhạc nền:</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  disabled={!audioSettings.bgmEnabled}
-                  value={audioSettings.bgmVolume}
-                  onChange={(e) => handleBgmVolChange(parseFloat(e.target.value))}
-                  className="flex-1 accent-amber-500 cursor-pointer h-1.5 bg-neutral-800 rounded disabled:opacity-40"
-                />
-                <span className="font-mono text-[11px] text-amber-300 font-bold w-10 text-right">
-                  {Math.round(audioSettings.bgmVolume * 100)}%
-                </span>
-              </div>
-            </div>
-
-            {/* SFX Toggle & Slider */}
-            <div className="space-y-2 pt-3 border-t border-neutral-800">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-neutral-200 font-semibold">
-                  {audioSettings.sfxEnabled ? (
-                    <Volume2 className="w-4 h-4 text-emerald-400" />
-                  ) : (
-                    <VolumeX className="w-4 h-4 text-neutral-500" />
+                  <div className="flex items-center gap-2">
+                    <RefreshCw
+                      className={`w-3.5 h-3.5 shrink-0 ${
+                        uploadUiStatus === 'UPLOADING' || uploadUiStatus === 'VERIFYING'
+                          ? 'animate-spin'
+                          : ''
+                      }`}
+                    />
+                    <span>Trạng thái tiến trình: {uploadUiStatusLabel}</span>
+                  </div>
+                  {plannedVersionInfo && (
+                    <span className="px-2 py-0.5 rounded bg-black/40 border border-white/15 font-mono text-[10px] text-amber-300">
+                      Phiên bản tiếp theo: v{plannedVersionInfo.nextVersion}
+                    </span>
                   )}
-                  <span>Âm thanh hiệu ứng (SFX)</span>
                 </div>
-                <button
-                  type="button"
-                  onClick={handleSfxToggle}
-                  className={`px-3 py-1 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer ${
-                    audioSettings.sfxEnabled
-                      ? 'bg-emerald-500 text-black'
-                      : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200'
+              )}
+
+              {/* Pending Firestore Metadata Sync / Indeterminate F5 Recovery Alert (M7.3.7 Mục II.1.2) */}
+              {pendingCatalogSync && (
+                <div
+                  className={`p-3.5 rounded-xl space-y-2.5 border ${
+                    pendingCatalogSync.status === 'UPLOAD_CONFIRMED_METADATA_PENDING'
+                      ? 'bg-sky-950/60 border-sky-500/50'
+                      : 'bg-amber-950/60 border-amber-500/50'
                   }`}
                 >
-                  {audioSettings.sfxEnabled ? 'ĐANG BẬT' : 'ĐANG TẮT'}
-                </button>
-              </div>
+                  <div className="text-[11px] font-semibold text-white leading-relaxed">
+                    {pendingCatalogSync.status === 'UPLOAD_CONFIRMED_METADATA_PENDING' ? (
+                      <span className="text-sky-200">
+                        <strong className="text-white">[Đã xác minh Storage thành công]</strong> File{' '}
+                        <span className="font-mono text-white">
+                          {pendingCatalogSync.storagePath}
+                        </span>{' '}
+                        (v{pendingCatalogSync.version}) đã tồn tại hợp lệ trên Firebase Storage nhưng chưa ghi được metadata lên Firestore. Bạn có thể hoàn tất đồng bộ metadata ngay mà không cần upload lại file.
+                      </span>
+                    ) : (
+                      <span className="text-amber-200">
+                        <strong className="text-amber-300">[Upload bị gián đoạn — Cần chọn file tải lên phiên bản mới]</strong>{' '}
+                        Tiến trình upload tại{' '}
+                        <span className="font-mono text-white">
+                          {pendingCatalogSync.storagePath}
+                        </span>{' '}
+                        (v{pendingCatalogSync.version}) bị gián đoạn khi F5/mất kết nối và object chưa tồn tại hoàn chỉnh trên Firebase Storage. Đường dẫn{' '}
+                        <span className="font-mono text-white">v{pendingCatalogSync.version}</span>{' '}
+                        được giữ khóa chống ghi đè; khi bạn chọn lại file ảnh, hệ thống sẽ tự động tải lên phiên bản mới{' '}
+                        <span className="font-mono font-extrabold text-emerald-300">
+                          v{pendingCatalogSync.version + 1}
+                        </span>{' '}
+                        cho cùng avatar <span className="font-mono text-white">{pendingCatalogSync.avatarId}</span>.
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {pendingCatalogSync.status === 'UPLOAD_CONFIRMED_METADATA_PENDING' && (
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={handleAdminRetryCatalogSync}
+                        className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-black font-extrabold text-xs flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isBusy ? 'animate-spin' : ''}`} />
+                        <span>HOÀN TẤT GHI METADATA (KHÔNG UPLOAD LẠI)</span>
+                      </button>
+                    )}
+                    {pendingCatalogSync.status === 'UPLOAD_INDETERMINATE' && (
+                      <>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => {
+                            setReplaceTargetId(pendingCatalogSync.avatarId);
+                            setCatalogNameInput(pendingCatalogSync.name || 'Chiến Xa Tank');
+                            setCatalogSortOrderInput(pendingCatalogSync.sortOrder ?? 10);
+                            adminFileInputRef.current?.click();
+                          }}
+                          className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Upload className="w-3.5 h-3.5" />
+                          <span>
+                            CHỌN FILE TẢI LÊN PHIÊN BẢN MỚI (v{pendingCatalogSync.version + 1})
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isBusy}
+                          onClick={() => void avatarManager.discardPendingCatalogUpload()}
+                          className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-amber-200 border border-amber-500/40 font-bold text-xs cursor-pointer"
+                        >
+                          BỎ QUA THÔNG BÁO (GIỮ KHÓA PATH v{pendingCatalogSync.version})
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
 
-              <div className="flex items-center gap-3">
-                <span className="text-[11px] text-neutral-400 w-28 shrink-0">Âm lượng hiệu ứng:</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  disabled={!audioSettings.sfxEnabled}
-                  value={audioSettings.sfxVolume}
-                  onChange={(e) => handleSfxVolChange(parseFloat(e.target.value))}
-                  className="flex-1 accent-emerald-500 cursor-pointer h-1.5 bg-neutral-800 rounded disabled:opacity-40"
-                />
-                <span className="font-mono text-[11px] text-emerald-300 font-bold w-10 text-right">
-                  {Math.round(audioSettings.sfxVolume * 100)}%
+              {/* Staged Catalog File Upload Form */}
+              {stagedCatalogFile ? (
+                <div className="p-3 rounded-xl bg-neutral-900/90 border border-amber-500/40 space-y-3">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-3">
+                      {stagedCatalogFile.previewObjectUrl && (
+                        <img
+                          src={stagedCatalogFile.previewObjectUrl}
+                          alt="Xem trước"
+                          className="w-14 h-14 rounded-full object-cover border border-amber-400 shrink-0"
+                        />
+                      )}
+                      <div className="text-[11px] space-y-0.5">
+                        <div className="font-bold text-white">
+                          {replaceTargetId
+                            ? `Cập nhật / Khôi phục cho mã: ${replaceTargetId}`
+                            : `Thêm mới: ${stagedCatalogFile.sanitizedFileName}`}
+                        </div>
+                        <div className="text-neutral-300 font-mono">
+                          {stagedCatalogFile.format} • {stagedCatalogFile.width}×
+                          {stagedCatalogFile.height} px •{' '}
+                          {formatFileSize(stagedCatalogFile.sizeBytes)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {plannedVersionInfo && (
+                      <div className="px-2.5 py-1.5 rounded-lg bg-neutral-950 border border-emerald-500/40 text-right">
+                        <div className="text-[10px] text-neutral-400">Phiên bản sẽ tạo</div>
+                        <div className="text-xs font-extrabold font-mono text-emerald-300">
+                          {plannedVersionInfo.targetAvatarId} • v{plannedVersionInfo.nextVersion}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="sm:col-span-2">
+                      <label className="block text-[10px] text-neutral-400 mb-1">
+                        Tên hiển thị avatar (1–60 ký tự)
+                      </label>
+                      <input
+                        type="text"
+                        maxLength={60}
+                        value={catalogNameInput}
+                        onChange={(e) => setCatalogNameInput(e.target.value)}
+                        placeholder="VD: Chiến Xa Đại Bàng Vàng"
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-950 border border-neutral-700 text-white text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] text-neutral-400 mb-1">
+                        Thứ tự sắp xếp (sortOrder)
+                      </label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={999999}
+                        value={catalogSortOrderInput}
+                        onChange={(e) =>
+                          setCatalogSortOrderInput(Math.max(0, parseInt(e.target.value, 10) || 0))
+                        }
+                        className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-950 border border-neutral-700 text-white text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {uploadProgressPct !== null && (
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] font-mono text-amber-300">
+                        <span>{uploadUiStatusLabel || 'Đang tải lên Firebase Storage...'}</span>
+                        <span>{uploadProgressPct}%</span>
+                      </div>
+                      <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-amber-400 transition-all"
+                          style={{ width: `${uploadProgressPct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      onClick={handleAdminUploadCatalog}
+                      className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                      <span>
+                        {isBusy
+                          ? uploadUiStatusLabel || 'ĐANG TẢI LÊN...'
+                          : plannedVersionInfo
+                            ? `XÁC NHẬN TẢI LÊN (v${plannedVersionInfo.nextVersion})`
+                            : 'TẢI LÊN FIREBASE STORAGE'}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAdminCancelStaged}
+                      className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 font-bold text-xs flex items-center gap-1 cursor-pointer"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      <span>HỦY</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <span className="text-[11px] text-neutral-300">
+                    Tải ảnh đại diện mới lên Firebase Storage để mọi người chơi lựa chọn.
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => {
+                      setReplaceTargetId(null);
+                      adminFileInputRef.current?.click();
+                    }}
+                    className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>THÊM AVATAR VÀO DANH MỤC</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Admin Catalog Items Table / List */}
+              {allCatalog.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-amber-500/20">
+                  <div className="text-[11px] font-bold text-amber-200">
+                    Danh sách toàn bộ Avatar trong Danh mục ({allCatalog.length})
+                  </div>
+                  <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
+                    {allCatalog.map((item) => {
+                      const itemUrl = avatarManager.getCatalogItemUrl(item.storagePath);
+                      return (
+                        <div
+                          key={item.avatarId}
+                          className="p-2 rounded-lg bg-neutral-900/90 border border-neutral-800 flex items-center justify-between gap-2"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-9 h-9 rounded-full overflow-hidden border border-neutral-700 bg-neutral-950 shrink-0 flex items-center justify-center">
+                              {itemUrl ? (
+                                <img
+                                  src={itemUrl}
+                                  alt={item.name}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <ImageIcon className="w-4 h-4 text-neutral-500" />
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-white truncate">
+                                {item.name}{' '}
+                                <span className="text-[10px] font-mono text-amber-400">
+                                  (v{item.version} • #{item.sortOrder})
+                                </span>
+                              </div>
+                              <div className="text-[10px] font-mono text-neutral-400 truncate">
+                                {item.storagePath} • {formatFileSize(item.fileSize)}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => handleAdminToggleActive(item)}
+                              className={`px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer ${
+                                item.isActive
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                                  : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
+                              }`}
+                              title={
+                                item.isActive
+                                  ? 'Đang kích hoạt (Nhấn để Ẩn)'
+                                  : 'Đang ẩn (Nhấn để Kích hoạt)'
+                              }
+                            >
+                              {item.isActive ? (
+                                <>
+                                  <Eye className="w-3 h-3" />
+                                  <span>Hiện</span>
+                                </>
+                              ) : (
+                                <>
+                                  <EyeOff className="w-3 h-3" />
+                                  <span>Ẩn</span>
+                                </>
+                              )}
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => handleAdminStartReplace(item)}
+                              className="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold cursor-pointer"
+                              title="Thay thế ảnh bằng phiên bản mới (v+1)"
+                            >
+                              Thay ảnh (v{item.version + 1})
+                            </button>
+
+                            <button
+                              type="button"
+                              disabled={isBusy}
+                              onClick={() => handleAdminDeleteCatalogItem(item)}
+                              className="p-1 rounded bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/60 cursor-pointer"
+                              title="Xóa khỏi danh mục (Chỉ xóa khi không có người chơi đang dùng)"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {/* =========================================================================
+              TAB 3: CÀI ĐẶT ÂM THANH (BGM & SFX CÁ NHÂN + QUẢN LÝ NHẠC NỀN SUPER ADMIN)
+             ========================================================================= */}
+          {activeTab === 'AUDIO_SETTINGS' && (
+            <>
+              <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-4 space-y-4">
+                <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
+                  <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
+                    <Music className="w-4 h-4 text-amber-400" />
+                    <span>CÀI ĐẶT ÂM THANH</span>
+                  </div>
+                  <span className="text-[10px] text-neutral-400 font-mono">
+                    BGM &amp; SFX Độc Lập • Chỉ 1 nguồn BGM phát tại 1 thời điểm
+                  </span>
+                </div>
+
+                {/* BGM Toggle & Slider */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-neutral-200 font-semibold">
+                      {audioSettings.bgmEnabled ? (
+                        <Volume2 className="w-4 h-4 text-amber-400" />
+                      ) : (
+                        <VolumeX className="w-4 h-4 text-neutral-500" />
+                      )}
+                      <span>Nhạc nền (BGM)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleBgmToggle}
+                      className={`px-3 py-1 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer ${
+                        audioSettings.bgmEnabled
+                          ? 'bg-amber-500 text-black'
+                          : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200'
+                      }`}
+                    >
+                      {audioSettings.bgmEnabled ? 'ĐANG BẬT' : 'ĐANG TẮT'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <span className="text-[11px] text-neutral-400 w-28 shrink-0">
+                      Âm lượng nhạc nền:
+                    </span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      disabled={!audioSettings.bgmEnabled}
+                      value={audioSettings.bgmVolume}
+                      onChange={(e) => handleBgmVolChange(parseFloat(e.target.value))}
+                      className="flex-1 accent-amber-500 cursor-pointer h-1.5 bg-neutral-800 rounded disabled:opacity-40"
+                    />
+                    <span className="font-mono text-[11px] text-amber-300 font-bold w-10 text-right">
+                      {Math.round(audioSettings.bgmVolume * 100)}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* SFX Toggle & Slider */}
+                <div className="space-y-2 pt-3 border-t border-neutral-800">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-neutral-200 font-semibold">
+                      {audioSettings.sfxEnabled ? (
+                        <Volume2 className="w-4 h-4 text-emerald-400" />
+                      ) : (
+                        <VolumeX className="w-4 h-4 text-neutral-500" />
+                      )}
+                      <span>Âm thanh hiệu ứng (SFX)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleSfxToggle}
+                      className={`px-3 py-1 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer ${
+                        audioSettings.sfxEnabled
+                          ? 'bg-emerald-500 text-black'
+                          : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200'
+                      }`}
+                    >
+                      {audioSettings.sfxEnabled ? 'ĐANG BẬT' : 'ĐANG TẮT'}
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <span className="text-[11px] text-neutral-400 w-28 shrink-0">
+                      Âm lượng hiệu ứng:
+                    </span>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.05"
+                      disabled={!audioSettings.sfxEnabled}
+                      value={audioSettings.sfxVolume}
+                      onChange={(e) => handleSfxVolChange(parseFloat(e.target.value))}
+                      className="flex-1 accent-emerald-500 cursor-pointer h-1.5 bg-neutral-800 rounded disabled:opacity-40"
+                    />
+                    <span className="font-mono text-[11px] text-emerald-300 font-bold w-10 text-right">
+                      {Math.round(audioSettings.sfxVolume * 100)}%
+                    </span>
+                  </div>
+                </div>
+
+                {/* Toggle Super Admin Music Management Panel — ONLY visible for Super Admin */}
+                {canShowAdminMusic && (
+                  <div className="pt-3 border-t border-neutral-800 flex items-center justify-between">
+                    <span className="text-[11px] text-amber-300 font-bold">
+                      Quản trị Thư viện Nhạc nền Hệ thống (Super Admin)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setShowMusicAdmin((v) => !v)}
+                      className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-[11px] transition-all cursor-pointer"
+                    >
+                      {showMusicAdmin ? 'Thu gọn Quản lý Nhạc' : 'Mở Quản lý Nhạc nền'}
+                    </button>
+                  </div>
+                )}
+              </section>
+
+              {canShowAdminMusic && showMusicAdmin && <MusicAdminPanel />}
+            </>
+          )}
+
+          {/* =========================================================================
+              TAB 4: CÀI ĐẶT CHẾ ĐỘ CHƠI (M7.3.7 MỤC III.2.1)
+             ========================================================================= */}
+          {activeTab === 'GAME_MODE_SETTINGS' && (
+            <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-4 space-y-4">
+              <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
+                <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
+                  <Gamepad2 className="w-4 h-4 text-amber-400" />
+                  <span>CÀI ĐẶT CHẾ ĐỘ CHƠI</span>
+                </div>
+                <span className="text-[10px] text-neutral-400 font-mono">
+                  Chơi đơn • Co-op 2 người • Co-op Online
                 </span>
               </div>
-            </div>
 
-            {/* Toggle Super Admin Music Management Panel — ONLY visible for Super Admin */}
-            {canShowAdminMusic && (
-              <div className="pt-3 border-t border-neutral-800 flex items-center justify-between">
-                <span className="text-[11px] text-amber-300 font-bold">
-                  Quản trị Thư viện Nhạc nền Hệ thống (Super Admin)
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setShowMusicAdmin((v) => !v)}
-                  className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-[11px] transition-all cursor-pointer"
-                >
-                  {showMusicAdmin ? 'Thu gọn Quản lý Nhạc' : 'Mở Quản lý Nhạc nền'}
-                </button>
+              {onDifficultyChange && (
+                <div className="space-y-2">
+                  <div className="text-xs font-bold text-amber-300">
+                    Độ khó ưu tiên mặc định (Chơi đơn &amp; Co-op 2 người)
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => onDifficultyChange('DEFAULT')}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        difficulty === 'DEFAULT'
+                          ? 'bg-emerald-950/50 border-emerald-500 text-emerald-200 ring-1 ring-emerald-500/40'
+                          : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700'
+                      }`}
+                    >
+                      <div className="font-extrabold text-xs">1. GIẢI TRÍ (MẶC ĐỊNH)</div>
+                      <div className="text-[11px] text-neutral-400 mt-1">
+                        3 mạng khởi đầu • Nhịp độ cân bằng chuẩn cổ điển.
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDifficultyChange('EXTREME')}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
+                        difficulty === 'EXTREME'
+                          ? 'bg-rose-950/50 border-rose-500 text-rose-200 ring-1 ring-rose-500/40'
+                          : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700'
+                      }`}
+                    >
+                      <div className="font-extrabold text-xs">2. THỬ THÁCH (SIÊU KHÓ)</div>
+                      <div className="text-[11px] text-neutral-400 mt-1">
+                        1 mạng duy nhất • AI chiến thuật áp lực cao.
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              <div className="p-3 rounded-xl bg-neutral-900/80 border border-neutral-800 space-y-2 text-[11px] text-neutral-300">
+                <div className="font-bold text-white">
+                  Quy tắc đồng bộ Chế độ chơi &amp; Đội hình Chiến Xa:
+                </div>
+                <ul className="list-disc list-inside space-y-1 text-neutral-400">
+                  <li>
+                    Trong <strong className="text-sky-300">Co-op Online</strong>, Chủ phòng (P1) chọn độ khó và cấu hình mật khẩu khi Tạo phòng; Người chơi 2 (P2) sử dụng đúng độ khó của phòng đã tham gia.
+                  </li>
+                  <li>
+                    Đội hình xe tăng địch giữ nguyên tên chuẩn:{' '}
+                    <span className="font-mono text-amber-300">
+                      Basic Tank, Fast Tank, Power Tank, Armor Tank
+                    </span>
+                    .
+                  </li>
+                </ul>
               </div>
-            )}
-          </section>
+            </section>
+          )}
 
-          {canShowAdminMusic && showMusicAdmin && <MusicAdminPanel />}
+          {/* =========================================================================
+              TAB 5: QUẢN TRỊ & PHÂN QUYỀN (CHỈ DÀNH CHO SUPER ADMIN linhnk.online@gmail.com)
+             ========================================================================= */}
+          {activeTab === 'ADMIN_OTHER' && isVerifiedSuperAdmin && (
+            <section className="p-4 rounded-xl bg-red-950/20 border border-red-500/40 space-y-4">
+              <div className="flex items-center justify-between border-b border-red-500/20 pb-2.5 flex-wrap gap-2">
+                <div className="flex items-center gap-2 font-extrabold text-red-300 uppercase tracking-wider">
+                  <Shield className="w-4 h-4 text-red-400" />
+                  <span>QUẢN TRỊ HỆ THỐNG &amp; PHÂN QUYỀN (SUPER ADMIN)</span>
+                </div>
+                <span className="text-[10px] font-mono text-red-200/80">
+                  Super Admin duy nhất: {SUPER_ADMIN_EMAIL}
+                </span>
+              </div>
+
+              <div className="space-y-2.5">
+                <div className="text-xs font-bold text-white">
+                  Quy ước màu khung tên hiển thị theo phân quyền (M7.3.7 Mục III.2.2):
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <div className="p-2.5 rounded-xl bg-neutral-900 border-2 border-red-500 ring-1 ring-red-500/40 flex items-center justify-between">
+                    <span className="font-extrabold text-white text-xs">Super Admin</span>
+                    <span className="text-[10px] font-mono text-red-300 font-bold">
+                      Viền Đỏ (#EF4444)
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-neutral-900 border-2 border-emerald-500 ring-1 ring-emerald-500/40 flex items-center justify-between">
+                    <span className="font-extrabold text-white text-xs">Admin</span>
+                    <span className="text-[10px] font-mono text-emerald-300 font-bold">
+                      Viền Xanh lá (#10B981)
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-neutral-900 border-2 border-sky-500 ring-1 ring-sky-500/40 flex items-center justify-between">
+                    <span className="font-extrabold text-white text-xs">Mod</span>
+                    <span className="text-[10px] font-mono text-sky-300 font-bold">
+                      Viền Xanh dương (#0EA5E9)
+                    </span>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
+                    <span className="font-extrabold text-white text-xs">Người chơi thường</span>
+                    <span className="text-[10px] font-mono text-neutral-400 font-bold">
+                      Viền Mặc định
+                    </span>
+                  </div>
+                </div>
+                <p className="text-[11px] text-neutral-400 leading-relaxed">
+                  Quyền hiển thị và phân quyền quản trị được xác định trực tiếp từ dữ liệu xác thực Google Auth và tài liệu máy chủ đã xác minh, tuyệt đối không tin tưởng dữ liệu tự sửa trong <span className="font-mono text-neutral-300">localStorage</span>.
+                </p>
+              </div>
+            </section>
+          )}
         </div>
 
         {/* Footer */}

@@ -50,6 +50,136 @@ export function isSuperAdminUser(user: User | ValidatedUserAccount | null | unde
   return (user.email || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL;
 }
 
+export type UserRoleType = 'SUPER_ADMIN' | 'ADMIN' | 'MOD' | 'PLAYER';
+
+// Bộ nhớ đệm vai trò xác thực từ tài liệu máy chủ (Firestore /users/{uid} hoặc /admins/{uid}),
+// tuyệt đối KHÔNG đọc từ localStorage để chống giả mạo quyền phía client.
+const verifiedServerRolesByUid: Map<string, UserRoleType> = new Map();
+
+export function setVerifiedServerRoleForUid(uid: string, role: unknown): void {
+  if (!uid || typeof uid !== 'string') return;
+  const upper = typeof role === 'string' ? role.trim().toUpperCase() : '';
+  if (upper === 'SUPER_ADMIN' || upper === 'ADMIN' || upper === 'MOD' || upper === 'PLAYER') {
+    verifiedServerRolesByUid.set(uid, upper as UserRoleType);
+  }
+}
+
+export function clearVerifiedServerRoles(): void {
+  verifiedServerRolesByUid.clear();
+}
+
+/**
+ * Xác định vai trò hợp lệ của người chơi từ dữ liệu xác thực đáng tin cậy:
+ * - Nếu là Super Admin duy nhất (`linhnk.online@gmail.com` đã xác minh Google): luôn là `SUPER_ADMIN`.
+ * - Nếu có vai trò đã được máy chủ xác nhận (`ADMIN`, `MOD`) hoặc truyền từ metadata phòng/hồ sơ hợp lệ: trả về vai trò tương ứng.
+ * - Mặc định: `PLAYER` (Người chơi thường).
+ * Tuyệt đối không đọc từ `localStorage` hoặc biến trạng thái giả lập phía client.
+ */
+export function resolveUserRole(
+  user?: {
+    uid?: string | null;
+    email?: string | null;
+    emailVerified?: boolean;
+    providerData?: Array<{ providerId: string }>;
+    providerIds?: string[];
+    serverRole?: UserRoleType | string | null;
+  } | null
+): UserRoleType {
+  if (!user) return 'PLAYER';
+
+  const normalizedEmail = (user.email || '').trim().toLowerCase();
+  if (normalizedEmail === SUPER_ADMIN_EMAIL) {
+    // Nếu đối tượng có đầy đủ thông tin provider, kiểm tra chặt bằng isSuperAdminUser
+    if (user.providerData || user.providerIds || user.emailVerified !== undefined) {
+      if (isSuperAdminUser(user as ValidatedUserAccount)) {
+        return 'SUPER_ADMIN';
+      }
+      return 'PLAYER';
+    }
+    return 'SUPER_ADMIN';
+  }
+
+  const explicitServerRole =
+    typeof user.serverRole === 'string' ? user.serverRole.trim().toUpperCase() : '';
+  if (explicitServerRole === 'SUPER_ADMIN') {
+    // Chỉ linhnk.online@gmail.com mới được nhận SUPER_ADMIN
+    return normalizedEmail === SUPER_ADMIN_EMAIL ? 'SUPER_ADMIN' : 'PLAYER';
+  }
+  if (explicitServerRole === 'ADMIN' || explicitServerRole === 'MOD') {
+    return explicitServerRole;
+  }
+
+  if (user.uid && verifiedServerRolesByUid.has(user.uid)) {
+    const cachedRole = verifiedServerRolesByUid.get(user.uid)!;
+    if (cachedRole === 'SUPER_ADMIN') {
+      return normalizedEmail === SUPER_ADMIN_EMAIL ? 'SUPER_ADMIN' : 'PLAYER';
+    }
+    return cachedRole;
+  }
+
+  return 'PLAYER';
+}
+
+/**
+ * Chuẩn hóa màu viền/khung tên người chơi tại tất cả vị trí hiển thị tên (M7.3.7 Mục III.2.2):
+ * - Super Admin: khung tên màu đỏ (`border-red-500`)
+ * - Admin: khung tên màu xanh lá (`border-emerald-500`)
+ * - Mod: khung tên màu xanh dương (`border-sky-500`)
+ * - Người chơi thường: giữ nguyên như hiện tại (`border-neutral-700/80`)
+ */
+export function getRoleNameFrameClasses(role: UserRoleType): string {
+  switch (role) {
+    case 'SUPER_ADMIN':
+      return 'border-2 border-red-500 ring-1 ring-red-500/40 shadow-sm shadow-red-500/20';
+    case 'ADMIN':
+      return 'border-2 border-emerald-500 ring-1 ring-emerald-500/40 shadow-sm shadow-emerald-500/20';
+    case 'MOD':
+      return 'border-2 border-sky-500 ring-1 ring-sky-500/40 shadow-sm shadow-sky-500/20';
+    case 'PLAYER':
+    default:
+      return 'border border-neutral-700/80';
+  }
+}
+
+export function getRoleDisplayInfo(role: UserRoleType): {
+  role: UserRoleType;
+  label: string;
+  frameClass: string;
+  colorNameVi: string;
+} {
+  switch (role) {
+    case 'SUPER_ADMIN':
+      return {
+        role,
+        label: 'Super Admin',
+        frameClass: getRoleNameFrameClasses('SUPER_ADMIN'),
+        colorNameVi: 'Đỏ',
+      };
+    case 'ADMIN':
+      return {
+        role,
+        label: 'Admin',
+        frameClass: getRoleNameFrameClasses('ADMIN'),
+        colorNameVi: 'Xanh lá',
+      };
+    case 'MOD':
+      return {
+        role,
+        label: 'Mod',
+        frameClass: getRoleNameFrameClasses('MOD'),
+        colorNameVi: 'Xanh dương',
+      };
+    case 'PLAYER':
+    default:
+      return {
+        role: 'PLAYER',
+        label: 'Người chơi',
+        frameClass: getRoleNameFrameClasses('PLAYER'),
+        colorNameVi: 'Mặc định',
+      };
+  }
+}
+
 /**
  * Trả về tên hiển thị của người dùng trên giao diện (Header / Banner / Lobby).
  * - Nếu người dùng có displayName hợp lệ: chỉ hiển thị displayName (không kèm email).
