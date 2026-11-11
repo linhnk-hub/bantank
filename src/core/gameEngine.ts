@@ -3,10 +3,21 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { SIMULATION_CONFIG, P1_CONFIG, ENEMY_CONFIG, TANK_CONFIG } from './constants.ts';
+import {
+  SIMULATION_CONFIG,
+  MATCH_TIMER_CONFIG,
+  getMatchDurationSecondsForDifficulty,
+  P1_CONFIG,
+  ENEMY_CONFIG,
+  TANK_CONFIG,
+} from './constants.ts';
 import {
   type GameCoreState,
+  type GuestVisualInterpolationState,
+  type SnapshotRejectErrorCode,
+  type SnapshotValidationResult,
   type InputState,
+  type Direction,
   type RuntimeTerrainState,
   type TankStructure,
   type BulletStructure,
@@ -26,6 +37,7 @@ import {
   getBulletHitbox,
   getTankHitbox,
   intersectAABB,
+  trySafeGridSnap,
 } from './physics.ts';
 import { findPathAStar } from './ai/pathfinding.ts';
 import { MATCH_STATES, MatchStateMachine, type MatchState } from './matchState.ts';
@@ -33,9 +45,197 @@ import { StageManager, type StageDefinition } from './stageManager.ts';
 import { ScoreManager } from './scoreManager.ts';
 import type { CombatEvent, CombatEventType } from './types.ts';
 
+export const NEUTRAL_INPUT: Readonly<InputState> = Object.freeze({
+  up: false,
+  down: false,
+  left: false,
+  right: false,
+  shoot: false,
+});
+
+export function validateAndNormalizeAuthoritativeSnapshot(
+  rawSnapshot: unknown,
+  lastAppliedSnapshotSeq: number,
+  lastAppliedStageRunSeq: number,
+  lastAppliedTickCount: number
+): SnapshotValidationResult & { normalized?: any } {
+  const reject = (code: SnapshotRejectErrorCode): SnapshotValidationResult => ({
+    valid: false,
+    reason: code,
+    errorCode: code,
+  });
+
+  if (!rawSnapshot || typeof rawSnapshot !== 'object') {
+    return reject('INVALID_SNAPSHOT_OBJECT');
+  }
+  const s = rawSnapshot as Record<string, any>;
+
+  // 1. Validate snapshotSeq (Strict Safe Integer > 0 & monotonic > lastAppliedSnapshotSeq)
+  if (
+    typeof s.snapshotSeq !== 'number' ||
+    !Number.isSafeInteger(s.snapshotSeq) ||
+    s.snapshotSeq <= 0
+  ) {
+    return reject('INVALID_SNAPSHOT_SEQ');
+  }
+  if (s.snapshotSeq <= lastAppliedSnapshotSeq) {
+    return reject('STALE_SNAPSHOT_SEQ');
+  }
+
+  // 2. Validate tickCount (Strict Safe Integer >= 0)
+  if (
+    typeof s.tickCount !== 'number' ||
+    !Number.isSafeInteger(s.tickCount) ||
+    s.tickCount < 0
+  ) {
+    return reject('INVALID_TICK_COUNT');
+  }
+
+  // 3. Validate stageRunSeq (Strict Canonical: MUST exist and be Safe Integer >= 1; never default to 1)
+  if (
+    typeof s.stageRunSeq !== 'number' ||
+    !Number.isSafeInteger(s.stageRunSeq) ||
+    s.stageRunSeq < 1
+  ) {
+    return reject('INVALID_STAGE_RUN_SEQ');
+  }
+  if (s.stageRunSeq < lastAppliedStageRunSeq) {
+    return reject('STALE_STAGE_RUN_SEQ');
+  }
+  if (
+    s.stageRunSeq === lastAppliedStageRunSeq &&
+    lastAppliedTickCount >= 0 &&
+    s.tickCount < lastAppliedTickCount
+  ) {
+    return reject('STALE_TICK_WITHIN_SAME_RUN');
+  }
+
+  // 4. Validate difficulty ('DEFAULT' | 'EXTREME')
+  if (s.difficulty !== 'DEFAULT' && s.difficulty !== 'EXTREME') {
+    return reject('INVALID_DIFFICULTY');
+  }
+  const expectedDurationSeconds = getMatchDurationSecondsForDifficulty(s.difficulty);
+  const maxTicks = expectedDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
+
+  // 5. Validate matchDurationSeconds
+  if (
+    typeof s.matchDurationSeconds !== 'number' ||
+    !Number.isSafeInteger(s.matchDurationSeconds) ||
+    s.matchDurationSeconds !== expectedDurationSeconds
+  ) {
+    return reject('MISMATCHED_MATCH_DURATION');
+  }
+
+  // 6. Validate remainingTicks in [0, maxTicks] and consistent with tickCount
+  if (
+    typeof s.remainingTicks !== 'number' ||
+    !Number.isSafeInteger(s.remainingTicks) ||
+    s.remainingTicks < 0 ||
+    s.remainingTicks > maxTicks
+  ) {
+    return reject('INVALID_REMAINING_TICKS');
+  }
+  const expectedRemainingTicks = Math.max(0, maxTicks - s.tickCount);
+  if (s.remainingTicks !== expectedRemainingTicks) {
+    return reject('MISMATCHED_REMAINING_TICKS');
+  }
+
+  // 7. Validate remainingSeconds === Math.ceil(remainingTicks / 60)
+  const expectedRemainingSeconds = Math.ceil(
+    s.remainingTicks / MATCH_TIMER_CONFIG.TICKS_PER_SECOND
+  );
+  if (
+    typeof s.remainingSeconds !== 'number' ||
+    !Number.isSafeInteger(s.remainingSeconds) ||
+    s.remainingSeconds !== expectedRemainingSeconds
+  ) {
+    return reject('MISMATCHED_REMAINING_SECONDS');
+  }
+
+  // 8. Validate stageElapsedSeconds
+  if (
+    typeof s.stageElapsedSeconds !== 'number' ||
+    !Number.isFinite(s.stageElapsedSeconds) ||
+    s.stageElapsedSeconds < 0
+  ) {
+    return reject('INVALID_ELAPSED_SECONDS');
+  }
+  const expectedElapsedSeconds =
+    (maxTicks - s.remainingTicks) / MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
+  if (Math.abs(s.stageElapsedSeconds - expectedElapsedSeconds) > 0.05) {
+    return reject('MISMATCHED_ELAPSED_SECONDS');
+  }
+
+  // 9. Validate outcome booleans & mutual exclusion
+  if (
+    typeof s.isGameOver !== 'boolean' ||
+    typeof s.isStageClear !== 'boolean' ||
+    typeof s.isTimeoutGameOver !== 'boolean' ||
+    typeof s.isBaseDestroyed !== 'boolean'
+  ) {
+    return reject('INVALID_OUTCOME_BOOLEANS');
+  }
+  if (s.isGameOver && s.isStageClear) {
+    return reject('CONTRADICTORY_OUTCOME_FLAGS');
+  }
+
+  // 10. Validate isTimeoutGameOver invariant before matchState & zero-ticks checks
+  if (s.isTimeoutGameOver === true) {
+    if (!s.isGameOver || s.isStageClear || s.remainingTicks !== 0 || s.isBaseDestroyed) {
+      return reject('CONTRADICTORY_TIMEOUT_STATE');
+    }
+  }
+
+  // Validate matchState consistency with outcome flags
+  const validMatchStates = [
+    'MENU',
+    'STAGE_START',
+    'PLAYING',
+    'PAUSED',
+    'STAGE_CLEAR',
+    'GAME_OVER',
+    'SUMMARY_STATS',
+  ];
+  if (typeof s.matchState !== 'string' || !validMatchStates.includes(s.matchState)) {
+    return reject('MISMATCHED_MATCH_STATE');
+  }
+  if (s.isGameOver && s.matchState !== 'GAME_OVER' && s.matchState !== 'SUMMARY_STATS') {
+    return reject('MISMATCHED_MATCH_STATE');
+  }
+  if (s.isStageClear && s.matchState !== 'STAGE_CLEAR' && s.matchState !== 'SUMMARY_STATS') {
+    return reject('MISMATCHED_MATCH_STATE');
+  }
+  if (
+    !s.isGameOver &&
+    !s.isStageClear &&
+    (s.matchState === 'GAME_OVER' || s.matchState === 'STAGE_CLEAR')
+  ) {
+    return reject('MISMATCHED_MATCH_STATE');
+  }
+
+  // 11. Validate remainingTicks === 0 terminal outcome resolution
+  if (s.remainingTicks === 0 && !s.isGameOver && !s.isStageClear) {
+    return reject('UNRESOLVED_ZERO_TICKS_OUTCOME');
+  }
+
+  return {
+    valid: true,
+    appliedSnapshotSeq: s.snapshotSeq,
+    normalized: s,
+  };
+}
+
 export class GameEngine {
   private state: GameCoreState;
+  private stageRunSeq: number = 1;
+  private lastAppliedSnapshotSeq: number = 0;
+  private lastAppliedStageRunSeq: number = 0;
+  private lastAppliedTickCount: number = -1;
   private accumulatorMs: number = 0;
+  private lastDroppedBacklogMs: number = 0;
+  private lastDroppedInputMs: number = 0;
+  private lastDroppedBacklogComponentMs: number = 0;
+  private catchUpTicksRemaining: number = 0;
   private justResumed: boolean = false;
   private isPaused: boolean = false;
   private totalRealElapsedMs: number = 0;
@@ -69,6 +269,19 @@ export class GameEngine {
     right: false,
     shoot: false,
   };
+  private guestVisualState: GuestVisualInterpolationState = {
+    p2RenderX: 144,
+    p2RenderY: 192,
+    p2RenderDirection: 'UP',
+    p1VisualShieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,
+    p2VisualShieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,
+    interpolatedMsSinceSnapshot: 0,
+  };
+  private onGuestSnapshotAppliedCallback?: (
+    snapshotSeq: number,
+    stageRunSeq: number,
+    tickCount: number
+  ) => void;
 
   public isCoopMode(): boolean {
     return this.gameMode === 'TWO_PLAYERS_AI' || this.gameMode === 'TWO_PLAYERS_ONLINE';
@@ -130,9 +343,13 @@ export class GameEngine {
     }
 
     const currentStage = this.stageManager.getCurrentStage();
+    this.stageRunSeq = 1;
+    const matchDurationSeconds = getMatchDurationSecondsForDifficulty(this.difficulty);
+    const remainingTicks = matchDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
 
     this.state = {
       tickCount: 0,
+      stageRunSeq: this.stageRunSeq,
       p1: customP1 ?? createP1Tank(),
       p1State: {
         lives: P1_CONFIG.STARTING_LIVES,
@@ -153,14 +370,19 @@ export class GameEngine {
       currentStageId: currentStage.id,
       currentStageName: currentStage.name,
       stageElapsedSeconds: 0,
+      matchDurationSeconds,
+      remainingTicks,
+      remainingSeconds: matchDurationSeconds,
       terrain: customTerrain ?? createRuntimeTerrainState(currentStage.map),
       isGameOver: false,
       isStageClear: false,
+      isTimeoutGameOver: false,
       gameOverReason: null,
       diagnosticLog: null,
       difficulty: this.difficulty,
       matchState: MATCH_STATES.PLAYING,
     };
+    this.syncGuestVisualStateFromAuthoritative();
   }
 
   public getDifficulty(): 'DEFAULT' | 'EXTREME' {
@@ -168,8 +390,20 @@ export class GameEngine {
   }
 
   public setDifficulty(diff: 'DEFAULT' | 'EXTREME'): void {
+    if (diff !== 'DEFAULT' && diff !== 'EXTREME') return;
+    // Prevent mid-match difficulty tampering once simulation ticks have started
+    if (this.state.tickCount > 0 && this.state.matchState !== MATCH_STATES.MENU) {
+      return;
+    }
     this.difficulty = diff;
     this.state.difficulty = diff;
+    const matchDurationSeconds = getMatchDurationSecondsForDifficulty(diff);
+    const remainingTicks = matchDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
+    this.state.matchDurationSeconds = matchDurationSeconds;
+    this.state.remainingTicks = remainingTicks;
+    this.state.remainingSeconds = matchDurationSeconds;
+    this.state.stageElapsedSeconds = 0;
+    this.state.isTimeoutGameOver = false;
   }
 
   public getGameMode(): 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' {
@@ -233,6 +467,8 @@ export class GameEngine {
       if (trans.success) {
         this.isPaused = true;
         this.accumulatorMs = 0;
+        this.lastDroppedBacklogMs = 0;
+        this.catchUpTicksRemaining = 0;
         this.justResumed = false;
         this.state.matchState = MATCH_STATES.PAUSED;
         // Clear inputs upon pausing
@@ -250,6 +486,8 @@ export class GameEngine {
       if (trans.success) {
         this.isPaused = false;
         this.accumulatorMs = 0; // Essential: reset backlog so no time-jump occurs
+        this.lastDroppedBacklogMs = 0;
+        this.catchUpTicksRemaining = 0;
         this.justResumed = true;
         this.state.matchState = MATCH_STATES.PLAYING;
         return true;
@@ -260,8 +498,13 @@ export class GameEngine {
 
   public restartStage(): void {
     const stage = this.stageManager.getCurrentStage();
+    this.stageRunSeq += 1;
     this.accumulatorMs = 0;
-    this.justResumed = true;
+    this.lastDroppedBacklogMs = 0;
+    this.lastDroppedInputMs = 0;
+    this.lastDroppedBacklogComponentMs = 0;
+    this.catchUpTicksRemaining = 0;
+    this.justResumed = false;
     this.totalRealElapsedMs = 0;
     this.totalDroppedMs = 0;
     this.tpsAccumulatorMs = 0;
@@ -276,8 +519,12 @@ export class GameEngine {
     this.scoreManager.resetRun();
     this.allyAI.reset();
 
+    const matchDurationSeconds = getMatchDurationSecondsForDifficulty(this.difficulty);
+    const remainingTicks = matchDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
+
     this.state = {
       tickCount: 0,
+      stageRunSeq: this.stageRunSeq,
       p1: createP1Tank(),
       p1State: {
         lives: P1_CONFIG.STARTING_LIVES,
@@ -308,24 +555,34 @@ export class GameEngine {
       currentStageId: stage.id,
       currentStageName: stage.name,
       stageElapsedSeconds: 0,
+      matchDurationSeconds,
+      remainingTicks,
+      remainingSeconds: matchDurationSeconds,
       terrain: createRuntimeTerrainState(stage.map),
       isGameOver: false,
       isStageClear: false,
+      isTimeoutGameOver: false,
       gameOverReason: null,
       diagnosticLog: null,
       difficulty: this.difficulty,
       matchState: MATCH_STATES.PLAYING,
     };
     this.matchStateMachine.transitionTo(MATCH_STATES.PLAYING, true);
+    this.syncGuestVisualStateFromAuthoritative();
   }
 
   public quitToMenu(): void {
     this.isPaused = true;
     this.accumulatorMs = 0;
+    this.lastDroppedBacklogMs = 0;
+    this.catchUpTicksRemaining = 0;
+    this.resetGuestSnapshotTracking();
     this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
     this.externalInputP2 = { up: false, down: false, left: false, right: false, shoot: false };
+    this.combatEvents = [];
     this.state.isGameOver = false;
     this.state.isStageClear = false;
+    this.state.isTimeoutGameOver = false;
     this.state.gameOverReason = null;
     this.state.bullets = [];
     this.state.bullet = null;
@@ -339,6 +596,9 @@ export class GameEngine {
   ): void {
     this.gameMode = mode;
     this.difficulty = difficulty;
+    // Set stageRunSeq = 0 right before restartStage() so restartStage() increments 0 -> 1 (no double increment)
+    this.stageRunSeq = 0;
+    this.resetGuestSnapshotTracking();
     this.restartStage();
   }
 
@@ -352,18 +612,25 @@ export class GameEngine {
     this.stageManager.setCurrentStage(nextStageId);
     const stage = this.stageManager.getCurrentStage();
 
+    this.stageRunSeq += 1;
     this.scoreManager.advanceToNextStage();
     this.accumulatorMs = 0;
+    this.lastDroppedBacklogMs = 0;
+    this.catchUpTicksRemaining = 0;
     this.isPaused = false;
+    this.combatEvents = [];
     this.enemyManager.reset(stage.enemyQueue);
     this.allyAI.reset();
 
     // Carry forward P1 lives and existing total score
     const preservedLives = this.state.p1State.lives;
     const preservedP2Lives = this.state.p2State?.lives ?? P1_CONFIG.STARTING_LIVES;
+    const matchDurationSeconds = getMatchDurationSecondsForDifficulty(this.difficulty);
+    const remainingTicks = matchDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
 
     this.state = {
       tickCount: 0,
+      stageRunSeq: this.stageRunSeq,
       p1: createP1Tank(),
       p1State: {
         lives: preservedLives,
@@ -394,36 +661,52 @@ export class GameEngine {
       currentStageId: stage.id,
       currentStageName: stage.name,
       stageElapsedSeconds: 0,
+      matchDurationSeconds,
+      remainingTicks,
+      remainingSeconds: matchDurationSeconds,
       terrain: createRuntimeTerrainState(stage.map),
       isGameOver: false,
       isStageClear: false,
+      isTimeoutGameOver: false,
       gameOverReason: null,
       diagnosticLog: null,
       difficulty: this.difficulty,
       matchState: MATCH_STATES.PLAYING,
     };
     this.matchStateMachine.transitionTo(MATCH_STATES.PLAYING, true);
+    this.syncGuestVisualStateFromAuthoritative();
     return true;
   }
 
   public reset(
     customTerrain?: RuntimeTerrainState,
     customP1?: TankStructure,
-    enableEnemies: boolean = true,
+    enableEnemies: boolean = this.enableEnemies,
     customEnemyQueue?: EnemyType[]
   ): void {
+    this.stageRunSeq += 1;
     this.accumulatorMs = 0;
+    this.lastDroppedBacklogMs = 0;
+    this.lastDroppedInputMs = 0;
+    this.lastDroppedBacklogComponentMs = 0;
+    this.catchUpTicksRemaining = 0;
+    this.justResumed = false;
+    this.resetGuestSnapshotTracking();
     this.lastShootState = false;
     this.isPaused = false;
+    this.combatEvents = [];
     this.enableEnemies = enableEnemies;
     this.enemyManager.reset(customEnemyQueue);
     this.scoreManager.resetRun();
     this.matchStateMachine.transitionTo(MATCH_STATES.PLAYING, true);
 
     const currentStage = this.stageManager.getCurrentStage();
+    const matchDurationSeconds = getMatchDurationSecondsForDifficulty(this.difficulty);
+    const remainingTicks = matchDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
 
     this.state = {
       tickCount: 0,
+      stageRunSeq: this.stageRunSeq,
       p1: customP1 ?? createP1Tank(),
       p1State: {
         lives: P1_CONFIG.STARTING_LIVES,
@@ -444,30 +727,60 @@ export class GameEngine {
       currentStageId: currentStage.id,
       currentStageName: currentStage.name,
       stageElapsedSeconds: 0,
+      matchDurationSeconds,
+      remainingTicks,
+      remainingSeconds: matchDurationSeconds,
       terrain: customTerrain ?? createRuntimeTerrainState(currentStage.map),
       isGameOver: false,
       isStageClear: false,
+      isTimeoutGameOver: false,
       gameOverReason: null,
       diagnosticLog: null,
       difficulty: this.difficulty,
       matchState: MATCH_STATES.PLAYING,
     };
+    this.syncGuestVisualStateFromAuthoritative();
   }
 
   /**
    * Called when document.visibilityState changes.
-   * When returning to visible: resets accumulator and frame timestamp.
-   * Never backlogs or simulates sleep time.
+   * - Always clears latched inputs to NEUTRAL_INPUT on tab switch.
+   * - In SOLO / TWO_PLAYERS_AI: discards backlog, freezes simulation, and optionally triggers Forced Safety Pause.
+   * - In TWO_PLAYERS_ONLINE: keeps simulation unpaused so Host BG_TIMER / catch-up operates seamlessly.
    */
-  public handleVisibilityChange(isVisible: boolean): void {
-    this.accumulatorMs = 0; // Always discard backlog on tab switch
+  public handleVisibilityChange(
+    isVisible: boolean,
+    options?: { triggerSafetyPause?: boolean }
+  ): void {
+    this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
+    this.externalInputP2 = { up: false, down: false, left: false, right: false, shoot: false };
+
+    if (this.gameMode === 'TWO_PLAYERS_ONLINE') {
+      if (!isVisible) {
+        this.state.diagnosticLog = 'Host background tab mode: BG_TIMER active';
+      } else {
+        this.state.diagnosticLog = 'Host returned to visible tab';
+      }
+      return;
+    }
+
+    this.accumulatorMs = 0;
+    this.lastDroppedBacklogMs = 0;
+    this.catchUpTicksRemaining = 0;
     if (!isVisible) {
-      this.isPaused = true;
-      this.justResumed = false;
+      if (options?.triggerSafetyPause) {
+        this.pause();
+        this.state.diagnosticLog = 'Forced Safety Pause: tab hidden';
+      } else {
+        this.isPaused = true;
+        this.justResumed = false;
+      }
     } else {
-      this.isPaused = false;
-      this.justResumed = true; // Prevents any catch-up frame burst upon returning
-      this.state.diagnosticLog = 'Resumed from background tab: accumulator reset';
+      if (this.state.matchState !== MATCH_STATES.PAUSED) {
+        this.isPaused = false;
+        this.justResumed = true; // Prevents any catch-up frame burst upon returning
+        this.state.diagnosticLog = 'Resumed from background tab: accumulator reset';
+      }
     }
   }
 
@@ -545,46 +858,35 @@ export class GameEngine {
     if (this.state.p1State.isDead) {
       if (this.state.p1State.respawnTimer > 0) {
         this.state.p1State.respawnTimer -= dt;
-      } else {
-        // Respawn delay completed: check lives first
-        if (this.state.p1State.lives <= 0) {
-          if (this.gameMode === 'SOLO' || !this.state.p2 || !this.state.p2State || (this.state.p2State.lives <= 0 && this.state.p2State.isDead)) {
-            this.state.isGameOver = true;
-            this.state.gameOverReason = 'P1 hết mạng! Game Over.';
-            this.state.matchState = MATCH_STATES.GAME_OVER;
-            this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
-            return;
+      } else if (this.state.p1State.lives > 0) {
+        // Check if spawn position (48, 192) is occupied by any enemy tank
+        const spawnBox = getTankHitbox(P1_CONFIG.SPAWN_X, P1_CONFIG.SPAWN_Y);
+        const isOccupied = checkTankVsTanks('p1_respawn_probe', spawnBox, this.state.enemies);
+
+        if (isOccupied) {
+          // Wait and re-check every 100ms; NEVER shift spawn coordinates
+          this.state.p1State.occupiedDuration = (this.state.p1State.occupiedDuration || 0) + dt;
+          this.state.p1State.waitingForClearSpawn = true;
+          this.state.p1State.spawnCheckTimer = (this.state.p1State.spawnCheckTimer || 0.1) - dt;
+          if (this.state.p1State.spawnCheckTimer <= 0) {
+            this.state.p1State.spawnCheckTimer = 0.1;
+            // If enemy occupies P1 spawn continuously for >= 2.0s, order occupying enemy to vacate
+            if (this.state.p1State.occupiedDuration >= 2.0) {
+              this.triggerSpawnAvoidance(spawnBox);
+            }
           }
         } else {
-          // Check if spawn position (48, 192) is occupied by any enemy tank
-          const spawnBox = getTankHitbox(P1_CONFIG.SPAWN_X, P1_CONFIG.SPAWN_Y);
-          const isOccupied = checkTankVsTanks('p1_respawn_probe', spawnBox, this.state.enemies);
-
-          if (isOccupied) {
-            // Wait and re-check every 100ms; NEVER shift spawn coordinates
-            this.state.p1State.occupiedDuration = (this.state.p1State.occupiedDuration || 0) + dt;
-            this.state.p1State.waitingForClearSpawn = true;
-            this.state.p1State.spawnCheckTimer = (this.state.p1State.spawnCheckTimer || 0.1) - dt;
-            if (this.state.p1State.spawnCheckTimer <= 0) {
-              this.state.p1State.spawnCheckTimer = 0.1;
-              // If enemy occupies P1 spawn continuously for >= 2.0s, order occupying enemy to vacate
-              if (this.state.p1State.occupiedDuration >= 2.0) {
-                this.triggerSpawnAvoidance(spawnBox);
-              }
-            }
-          } else {
-            // Clear to spawn at fixed (48, 192)
-            this.state.p1State.isDead = false;
-            this.state.p1State.waitingForClearSpawn = false;
-            this.state.p1State.spawnCheckTimer = 0;
-            this.state.p1State.occupiedDuration = 0;
-            this.state.p1State.shieldTimer = P1_CONFIG.RESPAWN_SHIELD_S;
-            this.state.p1.x = P1_CONFIG.SPAWN_X;
-            this.state.p1.y = P1_CONFIG.SPAWN_Y;
-            this.state.p1.direction = P1_CONFIG.SPAWN_DIRECTION;
-            this.state.p1.isAlive = true;
-            this.state.p1.isShielded = true;
-          }
+          // Clear to spawn at fixed (48, 192)
+          this.state.p1State.isDead = false;
+          this.state.p1State.waitingForClearSpawn = false;
+          this.state.p1State.spawnCheckTimer = 0;
+          this.state.p1State.occupiedDuration = 0;
+          this.state.p1State.shieldTimer = P1_CONFIG.RESPAWN_SHIELD_S;
+          this.state.p1.x = P1_CONFIG.SPAWN_X;
+          this.state.p1.y = P1_CONFIG.SPAWN_Y;
+          this.state.p1.direction = P1_CONFIG.SPAWN_DIRECTION;
+          this.state.p1.isAlive = true;
+          this.state.p1.isShielded = true;
         }
       }
     }
@@ -599,17 +901,8 @@ export class GameEngine {
       if (this.state.p2State.isDead) {
         if (this.state.p2State.respawnTimer > 0) {
           this.state.p2State.respawnTimer -= dt;
-        } else {
-          if (this.state.p2State.lives <= 0) {
-            if (this.state.p1State.lives <= 0 && this.state.p1State.isDead) {
-              this.state.isGameOver = true;
-              this.state.gameOverReason = 'Cả hai người chơi đều hết mạng! Game Over.';
-              this.state.matchState = MATCH_STATES.GAME_OVER;
-              this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
-              return;
-            }
-          } else {
-            const p2SpawnBox = getTankHitbox(144, 192);
+        } else if (this.state.p2State.lives > 0) {
+          const p2SpawnBox = getTankHitbox(144, 192);
             const otherTanks = [this.state.p1, ...this.state.enemies];
             const isOccupiedByTank = checkTankVsTanks('p2_respawn_probe', p2SpawnBox, otherTanks);
             const isOccupiedByBullet = this.state.bullets.some((b) =>
@@ -637,7 +930,6 @@ export class GameEngine {
               this.state.p2.isAlive = true;
               this.state.p2.isShielded = true;
             }
-          }
         }
       }
 
@@ -762,14 +1054,12 @@ export class GameEngine {
     }
 
     // Update Bullet Trajectory & Terrain Collisions
+    let baseHitByBulletThisTick = false;
     const survivingBullets: BulletStructure[] = [];
     for (const b of this.state.bullets) {
       const bulletResult = updateBullet(b, this.state.terrain);
       if (bulletResult.hitBase) {
-        this.state.isGameOver = true;
-        this.state.gameOverReason = 'Căn cứ đã bị phá hủy! Game Over.';
-        this.state.matchState = MATCH_STATES.GAME_OVER;
-        this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
+        baseHitByBulletThisTick = true;
         this.emitCombatEvent('BASE_EXPLOSION', 104, 200);
       }
       if (bulletResult.isAlive) {
@@ -868,15 +1158,6 @@ export class GameEngine {
             if (this.state.bullet?.ownerId === this.state.p1.id) {
               this.state.bullet = null;
             }
-
-            if (this.state.p1State.lives <= 0) {
-              if (this.gameMode === 'SOLO' || !this.state.p2 || !this.state.p2State || (this.state.p2State.lives <= 0 && this.state.p2State.isDead)) {
-                this.state.isGameOver = true;
-                this.state.gameOverReason = 'P1 hết mạng! Game Over.';
-                this.state.matchState = MATCH_STATES.GAME_OVER;
-                this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
-              }
-            }
           }
           continue;
         }
@@ -898,15 +1179,6 @@ export class GameEngine {
             this.state.bullets = this.state.bullets.filter(
               (b) => b.ownerId !== 'p2'
             );
-
-            if (this.state.p2State.lives <= 0) {
-              if (this.state.p1State.lives <= 0 && this.state.p1State.isDead) {
-                this.state.isGameOver = true;
-                this.state.gameOverReason = 'Cả hai người chơi đều hết mạng! Game Over.';
-                this.state.matchState = MATCH_STATES.GAME_OVER;
-                this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
-              }
-            }
           }
           continue;
         }
@@ -929,101 +1201,370 @@ export class GameEngine {
       this.state.enemyQueue = this.enemyManager.getQueue();
     }
 
-    // 10. Check Base destroyed state
-    if (this.state.terrain.isBaseDestroyed && !this.state.isGameOver) {
-      this.emitCombatEvent('BASE_EXPLOSION', 96, 192); // Eagle center at (96, 192)
+    // 10. Authoritative Tick-Bound Countdown Timer Update (Fixed 60Hz)
+    const maxTicks =
+      this.state.matchDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
+    this.state.remainingTicks = Math.max(0, this.state.remainingTicks - 1);
+    this.state.remainingSeconds = Math.ceil(
+      this.state.remainingTicks / MATCH_TIMER_CONFIG.TICKS_PER_SECOND
+    );
+    this.state.stageElapsedSeconds = Number(
+      (
+        (maxTicks - this.state.remainingTicks) /
+        MATCH_TIMER_CONFIG.TICKS_PER_SECOND
+      ).toFixed(2)
+    );
+
+    // 11. Canonical 4-Tier End-of-Tick Outcome Evaluation Gate
+    // Priority: Tier 1 (Base Destroyed) > Tier 2 (All Players Out of Lives) > Tier 3 (Stage Clear) > Tier 4 (Timeout)
+    const p1CanContinue =
+      this.state.p1State.lives > 0 || !this.state.p1State.isDead;
+    const p2CanContinue =
+      this.isCoopMode() &&
+      Boolean(
+        this.state.p2 &&
+          this.state.p2State &&
+          (this.state.p2State.lives > 0 || !this.state.p2State.isDead)
+      );
+    const hasLivingPlayer = p1CanContinue || p2CanContinue;
+
+    if (this.state.terrain.isBaseDestroyed) {
+      // Tier 1: Base Destroyed
+      if (!baseHitByBulletThisTick && !this.state.isGameOver) {
+        this.emitCombatEvent('BASE_EXPLOSION', 96, 192);
+      }
       this.state.isGameOver = true;
+      this.state.isStageClear = false;
+      this.state.isTimeoutGameOver = false;
       this.state.gameOverReason = 'Căn cứ đã bị phá hủy! Game Over.';
       this.state.matchState = MATCH_STATES.GAME_OVER;
       this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
-    }
-
-    // 11. Check Stage Clear condition
-    const hasLivingPlayer = this.state.p1State.lives > 0 || !this.state.p1State.isDead ||
-      (this.isCoopMode() && this.state.p2State && (this.state.p2State.lives > 0 || !this.state.p2State.isDead));
-
-    if (
-      !this.state.isGameOver &&
-      !this.state.terrain.isBaseDestroyed &&
-      hasLivingPlayer &&
+    } else if (!hasLivingPlayer) {
+      // Tier 2: All Players Out of Lives
+      this.state.isGameOver = true;
+      this.state.isStageClear = false;
+      this.state.isTimeoutGameOver = false;
+      this.state.gameOverReason = this.isCoopMode()
+        ? 'Cả hai người chơi đều hết mạng! Game Over.'
+        : 'P1 hết mạng! Game Over.';
+      this.state.matchState = MATCH_STATES.GAME_OVER;
+      this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
+    } else if (
       this.state.totalDefeatedEnemies >= ENEMY_CONFIG.TOTAL_COUNT &&
       this.state.enemies.length === 0
     ) {
+      // Tier 3: Stage Clear (Victory on or before final tick beats Timeout)
       this.state.isStageClear = true;
+      this.state.isGameOver = false;
+      this.state.isTimeoutGameOver = false;
+      this.state.gameOverReason = null;
       this.state.matchState = MATCH_STATES.STAGE_CLEAR;
       this.matchStateMachine.transitionTo(MATCH_STATES.STAGE_CLEAR, true);
       this.scoreManager.checkAndUpdateHighScore();
       this.state.highScore = this.scoreManager.getHighScore();
+    } else if (this.state.remainingTicks <= 0) {
+      // Tier 4: Match Countdown Timeout
+      this.state.isGameOver = true;
+      this.state.isStageClear = false;
+      this.state.isTimeoutGameOver = true;
+      this.state.gameOverReason = 'Hết thời gian chiến đấu! Game Over.';
+      this.state.matchState = MATCH_STATES.GAME_OVER;
+      this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
+    }
+  }
+
+  public getStageRunSeq(): number {
+    return this.stageRunSeq;
+  }
+
+  public getLastAppliedSnapshotSeq(): number {
+    return this.lastAppliedSnapshotSeq;
+  }
+
+  public getGuestLastAppliedSnapshotSeq(): number {
+    return this.lastAppliedSnapshotSeq;
+  }
+
+  public pauseMatch(): void {
+    this.pause();
+  }
+
+  public getLastAppliedStageRunSeq(): number {
+    return this.lastAppliedStageRunSeq;
+  }
+
+  public getLastAppliedTickCount(): number {
+    return this.lastAppliedTickCount;
+  }
+
+  public getLastDroppedBacklogMs(): number {
+    return this.lastDroppedBacklogMs;
+  }
+
+  public setOnGuestSnapshotAppliedCallback(
+    cb?: (snapshotSeq: number, stageRunSeq: number, tickCount: number) => void
+  ): void {
+    this.onGuestSnapshotAppliedCallback = cb;
+  }
+
+  public resetGuestSnapshotTracking(): void {
+    this.lastAppliedSnapshotSeq = 0;
+    this.lastAppliedStageRunSeq = 0;
+    this.lastAppliedTickCount = -1;
+  }
+
+  private syncGuestVisualStateFromAuthoritative(): void {
+    this.guestVisualState = {
+      p2RenderX: this.state.p2 ? this.state.p2.x : 144,
+      p2RenderY: this.state.p2 ? this.state.p2.y : 192,
+      p2RenderDirection: this.state.p2 ? this.state.p2.direction : 'UP',
+      p1VisualShieldTimer: this.state.p1State.shieldTimer,
+      p2VisualShieldTimer: this.state.p2State ? this.state.p2State.shieldTimer : 0,
+      interpolatedMsSinceSnapshot: 0,
+    };
+  }
+
+  public getGuestVisualState(): Readonly<GuestVisualInterpolationState> {
+    return { ...this.guestVisualState };
+  }
+
+  /**
+   * Advances isolated Guest visual interpolation for P2 (60 px/s, max 50ms budget since last snapshot).
+   * STRICT GUARANTEE: Never mutates GameCoreState, tickCount, remainingTicks, or authoritative shieldTimer.
+   */
+  public advanceGuestVisualInterpolation(rawDeltaMs: number): void {
+    if (typeof rawDeltaMs !== 'number' || !Number.isFinite(rawDeltaMs) || rawDeltaMs <= 0) {
+      return;
+    }
+    if (
+      this.isPaused ||
+      this.state.matchState !== MATCH_STATES.PLAYING ||
+      this.state.isGameOver ||
+      this.state.isStageClear
+    ) {
+      return;
+    }
+
+    const remainingBudgetMs = Math.max(
+      0,
+      SIMULATION_CONFIG.GUEST_MAX_INTERPOLATION_MS -
+        this.guestVisualState.interpolatedMsSinceSnapshot
+    );
+    const dtMs = Math.min(rawDeltaMs, remainingBudgetMs);
+    if (dtMs <= 0) {
+      return;
+    }
+    this.guestVisualState.interpolatedMsSinceSnapshot += dtMs;
+    const dtSec = dtMs / 1000;
+
+    if (this.guestVisualState.p1VisualShieldTimer > 0) {
+      this.guestVisualState.p1VisualShieldTimer = Math.max(
+        0,
+        this.guestVisualState.p1VisualShieldTimer - dtSec
+      );
+    }
+    if (this.guestVisualState.p2VisualShieldTimer > 0) {
+      this.guestVisualState.p2VisualShieldTimer = Math.max(
+        0,
+        this.guestVisualState.p2VisualShieldTimer - dtSec
+      );
+    }
+
+    if (!this.state.p2 || !this.state.p2.isAlive || this.state.p2State?.isDead) {
+      return;
+    }
+
+    const input = this.externalInputP2;
+    let requestedDir: Direction | null = null;
+    if (input.up && !input.down) requestedDir = 'UP';
+    else if (input.down && !input.up) requestedDir = 'DOWN';
+    else if (input.left && !input.right) requestedDir = 'LEFT';
+    else if (input.right && !input.left) requestedDir = 'RIGHT';
+
+    if (!requestedDir) {
+      return;
+    }
+
+    const v = this.guestVisualState;
+
+    if (requestedDir !== v.p2RenderDirection) {
+      const snapResult = trySafeGridSnap(
+        v.p2RenderX,
+        v.p2RenderY,
+        v.p2RenderDirection,
+        requestedDir,
+        this.state.terrain
+      );
+      if (!snapResult.success) {
+        // Keep original direction and coordinates when perpendicular grid alignment fails
+        return;
+      }
+      v.p2RenderX = snapResult.snappedX;
+      v.p2RenderY = snapResult.snappedY;
+      v.p2RenderDirection = requestedDir;
+    }
+
+    const distancePx = TANK_CONFIG.SPEED_PX_S * dtSec; // 60 px/s
+    let nextX = v.p2RenderX;
+    let nextY = v.p2RenderY;
+
+    if (v.p2RenderDirection === 'UP') nextY -= distancePx;
+    else if (v.p2RenderDirection === 'DOWN') nextY += distancePx;
+    else if (v.p2RenderDirection === 'LEFT') nextX -= distancePx;
+    else if (v.p2RenderDirection === 'RIGHT') nextX += distancePx;
+
+    nextX = Math.max(0, Math.min(TANK_CONFIG.MAX_X, nextX));
+    nextY = Math.max(0, Math.min(TANK_CONFIG.MAX_Y, nextY));
+
+    const nextHitbox = getTankHitbox(nextX, nextY);
+    const terrainColl = checkHitboxVsTerrain(nextHitbox, this.state.terrain, { forBullet: false });
+    const obstacles =
+      this.state.p1.isAlive && !this.state.p1State.isDead
+        ? [this.state.p1, ...this.state.enemies]
+        : this.state.enemies;
+    const tankColl = checkTankVsTanks('p2', nextHitbox, obstacles);
+
+    if (!terrainColl.collides && !tankColl) {
+      v.p2RenderX = nextX;
+      v.p2RenderY = nextY;
     }
   }
 
   /**
-   * Applies an authoritative state snapshot from Host onto a Guest client in Co-op Online mode.
+   * Validates and atomically applies an authoritative state snapshot from Host onto a Guest client.
+   * Rejects invalid/stale snapshots without mutating GameCoreState or any sequence counter.
    */
-  public applyAuthoritativeSnapshot(snapshot: {
-    tickCount: number;
-    p1: TankStructure;
-    p1State: GameCoreState['p1State'];
-    p2: TankStructure | null;
-    p2State: GameCoreState['p2State'];
-    bullets: BulletStructure[];
-    enemies: EnemyTank[];
-    enemyQueueLength: number;
-    totalDefeatedEnemies: number;
-    score: number;
-    highScore: number;
-    defeatedCounts: GameCoreState['defeatedCounts'];
-    currentStageId: number;
-    currentStageName: string;
-    stageElapsedSeconds: number;
-    brickSubTiles: Record<string, number>;
-    isBaseDestroyed: boolean;
-    isGameOver: boolean;
-    isStageClear: boolean;
-    gameOverReason: string | null;
-    matchState: GameCoreState['matchState'];
-  }): void {
+  public applyAuthoritativeSnapshot(rawSnapshot: unknown): SnapshotValidationResult {
+    const check = validateAndNormalizeAuthoritativeSnapshot(
+      rawSnapshot,
+      this.lastAppliedSnapshotSeq,
+      this.lastAppliedStageRunSeq,
+      this.lastAppliedTickCount
+    );
+    if (!check.valid || !check.normalized) {
+      return { valid: false, reason: check.reason, errorCode: check.reason };
+    }
+
+    const snapshot = check.normalized;
+    const prevStageRunSeq = this.lastAppliedStageRunSeq;
+    const prevStageId = this.state.currentStageId;
+    const prevTickCount = this.lastAppliedTickCount;
+    const prevBaseDestroyed = this.state.terrain.isBaseDestroyed;
+    const prevP1Dead = this.state.p1State.isDead;
+    const prevP1X = this.state.p1.x;
+    const prevP1Y = this.state.p1.y;
+    const prevP2 = this.state.p2;
+    const prevP2Dead = Boolean(this.state.p2State?.isDead);
+    const prevP2X = this.state.p2?.x ?? 144;
+    const prevP2Y = this.state.p2?.y ?? 192;
+
+    const isSameStageContinuity =
+      prevTickCount >= 0 &&
+      snapshot.stageRunSeq === prevStageRunSeq &&
+      snapshot.currentStageId === prevStageId;
+
+    if (!isSameStageContinuity) {
+      // Stage restart or stage transition: clear stale combat events, never emit false explosions
+      this.combatEvents = [];
+      const targetStage = this.stageManager.getStage(snapshot.currentStageId);
+      if (targetStage) {
+        this.stageManager.setCurrentStage(snapshot.currentStageId);
+        this.state.terrain = createRuntimeTerrainState(targetStage.map);
+      } else {
+        this.state.terrain = createRuntimeTerrainState(this.stageManager.getCurrentStage().map);
+      }
+    }
+
+    this.difficulty = snapshot.difficulty;
+    this.stageRunSeq = snapshot.stageRunSeq;
+    this.state.difficulty = snapshot.difficulty;
+    this.state.stageRunSeq = snapshot.stageRunSeq;
     this.state.tickCount = snapshot.tickCount;
+    this.state.matchDurationSeconds = snapshot.matchDurationSeconds;
+    this.state.remainingTicks = snapshot.remainingTicks;
+    this.state.remainingSeconds = snapshot.remainingSeconds;
+    this.state.stageElapsedSeconds = snapshot.stageElapsedSeconds;
     this.state.p1 = { ...snapshot.p1 };
     this.state.p1State = { ...snapshot.p1State };
     this.state.p2 = snapshot.p2 ? { ...snapshot.p2 } : null;
     this.state.p2State = snapshot.p2State ? { ...snapshot.p2State } : null;
-    this.state.bullets = snapshot.bullets.map((b) => ({ ...b }));
+    this.state.bullets = Array.isArray(snapshot.bullets)
+      ? snapshot.bullets.map((b: BulletStructure) => ({ ...b }))
+      : [];
     this.state.bullet =
       this.state.bullets.find(
         (b) => b.ownerId === this.state.p1.id || (b.ownerType === 'player' && b.ownerId !== 'p2')
       ) ?? null;
-    this.state.enemies = snapshot.enemies.map((e) => ({ ...e }));
-    this.state.enemyQueue = new Array(Math.max(0, snapshot.enemyQueueLength)).fill('BASIC');
+    this.state.enemies = Array.isArray(snapshot.enemies)
+      ? snapshot.enemies.map((e: EnemyTank) => ({ ...e }))
+      : [];
+    this.state.enemyQueue = new Array(Math.max(0, Number(snapshot.enemyQueueLength) || 0)).fill(
+      'BASIC'
+    );
     this.state.totalDefeatedEnemies = snapshot.totalDefeatedEnemies;
     this.state.score = snapshot.score;
     this.state.highScore = snapshot.highScore;
     this.state.defeatedCounts = { ...snapshot.defeatedCounts };
     this.state.currentStageId = snapshot.currentStageId;
     this.state.currentStageName = snapshot.currentStageName;
-    this.state.stageElapsedSeconds = snapshot.stageElapsedSeconds;
-    for (const [key, mask] of Object.entries(snapshot.brickSubTiles)) {
-      this.state.terrain.brickSubTiles[key] = mask;
-      const [rStr, cStr] = key.split('_');
-      const r = Number(rStr);
-      const c = Number(cStr);
-      if (!Number.isNaN(r) && !Number.isNaN(c) && this.state.terrain.currentMap[r]) {
-        this.state.terrain.currentMap[r][c] = mask === 0 ? 0 : 1;
+
+    if (snapshot.brickSubTiles && typeof snapshot.brickSubTiles === 'object') {
+      for (const [key, mask] of Object.entries(snapshot.brickSubTiles as Record<string, number>)) {
+        this.state.terrain.brickSubTiles[key] = mask;
+        const [rStr, cStr] = key.split('_');
+        const r = Number(rStr);
+        const c = Number(cStr);
+        if (!Number.isNaN(r) && !Number.isNaN(c) && this.state.terrain.currentMap[r]) {
+          this.state.terrain.currentMap[r][c] = mask === 0 ? 0 : 1;
+        }
       }
     }
     this.state.terrain.isBaseDestroyed = snapshot.isBaseDestroyed;
     this.state.isGameOver = snapshot.isGameOver;
     this.state.isStageClear = snapshot.isStageClear;
-    this.state.gameOverReason = snapshot.gameOverReason;
+    this.state.isTimeoutGameOver = snapshot.isTimeoutGameOver;
+    this.state.gameOverReason = snapshot.gameOverReason ?? null;
     this.state.matchState = snapshot.matchState;
     this.matchStateMachine.transitionTo(snapshot.matchState as any, true);
+
+    if (isSameStageContinuity) {
+      if (!prevBaseDestroyed && snapshot.isBaseDestroyed) {
+        this.emitCombatEvent('BASE_EXPLOSION', 96, 192);
+      }
+      if (!prevP1Dead && snapshot.p1State.isDead) {
+        this.emitCombatEvent('P1_EXPLOSION', prevP1X + 8, prevP1Y + 8);
+      }
+      if (prevP2 && !prevP2Dead && snapshot.p2State?.isDead) {
+        this.emitCombatEvent('TANK_EXPLOSION', prevP2X + 8, prevP2Y + 8);
+      }
+    }
+
+    // Commit sequence counters atomically ONLY after full validation & state update succeed
+    this.lastAppliedSnapshotSeq = snapshot.snapshotSeq;
+    this.lastAppliedStageRunSeq = snapshot.stageRunSeq;
+    this.lastAppliedTickCount = snapshot.tickCount;
+    this.syncGuestVisualStateFromAuthoritative();
+    this.onGuestSnapshotAppliedCallback?.(
+      snapshot.snapshotSeq,
+      snapshot.stageRunSeq,
+      snapshot.tickCount
+    );
+
+    return {
+      valid: true,
+      appliedSnapshotSeq: snapshot.snapshotSeq,
+    };
   }
 
   /**
    * Advances simulation with real-world delta time using fixed 60Hz ticks.
-   * Manages accumulator, backlog limits, and frame clamp.
+   * Manages input guards, non-overlapping lost time accounting, safety pause, and neutral catch-up input.
    */
-  public advanceTime(deltaMs: number, input: InputState): number {
+  public advanceTime(
+    rawElapsedMs: number,
+    input: InputState,
+    options?: { isHostHidden?: boolean }
+  ): number {
     if (
       this.isPaused ||
       this.state.matchState === MATCH_STATES.PAUSED ||
@@ -1034,55 +1575,132 @@ export class GameEngine {
       return 0;
     }
 
-    // Discard any lingering backlog or massive delta immediately upon resuming or tab switch
+    // 1. Strict input guard BEFORE any backlog arithmetic (rejects NaN, Infinity, -Infinity, <= 0)
+    if (typeof rawElapsedMs !== 'number' || !Number.isFinite(rawElapsedMs) || rawElapsedMs <= 0) {
+      this.lastDroppedBacklogMs = 0;
+      this.lastDroppedInputMs = 0;
+      this.lastDroppedBacklogComponentMs = 0;
+      return 0;
+    }
+
+    // Discard any lingering backlog or massive delta immediately upon resuming from pause/tab switch
     if (this.justResumed) {
       this.justResumed = false;
       this.accumulatorMs = 0;
-      deltaMs = Math.min(deltaMs, SIMULATION_CONFIG.FIXED_DT_MS);
+      this.catchUpTicksRemaining = 0;
+      rawElapsedMs = Math.min(rawElapsedMs, SIMULATION_CONFIG.FIXED_DT_MS);
     }
 
-    // Clamp incoming frame delta (max 50ms = 3 ticks) to prevent hyperspeed catch-up jumps
-    const clampedDeltaMs = Math.max(0, Math.min(deltaMs, SIMULATION_CONFIG.MAX_FRAME_DELTA_MS));
+    // 2. Non-overlapping lost time decomposition: droppedInputMs + droppedBacklogMs
+    const acceptedDeltaMs = Math.min(rawElapsedMs, SIMULATION_CONFIG.MAX_INPUT_DELTA_MS);
+    const droppedInputMs = rawElapsedMs - acceptedDeltaMs;
+    const rawTotalBacklogMs = this.accumulatorMs + rawElapsedMs;
 
-    // Track timing telemetry
-    this.totalRealElapsedMs += deltaMs;
-    const droppedMs = Math.max(0, deltaMs - clampedDeltaMs);
-    this.totalDroppedMs += droppedMs;
+    // 3. Forced Safety Pause for SOLO and TWO_PLAYERS_AI when total backlog exceeds 3000ms
+    if (
+      (this.gameMode === 'SOLO' || this.gameMode === 'TWO_PLAYERS_AI') &&
+      rawTotalBacklogMs > SIMULATION_CONFIG.MAX_ACCUMULATOR_BACKLOG_MS
+    ) {
+      const droppedBacklogMs = this.accumulatorMs + acceptedDeltaMs;
+      this.accumulatorMs = 0;
+      this.catchUpTicksRemaining = 0;
+      this.lastDroppedInputMs = droppedInputMs;
+      this.lastDroppedBacklogComponentMs = droppedBacklogMs;
+      this.lastDroppedBacklogMs = droppedInputMs + droppedBacklogMs;
+      this.totalDroppedMs += this.lastDroppedBacklogMs;
+      this.totalRealElapsedMs += rawElapsedMs;
+      this.state.diagnosticLog = `Forced Safety Pause: backlog ${rawTotalBacklogMs.toFixed(1)}ms > ${SIMULATION_CONFIG.MAX_ACCUMULATOR_BACKLOG_MS}ms`;
+      this.pause();
+      return 0;
+    }
 
-    this.state.stageElapsedSeconds += clampedDeltaMs / 1000;
-    this.accumulatorMs += clampedDeltaMs;
+    const unclampedBacklogMs = this.accumulatorMs + acceptedDeltaMs;
+    const clampedBacklogMs = Math.min(
+      unclampedBacklogMs,
+      SIMULATION_CONFIG.MAX_ACCUMULATOR_BACKLOG_MS
+    );
+    const droppedBacklogMs = Math.max(0, unclampedBacklogMs - clampedBacklogMs);
 
-    // Accumulator backlog clamp: strictly never more than 3 ticks (~50ms) backlog
-    // Note: 3 * (1000 / 60) in IEEE-754 float is 50.00000000000001ms; allow 1e-4 epsilon on normal frames
-    // so 3 full ticks are not truncated to 2 ticks by floating-point rounding.
-    const isMassiveSpike = deltaMs > SIMULATION_CONFIG.MAX_FRAME_DELTA_MS;
-    const maxAcc = isMassiveSpike
-      ? SIMULATION_CONFIG.MAX_ACCUMULATOR_MS
-      : SIMULATION_CONFIG.MAX_ACCUMULATOR_MS + 1e-4;
-
-    if (this.accumulatorMs > maxAcc) {
-      const excess = this.accumulatorMs - maxAcc;
-      this.totalDroppedMs += excess;
-      this.accumulatorMs = maxAcc;
+    this.accumulatorMs = clampedBacklogMs;
+    this.lastDroppedInputMs = droppedInputMs;
+    this.lastDroppedBacklogComponentMs = droppedBacklogMs;
+    this.lastDroppedBacklogMs = droppedInputMs + droppedBacklogMs;
+    this.totalDroppedMs += this.lastDroppedBacklogMs;
+    this.totalRealElapsedMs += rawElapsedMs;
+    if (this.lastDroppedBacklogMs > 0) {
       this.state.diagnosticLog = 'Simulation backlog clamped';
     }
 
-    const tickThreshold = isMassiveSpike
-      ? SIMULATION_CONFIG.FIXED_DT_MS
-      : SIMULATION_CONFIG.FIXED_DT_MS - 1e-6;
+    // 4. Neutral Input Policy for Historical Catch-Up Ticks
+    const isHostHidden = Boolean(options?.isHostHidden);
+    const maxSingleFrameBudgetMs =
+      SIMULATION_CONFIG.MAX_TICKS_PER_FRAME * SIMULATION_CONFIG.FIXED_DT_MS; // 250ms
+    const isFreezeRecoveryFrame =
+      rawElapsedMs > maxSingleFrameBudgetMs + SIMULATION_CONFIG.SIMULATION_EPSILON_MS;
+
+    if (isFreezeRecoveryFrame || isHostHidden) {
+      this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
+    }
+    if (isFreezeRecoveryFrame) {
+      this.externalInputP2 = { up: false, down: false, left: false, right: false, shoot: false };
+      this.catchUpTicksRemaining = Math.floor(
+        (this.accumulatorMs + SIMULATION_CONFIG.SIMULATION_EPSILON_MS) /
+          SIMULATION_CONFIG.FIXED_DT_MS
+      );
+    }
+
+    const tickThreshold =
+      SIMULATION_CONFIG.FIXED_DT_MS - SIMULATION_CONFIG.SIMULATION_EPSILON_MS;
+    const totalAvailableTicksInAccumulator = Math.floor(
+      (this.accumulatorMs + SIMULATION_CONFIG.SIMULATION_EPSILON_MS) /
+        SIMULATION_CONFIG.FIXED_DT_MS
+    );
+    const plannedTicksThisFrame = Math.min(
+      totalAvailableTicksInAccumulator,
+      SIMULATION_CONFIG.MAX_TICKS_PER_FRAME
+    );
+    const savedExternalInputP2 = { ...this.externalInputP2 };
 
     let ticksRun = 0;
     while (
       this.accumulatorMs >= tickThreshold &&
       ticksRun < SIMULATION_CONFIG.MAX_TICKS_PER_FRAME
     ) {
-      this.stepTick(input);
-      this.accumulatorMs = Math.max(0, this.accumulatorMs - SIMULATION_CONFIG.FIXED_DT_MS);
+      const isHistoricalCatchUpTick =
+        isFreezeRecoveryFrame ||
+        this.catchUpTicksRemaining > 1 ||
+        totalAvailableTicksInAccumulator > SIMULATION_CONFIG.MAX_TICKS_PER_FRAME ||
+        (plannedTicksThisFrame > 1 && ticksRun < plannedTicksThisFrame - 1);
+
+      if (this.catchUpTicksRemaining > 0) {
+        this.catchUpTicksRemaining -= 1;
+      }
+
+      const effectiveP1Input: InputState =
+        isHostHidden || isHistoricalCatchUpTick ? NEUTRAL_INPUT : input;
+      this.externalInputP2 = isHistoricalCatchUpTick
+        ? { ...NEUTRAL_INPUT }
+        : savedExternalInputP2;
+
+      this.stepTick(effectiveP1Input);
+
+      this.accumulatorMs -= SIMULATION_CONFIG.FIXED_DT_MS;
+      if (this.accumulatorMs < SIMULATION_CONFIG.SIMULATION_EPSILON_MS) {
+        this.accumulatorMs = 0;
+      }
       ticksRun++;
+
+      if (this.state.isGameOver || this.state.isStageClear || this.isPaused) {
+        this.accumulatorMs = 0;
+        this.catchUpTicksRemaining = 0;
+        break;
+      }
     }
 
+    this.externalInputP2 = isFreezeRecoveryFrame ? { ...NEUTRAL_INPUT } : savedExternalInputP2;
+
     // Measure live Simulation Ticks Per Second (TPS) over 500ms sliding windows
-    this.tpsAccumulatorMs += deltaMs;
+    this.tpsAccumulatorMs += rawElapsedMs;
     this.tpsTicksThisWindow += ticksRun;
     if (this.tpsAccumulatorMs >= 500) {
       this.recentTps = Math.round((this.tpsTicksThisWindow * 1000) / this.tpsAccumulatorMs);
@@ -1100,6 +1718,9 @@ export class GameEngine {
     realElapsedSeconds: number;
     simulatedSeconds: number;
     droppedSeconds: number;
+    droppedInputMs: number;
+    droppedBacklogMs: number;
+    lastDroppedBacklogMs: number;
     accumulatorMs: number;
   } {
     return {
@@ -1109,6 +1730,9 @@ export class GameEngine {
       realElapsedSeconds: Number((this.totalRealElapsedMs / 1000).toFixed(3)),
       simulatedSeconds: Number((this.state.tickCount * SIMULATION_CONFIG.FIXED_DT_S).toFixed(3)),
       droppedSeconds: Number((this.totalDroppedMs / 1000).toFixed(3)),
+      droppedInputMs: Number(this.lastDroppedInputMs.toFixed(3)),
+      droppedBacklogMs: Number(this.lastDroppedBacklogComponentMs.toFixed(3)),
+      lastDroppedBacklogMs: Number(this.lastDroppedBacklogMs.toFixed(3)),
       accumulatorMs: Number(this.accumulatorMs.toFixed(2)),
     };
   }

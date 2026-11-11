@@ -260,20 +260,20 @@ export function runSpeedAndLayoutTests(): {
 
   record(
     'TC-SL-08',
-    'Khóa Cứng Delta Frame: Tối Đa 50ms và Tối Đa 3 Ticks Trong 1 Frame Duy Nhất',
+    'Khóa Cứng Số Tick Mỗi Frame: Tối Đa 15 Ticks Trong 1 Frame Duy Nhất (M7.3.8)',
     'SPEED_TIMING',
     () => {
       const engine = new GameEngine(undefined, undefined, false);
-      // Pass massive delta: 1000ms in single frame (clamped to 50ms)
+      // Pass massive delta: 1000ms in single frame (capped at MAX_TICKS_PER_FRAME = 15)
       const ticksRun = engine.advanceTime(1000, emptyInput);
       if (ticksRun > SIMULATION_CONFIG.MAX_TICKS_PER_FRAME) {
         throw new Error(`Frame delta cực lớn bị vượt giới hạn MAX_TICKS_PER_FRAME: ${ticksRun} > ${SIMULATION_CONFIG.MAX_TICKS_PER_FRAME}`);
       }
-      if (ticksRun !== 2) {
-        throw new Error(`Frame delta bị clamp 50ms phải chạy đúng 2 ticks (50ms / 16.667ms), nhận: ${ticksRun}`);
+      if (ticksRun !== 15) {
+        throw new Error(`Frame delta 1000ms phải chạy đúng 15 ticks (MAX_TICKS_PER_FRAME = 15), nhận: ${ticksRun}`);
       }
     },
-    'Delta mỗi frame bị clamp tối đa 50ms, không frame nào được chạy quá 3 ticks'
+    'Mỗi frame thực thi tối đa 15 ticks (250ms), không frame nào được vượt quá MAX_TICKS_PER_FRAME'
   );
 
   // ====================================================================

@@ -11,7 +11,7 @@ import {
   type InputState,
   type GameCoreState,
 } from '../../core/types.ts';
-import { GameEngine } from '../../core/gameEngine.ts';
+import { GameEngine, NEUTRAL_INPUT } from '../../core/gameEngine.ts';
 import { generateTileTextures } from '../textureGenerator.ts';
 import { SoundManager } from '../../core/audio.ts';
 import { CoopOnlineManager } from '../../core/coopOnlineManager.ts';
@@ -43,6 +43,7 @@ export class BattleScene extends Phaser.Scene {
     ruinedTexKey: string;
   }> = [];
   private lastStageId: number = -1;
+  private lastStageRunSeq: number = -1;
   private lastTickCount: number = -1;
   private lastMatchState: string = '';
   private onStateCallback?: (state: GameCoreState) => void;
@@ -50,6 +51,9 @@ export class BattleScene extends Phaser.Scene {
   private fpsAccumulatorMs = 0;
   private fpsFrameCount = 0;
   private unsubOnlineSnapshots?: () => void;
+  private lastDispatchMonotonicMs: number = 0;
+  private bgTimerId: ReturnType<typeof setInterval> | null = null;
+  private visibilityChangeHandler?: () => void;
 
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd?: {
@@ -71,6 +75,9 @@ export class BattleScene extends Phaser.Scene {
 
   public setEngine(engine: GameEngine): void {
     this.engine = engine;
+    this.engine.setOnGuestSnapshotAppliedCallback((seq, stageRunSeq, tickCount) => {
+      CoopOnlineManager.getInstance().syncGuestAppliedSnapshotMeta(seq, stageRunSeq, tickCount);
+    });
     this.refreshAllTerrain();
   }
 
@@ -97,6 +104,113 @@ export class BattleScene extends Phaser.Scene {
   public setFpsLimit(_limit: number = 60): void {
     // Keep native requestAnimationFrame loop (fpsLimit = 0 in Phaser TimeStep)
     // to prevent stepLimitFPS from skipping frames on 60Hz displays.
+  }
+
+  private startBackgroundHostTimer(): void {
+    if (this.bgTimerId !== null) return;
+    this.bgTimerId = setInterval(() => {
+      const nowPerf =
+        typeof performance !== 'undefined' && typeof performance.now === 'function'
+          ? performance.now()
+          : Date.now();
+      this.dispatchSimulationStep('BG_TIMER', nowPerf, 16);
+    }, 16);
+  }
+
+  private stopBackgroundHostTimer(): void {
+    if (this.bgTimerId !== null) {
+      clearInterval(this.bgTimerId);
+      this.bgTimerId = null;
+    }
+  }
+
+  private readCurrentLocalInput(): InputState {
+    const ext = this.engine.getExternalInput();
+    return {
+      up: Boolean(this.cursors?.up.isDown || this.wasd?.W.isDown || ext.up),
+      down: Boolean(this.cursors?.down.isDown || this.wasd?.S.isDown || ext.down),
+      left: Boolean(this.cursors?.left.isDown || this.wasd?.A.isDown || ext.left),
+      right: Boolean(this.cursors?.right.isDown || this.wasd?.D.isDown || ext.right),
+      shoot: Boolean(
+        this.cursors?.space.isDown ||
+          this.wasd?.SPACE.isDown ||
+          this.wasd?.J.isDown ||
+          ext.shoot
+      ),
+    };
+  }
+
+  private reportHudStateIfNeeded(elapsedMs: number, state: GameCoreState): void {
+    if (!this.onStateCallback) return;
+    this.hudSyncAccumulatorMs += elapsedMs;
+    const sig = `${state.matchState}|${state.stageRunSeq}|${state.remainingSeconds}|${state.score}|${state.p1State.lives}|${state.p1State.isDead}|${state.p2State?.lives ?? -1}|${state.p2State?.isDead ?? false}|${state.totalDefeatedEnemies}|${state.enemyQueue.length}|${state.enemies.length}|${state.isGameOver}|${state.isStageClear}|${state.isTimeoutGameOver}|${state.terrain.isBaseDestroyed}`;
+    if (sig !== this.lastHudSignature || this.hudSyncAccumulatorMs >= 100) {
+      this.lastHudSignature = sig;
+      this.hudSyncAccumulatorMs = 0;
+      this.onStateCallback({ ...state });
+    }
+  }
+
+  /**
+   * Cổng điều phối mô phỏng đơn nhất (Unified Monotonic Simulation Dispatcher) giữa RAF và BG_TIMER.
+   */
+  public dispatchSimulationStep(
+    source: 'RAF' | 'BG_TIMER',
+    nowPerfMs: number = typeof performance !== 'undefined' && typeof performance.now === 'function'
+      ? performance.now()
+      : Date.now(),
+    fallbackDeltaMs: number = 0
+  ): number {
+    let rawElapsedMs = 0;
+    if (this.lastDispatchMonotonicMs <= 0) {
+      this.lastDispatchMonotonicMs = nowPerfMs;
+      rawElapsedMs = fallbackDeltaMs > 0 ? fallbackDeltaMs : 16.6666667;
+    } else {
+      rawElapsedMs = nowPerfMs - this.lastDispatchMonotonicMs;
+      if (!Number.isFinite(rawElapsedMs) || rawElapsedMs <= 0) {
+        if (source === 'RAF' && fallbackDeltaMs > 0 && Number.isFinite(fallbackDeltaMs)) {
+          rawElapsedMs = fallbackDeltaMs;
+          this.lastDispatchMonotonicMs = nowPerfMs;
+        } else {
+          return 0;
+        }
+      } else {
+        this.lastDispatchMonotonicMs = nowPerfMs;
+      }
+    }
+
+    const input = this.readCurrentLocalInput();
+
+    if (this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE') {
+      const coopManager = CoopOnlineManager.getInstance();
+      const onlineRole = coopManager.getRole();
+      if (onlineRole === 'HOST') {
+        const isHostHidden =
+          typeof document !== 'undefined' && document.visibilityState === 'hidden';
+        const effectiveHostInput = isHostHidden ? { ...NEUTRAL_INPUT } : input;
+        if (isHostHidden) {
+          this.engine.setExternalInput({ ...NEUTRAL_INPUT });
+        }
+        this.engine.setExternalInputP2(coopManager.getLatestValidatedGuestInput(Date.now()));
+        this.engine.advanceTime(rawElapsedMs, effectiveHostInput, { isHostHidden });
+        void coopManager.onHostSimulationFrame(rawElapsedMs, this.engine.getState());
+      } else if (onlineRole === 'GUEST') {
+        // Guest tuyệt đối không gọi advanceTime hay stepTick
+        void coopManager.submitGuestInput(input);
+        this.engine.setExternalInputP2(input);
+        this.engine.advanceGuestVisualInterpolation(rawElapsedMs);
+      } else {
+        this.engine.advanceTime(rawElapsedMs, input);
+      }
+    } else {
+      this.engine.advanceTime(rawElapsedMs, input);
+    }
+
+    if (source === 'BG_TIMER') {
+      this.reportHudStateIfNeeded(rawElapsedMs, this.engine.getState());
+    }
+
+    return rawElapsedMs;
   }
 
   create(): void {
@@ -151,7 +265,11 @@ export class BattleScene extends Phaser.Scene {
       SoundManager.getInstance().playEnemyShoot();
     });
 
-    // 8. Subscribe to Co-op Online snapshots when acting as Guest (P2)
+    // 8. Wire Guest snapshot confirmation callback & subscribe to Co-op Online snapshots
+    this.engine.setOnGuestSnapshotAppliedCallback((seq, stageRunSeq, tickCount) => {
+      CoopOnlineManager.getInstance().syncGuestAppliedSnapshotMeta(seq, stageRunSeq, tickCount);
+    });
+
     if (this.unsubOnlineSnapshots) {
       this.unsubOnlineSnapshots();
     }
@@ -160,11 +278,60 @@ export class BattleScene extends Phaser.Scene {
         this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE' &&
         CoopOnlineManager.getInstance().getRole() === 'GUEST'
       ) {
-        const prevStageId = this.engine.getState().currentStageId;
-        this.engine.applyAuthoritativeSnapshot(snapshot);
-        if (snapshot.currentStageId !== prevStageId) {
+        const prevState = this.engine.getState();
+        const prevStageId = prevState.currentStageId;
+        const prevStageRunSeq = prevState.stageRunSeq;
+        const res = this.engine.applyAuthoritativeSnapshot(snapshot);
+        if (!res.valid) {
+          return false;
+        }
+        if (
+          snapshot.currentStageId !== prevStageId ||
+          snapshot.stageRunSeq !== prevStageRunSeq
+        ) {
           this.refreshAllTerrain();
         }
+        return true;
+      }
+      return true;
+    });
+
+    // 9. Setup visibilitychange listener for SOLO/AI safety pause and TWO_PLAYERS_ONLINE Host BG_TIMER
+    if (typeof document !== 'undefined') {
+      if (this.visibilityChangeHandler) {
+        document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
+      }
+      this.visibilityChangeHandler = () => {
+        if (document.visibilityState === 'hidden') {
+          const mode = this.engine.getGameMode();
+          const role = CoopOnlineManager.getInstance().getRole();
+          if (mode === 'TWO_PLAYERS_ONLINE' && role === 'HOST') {
+            this.engine.setExternalInput({ ...NEUTRAL_INPUT });
+            this.startBackgroundHostTimer();
+          } else if (
+            (mode === 'SOLO' || mode === 'TWO_PLAYERS_AI') &&
+            this.engine.getState().matchState === 'PLAYING'
+          ) {
+            this.engine.setExternalInput({ ...NEUTRAL_INPUT });
+            this.engine.pauseMatch();
+            this.reportHudStateIfNeeded(0, this.engine.getState());
+          }
+        } else {
+          this.stopBackgroundHostTimer();
+        }
+      };
+      document.addEventListener('visibilitychange', this.visibilityChangeHandler);
+    }
+
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      this.stopBackgroundHostTimer();
+      if (this.unsubOnlineSnapshots) {
+        this.unsubOnlineSnapshots();
+        this.unsubOnlineSnapshots = undefined;
+      }
+      if (typeof document !== 'undefined' && this.visibilityChangeHandler) {
+        document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
+        this.visibilityChangeHandler = undefined;
       }
     });
   }
@@ -195,56 +362,30 @@ export class BattleScene extends Phaser.Scene {
       this.fpsFrameCount = 0;
     }
 
-    // 1. Read Input (merged keyboard + touch/external controls)
-    const ext = this.engine.getExternalInput();
-    const input: InputState = {
-      up: Boolean(this.cursors?.up.isDown || this.wasd?.W.isDown || ext.up),
-      down: Boolean(this.cursors?.down.isDown || this.wasd?.S.isDown || ext.down),
-      left: Boolean(this.cursors?.left.isDown || this.wasd?.A.isDown || ext.left),
-      right: Boolean(this.cursors?.right.isDown || this.wasd?.D.isDown || ext.right),
-      shoot: Boolean(
-        this.cursors?.space.isDown ||
-          this.wasd?.SPACE.isDown ||
-          this.wasd?.J.isDown ||
-          ext.shoot
-      ),
-    };
-
-    // 2. Advance GameCore Simulation with Fixed Timestep 60Hz
-    if (this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE') {
-      const coopManager = CoopOnlineManager.getInstance();
-      const onlineRole = coopManager.getRole();
-      if (onlineRole === 'HOST') {
-        this.engine.setExternalInputP2(coopManager.getLatestValidatedGuestInput());
-        this.engine.advanceTime(rawDelta, input);
-        void coopManager.onHostSimulationFrame(rawDelta, this.engine.getState());
-      } else if (onlineRole === 'GUEST') {
-        void coopManager.submitGuestInput(input);
-        this.engine.setExternalInputP2(input);
-        this.engine.advanceTime(rawDelta, {
-          up: false,
-          down: false,
-          left: false,
-          right: false,
-          shoot: false,
-        });
-      } else {
-        this.engine.advanceTime(rawDelta, input);
-      }
-    } else {
-      this.engine.advanceTime(rawDelta, input);
-    }
+    // 1. Dispatch simulation step through unified monotonic dispatcher
+    const nowPerf =
+      typeof performance !== 'undefined' && typeof performance.now === 'function'
+        ? performance.now()
+        : Date.now();
+    this.dispatchSimulationStep('RAF', nowPerf, rawDelta);
     const state = this.engine.getState();
 
     // Check if stage was restarted or stage was changed
     if (
       (this.lastStageId !== -1 && this.lastStageId !== state.currentStageId) ||
+      (this.lastStageRunSeq !== -1 && this.lastStageRunSeq !== state.stageRunSeq) ||
       (this.lastTickCount >= 0 && state.tickCount < this.lastTickCount)
     ) {
       this.refreshAllTerrain();
     }
     this.lastStageId = state.currentStageId;
+    this.lastStageRunSeq = state.stageRunSeq;
     this.lastTickCount = state.tickCount;
+
+    const isOnlineGuest =
+      this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE' &&
+      CoopOnlineManager.getInstance().getRole() === 'GUEST';
+    const guestVisual = isOnlineGuest ? this.engine.getGuestVisualState() : null;
 
     // 3. Update P1 Tank & Shield
     if (this.p1Sprite) {
@@ -255,9 +396,10 @@ export class BattleScene extends Phaser.Scene {
 
         const hasShield = state.p1.isShielded || state.p1State.shieldTimer > 0;
         if (hasShield) {
-          // Visual pulse/flash (alpha oscillation & glowing aura) on the tank sprite
-          // When paused, shieldTimer freezes, so pulse/flash freezes automatically
-          const pulsePhase = Math.floor(state.p1State.shieldTimer * 10) % 2 === 0;
+          const p1ShieldTimerForVisual = guestVisual
+            ? guestVisual.p1VisualShieldTimer
+            : state.p1State.shieldTimer;
+          const pulsePhase = Math.floor(p1ShieldTimerForVisual * 10) % 2 === 0;
           const tankAlpha = pulsePhase ? 0.7 : 1.0;
           const auraAlpha = pulsePhase ? 0.95 : 0.45;
 
@@ -283,14 +425,18 @@ export class BattleScene extends Phaser.Scene {
 
     // 3b. Update P2 Tank & Shield (if P2 exists in 2-Player mode)
     if (state.p2) {
+      const p2RenderX = guestVisual ? guestVisual.p2RenderX : state.p2.x;
+      const p2RenderY = guestVisual ? guestVisual.p2RenderY : state.p2.y;
+      const p2RenderDir = guestVisual ? guestVisual.p2RenderDirection : state.p2.direction;
+
       if (!this.p2Sprite) {
-        this.p2Sprite = this.add.image(state.p2.x, state.p2.y, `tank_p2_${state.p2.direction.toLowerCase()}`);
+        this.p2Sprite = this.add.image(p2RenderX, p2RenderY, `tank_p2_${p2RenderDir.toLowerCase()}`);
         this.p2Sprite.setOrigin(0, 0);
         this.p2Sprite.setDisplaySize(16, 16);
         this.p2Sprite.setDepth(10);
       }
       if (!this.p2ShieldSprite) {
-        this.p2ShieldSprite = this.add.image(state.p2.x - 1, state.p2.y - 1, 'shield_aura');
+        this.p2ShieldSprite = this.add.image(p2RenderX - 1, p2RenderY - 1, 'shield_aura');
         this.p2ShieldSprite.setOrigin(0, 0);
         this.p2ShieldSprite.setDisplaySize(18, 18);
         this.p2ShieldSprite.setDepth(12);
@@ -298,19 +444,22 @@ export class BattleScene extends Phaser.Scene {
       }
 
       if (state.p2.isAlive && (!state.p2State || !state.p2State.isDead)) {
-        this.p2Sprite.setPosition(state.p2.x, state.p2.y);
-        this.p2Sprite.setTexture(`tank_p2_${state.p2.direction.toLowerCase()}`);
+        this.p2Sprite.setPosition(p2RenderX, p2RenderY);
+        this.p2Sprite.setTexture(`tank_p2_${p2RenderDir.toLowerCase()}`);
         this.p2Sprite.setVisible(true);
 
         const hasShield = state.p2.isShielded || (state.p2State && state.p2State.shieldTimer > 0);
         if (hasShield) {
-          const pulsePhase = Math.floor((state.p2State?.shieldTimer ?? 1) * 10) % 2 === 0;
+          const p2ShieldTimerForVisual = guestVisual
+            ? guestVisual.p2VisualShieldTimer
+            : (state.p2State?.shieldTimer ?? 1);
+          const pulsePhase = Math.floor(p2ShieldTimerForVisual * 10) % 2 === 0;
           const tankAlpha = pulsePhase ? 0.7 : 1.0;
           const auraAlpha = pulsePhase ? 0.95 : 0.45;
 
           this.p2Sprite.setAlpha(tankAlpha);
           if (this.p2ShieldSprite) {
-            this.p2ShieldSprite.setPosition(state.p2.x - 1, state.p2.y - 1);
+            this.p2ShieldSprite.setPosition(p2RenderX - 1, p2RenderY - 1);
             this.p2ShieldSprite.setVisible(true);
             this.p2ShieldSprite.setAlpha(auraAlpha);
           }
@@ -525,15 +674,7 @@ export class BattleScene extends Phaser.Scene {
     this.syncDynamicTerrain(state);
 
     // 9. Report state to React (immediately on key HUD state change or every ~100ms)
-    if (this.onStateCallback) {
-      this.hudSyncAccumulatorMs += rawDelta;
-      const sig = `${state.matchState}|${state.score}|${state.p1State.lives}|${state.p1State.isDead}|${state.p2State?.lives ?? -1}|${state.p2State?.isDead ?? false}|${state.totalDefeatedEnemies}|${state.enemyQueue.length}|${state.enemies.length}|${state.isGameOver}|${state.isStageClear}|${state.terrain.isBaseDestroyed}`;
-      if (sig !== this.lastHudSignature || this.hudSyncAccumulatorMs >= 100) {
-        this.lastHudSignature = sig;
-        this.hudSyncAccumulatorMs = 0;
-        this.onStateCallback({ ...state });
-      }
-    }
+    this.reportHudStateIfNeeded(rawDelta, state);
   }
 
   public refreshAllTerrain(): void {

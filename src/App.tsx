@@ -21,7 +21,12 @@ import { SettingsModal } from './components/SettingsModal.tsx';
 import { SupportModal } from './components/SupportModal.tsx';
 import { SoundManager } from './core/audio.ts';
 import { MusicManager } from './core/musicManager.ts';
-import { STAGE_1_MAP } from './core/constants.ts';
+import {
+  MATCH_TIMER_CONFIG,
+  STAGE_1_MAP,
+  formatCountdownMMSS,
+  getMatchDurationSecondsForDifficulty,
+} from './core/constants.ts';
 import { validateStageMap } from './core/mapValidator.ts';
 import { GameEngine } from './core/gameEngine.ts';
 import {
@@ -52,6 +57,7 @@ import {
   Settings,
   HelpCircle,
   AlertTriangle,
+  Clock,
 } from 'lucide-react';
 
 export default function App() {
@@ -671,6 +677,29 @@ export default function App() {
 
             {/* Center: Live Match Metrics (No remaining enemy count per M7.3 IV) */}
             <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono">
+              {(() => {
+                const remSec =
+                  typeof gameState?.remainingSeconds === 'number'
+                    ? gameState.remainingSeconds
+                    : getMatchDurationSecondsForDifficulty(gameState?.difficulty ?? difficulty);
+                const isCrit = remSec <= MATCH_TIMER_CONFIG.CRITICAL_THRESHOLD_S;
+                const isWarn = !isCrit && remSec <= MATCH_TIMER_CONFIG.WARNING_THRESHOLD_S;
+                return (
+                  <div
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold ${
+                      isCrit
+                        ? 'bg-red-950/90 border-red-500 text-red-300 animate-pulse'
+                        : isWarn
+                        ? 'bg-amber-950/80 border-amber-500/80 text-amber-300'
+                        : 'bg-neutral-900 border-neutral-700 text-emerald-300'
+                    }`}
+                    title="Thời gian còn lại của trận đấu"
+                  >
+                    <Clock className="w-3 h-3" />
+                    <span>{formatCountdownMMSS(remSec)}</span>
+                  </div>
+                );
+              })()}
               <div className="flex items-center gap-1 text-amber-400">
                 <Trophy className="w-3.5 h-3.5" />
                 <span className="font-bold">{gameState?.score ?? 0} XP</span>
@@ -825,6 +854,29 @@ export default function App() {
 
             {/* Center: Live Match Metrics (No remaining enemy count per M7.3 IV) */}
             <div className="flex items-center gap-2 text-xs font-mono">
+              {(() => {
+                const remSec =
+                  typeof gameState?.remainingSeconds === 'number'
+                    ? gameState.remainingSeconds
+                    : getMatchDurationSecondsForDifficulty(gameState?.difficulty ?? difficulty);
+                const isCrit = remSec <= MATCH_TIMER_CONFIG.CRITICAL_THRESHOLD_S;
+                const isWarn = !isCrit && remSec <= MATCH_TIMER_CONFIG.WARNING_THRESHOLD_S;
+                return (
+                  <div
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold ${
+                      isCrit
+                        ? 'bg-red-950/90 border-red-500 text-red-300 animate-pulse'
+                        : isWarn
+                        ? 'bg-amber-950/80 border-amber-500/80 text-amber-300'
+                        : 'bg-neutral-900 border-neutral-700 text-emerald-300'
+                    }`}
+                    title="Thời gian còn lại của trận đấu"
+                  >
+                    <Clock className="w-3 h-3" />
+                    <span>{formatCountdownMMSS(remSec)}</span>
+                  </div>
+                );
+              })()}
               <div className="flex items-center gap-1 text-amber-400">
                 <Trophy className="w-3.5 h-3.5" />
                 <span className="font-bold">{gameState?.score ?? 0} XP</span>

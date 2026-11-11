@@ -603,7 +603,7 @@ export function runAllM6CorrectionAITests(): {
   }
 
   // =========================================================================
-  // TC-LAG-AI-02: Natural rAF Jitter & 3-Tick Catchup Precision (No IEEE-754 Truncation)
+  // TC-LAG-AI-02: Natural rAF Jitter & Catchup Precision (No IEEE-754 Truncation)
   // =========================================================================
   {
     const engine = new GameEngine();
@@ -611,14 +611,14 @@ export function runAllM6CorrectionAITests(): {
     // 3 * (1000 / 60) = 50.00000000000001 in IEEE-754 floating point; must execute 3 ticks with 0 dropped
     const ticks3 = engine.advanceTime(3 * (1000 / 60), blankInput);
     const droppedAfter3 = engine.getTimingTelemetry().droppedSeconds;
-    // Huge 1000ms spike still clamps to 2 ticks
+    // 1000ms spike caps per-frame execution at MAX_TICKS_PER_FRAME (15 ticks)
     const ticksSpike = engine.advanceTime(1000, blankInput);
 
     results.push({
       id: 'TC-LAG-AI-02',
-      name: '3-tick catchup executes without IEEE-754 truncation while clamping 1000ms spikes',
-      passed: ticks3 === 3 && droppedAfter3 === 0 && ticksSpike === 2,
-      details: `3*(1000/60)ms -> ${ticks3} ticks (dropped=${droppedAfter3}s); 1000ms spike -> clamped to ${ticksSpike} ticks.`,
+      name: '3-tick catchup executes without IEEE-754 truncation while capping 1000ms spikes at 15 ticks/frame',
+      passed: ticks3 === 3 && droppedAfter3 === 0 && ticksSpike === 15,
+      details: `3*(1000/60)ms -> ${ticks3} ticks (dropped=${droppedAfter3}s); 1000ms spike -> capped at ${ticksSpike} ticks/frame.`,
     });
   }
 
@@ -1374,18 +1374,18 @@ export function runAllM6CorrectionAITests(): {
     const telemetryAfterRecovery = spikeEngine.getTimingTelemetry();
 
     const passed =
-      ticksOnSpike === 2 &&
-      telemetryOnSpike.droppedSeconds === 0.95 &&
-      telemetryOnSpike.accumulatorMs === 16.67 &&
-      postSpikeTicks === 61 &&
-      telemetryAfterRecovery.actualTicks === 123 &&
-      telemetryAfterRecovery.droppedSeconds === 0.95 &&
+      ticksOnSpike === 15 &&
+      telemetryOnSpike.droppedSeconds === 0 &&
+      telemetryOnSpike.accumulatorMs === 750 &&
+      postSpikeTicks === 105 &&
+      telemetryAfterRecovery.actualTicks === 180 &&
+      telemetryAfterRecovery.droppedSeconds === 0 &&
       telemetryAfterRecovery.realElapsedSeconds === 3 &&
-      telemetryAfterRecovery.simulatedSeconds === 2.05;
+      telemetryAfterRecovery.simulatedSeconds === 3;
 
     results.push({
       id: 'TC-VER-07',
-      name: '1000ms frame spike processes 2 ticks, drops 0.950s, retains 16.67ms remainder, and recovers cleanly',
+      name: '1000ms frame spike processes 15 ticks/frame, retains 750ms backlog, and drains cleanly to 180 ticks over 3.00s',
       passed,
       details: `Spike(1000ms): ticks=${ticksOnSpike}, dropped=${telemetryOnSpike.droppedSeconds}s, remAcc=${telemetryOnSpike.accumulatorMs}ms; Post-spike(60 frames): ticks=${postSpikeTicks}, totalTicks=${telemetryAfterRecovery.actualTicks}, simTime=${telemetryAfterRecovery.simulatedSeconds}s vs realTime=${telemetryAfterRecovery.realElapsedSeconds}s.`,
     });

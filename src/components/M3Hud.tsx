@@ -6,16 +6,21 @@
 import React from 'react';
 import type { GameCoreState } from '../core/types.ts';
 import {
+  MATCH_TIMER_CONFIG,
+  formatCountdownMMSS,
+  getMatchDurationSecondsForDifficulty,
+} from '../core/constants.ts';
+import {
   RotateCcw,
   AlertTriangle,
   Trophy,
   Heart,
   Shield,
   Crosshair,
-  Compass,
   Cpu,
   Skull,
   User,
+  Clock,
 } from 'lucide-react';
 
 interface M3HudProps {
@@ -36,14 +41,50 @@ export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy, onPa
   const enemies = state.enemies;
   const isBaseDestroyed = state.terrain.isBaseDestroyed;
   const isCoop = state.gameMode === 'TWO_PLAYERS_AI' || state.gameMode === 'TWO_PLAYERS_ONLINE';
+  const remainingSeconds =
+    typeof state.remainingSeconds === 'number'
+      ? state.remainingSeconds
+      : getMatchDurationSecondsForDifficulty(state.difficulty);
+  const isCriticalTime = remainingSeconds <= MATCH_TIMER_CONFIG.CRITICAL_THRESHOLD_S;
+  const isWarningTime =
+    !isCriticalTime && remainingSeconds <= MATCH_TIMER_CONFIG.WARNING_THRESHOLD_S;
+  const timerBadgeClass = isCriticalTime
+    ? 'bg-red-950/90 border-red-500 text-red-300 animate-pulse shadow-sm shadow-red-500/30'
+    : isWarningTime
+    ? 'bg-amber-950/80 border-amber-500/80 text-amber-300'
+    : 'bg-neutral-950 border-neutral-800 text-emerald-300';
 
   return (
     <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 text-xs flex flex-col gap-3 shadow-xl">
-      {/* Top Header: Stage, Score, High Score & Lives */}
+      {/* Top Header: Stage, Countdown Timer, Score, High Score & Lives */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 pb-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold">
             <span>STAGE {state.currentStageId ?? 1}</span>
+          </div>
+
+          <div
+            data-testid="hud-countdown-timer"
+            className={`flex items-center gap-1.5 px-3 py-1 rounded border font-mono transition-colors ${timerBadgeClass}`}
+            title={
+              state.difficulty === 'EXTREME'
+                ? 'Đồng hồ đếm ngược chế độ Thử thách (60s)'
+                : 'Đồng hồ đếm ngược chế độ Giải trí (120s)'
+            }
+          >
+            <Clock
+              className={`w-4 h-4 ${
+                isCriticalTime
+                  ? 'text-red-400'
+                  : isWarningTime
+                  ? 'text-amber-400'
+                  : 'text-emerald-400'
+              }`}
+            />
+            <span className="text-[11px] opacity-80">THỜI GIAN:</span>
+            <span className="font-black text-sm tracking-wider">
+              {formatCountdownMMSS(remainingSeconds)}
+            </span>
           </div>
 
           <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-neutral-950 border border-neutral-800">

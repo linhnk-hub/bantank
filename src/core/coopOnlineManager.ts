@@ -15,6 +15,15 @@ import {
 import { getFirebaseDb } from './firebaseConfig.ts';
 import { getUserDisplayLabel } from './authManager.ts';
 import { SessionManager } from './sessionManager.ts';
+import {
+  MATCH_TIMER_CONFIG,
+  SIMULATION_CONFIG,
+  getMatchDurationSecondsForDifficulty,
+} from './constants.ts';
+import {
+  NEUTRAL_INPUT,
+  validateAndNormalizeAuthoritativeSnapshot,
+} from './gameEngine.ts';
 import type {
   BulletStructure,
   EnemyTank,
@@ -46,6 +55,11 @@ export interface CoopAuthoritativeSnapshot {
   snapshotSeq: number;
   serverTimestamp: number;
   tickCount: number;
+  stageRunSeq: number;
+  difficulty: 'DEFAULT' | 'EXTREME';
+  matchDurationSeconds: number;
+  remainingTicks: number;
+  remainingSeconds: number;
   p1: TankStructure;
   p1State: GameCoreState['p1State'];
   p2: TankStructure | null;
@@ -64,6 +78,7 @@ export interface CoopAuthoritativeSnapshot {
   isBaseDestroyed: boolean;
   isGameOver: boolean;
   isStageClear: boolean;
+  isTimeoutGameOver: boolean;
   gameOverReason: string | null;
   matchState: GameCoreState['matchState'];
 }
@@ -544,10 +559,37 @@ export function buildAuthoritativeSnapshot(
     }
   }
 
+  const difficulty: 'DEFAULT' | 'EXTREME' =
+    state.difficulty === 'EXTREME' ? 'EXTREME' : 'DEFAULT';
+  const matchDurationSeconds =
+    typeof state.matchDurationSeconds === 'number' && state.matchDurationSeconds > 0
+      ? state.matchDurationSeconds
+      : getMatchDurationSecondsForDifficulty(difficulty);
+  const maxStageTicks = matchDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
+  const remainingTicks =
+    typeof state.remainingTicks === 'number' &&
+    Number.isInteger(state.remainingTicks) &&
+    state.remainingTicks >= 0 &&
+    state.remainingTicks <= maxStageTicks
+      ? state.remainingTicks
+      : Math.max(0, maxStageTicks - state.tickCount);
+  const remainingSeconds = Math.ceil(remainingTicks / MATCH_TIMER_CONFIG.TICKS_PER_SECOND);
+  const stageRunSeq =
+    typeof state.stageRunSeq === 'number' &&
+    Number.isInteger(state.stageRunSeq) &&
+    state.stageRunSeq >= 1
+      ? state.stageRunSeq
+      : 1;
+
   return {
     snapshotSeq,
     serverTimestamp: nowMs,
     tickCount: state.tickCount,
+    stageRunSeq,
+    difficulty,
+    matchDurationSeconds,
+    remainingTicks,
+    remainingSeconds,
     p1: { ...state.p1 },
     p1State: { ...state.p1State },
     p2: state.p2 ? { ...state.p2 } : null,
@@ -564,11 +606,14 @@ export function buildAuthoritativeSnapshot(
     defeatedCounts: { ...state.defeatedCounts },
     currentStageId: state.currentStageId,
     currentStageName: state.currentStageName,
-    stageElapsedSeconds: Number(state.stageElapsedSeconds.toFixed(2)),
+    stageElapsedSeconds: Number(
+      (state.tickCount / MATCH_TIMER_CONFIG.TICKS_PER_SECOND).toFixed(2)
+    ),
     brickSubTiles: damagedBricks,
     isBaseDestroyed: state.terrain.isBaseDestroyed,
     isGameOver: state.isGameOver,
     isStageClear: state.isStageClear,
+    isTimeoutGameOver: Boolean(state.isTimeoutGameOver),
     gameOverReason: state.gameOverReason,
     matchState: state.matchState,
   };
@@ -1877,6 +1922,8 @@ export class CoopOnlineManager {
   private lastGuestInputSentAt: number = 0;
   private lastSentInputSignature: string = '';
   private hostLastProcessedGuestSeq: number = 0;
+  private lastValidatedGuestInputReceivedAt: number = 0;
+  private lastValidatedGuestInputClientTimestamp: number = 0;
   private latestValidatedGuestInput: InputState = {
     up: false,
     down: false,
@@ -1895,7 +1942,9 @@ export class CoopOnlineManager {
 
   // Guest Snapshot Application state
   private guestLastAppliedSnapshotSeq: number = 0;
-  private snapshotListeners: Set<(snapshot: CoopAuthoritativeSnapshot) => void> = new Set();
+  private guestLastAppliedStageRunSeq: number = 0;
+  private guestLastAppliedTickCount: number = -1;
+  private snapshotListeners: Set<(snapshot: CoopAuthoritativeSnapshot) => boolean | void> = new Set();
 
   public constructor(customAdapter?: CoopStorageAdapter) {
     this.adapter = customAdapter ?? new FirestoreCoopStorageAdapter();
@@ -1969,7 +2018,48 @@ export class CoopOnlineManager {
     return this.hostLastProcessedGuestSeq;
   }
 
-  public getLatestValidatedGuestInput(): InputState {
+  public getGuestLastAppliedSnapshotSeq(): number {
+    return this.guestLastAppliedSnapshotSeq;
+  }
+
+  public getGuestLastAppliedStageRunSeq(): number {
+    return this.guestLastAppliedStageRunSeq;
+  }
+
+  public getGuestLastAppliedTickCount(): number {
+    return this.guestLastAppliedTickCount;
+  }
+
+  public syncGuestAppliedSnapshotMeta(
+    snapshotSeq: number,
+    stageRunSeq: number,
+    tickCount: number
+  ): void {
+    this.guestLastAppliedSnapshotSeq = snapshotSeq;
+    this.guestLastAppliedStageRunSeq = stageRunSeq;
+    this.guestLastAppliedTickCount = tickCount;
+  }
+
+  public clearLatchedGuestInput(): void {
+    this.latestValidatedGuestInput = { ...NEUTRAL_INPUT };
+    this.lastValidatedGuestInputReceivedAt = 0;
+    this.lastValidatedGuestInputClientTimestamp = 0;
+  }
+
+  public getLatestValidatedGuestInput(nowMs?: number): InputState {
+    if (this.hostLastProcessedGuestSeq <= 0) {
+      return { ...NEUTRAL_INPUT };
+    }
+    if (typeof nowMs === 'number' && Number.isFinite(nowMs)) {
+      const refTimestamp =
+        this.lastValidatedGuestInputReceivedAt - nowMs > 1e9
+          ? this.lastValidatedGuestInputClientTimestamp
+          : this.lastValidatedGuestInputReceivedAt;
+      const ageMs = nowMs - refTimestamp;
+      if (ageMs > SIMULATION_CONFIG.GUEST_INPUT_MAX_AGE_MS) {
+        return { ...NEUTRAL_INPUT };
+      }
+    }
     return { ...this.latestValidatedGuestInput };
   }
 
@@ -1984,7 +2074,7 @@ export class CoopOnlineManager {
   }
 
   public subscribeSnapshots(
-    listener: (snapshot: CoopAuthoritativeSnapshot) => void
+    listener: (snapshot: CoopAuthoritativeSnapshot) => boolean | void
   ): () => void {
     this.snapshotListeners.add(listener);
     return () => {
@@ -2873,6 +2963,8 @@ export class CoopOnlineManager {
 
     this.hostLastProcessedGuestSeq = packet.seq;
     this.lastPeerP2PActiveAt = nowMs;
+    this.lastValidatedGuestInputReceivedAt = nowMs;
+    this.lastValidatedGuestInputClientTimestamp = packet.clientTimestamp;
     this.latestValidatedGuestInput = {
       up: packet.up,
       down: packet.down,
@@ -4076,16 +4168,31 @@ export class CoopOnlineManager {
     if (msg.type === 'GUEST_INPUT' && this.role === 'HOST') {
       this.processIncomingGuestInput(msg.packet, nowMs);
     } else if (msg.type === 'HOST_SNAPSHOT' && this.role === 'GUEST') {
-      const snap = msg.snapshot;
-      if (snap && typeof snap.snapshotSeq === 'number' && snap.snapshotSeq > this.guestLastAppliedSnapshotSeq) {
-        this.guestLastAppliedSnapshotSeq = snap.snapshotSeq;
-        this.snapshotListeners.forEach((cb) => {
-          try {
-            cb(snap);
-          } catch (e) {
-            console.error('[CoopOnlineManager] snapshot listener error:', e);
+      const validation = validateAndNormalizeAuthoritativeSnapshot(
+        msg.snapshot,
+        this.guestLastAppliedSnapshotSeq,
+        this.guestLastAppliedStageRunSeq,
+        this.guestLastAppliedTickCount
+      );
+      if (!validation.valid || !validation.normalized) {
+        return;
+      }
+      const normalizedSnap = validation.normalized;
+      let rejectedByEngineListener = false;
+      this.snapshotListeners.forEach((cb) => {
+        try {
+          const listenerResult = cb(normalizedSnap);
+          if (listenerResult === false) {
+            rejectedByEngineListener = true;
           }
-        });
+        } catch (e) {
+          console.error('[CoopOnlineManager] snapshot listener error:', e);
+        }
+      });
+      if (!rejectedByEngineListener) {
+        this.guestLastAppliedSnapshotSeq = normalizedSnap.snapshotSeq;
+        this.guestLastAppliedStageRunSeq = normalizedSnap.stageRunSeq;
+        this.guestLastAppliedTickCount = normalizedSnap.tickCount;
       }
     }
   }
@@ -4741,6 +4848,8 @@ export class CoopOnlineManager {
     this.lastGuestInputSentAt = 0;
     this.lastSentInputSignature = '';
     this.hostLastProcessedGuestSeq = 0;
+    this.lastValidatedGuestInputReceivedAt = 0;
+    this.lastValidatedGuestInputClientTimestamp = 0;
     this.latestValidatedGuestInput = {
       up: false,
       down: false,
@@ -4754,6 +4863,8 @@ export class CoopOnlineManager {
     this.lastBroadcastStageId = -1;
     this.hasRecordedMatchFinishInFirestore = false;
     this.guestLastAppliedSnapshotSeq = 0;
+    this.guestLastAppliedStageRunSeq = 0;
+    this.guestLastAppliedTickCount = -1;
     this.lastPingSentAt = 0;
   }
 

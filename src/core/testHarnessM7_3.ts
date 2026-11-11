@@ -54,7 +54,16 @@ import {
   verifyStorageObjectBeforeMetadataActivation,
   type PendingCatalogMetadataSync,
 } from './avatarManager.ts';
-import { GameEngine } from './gameEngine.ts';
+import {
+  GameEngine,
+  NEUTRAL_INPUT,
+  validateAndNormalizeAuthoritativeSnapshot,
+} from './gameEngine.ts';
+import {
+  MATCH_TIMER_CONFIG,
+  SIMULATION_CONFIG,
+  formatCountdownMMSS,
+} from './constants.ts';
 import { TILE_TYPES as TileType } from './types.ts';
 import {
   CoopOnlineManager,
@@ -83,6 +92,7 @@ import {
   classifyGetRoomErrorDuringCreate,
   buildCreateRoomStepErrorMessage,
   COOP_ONLINE_CONFIG,
+  type CoopAuthoritativeSnapshot,
   type CoopRoomDocument,
   type CoopRoomLobbyDocument,
   type CoopRoomSignalingDocument,
@@ -5747,6 +5757,569 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T39: M7.3.7 (Hạng mục 6) – Kiểm thử đủ 12 ca TC-01..TC-12: P2 bấm Sẵn sàng, không bị signaling.guestUid=null ghi đè, P2 rời phòng & bắt đầu trận',
       passed,
       details: `TC01=${tc01Pass}, TC02=${tc02Pass}, TC03=${tc03Pass}, TC04=${tc04Pass}, TC05=${tc05Pass}, TC06=${tc06Pass}, TC07=${tc07Pass}, TC08=${tc08Pass}, TC09=${tc09Pass}, TC10=${tc10Pass}, TC11=${tc11Pass}, TC12=${tc12Pass}`,
+    });
+  }
+
+  // =========================================================================
+  // T40: M7.3.8 (A) – Match Countdown Timer (120s DEFAULT / 60s EXTREME) & stageRunSeq Lifecycle
+  // =========================================================================
+  {
+    const engine = new GameEngine(undefined, undefined, false);
+    const initialSnap = engine.getState();
+    const initSeqIs1 = initialSnap.stageRunSeq === 1;
+
+    engine.startMatch('SOLO', 'DEFAULT');
+    const afterStartDefault = engine.getState();
+    const startDefaultOk =
+      afterStartDefault.stageRunSeq === 1 &&
+      afterStartDefault.matchDurationSeconds === 120 &&
+      afterStartDefault.remainingTicks === 7200 &&
+      afterStartDefault.remainingSeconds === 120 &&
+      formatCountdownMMSS(afterStartDefault.remainingSeconds) === '02:00';
+
+    engine.restartStage();
+    const afterRestart = engine.getState();
+    const restartSeqIs2 = afterRestart.stageRunSeq === 2 && afterRestart.remainingTicks === 7200;
+
+    engine.reset();
+    const afterReset = engine.getState();
+    const resetSeqIs3 = afterReset.stageRunSeq === 3 && afterReset.remainingTicks === 7200;
+
+    // Start EXTREME (Thử thách: 60s = 3600 ticks)
+    engine.startMatch('SOLO', 'EXTREME');
+    const afterStartExtreme = engine.getState();
+    const startExtremeOk =
+      afterStartExtreme.stageRunSeq === 1 &&
+      afterStartExtreme.matchDurationSeconds === 60 &&
+      afterStartExtreme.remainingTicks === 3600 &&
+      afterStartExtreme.remainingSeconds === 60 &&
+      formatCountdownMMSS(afterStartExtreme.remainingSeconds) === '01:00';
+
+    // Run 3599 ticks -> remainingTicks = 1, remainingSeconds = 1 (00:01), not game over yet
+    for (let i = 0; i < 3599; i++) {
+      engine.stepTick(NEUTRAL_INPUT);
+    }
+    const atTick3599 = engine.getState();
+    const tick3599Ok =
+      atTick3599.remainingTicks === 1 &&
+      atTick3599.remainingSeconds === 1 &&
+      !atTick3599.isGameOver &&
+      formatCountdownMMSS(atTick3599.remainingSeconds) === '00:01';
+
+    // Run 3600th tick -> remainingTicks = 0, remainingSeconds = 0 (00:00), Timeout Game Over!
+    engine.stepTick(NEUTRAL_INPUT);
+    const atTick3600 = engine.getState();
+    const tick3600TimeoutOk =
+      atTick3600.remainingTicks === 0 &&
+      atTick3600.remainingSeconds === 0 &&
+      atTick3600.isGameOver === true &&
+      atTick3600.isTimeoutGameOver === true &&
+      atTick3600.isStageClear === false &&
+      atTick3600.matchState === 'GAME_OVER' &&
+      formatCountdownMMSS(atTick3600.remainingSeconds) === '00:00';
+
+    const passed =
+      initSeqIs1 &&
+      startDefaultOk &&
+      restartSeqIs2 &&
+      resetSeqIs3 &&
+      startExtremeOk &&
+      tick3599Ok &&
+      tick3600TimeoutOk;
+
+    results.push({
+      id: 'M7_3_T40',
+      name: 'T40: M7.3.8 (A) – Match Countdown Timer (Giải trí 120s / Thử thách 60s), MM:SS & vòng đời stageRunSeq chuẩn xác',
+      passed,
+      details: `initSeq=${initSeqIs1}, startDefault=${startDefaultOk}, restartSeq=${restartSeqIs2}, resetSeq=${resetSeqIs3}, startExtreme=${startExtremeOk}, tick3599=${tick3599Ok}, timeoutAtZero=${tick3600TimeoutOk}`,
+    });
+  }
+
+  // =========================================================================
+  // T41: M7.3.8 (A) – 4-Tier End-of-Tick Outcome Priority Gate at Final Tick (remainingTicks === 0)
+  // =========================================================================
+  {
+    // Tier 1 > Tier 3/4: Base destroyed + last enemy killed on the exact final tick (remainingTicks: 1 -> 0)
+    const tier1Engine = new GameEngine(undefined, undefined, false);
+    tier1Engine.startMatch('SOLO', 'EXTREME');
+    for (let i = 0; i < 3599; i++) {
+      tier1Engine.stepTick(NEUTRAL_INPUT);
+    }
+    const t1Internal = (tier1Engine as any).state;
+    t1Internal.enemyQueue = [];
+    t1Internal.enemies = [];
+    t1Internal.totalDefeatedEnemies = 30;
+    t1Internal.terrain.isBaseDestroyed = true;
+    tier1Engine.stepTick(NEUTRAL_INPUT);
+    const t1Res = tier1Engine.getState();
+    const tier1Wins =
+      t1Res.remainingTicks === 0 &&
+      t1Res.isGameOver === true &&
+      t1Res.terrain.isBaseDestroyed === true &&
+      t1Res.isStageClear === false &&
+      t1Res.isTimeoutGameOver === false;
+
+    // Tier 2 > Tier 3/4: Out of lives (in TWO_PLAYERS_ONLINE both P1 & P2 out of lives) + last enemy killed at final tick
+    const tier2Engine = new GameEngine(undefined, undefined, false);
+    tier2Engine.startMatch('TWO_PLAYERS_ONLINE', 'EXTREME');
+    for (let i = 0; i < 3599; i++) {
+      tier2Engine.stepTick(NEUTRAL_INPUT);
+    }
+    const t2Internal = (tier2Engine as any).state;
+    t2Internal.enemyQueue = [];
+    t2Internal.enemies = [];
+    t2Internal.totalDefeatedEnemies = 30;
+    t2Internal.p1.isAlive = false;
+    t2Internal.p1State.isDead = true;
+    t2Internal.p1State.lives = 0;
+    // Wait: if P2 still has lives = 3 and isAlive = true, match must NOT be out of lives, so Tier 3 Stage Clear wins!
+    tier2Engine.stepTick(NEUTRAL_INPUT);
+    const t2WithP2Alive = tier2Engine.getState();
+    const p2AlivePreventsGameOver =
+      t2WithP2Alive.isStageClear === true &&
+      t2WithP2Alive.isGameOver === false &&
+      t2WithP2Alive.isTimeoutGameOver === false;
+
+    // Now test when BOTH P1 and P2 are out of lives at final tick -> Tier 2 Out of Lives wins over Stage Clear & Timeout
+    const tier2BothDeadEngine = new GameEngine(undefined, undefined, false);
+    tier2BothDeadEngine.startMatch('TWO_PLAYERS_ONLINE', 'EXTREME');
+    for (let i = 0; i < 3599; i++) {
+      tier2BothDeadEngine.stepTick(NEUTRAL_INPUT);
+    }
+    const t2BothInternal = (tier2BothDeadEngine as any).state;
+    t2BothInternal.enemyQueue = [];
+    t2BothInternal.enemies = [];
+    t2BothInternal.totalDefeatedEnemies = 30;
+    t2BothInternal.p1.isAlive = false;
+    t2BothInternal.p1State.isDead = true;
+    t2BothInternal.p1State.lives = 0;
+    t2BothInternal.p2.isAlive = false;
+    t2BothInternal.p2State.isDead = true;
+    t2BothInternal.p2State.lives = 0;
+    tier2BothDeadEngine.stepTick(NEUTRAL_INPUT);
+    const t2BothDeadRes = tier2BothDeadEngine.getState();
+    const tier2Wins =
+      t2BothDeadRes.remainingTicks === 0 &&
+      t2BothDeadRes.isGameOver === true &&
+      t2BothDeadRes.isStageClear === false &&
+      t2BothDeadRes.isTimeoutGameOver === false;
+
+    // Tier 3 > Tier 4: Last enemy killed on the exact final tick (remainingTicks: 1 -> 0) with P1 alive & base intact -> STAGE_CLEAR wins over Timeout!
+    const tier3Engine = new GameEngine(undefined, undefined, false);
+    tier3Engine.startMatch('SOLO', 'EXTREME');
+    for (let i = 0; i < 3599; i++) {
+      tier3Engine.stepTick(NEUTRAL_INPUT);
+    }
+    const t3Internal = (tier3Engine as any).state;
+    t3Internal.enemyQueue = [];
+    t3Internal.enemies = [];
+    t3Internal.totalDefeatedEnemies = 30;
+    tier3Engine.stepTick(NEUTRAL_INPUT);
+    const t3Res = tier3Engine.getState();
+    const tier3WinsOverTimeout =
+      t3Res.remainingTicks === 0 &&
+      t3Res.isStageClear === true &&
+      t3Res.isGameOver === false &&
+      t3Res.isTimeoutGameOver === false &&
+      t3Res.matchState === 'STAGE_CLEAR';
+
+    const passed = tier1Wins && p2AlivePreventsGameOver && tier2Wins && tier3WinsOverTimeout;
+
+    results.push({
+      id: 'M7_3_T41',
+      name: 'T41: M7.3.8 (A) – Cổng ưu tiên kết thúc trận 4 tầng tại tick cuối (Base > Lives > Stage Clear > Timeout) & kiểm tra anyPlayerRemaining',
+      passed,
+      details: `tier1Wins=${tier1Wins}, p2AlivePreventsGameOver=${p2AlivePreventsGameOver}, tier2Wins=${tier2Wins}, tier3WinsOverTimeout=${tier3WinsOverTimeout}`,
+    });
+  }
+
+  // =========================================================================
+  // T42: M7.3.8 (B & C) – 11-Step Snapshot Validator, Error Codes (Case A..F) & Anti-Sequence Poisoning
+  // =========================================================================
+  {
+    const hostEngine = new GameEngine(undefined, undefined, false);
+    hostEngine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+    hostEngine.stepTick(NEUTRAL_INPUT);
+    const validSnap10 = buildAuthoritativeSnapshot(hostEngine.getState(), 10, 1000);
+
+    // Case A: Non-monotonic snapshotSeq (snapshotSeq <= lastAppliedSnapshotSeq) -> STALE_SNAPSHOT_SEQ
+    const resCaseA = validateAndNormalizeAuthoritativeSnapshot(validSnap10, 10, 1, 1);
+    const caseAOk = !resCaseA.valid && resCaseA.errorCode === 'STALE_SNAPSHOT_SEQ';
+
+    // Case B: Missing stageRunSeq (must NOT fallback to 1) -> INVALID_STAGE_RUN_SEQ
+    const snapMissingStageRunSeq = { ...validSnap10, snapshotSeq: 11 } as any;
+    delete snapMissingStageRunSeq.stageRunSeq;
+    const resCaseB = validateAndNormalizeAuthoritativeSnapshot(snapMissingStageRunSeq, 10, 1, 1);
+    const caseBOk = !resCaseB.valid && resCaseB.errorCode === 'INVALID_STAGE_RUN_SEQ';
+
+    // Case C: Regressing stageRunSeq (< lastAppliedStageRunSeq) -> STALE_STAGE_RUN_SEQ
+    const resCaseC = validateAndNormalizeAuthoritativeSnapshot(
+      { ...validSnap10, snapshotSeq: 11, stageRunSeq: 1 },
+      10,
+      2,
+      50
+    );
+    const caseCOk = !resCaseC.valid && resCaseC.errorCode === 'STALE_STAGE_RUN_SEQ';
+
+    // Case D: Regressing tickCount in the SAME stageRunSeq -> STALE_TICK_WITHIN_SAME_RUN
+    const resCaseD = validateAndNormalizeAuthoritativeSnapshot(
+      {
+        ...validSnap10,
+        snapshotSeq: 11,
+        stageRunSeq: 1,
+        tickCount: 5,
+        remainingTicks: 7195,
+        remainingSeconds: 120,
+      },
+      10,
+      1,
+      20
+    );
+    const caseDOk = !resCaseD.valid && resCaseD.errorCode === 'STALE_TICK_WITHIN_SAME_RUN';
+
+    // Case E: tickCount reset to 0 when stageRunSeq increments (stageRunSeq: 1 -> 2) -> VALID!
+    const resCaseE = validateAndNormalizeAuthoritativeSnapshot(
+      {
+        ...validSnap10,
+        snapshotSeq: 11,
+        stageRunSeq: 2,
+        tickCount: 0,
+        remainingTicks: 7200,
+        remainingSeconds: 120,
+        stageElapsedSeconds: 0,
+      },
+      10,
+      1,
+      500
+    );
+    const caseEOk = resCaseE.valid === true && resCaseE.normalized?.stageRunSeq === 2;
+
+    // Case F: Mismatched remainingTicks vs tickCount -> MISMATCHED_REMAINING_TICKS
+    const resCaseF1 = validateAndNormalizeAuthoritativeSnapshot(
+      {
+        ...validSnap10,
+        snapshotSeq: 11,
+        tickCount: 100,
+        remainingTicks: 7000, // should be 7100
+      },
+      10,
+      1,
+      1
+    );
+    // Conflicting outcome flags (isGameOver && isStageClear) -> CONTRADICTORY_OUTCOME_FLAGS
+    const resCaseF2 = validateAndNormalizeAuthoritativeSnapshot(
+      {
+        ...validSnap10,
+        snapshotSeq: 11,
+        isGameOver: true,
+        isStageClear: true,
+        matchState: 'GAME_OVER',
+      },
+      10,
+      1,
+      1
+    );
+    const caseFOk =
+      !resCaseF1.valid &&
+      resCaseF1.errorCode === 'MISMATCHED_REMAINING_TICKS' &&
+      !resCaseF2.valid &&
+      resCaseF2.errorCode === 'CONTRADICTORY_OUTCOME_FLAGS';
+
+    // Anti-Sequence Poisoning test on CoopOnlineManager + GameEngine:
+    // Apply valid snapshotSeq = 10 -> send poisoned snapshotSeq = 15 (missing/invalid fields) -> send valid snapshotSeq = 11
+    const storage = new InMemoryCoopStorageAdapter();
+    const hostMgr = new CoopOnlineManager(storage);
+    const guestMgr = new CoopOnlineManager(storage);
+    const guestEngine = new GameEngine(undefined, undefined, false);
+    guestEngine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+    guestEngine.setOnGuestSnapshotAppliedCallback((seq, runSeq, tick) => {
+      guestMgr.syncGuestAppliedSnapshotMeta(seq, runSeq, tick);
+    });
+    const unsub = guestMgr.subscribeSnapshots((snap) => {
+      return guestEngine.applyAuthoritativeSnapshot(snap).valid;
+    });
+
+    (guestMgr as any).role = 'GUEST';
+    guestMgr.handleIncomingDataChannelMessage({ type: 'HOST_SNAPSHOT', snapshot: validSnap10 }, 1000);
+    const seqAfter10 = guestMgr.getGuestLastAppliedSnapshotSeq();
+
+    // Send poisoned snapshot with snapshotSeq = 15 (conflicting outcome flags)
+    const poisonedSnap15: CoopAuthoritativeSnapshot = {
+      ...validSnap10,
+      snapshotSeq: 15,
+      isGameOver: true,
+      isStageClear: true,
+    };
+    guestMgr.handleIncomingDataChannelMessage(
+      { type: 'HOST_SNAPSHOT', snapshot: poisonedSnap15 },
+      1050
+    );
+    const seqAfterPoison15 = guestMgr.getGuestLastAppliedSnapshotSeq();
+
+    // Now send valid snapshot with snapshotSeq = 11 -> must be ACCEPTED!
+    hostEngine.stepTick(NEUTRAL_INPUT);
+    const validSnap11 = buildAuthoritativeSnapshot(hostEngine.getState(), 11, 1100);
+    guestMgr.handleIncomingDataChannelMessage({ type: 'HOST_SNAPSHOT', snapshot: validSnap11 }, 1100);
+    const seqAfter11 = guestMgr.getGuestLastAppliedSnapshotSeq();
+    unsub();
+
+    const antiPoisoningOk =
+      seqAfter10 === 10 &&
+      seqAfterPoison15 === 10 &&
+      seqAfter11 === 11 &&
+      guestEngine.getGuestLastAppliedSnapshotSeq() === 11;
+
+    const passed =
+      caseAOk && caseBOk && caseCOk && caseDOk && caseEOk && caseFOk && antiPoisoningOk;
+
+    results.push({
+      id: 'M7_3_T42',
+      name: 'T42: M7.3.8 (B & C) – Xác thực 11 bước Snapshot (Case A..F) & Chống Sequence Poisoning (gói lỗi seq=15 không khóa gói hợp lệ seq=11)',
+      passed,
+      details: `caseA=${caseAOk}, caseB=${caseBOk}, caseC=${caseCOk}, caseD=${caseDOk}, caseE=${caseEOk}, caseF=${caseFOk}, antiPoisoning=${antiPoisoningOk}`,
+    });
+  }
+
+  // =========================================================================
+  // T43: M7.3.8 (C) – Suppress False Explosions on Guest Stage Restart / Stage Transition
+  // =========================================================================
+  {
+    const hostEngine = new GameEngine(undefined, undefined, false);
+    const guestEngine = new GameEngine(undefined, undefined, false);
+    hostEngine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+    guestEngine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+
+    // Step host a few ticks, damage an actual brick tile in Stage 1, and apply snapshot 1 to guest
+    hostEngine.stepTick(NEUTRAL_INPUT);
+    const hostState1 = hostEngine.getState();
+    const brickKey = Object.keys(hostState1.terrain.brickSubTiles)[0] || '11_5';
+    hostState1.terrain.brickSubTiles[brickKey] = 3; // damaged brick
+    hostState1.terrain.isBaseDestroyed = true;
+    const snap1 = buildAuthoritativeSnapshot(hostState1, 1, 1000);
+    guestEngine.applyAuthoritativeSnapshot(snap1);
+    guestEngine.popCombatEvents(); // clear initial events
+
+    // Now Host restarts stage (stageRunSeq increments 1 -> 2, bricks restored, base intact, enemy count resets)
+    hostEngine.restartStage();
+    const snap2AfterRestart = buildAuthoritativeSnapshot(hostEngine.getState(), 2, 2000);
+    const applyRes = guestEngine.applyAuthoritativeSnapshot(snap2AfterRestart);
+    const eventsOnRestart = guestEngine.popCombatEvents();
+    const guestStateAfterRestart = guestEngine.getState();
+
+    const passed =
+      applyRes.valid === true &&
+      eventsOnRestart.length === 0 &&
+      guestStateAfterRestart.stageRunSeq === 2 &&
+      guestStateAfterRestart.terrain.isBaseDestroyed === false &&
+      guestStateAfterRestart.terrain.brickSubTiles[brickKey] === 15;
+
+    results.push({
+      id: 'M7_3_T43',
+      name: 'T43: M7.3.8 (C) – Không phát nổ giả (TANK_EXPLOSION / BASE_EXPLOSION) trên Guest khi restartStage hoặc chuyển màn, khôi phục gạch & căn cứ nguyên vẹn',
+      passed,
+      details: `applyValid=${applyRes.valid}, eventsOnRestart=${eventsOnRestart.length}, stageRunSeq=${guestStateAfterRestart.stageRunSeq}, brickRestored=${guestStateAfterRestart.terrain.brickSubTiles[brickKey]}`,
+    });
+  }
+
+  // =========================================================================
+  // T44: M7.3.8 (D) – Input Delta Guard (NaN, -50, 0), Non-Overlapping Lost Time & Mode-Aware Backlog Policy
+  // =========================================================================
+  {
+    const engine = new GameEngine(undefined, undefined, false);
+    engine.startMatch('SOLO', 'DEFAULT');
+
+    // Seed accumulator with 10ms
+    engine.advanceTime(10, NEUTRAL_INPUT);
+    const accBeforeInvalid = engine.getTimingTelemetry().accumulatorMs;
+
+    // Pass invalid deltas: NaN, -50, 0, Infinity -> must return 0 ticks and preserve accumulatorMs (10ms)
+    const tNaN = engine.advanceTime(Number.NaN, NEUTRAL_INPUT);
+    const tNeg = engine.advanceTime(-50, NEUTRAL_INPUT);
+    const tZero = engine.advanceTime(0, NEUTRAL_INPUT);
+    const tInf = engine.advanceTime(Number.POSITIVE_INFINITY, NEUTRAL_INPUT);
+    const accAfterInvalid = engine.getTimingTelemetry().accumulatorMs;
+    const invalidGuardsOk =
+      tNaN === 0 &&
+      tNeg === 0 &&
+      tZero === 0 &&
+      tInf === 0 &&
+      Math.abs(accAfterInvalid - accBeforeInvalid) < 1e-3;
+
+    // SOLO mode with 10,000ms spike (> 3000ms safety limit) -> triggers Forced Safety Pause!
+    const soloSpikeEngine = new GameEngine(undefined, undefined, false);
+    soloSpikeEngine.startMatch('SOLO', 'DEFAULT');
+    const soloSpikeTicks = soloSpikeEngine.advanceTime(10000, NEUTRAL_INPUT);
+    const soloSpikeState = soloSpikeEngine.getState();
+    const soloSpikeTel = soloSpikeEngine.getTimingTelemetry();
+    const soloSafetyPauseOk =
+      soloSpikeTicks === 0 &&
+      soloSpikeState.matchState === 'PAUSED' &&
+      soloSpikeTel.droppedInputMs === 7000 &&
+      soloSpikeTel.droppedBacklogMs === 3000 &&
+      soloSpikeTel.droppedSeconds === 10 &&
+      soloSpikeTel.accumulatorMs === 0;
+
+    // TWO_PLAYERS_ONLINE Host mode with 2500ms spike -> catches up 15 ticks/frame without dropping time
+    const hostCatchupEngine = new GameEngine(undefined, undefined, false);
+    hostCatchupEngine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+    const hostTicksFrame1 = hostCatchupEngine.advanceTime(2500, NEUTRAL_INPUT);
+    const hostTelFrame1 = hostCatchupEngine.getTimingTelemetry();
+    const hostCatchup2500Ok =
+      hostTicksFrame1 === 15 &&
+      hostTelFrame1.droppedSeconds === 0 &&
+      Math.abs(hostTelFrame1.accumulatorMs - 2250) < 0.05;
+
+    // TWO_PLAYERS_ONLINE Host mode with 10,000ms spike + 500ms existing accumulator -> non-overlapping droppedInputMs (7000) + droppedBacklogMs (500) = 7500ms
+    const hostOverflowEngine = new GameEngine(undefined, undefined, false);
+    hostOverflowEngine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+    // Put 500ms in accumulator: pass 750ms -> runs 15 ticks (250ms), leaves 500ms in accumulator
+    hostOverflowEngine.advanceTime(750, NEUTRAL_INPUT);
+    const ticksOverflow = hostOverflowEngine.advanceTime(10000, NEUTRAL_INPUT);
+    const telOverflow = hostOverflowEngine.getTimingTelemetry();
+    const nonOverlappingDecompOk =
+      ticksOverflow === 15 &&
+      telOverflow.droppedInputMs === 7000 &&
+      Math.abs(telOverflow.droppedBacklogMs - 500) < 0.05 &&
+      Math.abs(telOverflow.droppedSeconds - 7.5) < 0.05 &&
+      Math.abs(telOverflow.accumulatorMs - 2750) < 0.05;
+
+    const passed =
+      invalidGuardsOk && soloSafetyPauseOk && hostCatchup2500Ok && nonOverlappingDecompOk;
+
+    results.push({
+      id: 'M7_3_T44',
+      name: 'T44: M7.3.8 (D) – Chốt chặn rawElapsedMs (NaN, -50, 0), Safety Pause cho SOLO/AI & phân rã không trùng lặp droppedInputMs + droppedBacklogMs',
+      passed,
+      details: `invalidGuards=${invalidGuardsOk}, soloSafetyPause=${soloSafetyPauseOk}, hostCatchup2500=${hostCatchup2500Ok}, nonOverlappingDecomp=${nonOverlappingDecompOk}`,
+    });
+  }
+
+  // =========================================================================
+  // T45: M7.3.8 (D) – Historical Catch-Up Neutral Input & P2 Guest Input 250ms Expiry
+  // =========================================================================
+  {
+    // 1. Historical catch-up ticks must use NEUTRAL_INPUT for ticks 1..(ticksToRun - 1), and live input only on the final tick
+    const catchupInputEngine = new GameEngine(undefined, undefined, false);
+    catchupInputEngine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+    let p1ShotEvents = 0;
+    catchupInputEngine.on('P1_SHOOT', () => {
+      p1ShotEvents++;
+    });
+    const p1StartY = catchupInputEngine.getState().p1.y;
+    // Pass 100ms (= 6 ticks) with UP + SHOOT held:
+    // Ticks 0..4 are historical catch-up ticks (NEUTRAL_INPUT -> no movement), only Tick 5 (final tick) applies UP (moves 1px)
+    const ticksExecuted = catchupInputEngine.advanceTime(100, {
+      up: true,
+      down: false,
+      left: false,
+      right: false,
+      shoot: true,
+    });
+    const p1EndY = catchupInputEngine.getState().p1.y;
+    const neutralHistoricalOk =
+      ticksExecuted === 6 && p1StartY - p1EndY === 1 && p1ShotEvents === 1;
+
+    // 2. Guest input 250ms TTL expiry in CoopOnlineManager
+    const coopMgr = new CoopOnlineManager(new InMemoryCoopStorageAdapter());
+    coopMgr.processIncomingGuestInput(
+      {
+        up: true,
+        down: false,
+        left: false,
+        right: false,
+        shoot: true,
+        seq: 1,
+        clientTimestamp: 1000,
+      },
+      1000
+    );
+    const activeAt1200 = coopMgr.getLatestValidatedGuestInput(1200); // age = 200ms <= 250ms
+    const expiredAt1260 = coopMgr.getLatestValidatedGuestInput(1260); // age = 260ms > 250ms
+    const guestInputTtlOk =
+      activeAt1200.up === true &&
+      activeAt1200.shoot === true &&
+      expiredAt1260.up === false &&
+      expiredAt1260.shoot === false;
+
+    const passed = neutralHistoricalOk && guestInputTtlOk;
+
+    results.push({
+      id: 'M7_3_T45',
+      name: 'T45: M7.3.8 (D) – Historical Catch-up Tick dùng Neutral Input & Gói GUEST_INPUT hết hạn sau 250ms',
+      passed,
+      details: `neutralHistorical=${neutralHistoricalOk} (ticks=${ticksExecuted}, dy=${p1StartY - p1EndY}), guestInputTtl=${guestInputTtlOk}`,
+    });
+  }
+
+  // =========================================================================
+  // T46: M7.3.8 (E) – Guest Visual Interpolation Isolation (No Core Mutation, 50ms/3.0px Cap, Failed Snap Keeps Direction)
+  // =========================================================================
+  {
+    const guestEngine = new GameEngine(undefined, undefined, false);
+    guestEngine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+    const stBefore = guestEngine.getState();
+    const p2AuthX = stBefore.p2!.x;
+    const p2AuthY = stBefore.p2!.y;
+    const authTickBefore = stBefore.tickCount;
+    const authRemTicksBefore = stBefore.remainingTicks;
+    const authP1ShieldBefore = stBefore.p1State.shieldTimer;
+    const authP2ShieldBefore = stBefore.p2State!.shieldTimer;
+
+    // Hold UP on P2 and run Guest visual interpolation for 200ms (must cap at 50ms = 3.0px)
+    guestEngine.setExternalInputP2({
+      up: true,
+      down: false,
+      left: false,
+      right: false,
+      shoot: true,
+    });
+    guestEngine.advanceGuestVisualInterpolation(30);
+    guestEngine.advanceGuestVisualInterpolation(170);
+
+    const stAfter = guestEngine.getState();
+    const visAfter = guestEngine.getGuestVisualState();
+
+    // Core state must remain 100% untouched!
+    const coreUntouched =
+      stAfter.tickCount === authTickBefore &&
+      stAfter.remainingTicks === authRemTicksBefore &&
+      stAfter.p2!.x === p2AuthX &&
+      stAfter.p2!.y === p2AuthY &&
+      stAfter.p1State.shieldTimer === authP1ShieldBefore &&
+      stAfter.p2State!.shieldTimer === authP2ShieldBefore &&
+      stAfter.bullets.length === 0;
+
+    // Visual state moved at most 3.0px (50ms at 60px/s)
+    const visualClampedAt3Px =
+      visAfter.interpolatedMsSinceSnapshot === 50 &&
+      Math.abs(p2AuthY - visAfter.p2RenderY - 3.0) < 1e-5;
+
+    // Now test failed corner snap when turning perpendicular:
+    // Place P2 at y = p2AuthY - 6 (misaligned by 6px > SNAP_THRESHOLD = 4px from 16px grid) and try turning LEFT
+    (guestEngine as any).guestVisualState.p2RenderY = p2AuthY - 6;
+    (guestEngine as any).guestVisualState.p2RenderDirection = 'UP';
+    (guestEngine as any).guestVisualState.interpolatedMsSinceSnapshot = 0;
+    guestEngine.setExternalInputP2({
+      up: false,
+      down: false,
+      left: true,
+      right: false,
+      shoot: false,
+    });
+    guestEngine.advanceGuestVisualInterpolation(16);
+    const visAfterFailedSnap = guestEngine.getGuestVisualState();
+    const failedSnapKeepsDirectionAndPos =
+      visAfterFailedSnap.p2RenderDirection === 'UP' &&
+      visAfterFailedSnap.p2RenderX === p2AuthX &&
+      visAfterFailedSnap.p2RenderY === p2AuthY - 6;
+
+    const passed = coreUntouched && visualClampedAt3Px && failedSnapKeepsDirectionAndPos;
+
+    results.push({
+      id: 'M7_3_T46',
+      name: 'T46: M7.3.8 (E) – Nội suy hình ảnh Guest độc lập hoàn toàn với GameCoreState, giới hạn 50ms (3.0px) & giữ nguyên hướng khi snap thất bại',
+      passed,
+      details: `coreUntouched=${coreUntouched}, visualClampedAt3Px=${visualClampedAt3Px}, failedSnapKeepsDirectionAndPos=${failedSnapKeepsDirectionAndPos}`,
     });
   }
 

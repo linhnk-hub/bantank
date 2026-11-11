@@ -119,11 +119,41 @@ export const BULLET_CONFIG = {
 export const SIMULATION_CONFIG = {
   FIXED_DT_S: 1 / 60,
   FIXED_DT_MS: 1000 / 60, // ~16.6667 ms
-  MAX_FRAME_DELTA_MS: 50, // Clamps incoming frame delta (max 3 ticks equivalent)
-  MAX_TICKS_PER_FRAME: 3, // Strictly maximum 3 ticks per frame (prevents hyperspeed bursts)
-  MAX_ACCUMULATOR_MS: 50, // Maximum backlog (~3 ticks) preventing lag catch-up surges
+  SIMULATION_EPSILON_MS: 1e-7, // Strict floating-point threshold epsilon
+  MAX_FRAME_DELTA_MS: 3000, // Clamps incoming frame delta (mapped to MAX_INPUT_DELTA_MS = 3000ms)
+  MAX_INPUT_DELTA_MS: 3000, // Maximum accepted input delta per dispatch (3000ms = 180 ticks)
+  MAX_TICKS_PER_FRAME: 15, // Strictly maximum 15 ticks (250ms) simulated per dispatch call
+  MAX_ACCUMULATOR_MS: 3000, // Legacy alias mapped to MAX_ACCUMULATOR_BACKLOG_MS (3000ms)
+  MAX_ACCUMULATOR_BACKLOG_MS: 3000, // Maximum retained backlog (3000ms = 180 ticks)
+  GUEST_MAX_INTERPOLATION_MS: 50, // Maximum 50ms (3.0px) visual interpolation per snapshot on Guest
+  GUEST_INPUT_MAX_AGE_MS: 250, // Maximum 250ms validity window for remote Guest P2 input
   SUB_TILE_SIZE: 8,
 } as const;
+
+export const MATCH_TIMER_CONFIG = {
+  DEFAULT_DURATION_S: 120, // Giải trí (Normal): 120 giây = 7,200 ticks
+  EXTREME_DURATION_S: 60,  // Thử thách (Hard): 60 giây = 3,600 ticks
+  TICKS_PER_SECOND: 60,
+  WARNING_THRESHOLD_S: 30, // <= 30s: Cảnh báo màu vàng
+  CRITICAL_THRESHOLD_S: 10, // <= 10s: Cảnh báo đỏ nhấp nháy
+} as const;
+
+export function getMatchDurationSecondsForDifficulty(
+  difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT'
+): number {
+  return difficulty === 'EXTREME'
+    ? MATCH_TIMER_CONFIG.EXTREME_DURATION_S
+    : MATCH_TIMER_CONFIG.DEFAULT_DURATION_S;
+}
+
+export function formatCountdownMMSS(remainingSeconds: number): string {
+  const safeSec = Number.isFinite(remainingSeconds)
+    ? Math.max(0, Math.ceil(remainingSeconds))
+    : 0;
+  const mins = Math.floor(safeSec / 60);
+  const secs = safeSec % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
 
 export const P1_CONFIG = {
   STARTING_LIVES: 3,

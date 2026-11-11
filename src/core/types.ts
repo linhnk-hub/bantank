@@ -212,8 +212,46 @@ export interface P1PlayerState {
    MILESTONE 4: MATCH LIFECYCLE & STAGE PROGRESSION TYPES
 ==================================================================== */
 
+export interface GuestVisualInterpolationState {
+  p2RenderX: number;
+  p2RenderY: number;
+  p2RenderDirection: Direction;
+  p1VisualShieldTimer: number;
+  p2VisualShieldTimer: number;
+  interpolatedMsSinceSnapshot: number;
+}
+
+export type SnapshotRejectErrorCode =
+  | 'INVALID_SNAPSHOT_OBJECT'
+  | 'INVALID_SNAPSHOT_SEQ'
+  | 'STALE_SNAPSHOT_SEQ'
+  | 'INVALID_TICK_COUNT'
+  | 'INVALID_STAGE_RUN_SEQ'
+  | 'STALE_STAGE_RUN_SEQ'
+  | 'STALE_TICK_WITHIN_SAME_RUN'
+  | 'INVALID_DIFFICULTY'
+  | 'MISMATCHED_MATCH_DURATION'
+  | 'INVALID_REMAINING_TICKS'
+  | 'MISMATCHED_REMAINING_TICKS'
+  | 'MISMATCHED_REMAINING_SECONDS'
+  | 'INVALID_ELAPSED_SECONDS'
+  | 'MISMATCHED_ELAPSED_SECONDS'
+  | 'INVALID_OUTCOME_BOOLEANS'
+  | 'CONTRADICTORY_OUTCOME_FLAGS'
+  | 'MISMATCHED_MATCH_STATE'
+  | 'CONTRADICTORY_TIMEOUT_STATE'
+  | 'UNRESOLVED_ZERO_TICKS_OUTCOME';
+
+export interface SnapshotValidationResult {
+  valid: boolean;
+  reason?: SnapshotRejectErrorCode;
+  errorCode?: SnapshotRejectErrorCode;
+  appliedSnapshotSeq?: number;
+}
+
 export interface GameCoreState {
   tickCount: number;
+  stageRunSeq: number;
   p1: TankStructure;
   p1State: P1PlayerState;
   bullet: BulletStructure | null; // P1 bullet (M2 compatibility)
@@ -232,9 +270,13 @@ export interface GameCoreState {
   currentStageId: number;
   currentStageName: string;
   stageElapsedSeconds: number;
+  matchDurationSeconds: number;
+  remainingTicks: number;
+  remainingSeconds: number;
   terrain: RuntimeTerrainState;
   isGameOver: boolean;
   isStageClear: boolean;
+  isTimeoutGameOver: boolean;
   gameOverReason: string | null;
   diagnosticLog?: string | null;
   difficulty?: 'DEFAULT' | 'EXTREME';

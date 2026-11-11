@@ -67,7 +67,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <div className="flex justify-center items-center p-0 m-0 mb-3">
             <img
               src="/logo-bantank.png"
-              alt="Huyền thoại trở lại"
+              alt="Chiến trường huyền thoại"
               className="w-48 h-48 sm:w-60 sm:h-60 md:w-72 md:h-72 object-contain p-0 m-0 drop-shadow-2xl"
               onError={(e) => {
                 e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
@@ -75,10 +75,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             />
           </div>
 
-          {/* Title: Huyền thoại trở lại with subtle yellow lines above and below */}
+          {/* Title: Chiến trường huyền thoại with subtle yellow lines above and below */}
           <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mb-2 sm:mb-3" />
           <h1 className="text-[clamp(1.15rem,4.8vw,2.5rem)] whitespace-nowrap font-black uppercase text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow p-0 text-center">
-            Huyền thoại trở lại
+            Chiến trường huyền thoại
           </h1>
           <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mt-2 sm:mt-3 mb-6 sm:mb-8" />
 

@@ -4,8 +4,9 @@
  */
 
 import React from 'react';
-import { RotateCcw, Home, Skull, Trophy } from 'lucide-react';
+import { RotateCcw, Home, Skull, Trophy, Clock, ShieldAlert } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
+import { formatCountdownMMSS } from '../core/constants.ts';
 
 interface GameOverModalProps {
   isOpen: boolean;
@@ -27,6 +28,13 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   const isNewRecord = state.score >= state.highScore && state.score > 0;
   const livesLeft = Math.max(0, state.p1State.lives);
   const livesUsed = 3 - livesLeft;
+  const isTimeout = Boolean(state.isTimeoutGameOver);
+  const isBaseDestroyed = Boolean(state.terrain.isBaseDestroyed);
+  const causeBadgeLabel = isTimeout
+    ? 'THUA DO HẾT THỜI GIAN (00:00)'
+    : isBaseDestroyed
+    ? 'CĂN CỨ ĐẠI BÀNG BỊ PHÁ HỦY'
+    : 'HẾT MẠNG CHIẾN ĐẤU';
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4 select-none animate-in fade-in duration-200">
@@ -34,13 +42,22 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         {/* Scrollable Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 sm:space-y-4 scrollbar-thin">
           {/* Header */}
-          <div className="text-center space-y-1">
+          <div className="text-center space-y-1.5">
             <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-red-500/10 text-red-500 border border-red-500/30 mb-0.5">
-              <Skull className="w-5 h-5 sm:w-6 sm:h-6" />
+              {isTimeout ? (
+                <Clock className="w-5 h-5 sm:w-6 sm:h-6" />
+              ) : isBaseDestroyed ? (
+                <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6" />
+              ) : (
+                <Skull className="w-5 h-5 sm:w-6 sm:h-6" />
+              )}
             </div>
             <h2 className="text-xl sm:text-2xl font-black tracking-wider text-red-500 uppercase">
               GAME OVER
             </h2>
+            <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-950/90 border border-red-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-red-300">
+              <span>{causeBadgeLabel}</span>
+            </div>
             <p className="text-[11px] sm:text-xs text-neutral-400 font-mono">
               {state.gameOverReason || 'Trận chiến kết thúc!'}
             </p>
@@ -68,7 +85,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           <div className="bg-neutral-950/70 border border-neutral-800/80 rounded-xl p-3 space-y-2 text-xs">
             <div className="font-bold text-neutral-300 pb-1 border-b border-neutral-800 flex justify-between">
               <span>THỐNG KÊ CHIẾN TÍCH</span>
-              <span className="text-amber-400 font-mono">STAGE 1</span>
+              <span className="text-amber-400 font-mono">STAGE {state.currentStageId ?? 1}</span>
             </div>
 
             <div className="space-y-1.5 font-mono text-[11px] sm:text-xs">
@@ -107,6 +124,13 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               <div className="pt-1.5 border-t border-neutral-800/80 flex items-center justify-between font-bold text-amber-400">
                 <span>Tổng tiêu diệt:</span>
                 <span>{totalDefeated} / 30 xe</span>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-0.5">
+                <span>Thời gian còn lại:</span>
+                <span className={isTimeout ? 'text-red-400 font-bold' : 'text-neutral-300'}>
+                  {formatCountdownMMSS(state.remainingSeconds ?? 0)}
+                </span>
               </div>
 
               <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-0.5">
