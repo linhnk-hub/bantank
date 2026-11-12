@@ -6,6 +6,36 @@
 import { MAP_DIMENSIONS } from './constants.ts';
 import { TILE_TYPES, type MapValidationResult, type StageMapMatrix } from './types.ts';
 
+export interface StageSpawnPointInfo {
+  id: 'P1' | 'P2' | 'ENEMY_LEFT' | 'ENEMY_CENTER' | 'ENEMY_RIGHT';
+  row: number;
+  col: number;
+  label: string;
+  shortLabel: string;
+  role: 'P1' | 'P2' | 'ENEMY';
+}
+
+export const STAGE_SPAWN_POINTS: readonly StageSpawnPointInfo[] = [
+  { id: 'P1', row: 12, col: 3, label: 'Người chơi 1 (P1)', shortLabel: 'P1', role: 'P1' },
+  { id: 'P2', row: 12, col: 9, label: 'Người chơi 2 (P2)', shortLabel: 'P2', role: 'P2' },
+  { id: 'ENEMY_LEFT', row: 0, col: 0, label: 'Xe địch 1 (Góc trái trên)', shortLabel: 'E1', role: 'ENEMY' },
+  { id: 'ENEMY_CENTER', row: 0, col: 6, label: 'Xe địch 2 (Giữa trên)', shortLabel: 'E2', role: 'ENEMY' },
+  { id: 'ENEMY_RIGHT', row: 0, col: 12, label: 'Xe địch 3 (Góc phải trên)', shortLabel: 'E3', role: 'ENEMY' },
+] as const;
+
+const IMPASSABLE_SPAWN_TILES = new Set<number>([
+  TILE_TYPES.BRICK,
+  TILE_TYPES.STEEL,
+  TILE_TYPES.WATER,
+  TILE_TYPES.BASE,
+]);
+
+const INDESTRUCTIBLE_BLOCKING_TILES = new Set<number>([
+  TILE_TYPES.STEEL,
+  TILE_TYPES.WATER,
+  TILE_TYPES.BASE,
+]);
+
 /**
  * Pure Game Core function to validate any stage map matrix.
  * Has ZERO dependencies on React, Phaser, or DOM APIs.
@@ -46,14 +76,17 @@ export function validateStageMap(matrix: StageMapMatrix): MapValidationResult {
   }
 
   let totalCols = 0;
+  let dimensionsValid = rowCount === MAP_DIMENSIONS.ROWS;
   for (let r = 0; r < matrix.length; r++) {
     const row = matrix[r];
     if (!Array.isArray(row)) {
       errors.push(`Hàng ${r} không phải là một mảng hợp lệ`);
+      dimensionsValid = false;
       continue;
     }
     if (row.length !== MAP_DIMENSIONS.COLS) {
       errors.push(`Hàng ${r} có ${row.length} cột (kỳ vọng đúng ${MAP_DIMENSIONS.COLS} cột)`);
+      dimensionsValid = false;
     }
     totalCols += row.length;
 
@@ -91,6 +124,38 @@ export function validateStageMap(matrix: StageMapMatrix): MapValidationResult {
     errors.push('Hai ô cánh bảo vệ [hàng 12, cột 5] và [hàng 12, cột 7] phải là tường gạch BRICK');
   }
 
+  // Validate P1, P2, and Enemy spawn points are not blocked by impassable obstacles
+  if (dimensionsValid) {
+    for (const spawn of STAGE_SPAWN_POINTS) {
+      const tileAtSpawn = matrix[spawn.row]?.[spawn.col];
+      if (IMPASSABLE_SPAWN_TILES.has(tileAtSpawn)) {
+        errors.push(
+          `Vị trí xuất hiện của ${spawn.label} tại [hàng ${spawn.row}, cột ${spawn.col}] bị chặn bởi vật cản không thể đi qua (mã ô: ${tileAtSpawn})`
+        );
+        continue;
+      }
+
+      // Check that the spawn point is not completely surrounded by indestructible obstacles (STEEL, WATER, BASE)
+      const neighbors = [
+        { r: spawn.row - 1, c: spawn.col },
+        { r: spawn.row + 1, c: spawn.col },
+        { r: spawn.row, c: spawn.col - 1 },
+        { r: spawn.row, c: spawn.col + 1 },
+      ].filter(
+        (n) => n.r >= 0 && n.r < MAP_DIMENSIONS.ROWS && n.c >= 0 && n.c < MAP_DIMENSIONS.COLS
+      );
+
+      const hasPassableOrDestructibleExit = neighbors.some(
+        (n) => !INDESTRUCTIBLE_BLOCKING_TILES.has(matrix[n.r][n.c])
+      );
+      if (!hasPassableOrDestructibleExit) {
+        errors.push(
+          `Vị trí xuất hiện của ${spawn.label} tại [hàng ${spawn.row}, cột ${spawn.col}] bị vây kín hoàn toàn bởi vật cản không thể phá hủy`
+        );
+      }
+    }
+  }
+
   const hasThreeBaseCells = false;
 
   // Check if Stage 1 contains any unintroduced tile types (WATER, GRASS, ICE)
@@ -111,3 +176,4 @@ export function validateStageMap(matrix: StageMapMatrix): MapValidationResult {
     warnings,
   };
 }
+

@@ -18,6 +18,8 @@ export const SESSION_TIMINGS = {
   CLIENT_SAFETY_BUFFER_MS: 5000, // 5s client safety buffer
   MIN_HEARTBEAT_CLIENT_WAIT_MS: 125000, // 120s + 5s = 125s
   TARGET_HEARTBEAT_MS: 150000, // 150s regular heartbeat cycle
+  IDLE_WARNING_THRESHOLD_MS: 840000, // 840s (14 minutes) -> show warning 60s before expiry
+  IDLE_WARNING_WINDOW_S: 60, // 60 seconds countdown before 15m timeout
   IDLE_TIMEOUT_MS: 900000, // 900s (15 minutes) client idle timeout
 } as const;
 
@@ -46,11 +48,26 @@ export interface SessionStateSnapshot {
   sessionId: string | null;
   deviceId: string;
   lastKnownServerActiveMs: number;
+  lastUserActivityWallMs: number;
+  isIdleWarningVisible: boolean;
+  idleRemainingSeconds: number | null;
   message: string | null;
   isHeartbeatInFlight: boolean;
 }
 
 export type SessionStateListener = (snapshot: SessionStateSnapshot) => void;
+
+/**
+ * Payload đồng bộ giữa các tab trên cùng trình duyệt (BroadcastChannel & localStorage).
+ * TUYỆT ĐỐI KHÔNG chứa ID Token, Refresh Token hoặc bất kỳ thông tin xác thực nhạy cảm nào.
+ */
+export interface SafeMultiTabSyncPayload {
+  type: 'SESSION_SYNC' | 'USER_ACTIVITY' | 'SESSION_LOGOUT';
+  sessionId: string | null;
+  lastConfirmedServerActiveMs: number;
+  lastUserActivityWallMs: number;
+  time: number;
+}
 
 function generateUUID(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -68,6 +85,8 @@ const STORAGE_KEYS = {
   ACTIVE_SESSION_ID: 'bantank_active_session_id_v1',
   MULTI_TAB_SYNC: 'bantank_session_sync_v1',
 };
+
+const BROADCAST_CHANNEL_NAME = 'bantank_session_channel_v1';
 
 export class SessionManager {
   private static instance: SessionManager;
@@ -88,9 +107,13 @@ export class SessionManager {
   private heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
   private lastUserPhysicalActivityPerfMs: number = performance.now();
   private lastUserPhysicalActivityWallMs: number = Date.now();
+  private lastBroadcastActivityWallMs: number = 0;
   private isUserInteractingInCycle: boolean = true;
+  private isIdleWarningVisible: boolean = false;
+  private idleRemainingSeconds: number | null = null;
   private earlyRejectRetryCount: number = 0;
   private isHeartbeatInFlight: boolean = false;
+  private broadcastChannel: BroadcastChannel | null = null;
   private listeners: Set<SessionStateListener> = new Set();
   private onPauseGameCallback: (() => void) | null = null;
 
@@ -128,10 +151,40 @@ export class SessionManager {
     return generateUUID();
   }
 
+  private saveLocalActiveSessionRecord(): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        if (this.currentUid && this.currentSessionId) {
+          window.localStorage.setItem(
+            STORAGE_KEYS.ACTIVE_SESSION_ID,
+            JSON.stringify({
+              uid: this.currentUid,
+              sessionId: this.currentSessionId,
+              deviceId: this.deviceId,
+              lastKnownServerActiveMs: this.lastKnownServerActiveMs,
+              savedAtMs: Date.now(),
+            })
+          );
+        } else {
+          window.localStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION_ID);
+        }
+      }
+    } catch {}
+  }
+
+  private clearLocalActiveSessionRecord(): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(STORAGE_KEYS.ACTIVE_SESSION_ID);
+      }
+    } catch {}
+  }
+
   private setServerTimeAnchor(serverMs: number): void {
     this.lastKnownServerActiveMs = serverMs;
     this.lastKnownServerActivePerfMs = performance.now();
-    this.broadcastTabSync();
+    this.saveLocalActiveSessionRecord();
+    this.broadcastTabSync('SESSION_SYNC');
   }
 
   public getDeviceId(): string {
@@ -163,45 +216,146 @@ export class SessionManager {
       sessionId: this.currentSessionId,
       deviceId: this.deviceId,
       lastKnownServerActiveMs: this.lastKnownServerActiveMs,
+      lastUserActivityWallMs: this.lastUserPhysicalActivityWallMs,
+      isIdleWarningVisible: this.isIdleWarningVisible,
+      idleRemainingSeconds: this.idleRemainingSeconds,
       message: this.statusMessage,
       isHeartbeatInFlight: this.isHeartbeatInFlight,
     };
   }
 
   /**
-   * Records user activity (keyboard, joystick, shoot button, in-game control touches).
-   * CRITICAL: Always checks if the session has already exceeded 900,000ms BEFORE resetting timestamps.
+   * Tính thời gian không hoạt động thực tế theo đồng hồ thời gian thực (wall-clock).
+   * Không phụ thuộc vào bộ đếm cộng dồn bị đóng băng khi tab ở chế độ ngủ nền.
    */
-  public recordUserActivity(): void {
-    if (this.status === 'ACTIVE') {
-      const elapsedPerf = performance.now() - this.lastUserPhysicalActivityPerfMs;
-      const elapsedWall = Date.now() - this.lastUserPhysicalActivityWallMs;
+  public getElapsedIdleMs(nowWallMs: number = Date.now()): number {
+    return Math.max(0, nowWallMs - this.lastUserPhysicalActivityWallMs);
+  }
 
-      // 1. Pre-check: if already expired, terminate immediately and NEVER reset timestamps!
-      if (
-        elapsedPerf >= SESSION_TIMINGS.IDLE_TIMEOUT_MS ||
-        elapsedWall >= SESSION_TIMINGS.IDLE_TIMEOUT_MS
-      ) {
+  /**
+   * Kiểm tra trạng thái không hoạt động (Idle Warning ở phút 14 & Idle Timeout ở phút 15).
+   */
+  public evaluateIdleState(nowWallMs: number = Date.now()): SessionStateSnapshot {
+    if (this.status !== 'ACTIVE') {
+      if (this.isIdleWarningVisible || this.idleRemainingSeconds !== null) {
+        this.isIdleWarningVisible = false;
+        this.idleRemainingSeconds = null;
+        this.notify();
+      }
+      return this.getSnapshot();
+    }
+
+    const elapsedWall = Math.max(0, nowWallMs - this.lastUserPhysicalActivityWallMs);
+
+    if (elapsedWall >= SESSION_TIMINGS.IDLE_TIMEOUT_MS) {
+      this.isIdleWarningVisible = false;
+      this.idleRemainingSeconds = 0;
+      this.handleLocalIdleTimeout();
+      return this.getSnapshot();
+    }
+
+    if (elapsedWall >= SESSION_TIMINGS.IDLE_WARNING_THRESHOLD_MS) {
+      const remainingMs = Math.max(0, SESSION_TIMINGS.IDLE_TIMEOUT_MS - elapsedWall);
+      const nextRemainingSec = Math.max(1, Math.ceil(remainingMs / 1000));
+      const changed =
+        !this.isIdleWarningVisible || this.idleRemainingSeconds !== nextRemainingSec;
+      this.isIdleWarningVisible = true;
+      this.idleRemainingSeconds = nextRemainingSec;
+      if (changed) {
+        this.notify();
+      }
+      return this.getSnapshot();
+    }
+
+    if (this.isIdleWarningVisible || this.idleRemainingSeconds !== null) {
+      this.isIdleWarningVisible = false;
+      this.idleRemainingSeconds = null;
+      this.notify();
+    }
+    return this.getSnapshot();
+  }
+
+  /**
+   * Records user activity (keyboard, mouse/pointer, touch, menu or in-game controls).
+   * CRITICAL: Always checks if the session has already exceeded 900,000ms on wall-clock BEFORE resetting timestamps.
+   */
+  public recordUserActivity(nowWallMs: number = Date.now()): void {
+    if (this.status === 'ACTIVE') {
+      const elapsedWall = Math.max(0, nowWallMs - this.lastUserPhysicalActivityWallMs);
+
+      // 1. Pre-check: if already expired (>= 15 minutes), terminate immediately and NEVER reset timestamps!
+      if (elapsedWall >= SESSION_TIMINGS.IDLE_TIMEOUT_MS) {
         this.handleLocalIdleTimeout();
         return;
       }
     }
 
+    const hadWarning = this.isIdleWarningVisible;
     this.lastUserPhysicalActivityPerfMs = performance.now();
-    this.lastUserPhysicalActivityWallMs = Date.now();
+    this.lastUserPhysicalActivityWallMs = nowWallMs;
     this.isUserInteractingInCycle = true;
+    this.isIdleWarningVisible = false;
+    this.idleRemainingSeconds = null;
+
+    // Throttle cross-tab activity broadcast to at most once every 3 seconds (or immediately when dismissing warning)
+    if (hadWarning || nowWallMs - this.lastBroadcastActivityWallMs >= 3000) {
+      this.lastBroadcastActivityWallMs = nowWallMs;
+      this.broadcastTabSync('USER_ACTIVITY');
+    }
+
+    if (hadWarning) {
+      this.notify();
+    }
+  }
+
+  /**
+   * Người dùng nhấn nút "Tiếp tục phiên" khi cảnh báo sắp hết hạn (60 giây cuối) hiển thị.
+   */
+  public continueSession(): SessionStateSnapshot {
+    if (this.status !== 'ACTIVE') {
+      return this.getSnapshot();
+    }
+    const nowWallMs = Date.now();
+    const elapsedWall = Math.max(0, nowWallMs - this.lastUserPhysicalActivityWallMs);
+    if (elapsedWall >= SESSION_TIMINGS.IDLE_TIMEOUT_MS) {
+      this.handleLocalIdleTimeout();
+      return this.getSnapshot();
+    }
+
+    this.lastUserPhysicalActivityPerfMs = performance.now();
+    this.lastUserPhysicalActivityWallMs = nowWallMs;
+    this.isUserInteractingInCycle = true;
+    this.isIdleWarningVisible = false;
+    this.idleRemainingSeconds = null;
+    this.lastBroadcastActivityWallMs = nowWallMs;
+    this.broadcastTabSync('USER_ACTIVITY');
+    this.notify();
+
+    // If enough time has elapsed since the last server anchor (>= 125s), trigger a heartbeat to keep server lease fresh
+    const elapsedSinceServerAnchor =
+      this.lastKnownServerActiveMs > 0
+        ? nowWallMs - this.lastKnownServerActiveMs
+        : performance.now() - this.lastKnownServerActivePerfMs;
+    if (elapsedSinceServerAnchor >= SESSION_TIMINGS.MIN_HEARTBEAT_CLIENT_WAIT_MS) {
+      this.scheduleNextHeartbeat(50);
+    }
+
+    return this.getSnapshot();
   }
 
   private setupPhysicalActivityListeners(): void {
     if (typeof window === 'undefined') return;
 
     const onActivity = () => {
+      // Do not automatically dismiss the 60s warning on passive pointer/key events if warning modal is open,
+      // OR record valid user activity as required by M7.3.11 Section V.3
       this.recordUserActivity();
     };
 
     window.addEventListener('keydown', onActivity, { passive: true });
     window.addEventListener('pointerdown', onActivity, { passive: true });
     window.addEventListener('touchstart', onActivity, { passive: true });
+    window.addEventListener('mousedown', onActivity, { passive: true });
 
     // Handle visibilitychange (background <-> foreground tab transitions)
     if (typeof document !== 'undefined') {
@@ -215,53 +369,100 @@ export class SessionManager {
       this.handleVisibilityOrFocusChange();
     });
 
-    // Client-side Idle Timeout check every 10 seconds
+    // Check Idle Warning (14m) & Idle Timeout (15m) every 1 second for accurate 60s countdown
     setInterval(() => {
       if (this.status === 'ACTIVE') {
-        const elapsedPerf = performance.now() - this.lastUserPhysicalActivityPerfMs;
-        const elapsedWall = Date.now() - this.lastUserPhysicalActivityWallMs;
-        if (
-          elapsedPerf >= SESSION_TIMINGS.IDLE_TIMEOUT_MS ||
-          elapsedWall >= SESSION_TIMINGS.IDLE_TIMEOUT_MS
-        ) {
-          this.handleLocalIdleTimeout();
-        }
+        this.evaluateIdleState(Date.now());
       }
-    }, 10000);
+    }, 1000);
 
     // Online recovery hook
     window.addEventListener('online', () => {
       if (this.status === 'CONNECTION_LOST_UNVERIFIED' && this.currentUid) {
-        this.reconcileSessionFromServer();
+        this.reconcileSessionFromServer({ reason: 'NETWORK_RECOVERED' });
       }
     });
   }
 
   /**
    * Invoked when tab returns to foreground or window gains focus after sleep/background.
+   * M7.3.11 Section V.1 - V.3:
+   * - Khi chuyển sang tab khác khoảng 5-10 phút rồi quay lại (< 15 phút), KHÔNG được tự động đăng xuất hoặc báo lỗi giả!
+   * - Tính lại thời gian không hoạt động bằng mốc thời gian thực (wall-clock).
+   * - Nếu chưa quá 15 phút, người dùng quay lại tab là hành động hợp lệ: cập nhật mốc hoạt động và kiểm tra đối chiếu phiên an toàn.
    */
   private handleVisibilityOrFocusChange(): void {
     if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
       return;
     }
     if (this.status === 'ACTIVE') {
-      const elapsedPerf = performance.now() - this.lastUserPhysicalActivityPerfMs;
-      const elapsedWall = Date.now() - this.lastUserPhysicalActivityWallMs;
+      const nowWallMs = Date.now();
+      const elapsedWall = Math.max(0, nowWallMs - this.lastUserPhysicalActivityWallMs);
 
-      // 1. Immediately terminate if idle elapsed >= 900,000ms on either clock
-      if (
-        elapsedPerf >= SESSION_TIMINGS.IDLE_TIMEOUT_MS ||
-        elapsedWall >= SESSION_TIMINGS.IDLE_TIMEOUT_MS
-      ) {
+      // 1. Immediately terminate ONLY if real wall-clock idle time >= 900,000ms (15 minutes)
+      if (elapsedWall >= SESSION_TIMINGS.IDLE_TIMEOUT_MS) {
         this.handleLocalIdleTimeout();
         return;
       }
 
-      // 2. Detect anomalous sleep / suspension gap (e.g. wall clock elapsed > 150s or gap between wall & monotonic > 30s)
-      // Tạm khóa thao tác và gọi đối chiếu phiên với máy chủ (reconcileSessionFromServer) trước khi tiếp tục.
-      // Tuyệt đối không tự động gia hạn heartbeat! Chỉ đọc đối chiếu máy chủ bằng getDocFromServer.
-      if (elapsedWall >= SESSION_TIMINGS.TARGET_HEARTBEAT_MS || Math.abs(elapsedWall - elapsedPerf) > 30000) {
-        this.reconcileSessionFromServer();
+      // 2. User returned to the tab BEFORE 15 minutes!
+      // Returning to the game tab while < 15m idle is valid activity: refresh physical activity timestamp
+      // and clear any stale warning so returning at 5m or 10m continues seamlessly.
+      this.lastUserPhysicalActivityPerfMs = performance.now();
+      this.lastUserPhysicalActivityWallMs = nowWallMs;
+      this.isUserInteractingInCycle = true;
+      if (this.isIdleWarningVisible) {
+        this.isIdleWarningVisible = false;
+        this.idleRemainingSeconds = null;
+        this.notify();
+      }
+      this.broadcastTabSync('USER_ACTIVITY');
+
+      // 3. Reconcile with server if tab was in background for >= 125s so we verify single-device lease
+      // and refresh heartbeat if needed (WITHOUT triggering HEARTBEAT_REJECTED_UNCLASSIFIED when serverMs == lastKnownServerActiveMs!)
+      const elapsedSinceServerAnchorWall =
+        this.lastKnownServerActiveMs > 0 ? nowWallMs - this.lastKnownServerActiveMs : elapsedWall;
+      if (elapsedSinceServerAnchorWall >= SESSION_TIMINGS.MIN_HEARTBEAT_CLIENT_WAIT_MS) {
+        this.reconcileSessionFromServer({ reason: 'TAB_RETURN' });
+      }
+    }
+  }
+
+  private applyIncomingMultiTabSync(sync: SafeMultiTabSyncPayload): void {
+    if (!sync || typeof sync !== 'object') return;
+
+    if (sync.type === 'SESSION_LOGOUT') {
+      if (this.status === 'ACTIVE' || this.status === 'ACQUIRING') {
+        this.status = 'EXPIRED';
+        this.statusMessage = 'Tài khoản đã đăng xuất từ một tab khác trên trình duyệt này.';
+        this.terminateSessionLocally(false);
+      }
+      return;
+    }
+
+    if (sync.sessionId && sync.sessionId !== this.currentSessionId && this.currentUid) {
+      this.currentSessionId = sync.sessionId;
+    }
+
+    if (
+      typeof sync.lastConfirmedServerActiveMs === 'number' &&
+      sync.lastConfirmedServerActiveMs > this.lastKnownServerActiveMs
+    ) {
+      this.lastKnownServerActiveMs = sync.lastConfirmedServerActiveMs;
+      this.lastKnownServerActivePerfMs = performance.now();
+    }
+
+    if (
+      typeof sync.lastUserActivityWallMs === 'number' &&
+      sync.lastUserActivityWallMs > this.lastUserPhysicalActivityWallMs
+    ) {
+      this.lastUserPhysicalActivityWallMs = sync.lastUserActivityWallMs;
+      this.lastUserPhysicalActivityPerfMs = performance.now();
+      this.isUserInteractingInCycle = true;
+      if (this.isIdleWarningVisible) {
+        this.isIdleWarningVisible = false;
+        this.idleRemainingSeconds = null;
+        this.notify();
       }
     }
   }
@@ -269,17 +470,24 @@ export class SessionManager {
   private setupMultiTabListener(): void {
     if (typeof window === 'undefined') return;
 
+    // 1. BroadcastChannel for instant same-browser multi-tab sync
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        this.broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+        this.broadcastChannel.onmessage = (event) => {
+          this.applyIncomingMultiTabSync(event.data as SafeMultiTabSyncPayload);
+        };
+      } catch (e) {
+        console.warn('[SessionManager] BroadcastChannel init fallback to storage:', e);
+      }
+    }
+
+    // 2. localStorage storage event fallback
     window.addEventListener('storage', (e) => {
       if (e.key === STORAGE_KEYS.MULTI_TAB_SYNC && e.newValue) {
         try {
-          const sync = JSON.parse(e.newValue);
-          if (sync.sessionId && sync.sessionId !== this.currentSessionId) {
-            this.currentSessionId = sync.sessionId;
-          }
-          if (sync.lastConfirmedServerActiveMs > this.lastKnownServerActiveMs) {
-            this.lastKnownServerActiveMs = sync.lastConfirmedServerActiveMs;
-            this.lastKnownServerActivePerfMs = performance.now();
-          }
+          const sync = JSON.parse(e.newValue) as SafeMultiTabSyncPayload;
+          this.applyIncomingMultiTabSync(sync);
         } catch (err) {
           console.warn('[SessionManager] multi-tab sync error:', err);
         }
@@ -287,19 +495,31 @@ export class SessionManager {
     });
   }
 
-  private broadcastTabSync(): void {
+  /**
+   * Đồng bộ trạng thái phiên và mốc hoạt động giữa các tab cùng trình duyệt.
+   * Đảm bảo: KHÔNG BAO GIỜ chứa token, refreshToken hoặc dữ liệu nhạy cảm.
+   */
+  private broadcastTabSync(
+    type: SafeMultiTabSyncPayload['type'] = 'SESSION_SYNC'
+  ): SafeMultiTabSyncPayload {
+    const payload: SafeMultiTabSyncPayload = {
+      type,
+      sessionId: this.currentSessionId,
+      lastConfirmedServerActiveMs: this.lastKnownServerActiveMs,
+      lastUserActivityWallMs: this.lastUserPhysicalActivityWallMs,
+      time: Date.now(),
+    };
     try {
-      if (typeof window !== 'undefined' && window.localStorage) {
-        window.localStorage.setItem(
-          STORAGE_KEYS.MULTI_TAB_SYNC,
-          JSON.stringify({
-            sessionId: this.currentSessionId,
-            lastConfirmedServerActiveMs: this.lastKnownServerActiveMs,
-            time: Date.now(),
-          })
-        );
+      if (this.broadcastChannel) {
+        this.broadcastChannel.postMessage(payload);
       }
     } catch {}
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(STORAGE_KEYS.MULTI_TAB_SYNC, JSON.stringify(payload));
+      }
+    } catch {}
+    return payload;
   }
 
   /**
@@ -323,8 +543,6 @@ export class SessionManager {
         const snap = await tx.get(sessionDocRef);
 
         if (snap.exists()) {
-          // Do NOT evaluate Date.now() on the client to decide session validity!
-          // We issue the update transaction directly.
           // Firestore Security Rules (isNewSessionAcquisitionAction) will enforce:
           // (!isExistingSessionStillActive() || incoming().deviceId == existing().deviceId)
           // based on server request.time <= existing().lastActiveAt + 900s.
@@ -350,20 +568,27 @@ export class SessionManager {
         }
       });
 
+      this.currentSessionId = newSessionId;
+
       // Verify and anchor server timestamp immediately after transaction
       const verifySnap = await getDocFromServer(sessionDocRef);
       if (verifySnap.exists()) {
         const data = verifySnap.data() as SessionDocument;
         this.setServerTimeAnchor(data.lastActiveAt.toMillis());
+      } else {
+        this.setServerTimeAnchor(Date.now());
       }
 
-      this.currentSessionId = newSessionId;
       this.status = 'ACTIVE';
       this.statusMessage = null;
+      this.isIdleWarningVisible = false;
+      this.idleRemainingSeconds = null;
       this.earlyRejectRetryCount = 0;
       this.isUserInteractingInCycle = true;
       this.lastUserPhysicalActivityPerfMs = performance.now();
       this.lastUserPhysicalActivityWallMs = Date.now();
+      this.saveLocalActiveSessionRecord();
+      this.broadcastTabSync('SESSION_SYNC');
       this.notify();
       this.scheduleNextHeartbeat(SESSION_TIMINGS.TARGET_HEARTBEAT_MS);
 
@@ -404,16 +629,32 @@ export class SessionManager {
               return { success: false, message: this.statusMessage };
             }
 
-            // If doc exists but data.deviceId === this.deviceId OR data.isActive === false,
-            // the PERMISSION_DENIED was NOT because of another active device, but another rule condition!
+            // If doc exists AND data.deviceId === this.deviceId && data.isActive === true,
+            // resume existing active session on this same device!
+            if (data.deviceId === this.deviceId && data.isActive === true && data.sessionId) {
+              this.currentSessionId = data.sessionId;
+              const srvMs =
+                typeof data.lastActiveAt?.toMillis === 'function'
+                  ? data.lastActiveAt.toMillis()
+                  : Date.now();
+              this.setServerTimeAnchor(srvMs);
+              this.status = 'ACTIVE';
+              this.statusMessage = null;
+              this.isIdleWarningVisible = false;
+              this.idleRemainingSeconds = null;
+              this.lastUserPhysicalActivityPerfMs = performance.now();
+              this.lastUserPhysicalActivityWallMs = Date.now();
+              this.notify();
+              this.scheduleNextHeartbeat(SESSION_TIMINGS.TARGET_HEARTBEAT_MS);
+              return { success: true, message: null };
+            }
+
             this.status = 'NO_SESSION';
             this.statusMessage =
               'Không đủ quyền truy cập hoặc vi phạm điều kiện bảo mật phiên đăng nhập (Quy tắc Firestore).';
             this.notify();
             return { success: false, message: this.statusMessage };
           } else {
-            // Document does not exist: PERMISSION_DENIED on creation (e.g. invalid user, unverified personal Gmail, rule mismatch)
-            // Definitely NOT displaced!
             this.status = 'NO_SESSION';
             this.statusMessage =
               'Không thể tạo phiên: Tài khoản không thỏa mãn điều kiện bảo mật (Chỉ chấp nhận Gmail cá nhân đã xác minh).';
@@ -434,7 +675,6 @@ export class SessionManager {
             return { success: false, message: this.statusMessage };
           }
 
-          // Could not read server doc due to network/unavailable
           this.status = 'CONNECTION_LOST_UNVERIFIED';
           this.statusMessage =
             'Gặp lỗi kiểm tra quyền từ máy chủ nhưng không thể đọc đối chiếu do sự cố kết nối mạng. Vui lòng kiểm tra lại kết nối mạng.';
@@ -487,10 +727,16 @@ export class SessionManager {
       return;
     }
 
-    // Multi-tab check before dispatching network request
-    const elapsedSinceLastAnchor = performance.now() - this.lastKnownServerActivePerfMs;
-    if (elapsedSinceLastAnchor < SESSION_TIMINGS.MIN_HEARTBEAT_CLIENT_WAIT_MS) {
-      const waitRemaining = SESSION_TIMINGS.MIN_HEARTBEAT_CLIENT_WAIT_MS - elapsedSinceLastAnchor;
+    // Check both wall-clock since server anchor and monotonic clock before dispatching network request
+    const elapsedWallSinceAnchor =
+      this.lastKnownServerActiveMs > 0
+        ? Date.now() - this.lastKnownServerActiveMs
+        : performance.now() - this.lastKnownServerActivePerfMs;
+    const elapsedPerfSinceAnchor = performance.now() - this.lastKnownServerActivePerfMs;
+    const effectiveElapsed = Math.max(elapsedWallSinceAnchor, elapsedPerfSinceAnchor);
+
+    if (effectiveElapsed < SESSION_TIMINGS.MIN_HEARTBEAT_CLIENT_WAIT_MS) {
+      const waitRemaining = SESSION_TIMINGS.MIN_HEARTBEAT_CLIENT_WAIT_MS - effectiveElapsed;
       this.scheduleNextHeartbeat(waitRemaining);
       return;
     }
@@ -521,11 +767,12 @@ export class SessionManager {
       const msg = String(err?.message || err);
       if (msg.includes('permission-denied') || msg.includes('PERMISSION_DENIED')) {
         // Reconcile before deciding
-        await this.reconcileSessionFromServer();
+        await this.reconcileSessionFromServer({ reason: 'HEARTBEAT_PERMISSION_DENIED' });
       } else {
         // Network or connection error: pause gameplay safely without sign out
         this.status = 'CONNECTION_LOST_UNVERIFIED';
-        this.statusMessage = 'Mất kết nối với máy chủ. Trận đấu đang tạm dừng để chờ xác minh lại phiên...';
+        this.statusMessage =
+          'Mất kết nối với máy chủ. Trận đấu đang tạm dừng để chờ xác minh lại phiên...';
         if (this.onPauseGameCallback) this.onPauseGameCallback();
         this.notify();
       }
@@ -536,11 +783,18 @@ export class SessionManager {
   }
 
   /**
-   * Reconciles session state directly from serverDoc. Never signs out on PERMISSION_DENIED.
+   * Reconciles session state directly from serverDoc. Never signs out on transient network errors or valid tab switches.
+   * Fix M7.3.11 Section V:
+   * - Khi quay lại tab sau 5-10 phút (reason === 'TAB_RETURN' hoặc 'NETWORK_RECOVERED'), serverMs có thể bằng đúng
+   *   lastKnownServerActiveMs vì tab ẩn không gửi heartbeat. Miễn là phiên trên server vẫn isActive === true,
+   *   cùng deviceId, cùng sessionId và chưa quá 15 phút (900,000ms), phiên hoàn toàn hợp lệ (ACTIVE) và sẽ gửi heartbeat gia hạn!
    */
-  public async reconcileSessionFromServer(): Promise<void> {
+  public async reconcileSessionFromServer(options?: {
+    reason?: 'TAB_RETURN' | 'NETWORK_RECOVERED' | 'HEARTBEAT_PERMISSION_DENIED';
+  }): Promise<void> {
     if (!this.currentUid) return;
 
+    const reason = options?.reason ?? 'TAB_RETURN';
     const sessionDocRef = doc(this.db, 'user_sessions', this.currentUid);
 
     try {
@@ -571,16 +825,36 @@ export class SessionManager {
       }
 
       if (data.sessionId !== this.currentSessionId) {
-        this.status = 'DISPLACED';
-        this.statusMessage = 'Phiên làm việc đã thay đổi. Vui lòng đăng nhập lại.';
+        // If same deviceId but another tab on the same browser updated sessionId, sync it rather than displacing!
+        if (data.deviceId === this.deviceId && data.isActive === true && data.sessionId) {
+          this.currentSessionId = data.sessionId;
+        } else {
+          this.status = 'DISPLACED';
+          this.statusMessage = 'Phiên làm việc đã thay đổi. Vui lòng đăng nhập lại.';
+          this.terminateSessionLocally();
+          return;
+        }
+      }
+
+      const serverMs =
+        typeof data.lastActiveAt?.toMillis === 'function'
+          ? data.lastActiveAt.toMillis()
+          : this.lastKnownServerActiveMs;
+
+      const nowWallMs = Date.now();
+      const serverIdleElapsedMs = Math.max(0, nowWallMs - serverMs);
+
+      // Check if server session has exceeded 15 minutes (900,000ms)
+      if (serverIdleElapsedMs >= SESSION_TIMINGS.IDLE_TIMEOUT_MS) {
+        this.status = 'EXPIRED';
+        this.statusMessage =
+          'Phiên đăng nhập trên máy chủ đã hết hạn sau 15 phút không hoạt động. Vui lòng đăng nhập lại.';
         this.terminateSessionLocally();
         return;
       }
 
-      // Check server anchor
-      const serverMs = data.lastActiveAt.toMillis();
+      // If server has a newer timestamp (e.g. another tab sent a heartbeat), anchor and continue ACTIVE
       if (serverMs > this.lastKnownServerActiveMs) {
-        // Server actually accepted an earlier update: session is alive!
         this.setServerTimeAnchor(serverMs);
         this.status = 'ACTIVE';
         this.statusMessage = null;
@@ -590,7 +864,46 @@ export class SessionManager {
         return;
       }
 
-      // Timestamp unchanged: enter safe unclassified pause state
+      // CRITICAL FIX FOR 5-MINUTE TAB SWITCH:
+      // When returning from another tab or recovering network before 15 minutes, serverMs === lastKnownServerActiveMs
+      // is normal because no heartbeat was sent while hidden. The session is still valid on the server!
+      if (reason !== 'HEARTBEAT_PERMISSION_DENIED' && serverMs === this.lastKnownServerActiveMs) {
+        this.status = 'ACTIVE';
+        this.statusMessage = null;
+        this.earlyRejectRetryCount = 0;
+        this.notify();
+
+        if (serverIdleElapsedMs >= SESSION_TIMINGS.MIN_HEARTBEAT_CLIENT_WAIT_MS) {
+          // Immediately trigger a heartbeat to extend the server lease now that the user is back
+          this.isUserInteractingInCycle = true;
+          this.scheduleNextHeartbeat(100);
+        } else {
+          const remainingToNextHeartbeat = Math.max(
+            5000,
+            SESSION_TIMINGS.TARGET_HEARTBEAT_MS - serverIdleElapsedMs
+          );
+          this.scheduleNextHeartbeat(remainingToNextHeartbeat);
+        }
+        return;
+      }
+
+      // If we got here because sendHeartbeat threw PERMISSION_DENIED, check if it was just sent too early (< 125s)
+      if (
+        reason === 'HEARTBEAT_PERMISSION_DENIED' &&
+        serverIdleElapsedMs < SESSION_TIMINGS.MIN_HEARTBEAT_CLIENT_WAIT_MS &&
+        this.earlyRejectRetryCount < 2
+      ) {
+        this.earlyRejectRetryCount += 1;
+        this.status = 'ACTIVE';
+        this.statusMessage = null;
+        this.notify();
+        const waitMs =
+          SESSION_TIMINGS.MIN_HEARTBEAT_CLIENT_WAIT_MS - serverIdleElapsedMs + 2000;
+        this.scheduleNextHeartbeat(waitMs);
+        return;
+      }
+
+      // Otherwise, an actual heartbeat write after >= 125s was rejected by server rules: enter safe pause state
       this.status = 'HEARTBEAT_REJECTED_UNCLASSIFIED';
       this.statusMessage =
         'Không thể xác minh quyền gia hạn phiên. Trận đấu đang tạm dừng để bảo vệ tài khoản.';
@@ -649,7 +962,11 @@ export class SessionManager {
     }
 
     const data = serverDoc.data() as SessionDocument;
-    if (data.isActive === false || data.deviceId !== this.deviceId || data.sessionId !== this.currentSessionId) {
+    if (
+      data.isActive === false ||
+      data.deviceId !== this.deviceId ||
+      data.sessionId !== this.currentSessionId
+    ) {
       this.status = 'DISPLACED';
       this.statusMessage = 'Phiên làm việc đã chuyển sang thiết bị khác hoặc đã kết thúc.';
       this.terminateSessionLocally();
@@ -668,8 +985,9 @@ export class SessionManager {
       return { success: true, message: 'Đã xác minh và gia hạn phiên thành công.' };
     }
 
-    // Step 4b: Check 120s + buffer constraint on client monotonic clock
-    const deltaClient = performance.now() - this.lastKnownServerActivePerfMs;
+    // Step 4b: Check 120s + buffer constraint on wall-clock and client monotonic clock
+    const deltaWall = this.lastKnownServerActiveMs > 0 ? Date.now() - this.lastKnownServerActiveMs : 0;
+    const deltaClient = Math.max(deltaWall, performance.now() - this.lastKnownServerActivePerfMs);
     if (deltaClient < SESSION_TIMINGS.MIN_HEARTBEAT_CLIENT_WAIT_MS) {
       const waitRemainingSec = Math.ceil(
         (SESSION_TIMINGS.MIN_HEARTBEAT_CLIENT_WAIT_MS - deltaClient) / 1000
@@ -729,6 +1047,8 @@ export class SessionManager {
 
   private handleLocalIdleTimeout(): void {
     if (this.onPauseGameCallback) this.onPauseGameCallback();
+    this.isIdleWarningVisible = false;
+    this.idleRemainingSeconds = 0;
     this.status = 'PAUSED_IDLE';
     this.statusMessage =
       'Phiên đăng nhập đã hết hạn sau 15 phút không hoạt động. Vui lòng đăng nhập lại.';
@@ -747,17 +1067,162 @@ export class SessionManager {
         console.warn('[SessionManager] releaseSession error:', e);
       }
     }
-    this.terminateSessionLocally();
+    this.broadcastTabSync('SESSION_LOGOUT');
+    this.terminateSessionLocally(true);
   }
 
-  private terminateSessionLocally(): void {
+  private terminateSessionLocally(shouldSignOutAuth: boolean = true): void {
     if (this.heartbeatTimer) {
       clearTimeout(this.heartbeatTimer);
       this.heartbeatTimer = null;
     }
     this.currentSessionId = null;
     this.currentUid = null;
+    this.isIdleWarningVisible = false;
+    this.idleRemainingSeconds = null;
+    this.clearLocalActiveSessionRecord();
     this.notify();
-    this.authManager.signOut();
+    if (shouldSignOutAuth) {
+      this.authManager.signOut();
+    }
+  }
+
+  /**
+   * Bộ hàm mô phỏng tất định (Deterministic Test Helpers) phục vụ kiểm thử tự động M7.3.11 Mục VI (Nhóm D).
+   */
+  public initMockActiveSessionForTesting(params: {
+    uid: string;
+    sessionId: string;
+    serverActiveMs?: number;
+  }): SessionStateSnapshot {
+    if (this.heartbeatTimer) {
+      clearTimeout(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+    const nowWall = Date.now();
+    this.currentUid = params.uid;
+    this.currentSessionId = params.sessionId;
+    this.status = 'ACTIVE';
+    this.statusMessage = null;
+    this.lastKnownServerActiveMs = params.serverActiveMs ?? nowWall;
+    this.lastKnownServerActivePerfMs = performance.now();
+    this.lastUserPhysicalActivityWallMs = nowWall;
+    this.lastUserPhysicalActivityPerfMs = performance.now();
+    this.isIdleWarningVisible = false;
+    this.idleRemainingSeconds = null;
+    this.notify();
+    return this.getSnapshot();
+  }
+
+  public simulateTabSwitchReturnForTesting(params: {
+    backgroundDurationMs: number;
+    serverDocState: {
+      exists: boolean;
+      isActive: boolean;
+      deviceId: string;
+      sessionId: string;
+      lastActiveAtMs: number;
+    };
+  }): SessionStateSnapshot {
+    const nowWall = Date.now();
+    // Simulate that the user's last activity before switching away was `backgroundDurationMs` ago
+    this.lastUserPhysicalActivityWallMs = nowWall - params.backgroundDurationMs;
+
+    // 1. If background duration >= 15 minutes (900,000ms), session expires on return
+    if (params.backgroundDurationMs >= SESSION_TIMINGS.IDLE_TIMEOUT_MS) {
+      this.status = 'PAUSED_IDLE';
+      this.statusMessage =
+        'Phiên đăng nhập đã hết hạn sau 15 phút không hoạt động. Vui lòng đăng nhập lại.';
+      this.isIdleWarningVisible = false;
+      this.idleRemainingSeconds = 0;
+      if (this.heartbeatTimer) {
+        clearTimeout(this.heartbeatTimer);
+        this.heartbeatTimer = null;
+      }
+      this.currentSessionId = null;
+      this.currentUid = null;
+      this.notify();
+      return this.getSnapshot();
+    }
+
+    // 2. User returned before 15 minutes (< 900,000ms): refresh user activity and reconcile against serverDocState
+    this.lastUserPhysicalActivityWallMs = nowWall;
+    this.lastUserPhysicalActivityPerfMs = performance.now();
+    this.isIdleWarningVisible = false;
+    this.idleRemainingSeconds = null;
+
+    const srv = params.serverDocState;
+    if (!srv.exists || !srv.isActive) {
+      this.status = 'EXPIRED';
+      this.statusMessage = 'Phiên đăng nhập không tồn tại hoặc đã kết thúc.';
+      this.currentSessionId = null;
+      this.currentUid = null;
+      this.notify();
+      return this.getSnapshot();
+    }
+
+    if (srv.deviceId !== this.deviceId) {
+      this.status = 'DISPLACED';
+      this.statusMessage = 'Tài khoản đang được đăng nhập trên một thiết bị khác.';
+      this.currentSessionId = null;
+      this.currentUid = null;
+      this.notify();
+      return this.getSnapshot();
+    }
+
+    // Even when srv.lastActiveAtMs === this.lastKnownServerActiveMs (no heartbeat while tab was hidden),
+    // the session MUST remain ACTIVE and NEVER enter HEARTBEAT_REJECTED_UNCLASSIFIED!
+    if (srv.lastActiveAtMs >= this.lastKnownServerActiveMs) {
+      this.lastKnownServerActiveMs = srv.lastActiveAtMs;
+      this.status = 'ACTIVE';
+      this.statusMessage = null;
+    }
+
+    this.notify();
+    return this.getSnapshot();
+  }
+
+  public simulateIdleElapsedForTesting(elapsedIdleMs: number): SessionStateSnapshot {
+    const nowWall = Date.now();
+    this.lastUserPhysicalActivityWallMs = nowWall - elapsedIdleMs;
+    if (elapsedIdleMs >= SESSION_TIMINGS.IDLE_TIMEOUT_MS) {
+      if (this.heartbeatTimer) {
+        clearTimeout(this.heartbeatTimer);
+        this.heartbeatTimer = null;
+      }
+      this.isIdleWarningVisible = false;
+      this.idleRemainingSeconds = 0;
+      this.status = 'PAUSED_IDLE';
+      this.statusMessage =
+        'Phiên đăng nhập đã hết hạn sau 15 phút không hoạt động. Vui lòng đăng nhập lại.';
+      this.currentSessionId = null;
+      this.currentUid = null;
+      this.notify();
+      return this.getSnapshot();
+    }
+    return this.evaluateIdleState(nowWall);
+  }
+
+  public simulateNetworkDisconnectForTesting(): SessionStateSnapshot {
+    if (this.status === 'ACTIVE') {
+      this.status = 'CONNECTION_LOST_UNVERIFIED';
+      this.statusMessage =
+        'Mất kết nối với máy chủ. Trận đấu đang tạm dừng để chờ xác minh lại phiên...';
+      if (this.onPauseGameCallback) this.onPauseGameCallback();
+      this.notify();
+    }
+    return this.getSnapshot();
+  }
+
+  public simulateMultiTabSyncPayloadForTesting(
+    payload: SafeMultiTabSyncPayload
+  ): SessionStateSnapshot {
+    this.applyIncomingMultiTabSync(payload);
+    return this.getSnapshot();
+  }
+
+  public getSafeMultiTabPayloadForTesting(): SafeMultiTabSyncPayload {
+    return this.broadcastTabSync('SESSION_SYNC');
   }
 }
+

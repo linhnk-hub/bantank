@@ -73,6 +73,8 @@ export interface CoopAuthoritativeSnapshot {
   defeatedCounts: GameCoreState['defeatedCounts'];
   currentStageId: number;
   currentStageName: string;
+  currentStageVersion?: number;
+  currentStageMap?: number[][];
   stageElapsedSeconds: number;
   brickSubTiles: Record<string, number>;
   isBaseDestroyed: boolean;
@@ -608,6 +610,8 @@ export function buildAuthoritativeSnapshot(
     defeatedCounts: { ...state.defeatedCounts },
     currentStageId: state.currentStageId,
     currentStageName: state.currentStageName,
+    currentStageVersion: state.currentStageVersion ?? 1,
+    currentStageMap: (state.terrain.initialMap ?? state.terrain.currentMap).map((row) => [...row]),
     stageElapsedSeconds: Number(
       (state.tickCount / MATCH_TIMER_CONFIG.TICKS_PER_SECOND).toFixed(2)
     ),

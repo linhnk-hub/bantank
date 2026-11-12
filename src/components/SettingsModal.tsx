@@ -48,9 +48,14 @@ import {
   resolveUserRole,
   getRoleNameFrameClasses,
   getRoleDisplayInfo,
+  RBAC_PERMISSION_MATRIX,
+  hasRolePermission,
+  getRoleChangeAuditLogs,
   type UserAccountSummary,
+  type UserRole,
 } from '../core/authManager.ts';
 import { MusicAdminPanel } from './MusicAdminPanel.tsx';
+import { StageEditorPanel } from './StageEditorPanel.tsx';
 
 export type SettingsTabId =
   | 'ACCOUNT'
@@ -83,11 +88,20 @@ export interface SettingsModalProps {
  * - Tuyệt đối ẩn và chặn truy cập `Chế độ chơi` (`GAME_MODE_SETTINGS`), `Hình ảnh` (`IMAGE_SETTINGS`),
  *   `Cấp quyền` (`ADMIN_OTHER`) và `Tài khoản` (`USER_ACCOUNTS`) đối với người chơi thường.
  */
-export function getAvailableSettingsTabsForRole(isVerifiedSuperAdmin: boolean): Array<{
+export function getAvailableSettingsTabsForRole(
+  roleOrIsSuperAdmin: boolean | UserRole
+): Array<{
   id: SettingsTabId;
   label: string;
   adminOnly: boolean;
 }> {
+  const effectiveRole: UserRole =
+    typeof roleOrIsSuperAdmin === 'boolean'
+      ? roleOrIsSuperAdmin
+        ? 'SUPER_ADMIN'
+        : 'PLAYER'
+      : roleOrIsSuperAdmin;
+
   const tabs: Array<{ id: SettingsTabId; label: string; adminOnly: boolean }> = [
     {
       id: 'ACCOUNT',
@@ -96,7 +110,7 @@ export function getAvailableSettingsTabsForRole(isVerifiedSuperAdmin: boolean): 
     },
   ];
 
-  if (isVerifiedSuperAdmin) {
+  if (hasRolePermission(effectiveRole, 'MANAGE_AVATAR_CATALOG')) {
     tabs.push({
       id: 'IMAGE_SETTINGS',
       label: 'Hình ảnh',
@@ -110,24 +124,28 @@ export function getAvailableSettingsTabsForRole(isVerifiedSuperAdmin: boolean): 
     adminOnly: false,
   });
 
-  if (isVerifiedSuperAdmin) {
-    tabs.push(
-      {
-        id: 'GAME_MODE_SETTINGS',
-        label: 'Chế độ chơi',
-        adminOnly: true,
-      },
-      {
-        id: 'ADMIN_OTHER',
-        label: 'Cấp quyền',
-        adminOnly: true,
-      },
-      {
-        id: 'USER_ACCOUNTS',
-        label: 'Tài khoản',
-        adminOnly: true,
-      }
-    );
+  if (hasRolePermission(effectiveRole, 'MANAGE_STAGES')) {
+    tabs.push({
+      id: 'GAME_MODE_SETTINGS',
+      label: 'Chế độ chơi',
+      adminOnly: true,
+    });
+  }
+
+  if (hasRolePermission(effectiveRole, 'VIEW_AUDIT_AND_MONITORING')) {
+    tabs.push({
+      id: 'ADMIN_OTHER',
+      label: 'Cấp quyền',
+      adminOnly: true,
+    });
+  }
+
+  if (hasRolePermission(effectiveRole, 'VIEW_ACCOUNT_LIST')) {
+    tabs.push({
+      id: 'USER_ACCOUNTS',
+      label: 'Tài khoản',
+      adminOnly: true,
+    });
   }
 
   return tabs;
@@ -203,7 +221,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [catalogSortOrderInput, setCatalogSortOrderInput] = useState<number>(10);
   const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
 
-  // Super Admin User Accounts Pagination state (M7.3.9 Mục 3)
+  // Super Admin User Accounts Pagination & Role Assignment state (M7.3.11 Mục II)
   const [accountsPageList, setAccountsPageList] = useState<UserAccountSummary[]>([]);
   const [accountsPageIndex, setAccountsPageIndex] = useState<number>(0);
   const [accountsCursorHistory, setAccountsCursorHistory] = useState<Array<unknown | null>>([null]);
@@ -211,12 +229,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [accountsNextCursor, setAccountsNextCursor] = useState<unknown | null>(null);
   const [isLoadingAccounts, setIsLoadingAccounts] = useState<boolean>(false);
   const [accountsError, setAccountsError] = useState<string | null>(null);
+  const [accountsRoleFeedback, setAccountsRoleFeedback] = useState<{
+    type: 'success' | 'error';
+    text: string;
+  } | null>(null);
+  const [pendingRoleChangeConfirm, setPendingRoleChangeConfirm] = useState<{
+    account: UserAccountSummary;
+    newRole: 'ADMIN' | 'MOD' | 'PLAYER';
+    label: string;
+  } | null>(null);
+  const [isChangingRole, setIsChangingRole] = useState<boolean>(false);
+
+  const canViewAccountsTab =
+    isVerifiedSuperAdmin || hasRolePermission(userRole, 'VIEW_ACCOUNT_LIST');
+  const canManageStagesTab =
+    isVerifiedSuperAdmin || hasRolePermission(userRole, 'MANAGE_STAGES');
+  const canViewPermissionMatrixTab =
+    isVerifiedSuperAdmin || hasRolePermission(userRole, 'VIEW_AUDIT_AND_MONITORING');
 
   const adminFileInputRef = useRef<HTMLInputElement | null>(null);
   const quickProfileAvatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadUserAccountsPage = async (targetPageIndex: number, cursor: unknown | null) => {
-    if (!isVerifiedSuperAdmin) return;
+    if (!canViewAccountsTab) return;
     setIsLoadingAccounts(true);
     setAccountsError(null);
     try {
@@ -239,6 +274,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  const handleConfirmRoleChange = async () => {
+    if (!pendingRoleChangeConfirm || isChangingRole) return;
+    setIsChangingRole(true);
+    setAccountsRoleFeedback(null);
+    try {
+      const res = await authManager.changeUserRole({
+        targetUid: pendingRoleChangeConfirm.account.uid,
+        targetEmail: pendingRoleChangeConfirm.account.email,
+        currentTargetRole: pendingRoleChangeConfirm.account.role,
+        newRole: pendingRoleChangeConfirm.newRole,
+      });
+      setAccountsRoleFeedback({
+        type: res.success ? 'success' : 'error',
+        text: res.success
+          ? `Đã cập nhật vai trò cho ${pendingRoleChangeConfirm.account.email || pendingRoleChangeConfirm.account.uid} thành ${pendingRoleChangeConfirm.label}.`
+          : res.errorMessage || 'Không thể cập nhật vai trò.',
+      });
+      if (res.success) {
+        setPendingRoleChangeConfirm(null);
+        await loadUserAccountsPage(
+          accountsPageIndex,
+          accountsCursorHistory[accountsPageIndex] ?? null
+        );
+      }
+    } finally {
+      setIsChangingRole(false);
+    }
+  };
+
   useEffect(() => {
     if (!isOpen) return;
     const authUser = authManager.getCurrentUser() || currentUser;
@@ -253,24 +317,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setDisplayName(meta?.displayName || authUser?.displayName || '');
     setAvatarLoadError(false);
     setFeedback(null);
-    // Reset to ACCOUNT tab if current tab is admin-only and user is not Super Admin
-    if (
-      !isVerifiedSuperAdmin &&
-      (activeTab === 'IMAGE_SETTINGS' ||
-        activeTab === 'GAME_MODE_SETTINGS' ||
-        activeTab === 'ADMIN_OTHER' ||
-        activeTab === 'USER_ACCOUNTS')
-    ) {
+    setAccountsRoleFeedback(null);
+    setPendingRoleChangeConfirm(null);
+    // Reset to ACCOUNT tab if current tab is not permitted for the user's role
+    const allowedIds = getAvailableSettingsTabsForRole(
+      isVerifiedSuperAdmin ? 'SUPER_ADMIN' : userRole
+    ).map((t) => t.id);
+    if (!allowedIds.includes(activeTab)) {
       setActiveTab('ACCOUNT');
     }
-  }, [isOpen, currentUid, isVerifiedSuperAdmin]);
+  }, [isOpen, currentUid, isVerifiedSuperAdmin, userRole]);
 
   useEffect(() => {
-    if (isOpen && activeTab === 'USER_ACCOUNTS' && isVerifiedSuperAdmin) {
+    if (isOpen && activeTab === 'USER_ACCOUNTS' && canViewAccountsTab) {
       setAccountsCursorHistory([null]);
       void loadUserAccountsPage(0, null);
     }
-  }, [isOpen, activeTab, isVerifiedSuperAdmin]);
+  }, [isOpen, activeTab, canViewAccountsTab]);
 
   useEffect(() => {
     const unsubAvatar = avatarManager.subscribe(() => {
@@ -589,14 +652,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  const availableTabs = getAvailableSettingsTabsForRole(isVerifiedSuperAdmin).map((tab) => ({
+  const availableTabs = getAvailableSettingsTabsForRole(
+    isVerifiedSuperAdmin ? 'SUPER_ADMIN' : userRole
+  ).map((tab) => ({
     ...tab,
     icon: getTabIcon(tab.id),
   }));
 
+  const isWideAdminTab =
+    activeTab === 'GAME_MODE_SETTINGS' ||
+    activeTab === 'ADMIN_OTHER' ||
+    activeTab === 'USER_ACCOUNTS';
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 bg-black/80 backdrop-blur-md animate-fade-in select-none">
-      <div className="bg-neutral-900 border border-neutral-700 rounded-2xl w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-2xl overflow-hidden">
+      <div
+        className={`bg-neutral-900 border border-neutral-700 rounded-2xl w-full ${
+          isWideAdminTab ? 'max-w-4xl' : 'max-w-2xl'
+        } max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-2xl overflow-hidden transition-all`}
+      >
         {/* Header */}
         <div className="bg-neutral-950 px-4 py-3 border-b border-neutral-800 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
@@ -1434,14 +1508,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* =========================================================================
-              TAB 4: CHẾ ĐỘ CHƠI (M7.3.9 MỤC 4: CHỈ HIỂN THỊ VỚI SUPER ADMIN)
+              TAB 4: CHẾ ĐỘ CHƠI & QUẢN LÝ MÀN CHƠI STAGE 13x13 (M7.3.11 MỤC III)
              ========================================================================= */}
-          {activeTab === 'GAME_MODE_SETTINGS' && isVerifiedSuperAdmin && (
+          {activeTab === 'GAME_MODE_SETTINGS' && canManageStagesTab && (
             <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-4 space-y-4">
-              <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
+              <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
                   <Gamepad2 className="w-4 h-4 text-amber-400" />
-                  <span>CHẾ ĐỘ CHƠI (SUPER ADMIN)</span>
+                  <span>CHẾ ĐỘ CHƠI &amp; QUẢN LÝ STAGE (13×13 MAP EDITOR)</span>
                 </div>
                 <span className="text-[10px] text-neutral-400 font-mono">
                   Chơi đơn • Co-op 2 người • Co-op Online
@@ -1486,91 +1560,205 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               )}
 
-              <div className="p-3 rounded-xl bg-neutral-900/80 border border-neutral-800 space-y-2 text-[11px] text-neutral-300">
-                <div className="font-bold text-white">
-                  Quy tắc đồng bộ Chế độ chơi &amp; Đội hình Chiến Xa:
-                </div>
-                <ul className="list-disc list-inside space-y-1 text-neutral-400">
-                  <li>
-                    Trong <strong className="text-sky-300">Co-op Online</strong>, Chủ phòng (P1) chọn độ khó và cấu hình mật khẩu khi Tạo phòng; Người chơi 2 (P2) sử dụng đúng độ khó của phòng đã tham gia.
-                  </li>
-                  <li>
-                    Đội hình xe tăng địch giữ nguyên tên chuẩn:{' '}
-                    <span className="font-mono text-amber-300">
-                      Basic Tank, Fast Tank, Power Tank, Armor Tank
-                    </span>
-                    .
-                  </li>
-                </ul>
-              </div>
+              {/* Interactive Stage Manager & 13x13 Drag-and-Drop Map Editor */}
+              <StageEditorPanel
+                actorRole={isVerifiedSuperAdmin ? 'SUPER_ADMIN' : userRole}
+                actorEmail={currentUser?.email || SUPER_ADMIN_EMAIL}
+              />
             </section>
           )}
 
           {/* =========================================================================
-              TAB 5: CẤP QUYỀN (CHỈ DÀNH CHO SUPER ADMIN linhnk.online@gmail.com)
+              TAB 5: CẤP QUYỀN & BẢNG MA TRẬN PHÂN QUYỀN (M7.3.11 MỤC IV)
              ========================================================================= */}
-          {activeTab === 'ADMIN_OTHER' && isVerifiedSuperAdmin && (
-            <section className="p-4 rounded-xl bg-red-950/20 border border-red-500/40 space-y-4">
+          {activeTab === 'ADMIN_OTHER' && canViewPermissionMatrixTab && (
+            <section className="p-4 rounded-xl bg-neutral-950/90 border border-red-500/40 space-y-4">
               <div className="flex items-center justify-between border-b border-red-500/20 pb-2.5 flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-extrabold text-red-300 uppercase tracking-wider">
                   <Shield className="w-4 h-4 text-red-400" />
-                  <span>CẤP QUYỀN HỆ THỐNG (SUPER ADMIN)</span>
+                  <span>MA TRẬN PHÂN QUYỀN HỆ THỐNG (SUPER ADMIN / ADMIN / MOD)</span>
                 </div>
                 <span className="text-[10px] font-mono text-red-200/80">
                   Super Admin duy nhất: {SUPER_ADMIN_EMAIL}
                 </span>
               </div>
 
-              <div className="space-y-2.5">
+              {/* 5-Column RBAC Permission Matrix Table */}
+              <div className="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900/60">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-neutral-950 text-neutral-300 border-b border-neutral-800">
+                      <th className="py-2.5 px-3 font-extrabold whitespace-nowrap">
+                        Nhóm chức năng
+                      </th>
+                      <th className="py-2.5 px-3 font-extrabold">Quyền cụ thể</th>
+                      <th className="py-2.5 px-3 font-extrabold text-center text-red-400 whitespace-nowrap">
+                        Super Admin
+                      </th>
+                      <th className="py-2.5 px-3 font-extrabold text-center text-emerald-400 whitespace-nowrap">
+                        Admin
+                      </th>
+                      <th className="py-2.5 px-3 font-extrabold text-center text-sky-400 whitespace-nowrap">
+                        Mod
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-800/70">
+                    {RBAC_PERMISSION_MATRIX.map((perm) => {
+                      const saLabel =
+                        perm.status === 'NOT_DEPLOYED'
+                          ? 'Chưa triển khai'
+                          : perm.SUPER_ADMIN
+                            ? 'Có'
+                            : 'Không';
+                      const adminLabel =
+                        perm.status === 'NOT_DEPLOYED'
+                          ? 'Chưa triển khai'
+                          : perm.ADMIN
+                            ? 'Có'
+                            : 'Không';
+                      const modLabel =
+                        perm.status === 'NOT_DEPLOYED'
+                          ? 'Chưa triển khai'
+                          : perm.MOD
+                            ? 'Có'
+                            : 'Không';
+                      return (
+                        <tr key={perm.id} className="hover:bg-neutral-900/90 transition-colors">
+                          <td className="py-2 px-3 font-bold text-amber-300 whitespace-nowrap">
+                            {perm.category}
+                          </td>
+                          <td className="py-2 px-3 text-neutral-200">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span>{perm.nameVi}</span>
+                              {perm.status === 'NOT_DEPLOYED' && (
+                                <span className="px-1.5 py-0.5 rounded bg-neutral-800 border border-neutral-700 text-neutral-400 text-[10px] font-mono">
+                                  {perm.statusLabelVi}
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td className="py-2 px-3 text-center whitespace-nowrap">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                perm.SUPER_ADMIN && perm.status === 'DEPLOYED'
+                                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
+                                  : 'bg-neutral-800 text-neutral-400'
+                              }`}
+                            >
+                              {saLabel}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-center whitespace-nowrap">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                perm.ADMIN && perm.status === 'DEPLOYED'
+                                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
+                                  : 'bg-neutral-800 text-neutral-400'
+                              }`}
+                            >
+                              {adminLabel}
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-center whitespace-nowrap">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                perm.MOD && perm.status === 'DEPLOYED'
+                                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
+                                  : 'bg-neutral-800 text-neutral-400'
+                              }`}
+                            >
+                              {modLabel}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Role Frame Color Legend */}
+              <div className="space-y-2 pt-1">
                 <div className="text-xs font-bold text-white">
-                  Quy ước màu khung tên hiển thị theo phân quyền (M7.3.7 Mục III.2.2):
+                  Quy ước màu khung tên hiển thị theo phân quyền:
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                  <div className="p-2.5 rounded-xl bg-neutral-900 border-2 border-red-500 ring-1 ring-red-500/40 flex items-center justify-between">
-                    <span className="font-extrabold text-white text-xs">Super Admin</span>
-                    <span className="text-[10px] font-mono text-red-300 font-bold">
-                      Viền Đỏ (#EF4444)
-                    </span>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="p-2 rounded-xl bg-neutral-900 border-2 border-red-500 flex items-center justify-between">
+                    <span className="font-extrabold text-white text-[11px]">Super Admin</span>
+                    <span className="text-[10px] font-mono text-red-300 font-bold">Đỏ</span>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-neutral-900 border-2 border-emerald-500 ring-1 ring-emerald-500/40 flex items-center justify-between">
-                    <span className="font-extrabold text-white text-xs">Admin</span>
-                    <span className="text-[10px] font-mono text-emerald-300 font-bold">
-                      Viền Xanh lá (#10B981)
-                    </span>
+                  <div className="p-2 rounded-xl bg-neutral-900 border-2 border-emerald-500 flex items-center justify-between">
+                    <span className="font-extrabold text-white text-[11px]">Admin</span>
+                    <span className="text-[10px] font-mono text-emerald-300 font-bold">Xanh lá</span>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-neutral-900 border-2 border-sky-500 ring-1 ring-sky-500/40 flex items-center justify-between">
-                    <span className="font-extrabold text-white text-xs">Mod</span>
-                    <span className="text-[10px] font-mono text-sky-300 font-bold">
-                      Viền Xanh dương (#0EA5E9)
-                    </span>
+                  <div className="p-2 rounded-xl bg-neutral-900 border-2 border-sky-500 flex items-center justify-between">
+                    <span className="font-extrabold text-white text-[11px]">Mod</span>
+                    <span className="text-[10px] font-mono text-sky-300 font-bold">Xanh dương</span>
                   </div>
-                  <div className="p-2.5 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
-                    <span className="font-extrabold text-white text-xs">Người chơi thường</span>
-                    <span className="text-[10px] font-mono text-neutral-400 font-bold">
-                      Viền Mặc định
-                    </span>
+                  <div className="p-2 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
+                    <span className="font-extrabold text-white text-[11px]">Người chơi</span>
+                    <span className="text-[10px] font-mono text-neutral-400 font-bold">Mặc định</span>
                   </div>
                 </div>
-                <p className="text-[11px] text-neutral-400 leading-relaxed">
-                  Quyền hiển thị và phân quyền quản trị được xác định trực tiếp từ dữ liệu xác thực Google Auth và tài liệu máy chủ đã xác minh, tuyệt đối không tin tưởng dữ liệu tự sửa trong <span className="font-mono text-neutral-300">localStorage</span>.
-                </p>
+              </div>
+
+              {/* Role Change Audit Log Section */}
+              <div className="p-3 rounded-xl bg-neutral-900/90 border border-neutral-800 space-y-2">
+                <div className="text-xs font-bold text-amber-300 flex items-center justify-between">
+                  <span>Nhật ký thay đổi quyền hạn (Audit Log)</span>
+                  <span className="text-[10px] font-mono text-neutral-400">
+                    {getRoleChangeAuditLogs().length} bản ghi
+                  </span>
+                </div>
+                {getRoleChangeAuditLogs().length === 0 ? (
+                  <p className="text-[11px] text-neutral-500">
+                    Chưa có thao tác cấp hoặc thu hồi quyền nào trong phiên hiện tại.
+                  </p>
+                ) : (
+                  <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                    {getRoleChangeAuditLogs()
+                      .slice(0, 10)
+                      .map((log) => (
+                        <div
+                          key={log.auditId}
+                          className="p-2 rounded bg-neutral-950 border border-neutral-800 text-[11px] flex flex-wrap items-center justify-between gap-2"
+                        >
+                          <div>
+                            <span className="font-mono text-amber-300 font-bold">
+                              {log.actorEmail}
+                            </span>{' '}
+                            đã đổi vai trò của{' '}
+                            <span className="font-mono text-white font-bold">
+                              {log.targetEmail || log.targetUid}
+                            </span>{' '}
+                            từ <span className="text-neutral-400">{log.previousRole}</span> sang{' '}
+                            <span className="text-emerald-300 font-bold">{log.newRole}</span>
+                          </div>
+                          <span className="font-mono text-[10px] text-neutral-500">
+                            {new Date(log.timestampMs).toLocaleString('vi-VN')}
+                          </span>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
             </section>
           )}
 
           {/* =========================================================================
-              TAB 6: TÀI KHOẢN (M7.3.9 MỤC 3: CHỈ DÀNH CHO SUPER ADMIN, PHÂN TRANG 10 TÀI KHOẢN / TRANG)
+              TAB 6: TÀI KHOẢN (M7.3.11 MỤC II: HIỂN THỊ ĐẦY ĐỦ 8 CỘT & CẤP QUYỀN ADMIN/MOD)
              ========================================================================= */}
-          {activeTab === 'USER_ACCOUNTS' && isVerifiedSuperAdmin && (
-            <section className="p-4 rounded-xl bg-neutral-950/80 border border-red-500/40 space-y-4">
+          {activeTab === 'USER_ACCOUNTS' && canViewAccountsTab && (
+            <section className="p-4 rounded-xl bg-neutral-950/90 border border-red-500/40 space-y-4">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-extrabold text-red-300 uppercase tracking-wider">
                   <Users className="w-4 h-4 text-red-400" />
-                  <span>DANH SÁCH TÀI KHOẢN ĐÃ THAM GIA (SUPER ADMIN)</span>
+                  <span>DANH SÁCH TÀI KHOẢN ĐÃ ĐĂNG NHẬP GOOGLE</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-mono text-neutral-400">
-                    Tối đa {USER_ACCOUNTS_PAGE_SIZE} tài khoản / trang
+                    Phân trang: {USER_ACCOUNTS_PAGE_SIZE} tài khoản / trang
                   </span>
                   <button
                     type="button"
@@ -1581,13 +1769,68 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         accountsCursorHistory[accountsPageIndex] ?? null
                       )
                     }
-                    className="px-2 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                    className="px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
                   >
                     <RefreshCw className={`w-3 h-3 ${isLoadingAccounts ? 'animate-spin' : ''}`} />
                     <span>Làm mới</span>
                   </button>
                 </div>
               </div>
+
+              {accountsRoleFeedback && (
+                <div
+                  className={`p-3 rounded-xl border text-xs flex items-center gap-2 ${
+                    accountsRoleFeedback.type === 'success'
+                      ? 'bg-emerald-950/70 border-emerald-700 text-emerald-200'
+                      : 'bg-rose-950/70 border-rose-700 text-rose-200'
+                  }`}
+                >
+                  {accountsRoleFeedback.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  )}
+                  <span>{accountsRoleFeedback.text}</span>
+                </div>
+              )}
+
+              {/* Confirmation Modal before changing role */}
+              {pendingRoleChangeConfirm && (
+                <div className="p-3.5 rounded-xl bg-amber-950/70 border-2 border-amber-500/80 text-xs space-y-2.5">
+                  <div className="font-extrabold text-amber-300 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4" />
+                    <span>XÁC NHẬN THAY ĐỔI QUYỀN HẠN TÀI KHOẢN</span>
+                  </div>
+                  <p className="text-neutral-200 leading-relaxed">
+                    Bạn có chắc chắn muốn thực hiện thao tác{' '}
+                    <strong className="text-amber-300">{pendingRoleChangeConfirm.label}</strong> cho
+                    tài khoản{' '}
+                    <strong className="text-white">
+                      {pendingRoleChangeConfirm.account.displayName}
+                    </strong>{' '}
+                    ({pendingRoleChangeConfirm.account.email || pendingRoleChangeConfirm.account.uid})?
+                    Thao tác này sẽ được ghi nhận vào Nhật ký Audit.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={isChangingRole}
+                      onClick={() => void handleConfirmRoleChange()}
+                      className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs cursor-pointer disabled:opacity-50"
+                    >
+                      {isChangingRole ? 'Đang cập nhật...' : 'Xác nhận thực hiện'}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isChangingRole}
+                      onClick={() => setPendingRoleChangeConfirm(null)}
+                      className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs cursor-pointer"
+                    >
+                      Hủy bỏ
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {accountsError && (
                 <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs flex items-center gap-2">
@@ -1606,66 +1849,184 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   Chưa có dữ liệu tài khoản trên trang này.
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {accountsPageList.map((acc, idx) => {
-                    const accRoleInfo = getRoleDisplayInfo(acc.role);
-                    const rowNumber = accountsPageIndex * USER_ACCOUNTS_PAGE_SIZE + idx + 1;
-                    return (
-                      <div
-                        key={acc.uid}
-                        className="p-2.5 rounded-xl bg-neutral-900/90 border border-neutral-800 flex items-center justify-between gap-3 flex-wrap"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <span className="w-6 text-center font-mono text-[11px] text-neutral-500 font-bold shrink-0">
-                            #{rowNumber}
-                          </span>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
+                <div className="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900/50">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-neutral-950 text-neutral-400 border-b border-neutral-800">
+                        <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">STT</th>
+                        <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">Avatar</th>
+                        <th className="py-2.5 px-2.5 font-bold">Nickname</th>
+                        <th className="py-2.5 px-2.5 font-bold">Email</th>
+                        <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">Vai trò</th>
+                        <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">
+                          Đăng nhập gần nhất
+                        </th>
+                        <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">Trạng thái</th>
+                        <th className="py-2.5 px-2.5 font-bold text-right whitespace-nowrap">
+                          Thao tác
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-800/70">
+                      {accountsPageList.map((acc, idx) => {
+                        const accRoleInfo = getRoleDisplayInfo(acc.role);
+                        const rowNumber = accountsPageIndex * USER_ACCOUNTS_PAGE_SIZE + idx + 1;
+                        const isTargetSuperAdmin =
+                          acc.role === 'SUPER_ADMIN' ||
+                          (acc.email && acc.email.toLowerCase() === SUPER_ADMIN_EMAIL);
+                        const isSelfAccount = Boolean(currentUid && acc.uid === currentUid);
+
+                        return (
+                          <tr key={acc.uid} className="hover:bg-neutral-900/90 transition-colors">
+                            {/* 1. STT */}
+                            <td className="py-2.5 px-2.5 font-mono font-bold text-neutral-400 whitespace-nowrap">
+                              #{rowNumber}
+                            </td>
+
+                            {/* 2. Avatar */}
+                            <td className="py-2.5 px-2.5 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-7 h-7 rounded-full bg-neutral-800 border border-neutral-600 flex items-center justify-center text-[11px] font-extrabold text-amber-400 uppercase shrink-0">
+                                  {(acc.displayName || 'U').charAt(0)}
+                                </div>
+                                <span className="text-[10px] font-mono text-neutral-400">
+                                  {acc.avatarType === 'catalog'
+                                    ? `Catalog (${acc.avatarId || 'Mặc định'})`
+                                    : 'Google'}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* 3. Nickname (Never blank; shows note if not configured) */}
+                            <td className="py-2.5 px-2.5">
+                              <div className="flex flex-col gap-0.5">
+                                <span
+                                  className={`inline-block w-fit px-2 py-0.5 rounded bg-neutral-950 text-xs font-extrabold text-white ${accRoleInfo.frameClass}`}
+                                >
+                                  {acc.displayName}
+                                </span>
+                                {acc.nicknameNote && (
+                                  <span className="text-[10px] italic text-amber-300/90">
+                                    {acc.nicknameNote}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            {/* 4. Email */}
+                            <td className="py-2.5 px-2.5 font-mono text-[11px] text-neutral-300">
+                              <div>{acc.email || 'Chưa đồng bộ email'}</div>
+                              <div className="text-[9px] text-neutral-500">UID: {acc.uid}</div>
+                            </td>
+
+                            {/* 5. Vai trò */}
+                            <td className="py-2.5 px-2.5 whitespace-nowrap">
                               <span
-                                className={`px-2 py-0.5 rounded-md bg-neutral-950 text-xs font-extrabold text-white ${accRoleInfo.frameClass}`}
-                              >
-                                {acc.displayName}
-                              </span>
-                              <span className="text-[10px] font-mono font-bold text-amber-300">
-                                [{accRoleInfo.label}]
-                              </span>
-                              <span
-                                className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
-                                  acc.status === 'ACTIVE'
-                                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
-                                    : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
+                                className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                                  acc.role === 'SUPER_ADMIN'
+                                    ? 'bg-red-950/90 text-red-300 border border-red-600/70'
+                                    : acc.role === 'ADMIN'
+                                      ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-600/70'
+                                      : acc.role === 'MOD'
+                                        ? 'bg-sky-950/90 text-sky-300 border border-sky-600/70'
+                                        : 'bg-neutral-800 text-neutral-300 border border-neutral-700'
                                 }`}
                               >
-                                {acc.status === 'ACTIVE' ? 'Trực tuyến' : 'Ngoại tuyến'}
+                                {acc.role === 'PLAYER' ? 'Người chơi' : accRoleInfo.label}
                               </span>
-                            </div>
-                            <div className="text-[11px] font-mono text-neutral-400 truncate mt-1">
-                              {acc.email ? `${acc.email} • ` : ''}UID: {acc.uid}
-                            </div>
-                          </div>
-                        </div>
+                            </td>
 
-                        <div className="text-right font-mono text-[10px] text-neutral-400 shrink-0">
-                          <div>
-                            Avatar: {acc.avatarType === 'catalog' ? `Danh mục (${acc.avatarId || 'N/A'})` : 'Google'}
-                          </div>
-                          {acc.lastLoginAtMs > 0 && (
-                            <div className="text-neutral-500">
-                              Hoạt động: {new Date(acc.lastLoginAtMs).toLocaleString('vi-VN')}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                            {/* 6. Ngày đăng nhập gần nhất */}
+                            <td className="py-2.5 px-2.5 font-mono text-[11px] text-neutral-300 whitespace-nowrap">
+                              {acc.lastLoginAtMs > 0
+                                ? new Date(acc.lastLoginAtMs).toLocaleString('vi-VN')
+                                : 'Mới tham gia'}
+                            </td>
+
+                            {/* 7. Trạng thái tài khoản */}
+                            <td className="py-2.5 px-2.5 whitespace-nowrap">
+                              <span
+                                className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+                                  acc.status === 'ACTIVE'
+                                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
+                                    : 'bg-neutral-800 text-neutral-300 border border-neutral-700'
+                                }`}
+                              >
+                                {acc.status === 'ACTIVE' ? 'Đang trực tuyến' : 'Hoạt động'}
+                              </span>
+                            </td>
+
+                            {/* 8. Thao tác (Super Admin Role Assignment) */}
+                            <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
+                              {!isVerifiedSuperAdmin ? (
+                                <span className="text-[10px] text-neutral-500 font-mono">
+                                  Chỉ xem
+                                </span>
+                              ) : isTargetSuperAdmin || isSelfAccount ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-950/60 border border-red-800/60 text-red-300 text-[10px] font-bold">
+                                  <Lock className="w-3 h-3" />
+                                  Super Admin Cố định
+                                </span>
+                              ) : (
+                                <div className="inline-flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    disabled={acc.role === 'ADMIN' || isChangingRole}
+                                    onClick={() =>
+                                      setPendingRoleChangeConfirm({
+                                        account: acc,
+                                        newRole: 'ADMIN',
+                                        label: 'Cấp Admin',
+                                      })
+                                    }
+                                    className="px-2 py-1 rounded bg-emerald-900/70 hover:bg-emerald-800 disabled:opacity-35 border border-emerald-600/70 text-emerald-200 text-[10px] font-bold transition-colors cursor-pointer"
+                                  >
+                                    Cấp Admin
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={acc.role === 'MOD' || isChangingRole}
+                                    onClick={() =>
+                                      setPendingRoleChangeConfirm({
+                                        account: acc,
+                                        newRole: 'MOD',
+                                        label: 'Cấp Mod',
+                                      })
+                                    }
+                                    className="px-2 py-1 rounded bg-sky-900/70 hover:bg-sky-800 disabled:opacity-35 border border-sky-600/70 text-sky-200 text-[10px] font-bold transition-colors cursor-pointer"
+                                  >
+                                    Cấp Mod
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={acc.role === 'PLAYER' || isChangingRole}
+                                    onClick={() =>
+                                      setPendingRoleChangeConfirm({
+                                        account: acc,
+                                        newRole: 'PLAYER',
+                                        label: 'Thu hồi về Người chơi',
+                                      })
+                                    }
+                                    className="px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 disabled:opacity-35 border border-neutral-600 text-neutral-200 text-[10px] font-bold transition-colors cursor-pointer"
+                                  >
+                                    Thu hồi về Người chơi
+                                  </button>
+                                </div>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
 
-              {/* Pagination Controls: Trước / Sau */}
-              <div className="pt-2 border-t border-neutral-800 flex items-center justify-between gap-2">
+              {/* Pagination Controls: Trang trước / Trang sau */}
+              <div className="pt-2 border-t border-neutral-800 flex items-center justify-between gap-2 flex-wrap">
                 <span className="text-[11px] font-mono text-neutral-400">
-                  Trang <strong className="text-white">{accountsPageIndex + 1}</strong> • Hiển thị{' '}
-                  <strong className="text-white">{accountsPageList.length}</strong> / tối đa{' '}
+                  Trang hiện tại: <strong className="text-white">{accountsPageIndex + 1}</strong> •
+                  Hiển thị <strong className="text-white">{accountsPageList.length}</strong> / tối đa{' '}
                   {USER_ACCOUNTS_PAGE_SIZE} tài khoản
                 </span>
                 <div className="flex items-center gap-2">
@@ -1676,7 +2037,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     <ChevronLeft className="w-3.5 h-3.5" />
-                    <span>Trước</span>
+                    <span>Trang trước</span>
                   </button>
                   <button
                     type="button"
@@ -1684,7 +2045,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     onClick={handleNextAccountsPage}
                     className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                   >
-                    <span>Sau</span>
+                    <span>Trang sau</span>
                     <ChevronRight className="w-3.5 h-3.5" />
                   </button>
                 </div>

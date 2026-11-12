@@ -21,23 +21,28 @@ export function createRuntimeTerrainState(
   sourceMap: StageMapMatrix = STAGE_1_MAP
 ): RuntimeTerrainState {
   const currentMap: number[][] = [];
+  const initialMap: number[][] = [];
   const brickSubTiles: Record<string, number> = {};
 
   for (let r = 0; r < sourceMap.length; r++) {
     const row = sourceMap[r];
     const newRow: number[] = [];
+    const initRow: number[] = [];
     for (let c = 0; c < row.length; c++) {
       const tileType = row[c];
       newRow.push(tileType);
+      initRow.push(tileType);
       if (tileType === TILE_TYPES.BRICK) {
         brickSubTiles[`${r}_${c}`] = SUB_TILE_MASKS.ALL; // 15 = 0b1111
       }
     }
     currentMap.push(newRow);
+    initialMap.push(initRow);
   }
 
   return {
     currentMap,
+    initialMap,
     brickSubTiles,
     isBaseDestroyed: false,
   };

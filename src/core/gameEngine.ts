@@ -465,6 +465,7 @@ export class GameEngine {
       defeatedCounts: this.scoreManager.getStageStats(),
       currentStageId: currentStage.id,
       currentStageName: currentStage.name,
+      currentStageVersion: currentStage.version ?? 1,
       stageElapsedSeconds: 0,
       matchDurationSeconds,
       remainingTicks,
@@ -687,6 +688,7 @@ export class GameEngine {
       defeatedCounts: this.scoreManager.getStageStats(),
       currentStageId: stage.id,
       currentStageName: stage.name,
+      currentStageVersion: stage.version ?? 1,
       stageElapsedSeconds: 0,
       matchDurationSeconds,
       remainingTicks,
@@ -732,6 +734,7 @@ export class GameEngine {
   ): void {
     this.gameMode = mode;
     this.difficulty = difficulty;
+    this.stageManager.syncFromGlobalActiveStages();
     // Set stageRunSeq = 0 right before restartStage() so restartStage() increments 0 -> 1 (no double increment)
     this.stageRunSeq = 0;
     this.resetGuestSnapshotTracking();
@@ -819,6 +822,7 @@ export class GameEngine {
       defeatedCounts: this.scoreManager.getStageStats(),
       currentStageId: stage.id,
       currentStageName: stage.name,
+      currentStageVersion: stage.version ?? 1,
       stageElapsedSeconds: 0,
       matchDurationSeconds,
       remainingTicks,
@@ -1680,12 +1684,21 @@ export class GameEngine {
     if (!isSameStageContinuity) {
       // Stage restart or stage transition: clear stale combat events, never emit false explosions
       this.combatEvents = [];
-      const targetStage = this.stageManager.getStage(snapshot.currentStageId);
-      if (targetStage) {
-        this.stageManager.setCurrentStage(snapshot.currentStageId);
-        this.state.terrain = createRuntimeTerrainState(targetStage.map);
+      if (
+        Array.isArray(snapshot.currentStageMap) &&
+        snapshot.currentStageMap.length === 13 &&
+        Array.isArray(snapshot.currentStageMap[0]) &&
+        snapshot.currentStageMap[0].length === 13
+      ) {
+        this.state.terrain = createRuntimeTerrainState(snapshot.currentStageMap);
       } else {
-        this.state.terrain = createRuntimeTerrainState(this.stageManager.getCurrentStage().map);
+        const targetStage = this.stageManager.getStage(snapshot.currentStageId);
+        if (targetStage) {
+          this.stageManager.setCurrentStage(snapshot.currentStageId);
+          this.state.terrain = createRuntimeTerrainState(targetStage.map);
+        } else {
+          this.state.terrain = createRuntimeTerrainState(this.stageManager.getCurrentStage().map);
+        }
       }
     }
 
@@ -1735,6 +1748,10 @@ export class GameEngine {
     this.state.defeatedCounts = { ...snapshot.defeatedCounts };
     this.state.currentStageId = snapshot.currentStageId;
     this.state.currentStageName = snapshot.currentStageName;
+    this.state.currentStageVersion =
+      typeof snapshot.currentStageVersion === 'number'
+        ? snapshot.currentStageVersion
+        : (this.state.currentStageVersion ?? 1);
 
     if (snapshot.brickSubTiles && typeof snapshot.brickSubTiles === 'object') {
       for (const [key, mask] of Object.entries(snapshot.brickSubTiles as Record<string, number>)) {

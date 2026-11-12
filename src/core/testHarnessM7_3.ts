@@ -8,6 +8,7 @@ import {
   USER_ACCOUNTS_PAGE_SIZE,
   AuthManager,
   InMemoryUserAccountsPaginationAdapter,
+  mergeUpsertUserAccountRecord,
   sanitizeUserAccountSummary,
   isSuperAdminUser,
   getUserDisplayLabel,
@@ -16,8 +17,17 @@ import {
   clearVerifiedServerRoles,
   getRoleNameFrameClasses,
   getRoleDisplayInfo,
+  RBAC_PERMISSION_MATRIX,
+  hasRolePermission,
+  validateRoleAssignmentChange,
+  getRoleChangeAuditLogs,
+  clearRoleChangeAuditLogsForTesting,
   type ValidatedUserAccount,
 } from './authManager.ts';
+import { StageManager, cloneStageMap, createBlankDraftMap } from './stageManager.ts';
+import { validateStageMap, STAGE_SPAWN_POINTS } from './mapValidator.ts';
+import { SessionManager, SESSION_TIMINGS } from './sessionManager.ts';
+import { STAGE_1_MAP } from './constants.ts';
 import { ScoreManager } from './scoreManager.ts';
 import { getAvailableSettingsTabsForRole } from '../components/SettingsModal.tsx';
 import {
@@ -7218,6 +7228,641 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T56: M7.3.10 – Quy chuẩn Logo 200% (320x320), Nút Tắt/Mở nhanh âm thanh trên Top Menu & Quản lý/Upload Âm thanh Hành động (Action SFX) của Super Admin',
       passed,
       details: `logoSpec200Pct=${logoSpecOk}, quickMuteOff=${quickMuteOffOk}, quickMuteRestore=${quickMuteOnRestoreOk}, adminActionSfx=${adminActionSfxLifecycleOk}`,
+    });
+  }
+
+  // =========================================================================
+  // T57: M7.3.11 Nhóm A (Test A1–A6) – Quản lý tài khoản: Upsert an toàn theo UID, Nickname fallback kèm ghi chú, Phân trang 15 tài khoản (10/trang) & Cấp/Thu hồi quyền Admin/Mod có Audit Log
+  // =========================================================================
+  {
+    const adapter = new InMemoryUserAccountsPaginationAdapter([]);
+    clearRoleChangeAuditLogsForTesting();
+    clearVerifiedServerRoles();
+
+    // Test A1: Tạo tài khoản mới đăng nhập Google lần đầu -> tạo hồ sơ theo UID, không tạo trùng theo email
+    const newLogin1 = adapter.upsertRecord({
+      uid: 'uid_new_player_1',
+      email: 'newplayer1@gmail.com',
+      displayName: 'Tân Binh Chiến Xa',
+      avatarType: 'google',
+      avatarId: null,
+      lastLoginAtMs: 1710000100000,
+      status: 'ACTIVE',
+    });
+    const a1Passed =
+      newLogin1.uid === 'uid_new_player_1' &&
+      newLogin1.displayName === 'Tân Binh Chiến Xa' &&
+      newLogin1.role === 'PLAYER' &&
+      adapter.getAllRecords().length === 1;
+
+    // Test A2: Tài khoản cũ quay lại -> giữ nguyên Nickname tùy chỉnh, Avatar tùy chỉnh & quyền đã có; chỉ cập nhật lastLoginAtMs
+    adapter.upsertRecord({
+      uid: 'uid_returning_vet',
+      email: 'vet@gmail.com',
+      displayName: 'Chiến Thần Đã Đặt Tên',
+      avatarType: 'catalog',
+      avatarId: 'tank_gold_01',
+      role: 'MOD',
+      lastLoginAtMs: 1700000000000,
+      status: 'OFFLINE',
+    });
+    // Khi tài khoản cũ đăng nhập lại với tên Google khác và không truyền avatarId: không được ghi đè dữ liệu đã thiết lập!
+    const returningAfterRelogin = mergeUpsertUserAccountRecord(
+      adapter.getAllRecords().find((r) => r.uid === 'uid_returning_vet') || null,
+      {
+        uid: 'uid_returning_vet',
+        email: 'vet@gmail.com',
+        googleDisplayName: 'Google Default Name',
+        loginTimestampMs: 1710000200000,
+        status: 'ACTIVE',
+      }
+    );
+    adapter.upsertRecord(returningAfterRelogin);
+    const a2Passed =
+      returningAfterRelogin.displayName === 'Chiến Thần Đã Đặt Tên' &&
+      returningAfterRelogin.avatarType === 'catalog' &&
+      returningAfterRelogin.avatarId === 'tank_gold_01' &&
+      returningAfterRelogin.role === 'MOD' &&
+      returningAfterRelogin.lastLoginAtMs === 1710000200000 &&
+      returningAfterRelogin.status === 'ACTIVE';
+
+    // Test A3: Tài khoản chưa có Nickname -> fallback lấy phần trước @ của email kèm ghi chú "Chưa thiết lập Nickname"
+    adapter.upsertRecord({
+      uid: 'uid_no_nickname',
+      email: 'tankcommander99@gmail.com',
+      displayName: '',
+      lastLoginAtMs: 1710000300000,
+    });
+    const sanitizedNoNick = sanitizeUserAccountSummary({
+      uid: 'uid_no_nickname',
+      email: 'tankcommander99@gmail.com',
+      displayName: '',
+      lastLoginAtMs: 1710000300000,
+    });
+    const a3Passed =
+      sanitizedNoNick.displayName === 'tankcommander99' &&
+      sanitizedNoNick.hasCustomNickname === false &&
+      sanitizedNoNick.nicknameNote === 'Chưa thiết lập Nickname';
+
+    // Test A4: Phân trang 15 tài khoản (thêm 12 tài khoản nữa để đủ 15 tài khoản tổng cộng)
+    for (let i = 4; i <= 15; i++) {
+      adapter.upsertRecord({
+        uid: `uid_bulk_${i}`,
+        email: `player${i}@gmail.com`,
+        displayName: i % 3 === 0 ? '' : `Chiến Binh #${i}`,
+        lastLoginAtMs: 1710000000000 + i * 1000,
+      });
+    }
+    const page1 = adapter.queryPageSync(USER_ACCOUNTS_PAGE_SIZE, null);
+    const page2 = adapter.queryPageSync(USER_ACCOUNTS_PAGE_SIZE, page1.nextCursor);
+    const combinedUids = new Set([
+      ...page1.accounts.map((a) => a.uid),
+      ...page2.accounts.map((a) => a.uid),
+    ]);
+    const a4Passed =
+      page1.accounts.length === 10 &&
+      page1.hasNextPage === true &&
+      page2.accounts.length === 5 &&
+      page2.hasNextPage === false &&
+      combinedUids.size === 15;
+
+    // Test A5: Cấp quyền Admin, Mod và Thu hồi về Người chơi bởi Super Admin -> cập nhật vai trò & ghi Audit Log
+    const authMgr = AuthManager.getInstance();
+    authMgr.setCustomPaginationAdapterForTesting(adapter);
+    const superAdminCaller = {
+      uid: 'uid_super_admin',
+      email: SUPER_ADMIN_EMAIL,
+      emailVerified: true,
+      providerData: [{ providerId: 'google.com' }],
+    };
+    const grantAdminRes = authMgr.changeUserRoleSync({
+      targetUid: 'uid_new_player_1',
+      targetEmail: 'newplayer1@gmail.com',
+      currentTargetRole: 'PLAYER',
+      newRole: 'ADMIN',
+      overrideCallerForTesting: superAdminCaller,
+    });
+    const grantModRes = authMgr.changeUserRoleSync({
+      targetUid: 'uid_new_player_1',
+      targetEmail: 'newplayer1@gmail.com',
+      currentTargetRole: 'ADMIN',
+      newRole: 'MOD',
+      overrideCallerForTesting: superAdminCaller,
+    });
+    const revokeToPlayerRes = authMgr.changeUserRoleSync({
+      targetUid: 'uid_new_player_1',
+      targetEmail: 'newplayer1@gmail.com',
+      currentTargetRole: 'MOD',
+      newRole: 'PLAYER',
+      overrideCallerForTesting: superAdminCaller,
+    });
+    const auditLogs = getRoleChangeAuditLogs();
+    const a5Passed =
+      grantAdminRes.success === true &&
+      grantModRes.success === true &&
+      revokeToPlayerRes.success === true &&
+      auditLogs.length === 3 &&
+      auditLogs[0].newRole === 'PLAYER' &&
+      auditLogs[1].newRole === 'MOD' &&
+      auditLogs[2].newRole === 'ADMIN';
+
+    // Test A6: Chặn cấp quyền trái phép (Admin, Mod, Player bị từ chối; chặn tự hạ quyền Super Admin duy nhất; chặn cấp thêm Super Admin)
+    setVerifiedServerRoleForUid('uid_admin_2', 'ADMIN');
+    setVerifiedServerRoleForUid('uid_mod_1', 'MOD');
+    const adminAttempt = authMgr.changeUserRoleSync({
+      targetUid: 'uid_bulk_4',
+      targetEmail: 'player4@gmail.com',
+      currentTargetRole: 'PLAYER',
+      newRole: 'MOD',
+      overrideCallerForTesting: {
+        uid: 'uid_admin_2',
+        email: 'admin2@gmail.com',
+        emailVerified: true,
+        providerData: [{ providerId: 'google.com' }],
+      },
+    });
+    const modAttempt = authMgr.changeUserRoleSync({
+      targetUid: 'uid_bulk_4',
+      targetEmail: 'player4@gmail.com',
+      currentTargetRole: 'PLAYER',
+      newRole: 'MOD',
+      overrideCallerForTesting: {
+        uid: 'uid_mod_1',
+        email: 'mod1@gmail.com',
+        emailVerified: true,
+        providerData: [{ providerId: 'google.com' }],
+      },
+    });
+    const playerAttempt = authMgr.changeUserRoleSync({
+      targetUid: 'uid_bulk_4',
+      targetEmail: 'player4@gmail.com',
+      currentTargetRole: 'PLAYER',
+      newRole: 'ADMIN',
+      overrideCallerForTesting: {
+        uid: 'uid_player_5',
+        email: 'player5@gmail.com',
+        emailVerified: true,
+        providerData: [{ providerId: 'google.com' }],
+      },
+    });
+    const selfDemoteSuperAdmin = validateRoleAssignmentChange({
+      actorUid: 'uid_super_admin',
+      actorEmail: SUPER_ADMIN_EMAIL,
+      actorRole: 'SUPER_ADMIN',
+      targetUid: 'uid_super_admin',
+      targetEmail: SUPER_ADMIN_EMAIL,
+      currentTargetRole: 'SUPER_ADMIN',
+      newRole: 'ADMIN',
+      superAdminEmail: SUPER_ADMIN_EMAIL,
+    });
+    const grantSecondSuperAdmin = validateRoleAssignmentChange({
+      actorUid: 'uid_super_admin',
+      actorEmail: SUPER_ADMIN_EMAIL,
+      actorRole: 'SUPER_ADMIN',
+      targetUid: 'uid_bulk_4',
+      targetEmail: 'player4@gmail.com',
+      currentTargetRole: 'ADMIN',
+      newRole: 'SUPER_ADMIN',
+      superAdminEmail: SUPER_ADMIN_EMAIL,
+    });
+    authMgr.setCustomPaginationAdapterForTesting(null);
+    clearVerifiedServerRoles();
+
+    const a6Passed =
+      adminAttempt.success === false &&
+      modAttempt.success === false &&
+      playerAttempt.success === false &&
+      selfDemoteSuperAdmin.allowed === false &&
+      grantSecondSuperAdmin.allowed === false;
+
+    const passed = a1Passed && a2Passed && a3Passed && a4Passed && a5Passed && a6Passed;
+
+    results.push({
+      id: 'M7_3_T57',
+      name: 'T57: M7.3.11 Nhóm A (Test A1–A6) – Quản lý tài khoản: Upsert an toàn theo UID, Nickname fallback kèm ghi chú, Phân trang 15 tài khoản (10/trang) & Cấp/Thu hồi quyền Admin/Mod có Audit Log',
+      passed,
+      details: `A1(NewUid)=${a1Passed}, A2(ReturningPreserved)=${a2Passed}, A3(NicknameFallback)=${a3Passed}, A4(Pagination15)=${a4Passed}, A5(RoleGrantRevokeAudit)=${a5Passed}, A6(UnauthorizedBlocked)=${a6Passed}`,
+    });
+  }
+
+  // =========================================================================
+  // T58: M7.3.11 Nhóm B (Test B1–B7) – Quản lý màn chơi Stage & Thiết kế bản đồ 13×13 kéo thả, Kiểm tra hợp lệ, Bảo vệ Stage 1 & Cô lập trận đang diễn ra
+  // =========================================================================
+  {
+    const stageMgr = StageManager.getInstance();
+    stageMgr.resetForTesting();
+
+    // Test B1: Tạo màn chơi mới -> mặc định ở trạng thái Bản nháp (DRAFT), chưa vào danh sách active
+    const createRes = stageMgr.createStageDraft({
+      name: 'Stage 2 - Pháo Đài Thép',
+      orderIndex: 2,
+      actorRole: 'ADMIN',
+      actorEmail: 'admin@bantank.online',
+    });
+    const b1Passed =
+      createRes.success === true &&
+      createRes.stage?.status === 'DRAFT' &&
+      createRes.stage?.activeVersion === null &&
+      stageMgr.getAllStages().length === 1; // Chỉ Stage 1 đang ACTIVE
+
+    // Test B2: Đặt và xóa đủ 7 loại ô địa hình (EMPTY, BRICK, STEEL, WATER, GRASS, ICE, BASE) trên lưới 13×13
+    const customMap = createBlankDraftMap();
+    customMap[2][2] = TileType.BRICK; // 1
+    customMap[2][3] = TileType.STEEL; // 2
+    customMap[4][4] = TileType.WATER; // 3
+    customMap[5][5] = TileType.GRASS; // 4
+    customMap[6][6] = TileType.ICE;   // 5
+    customMap[2][2] = TileType.EMPTY; // Xóa về EMPTY (0)
+    customMap[2][1] = TileType.BRICK; // Đặt lại BRICK tại [2,1]
+    const b2Validation = validateStageMap(customMap);
+    const b2Passed =
+      b2Validation.isValid === true &&
+      b2Validation.rows === 13 &&
+      b2Validation.cols === 13 &&
+      b2Validation.tileCounts[TileType.BRICK] > 0 &&
+      b2Validation.tileCounts[TileType.STEEL] === 1 &&
+      b2Validation.tileCounts[TileType.WATER] === 1 &&
+      b2Validation.tileCounts[TileType.GRASS] === 1 &&
+      b2Validation.tileCounts[TileType.ICE] === 1 &&
+      b2Validation.tileCounts[TileType.BASE] === 1 &&
+      STAGE_SPAWN_POINTS.length === 5;
+
+    // Test B3: Chặn bản đồ lỗi (thiếu BASE, 2 BASE, sai kích thước 12x13, mã ô 99, hoặc chặn vị trí spawn P1 [12,3] / Enemy [0,0])
+    const noBaseMap = createBlankDraftMap();
+    noBaseMap[12][6] = TileType.EMPTY;
+    const twoBaseMap = createBlankDraftMap();
+    twoBaseMap[6][6] = TileType.BASE;
+    const wrongSizeMap = customMap.slice(0, 12);
+    const invalidTileMap = createBlankDraftMap();
+    invalidTileMap[3][3] = 99;
+    const blockedSpawnMap = createBlankDraftMap();
+    blockedSpawnMap[12][3] = TileType.STEEL; // Chặn vị trí xuất hiện của P1 [12, 3]
+
+    const stage2Id = createRes.stage!.id;
+    const rejectNoBase = stageMgr.saveStageDraft({
+      id: stage2Id,
+      name: 'Stage 2',
+      orderIndex: 2,
+      map: noBaseMap,
+      actorRole: 'ADMIN',
+      actorEmail: 'admin@bantank.online',
+    });
+    const rejectTwoBase = stageMgr.saveStageDraft({
+      id: stage2Id,
+      name: 'Stage 2',
+      orderIndex: 2,
+      map: twoBaseMap,
+      actorRole: 'ADMIN',
+      actorEmail: 'admin@bantank.online',
+    });
+    const rejectWrongSize = stageMgr.saveStageDraft({
+      id: stage2Id,
+      name: 'Stage 2',
+      orderIndex: 2,
+      map: wrongSizeMap,
+      actorRole: 'ADMIN',
+      actorEmail: 'admin@bantank.online',
+    });
+    const rejectInvalidTile = stageMgr.saveStageDraft({
+      id: stage2Id,
+      name: 'Stage 2',
+      orderIndex: 2,
+      map: invalidTileMap,
+      actorRole: 'ADMIN',
+      actorEmail: 'admin@bantank.online',
+    });
+    const rejectBlockedSpawn = stageMgr.saveStageDraft({
+      id: stage2Id,
+      name: 'Stage 2',
+      orderIndex: 2,
+      map: blockedSpawnMap,
+      actorRole: 'ADMIN',
+      actorEmail: 'admin@bantank.online',
+    });
+    const b3Passed =
+      !rejectNoBase.success &&
+      !rejectTwoBase.success &&
+      !rejectWrongSize.success &&
+      !rejectInvalidTile.success &&
+      !rejectBlockedSpawn.success;
+
+    // Test B4: Lưu nháp (chưa đổi active) và Kích hoạt màn chơi -> đưa vào danh sách màn chơi hoạt động
+    const saveValidRes = stageMgr.saveStageDraft({
+      id: stage2Id,
+      name: 'Stage 2 - Pháo Đài Thép',
+      orderIndex: 2,
+      map: customMap,
+      actorRole: 'ADMIN',
+      actorEmail: 'admin@bantank.online',
+    });
+    const stillOnly1ActiveBeforeActivate = stageMgr.getAllStages().length === 1;
+    const activateRes = stageMgr.activateStage({
+      id: stage2Id,
+      actorRole: 'ADMIN',
+      actorEmail: 'admin@bantank.online',
+    });
+    const activeCountAfterActivate = stageMgr.getAllStages().length;
+    const b4Passed =
+      saveValidRes.success === true &&
+      stillOnly1ActiveBeforeActivate &&
+      activateRes.success === true &&
+      activateRes.stage?.status === 'ACTIVE' &&
+      activeCountAfterActivate === 2;
+
+    // Test B5: Bảo vệ Stage 1 chính thức không bị ghi đè sai cấu trúc hoặc ngừng kích hoạt
+    const overwriteStage1Attempt = stageMgr.saveStageDraft({
+      id: 1,
+      name: 'Stage 1 Bị Sửa',
+      orderIndex: 1,
+      map: customMap,
+      actorRole: 'SUPER_ADMIN',
+      actorEmail: SUPER_ADMIN_EMAIL,
+    });
+    const deactivateStage1Attempt = stageMgr.deactivateStage({
+      id: 1,
+      actorRole: 'SUPER_ADMIN',
+      actorEmail: SUPER_ADMIN_EMAIL,
+    });
+    const b5Passed =
+      overwriteStage1Attempt.success === false &&
+      deactivateStage1Attempt.success === false &&
+      validateStageMap(stageMgr.getStage(1)!.map).isValid === true;
+
+    // Test B6 & B7: Tải màn chơi vào Solo / 2P AI / 2P Online & Cô lập trận đang diễn ra khi Admin chỉnh sửa Stage giữa trận
+    const liveEngine = new GameEngine();
+    liveEngine.startMatch('SOLO', 'DEFAULT');
+    // Chuyển sang Stage 2 đã kích hoạt
+    const advancedToStage2 = liveEngine.advanceToNextStage();
+    const stage2MapInLiveMatchBeforeEdit = cloneStageMap(
+      liveEngine.getState().terrain.currentMap
+    );
+
+    // Trong lúc trận đang diễn ra ở Stage 2, Admin chỉnh sửa và kích hoạt phiên bản mới của Stage 2 (thêm tường thép ở [3, 3])
+    const editedStage2Map = cloneStageMap(customMap);
+    editedStage2Map[3][3] = TileType.STEEL;
+    stageMgr.saveStageDraft({
+      id: stage2Id,
+      name: 'Stage 2 - Phiên Bản 2',
+      orderIndex: 2,
+      map: editedStage2Map,
+      actorRole: 'ADMIN',
+      actorEmail: 'admin@bantank.online',
+    });
+    stageMgr.activateStage({
+      id: stage2Id,
+      actorRole: 'ADMIN',
+      actorEmail: 'admin@bantank.online',
+    });
+
+    // Trận đang diễn ra (liveEngine) KHÔNG bị thay đổi cấu trúc bản đồ!
+    const stage2MapInLiveMatchAfterAdminEdit = liveEngine.getState().terrain.currentMap;
+    const b7MatchIsolated =
+      stage2MapInLiveMatchBeforeEdit[3][3] === TileType.EMPTY &&
+      stage2MapInLiveMatchAfterAdminEdit[3][3] === TileType.EMPTY;
+
+    // Trong chế độ 2 người Online: Host gửi snapshot chứa currentStageMap & currentStageVersion sang Guest
+    const hostEngine = new GameEngine();
+    hostEngine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+    hostEngine.advanceToNextStage(); // Host vào Stage 2 (phiên bản mới có STEEL tại [3,3])
+    const hostSnap = buildAuthoritativeSnapshot(hostEngine.getState(), 1, Date.now());
+    const guestEngine = new GameEngine();
+    guestEngine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+    const guestApply = guestEngine.applyAuthoritativeSnapshot(hostSnap);
+    const b6ModesSynced =
+      advancedToStage2 === true &&
+      guestApply.valid === true &&
+      guestEngine.getState().currentStageId === stage2Id &&
+      guestEngine.getState().terrain.currentMap[3][3] === TileType.STEEL;
+
+    // Reset StageManager về mặc định Stage 1 sau khi test xong
+    stageMgr.resetForTesting();
+
+    const passed =
+      b1Passed &&
+      b2Passed &&
+      b3Passed &&
+      b4Passed &&
+      b5Passed &&
+      b6ModesSynced &&
+      b7MatchIsolated;
+
+    results.push({
+      id: 'M7_3_T58',
+      name: 'T58: M7.3.11 Nhóm B (Test B1–B7) – Quản lý Stage & Thiết kế bản đồ 13×13 kéo thả: 7 loại ô, Chặn bản đồ lỗi/chặn spawn, Lưu nháp vs Kích hoạt, Bảo vệ Stage 1 & Cô lập trận đang chạy',
+      passed,
+      details: `B1(Draft)=${b1Passed}, B2(7Tiles13x13)=${b2Passed}, B3(InvalidBlocked)=${b3Passed}, B4(SaveActivate)=${b4Passed}, B5(Stage1Protected)=${b5Passed}, B6(CoopStageSync)=${b6ModesSynced}, B7(LiveMatchIsolated)=${b7MatchIsolated}`,
+    });
+  }
+
+  // =========================================================================
+  // T59: M7.3.11 Nhóm C (Test C1–C5) – Bảng Ma trận Phân quyền Tập trung (Super Admin / Admin / Mod / Người chơi) & Đánh dấu Chưa triển khai
+  // =========================================================================
+  {
+    // Test C1: Super Admin có đầy đủ toàn bộ quyền quản trị và cấp quyền
+    const c1SuperAdminAll =
+      hasRolePermission('SUPER_ADMIN', 'GRANT_REVOKE_ADMIN') &&
+      hasRolePermission('SUPER_ADMIN', 'GRANT_REVOKE_MOD') &&
+      hasRolePermission('SUPER_ADMIN', 'MANAGE_STAGES') &&
+      hasRolePermission('SUPER_ADMIN', 'MANAGE_AVATAR_CATALOG') &&
+      hasRolePermission('SUPER_ADMIN', 'MANAGE_AUDIO_SYSTEM');
+
+    // Test C2: Admin quản lý được Stage, Cài đặt hệ thống nhưng KHÔNG cấp được quyền Admin/Mod
+    const c2AdminScope =
+      hasRolePermission('ADMIN', 'MANAGE_STAGES') &&
+      hasRolePermission('ADMIN', 'ADD_STAGE') &&
+      hasRolePermission('ADMIN', 'ACTIVATE_STAGE') &&
+      hasRolePermission('ADMIN', 'MANAGE_SYSTEM_SETTINGS') &&
+      !hasRolePermission('ADMIN', 'GRANT_REVOKE_ADMIN') &&
+      !hasRolePermission('ADMIN', 'GRANT_REVOKE_MOD');
+
+    // Test C3: Mod truy cập được công cụ kiểm duyệt tài khoản nhưng KHÔNG sửa được Stage, không sửa được Media, không cấp được quyền
+    const c3ModScope =
+      hasRolePermission('MOD', 'VIEW_ACCOUNT_LIST') &&
+      hasRolePermission('MOD', 'VIEW_ACCOUNT_DETAILS') &&
+      hasRolePermission('MOD', 'MANAGE_PLAYER_ACCOUNT') &&
+      hasRolePermission('MOD', 'VIEW_AUDIT_AND_MONITORING') &&
+      !hasRolePermission('MOD', 'MANAGE_STAGES') &&
+      !hasRolePermission('MOD', 'ADD_STAGE') &&
+      !hasRolePermission('MOD', 'EDIT_STAGE') &&
+      !hasRolePermission('MOD', 'ACTIVATE_STAGE') &&
+      !hasRolePermission('MOD', 'MANAGE_AVATAR_CATALOG') &&
+      !hasRolePermission('MOD', 'MANAGE_AUDIO_SYSTEM') &&
+      !hasRolePermission('MOD', 'GRANT_REVOKE_ADMIN');
+
+    // Test C4: Người chơi thường (PLAYER) không truy cập được bất kỳ quyền quản trị nào
+    const playerTabs = getAvailableSettingsTabsForRole('PLAYER');
+    const c4PlayerRestricted =
+      !hasRolePermission('PLAYER', 'VIEW_ACCOUNT_LIST') &&
+      !hasRolePermission('PLAYER', 'MANAGE_STAGES') &&
+      !hasRolePermission('PLAYER', 'MANAGE_PLAYER_ACCOUNT') &&
+      playerTabs.length === 2 &&
+      playerTabs.every((t) => !t.adminOnly);
+
+    // Test C5: Các chức năng Rank & XP/Xu, Clan, Friends được đánh dấu rõ "Chưa triển khai"
+    const undeployedPerms = RBAC_PERMISSION_MATRIX.filter(
+      (p) =>
+        p.id === 'MANAGE_RANK_XP_XU' ||
+        p.id === 'MANAGE_CLAN_ADMIN' ||
+        p.id === 'MANAGE_FRIENDS_ADMIN'
+    );
+    const c5NotDeployedMarked =
+      undeployedPerms.length === 3 &&
+      undeployedPerms.every(
+        (p) =>
+          p.status === 'NOT_DEPLOYED' &&
+          p.statusLabelVi === 'Chưa triển khai' &&
+          !hasRolePermission('SUPER_ADMIN', p.id)
+      );
+
+    const passed =
+      c1SuperAdminAll &&
+      c2AdminScope &&
+      c3ModScope &&
+      c4PlayerRestricted &&
+      c5NotDeployedMarked;
+
+    results.push({
+      id: 'M7_3_T59',
+      name: 'T59: M7.3.11 Nhóm C (Test C1–C5) – Ma trận Phân quyền Tập trung (Super Admin / Admin / Mod / Người chơi) & Đánh dấu "Chưa triển khai" cho Rank/Clan/Friends',
+      passed,
+      details: `C1(SuperAdmin)=${c1SuperAdminAll}, C2(Admin)=${c2AdminScope}, C3(Mod)=${c3ModScope}, C4(Player)=${c4PlayerRestricted}, C5(NotDeployed)=${c5NotDeployedMarked}`,
+    });
+  }
+
+  // =========================================================================
+  // T60: M7.3.11 Nhóm D (Test D1–D9) – Bảo vệ phiên đăng nhập: Khắc phục đăng xuất 5 phút khi chuyển tab, Cảnh báo phút 14 + Tiếp tục phiên, Timeout 15 phút & Đồng bộ đa tab không lộ token
+  // =========================================================================
+  {
+    const sessionMgr = SessionManager.getInstance();
+    const deviceId = sessionMgr.getDeviceId();
+    const baseTimeMs = Date.now();
+
+    // Khởi tạo phiên mẫu đang hoạt động
+    sessionMgr.initMockActiveSessionForTesting({
+      uid: 'uid_session_test',
+      sessionId: 'sess_active_001',
+      serverActiveMs: baseTimeMs - 300000,
+    });
+
+    // Test D1: Chuyển sang tab khác 5 phút (300,000ms) rồi quay lại (serverMs === lastKnownServerActiveMs vì tab ẩn không gửi heartbeat)
+    // -> Phiên PHẢI giữ nguyên ACTIVE, tuyệt đối KHÔNG rơi vào HEARTBEAT_REJECTED_UNCLASSIFIED hay bị đẩy về màn hình đăng nhập!
+    const snapAfter5MinTabSwitch = sessionMgr.simulateTabSwitchReturnForTesting({
+      backgroundDurationMs: 5 * 60 * 1000, // 300,000ms
+      serverDocState: {
+        exists: true,
+        isActive: true,
+        deviceId,
+        sessionId: 'sess_active_001',
+        lastActiveAtMs: baseTimeMs - 300000,
+      },
+    });
+    const d1FiveMinTabSwitchOk =
+      snapAfter5MinTabSwitch.status === 'ACTIVE' &&
+      snapAfter5MinTabSwitch.isIdleWarningVisible === false;
+
+    // Test D2: Chuyển sang tab khác 10 phút (600,000ms) rồi quay lại -> phiên vẫn giữ nguyên ACTIVE
+    const snapAfter10MinTabSwitch = sessionMgr.simulateTabSwitchReturnForTesting({
+      backgroundDurationMs: 10 * 60 * 1000, // 600,000ms
+      serverDocState: {
+        exists: true,
+        isActive: true,
+        deviceId,
+        sessionId: 'sess_active_001',
+        lastActiveAtMs: baseTimeMs - 300000,
+      },
+    });
+    const d2TenMinTabSwitchOk =
+      snapAfter10MinTabSwitch.status === 'ACTIVE' &&
+      snapAfter10MinTabSwitch.isIdleWarningVisible === false;
+
+    // Test D3: Không hoạt động 14 phút (840,000ms = trước khi hết hạn 60 giây) -> hiển thị cảnh báo và cho phép nhấn "Tiếp tục phiên"
+    const snapAt14Min = sessionMgr.simulateIdleElapsedForTesting(
+      SESSION_TIMINGS.IDLE_WARNING_THRESHOLD_MS // 840,000ms
+    );
+    const warningShownAt14Min =
+      snapAt14Min.status === 'ACTIVE' &&
+      snapAt14Min.isIdleWarningVisible === true &&
+      snapAt14Min.idleRemainingSeconds === 60;
+
+    const snapAfterContinue = sessionMgr.continueSession();
+    const d3WarningAndContinueOk =
+      warningShownAt14Min &&
+      snapAfterContinue.status === 'ACTIVE' &&
+      snapAfterContinue.isIdleWarningVisible === false &&
+      snapAfterContinue.idleRemainingSeconds === null;
+
+    // Test D6 & D7: Đa tab cùng trình duyệt đồng bộ mốc hoạt động mà không lộ token; gián đoạn mạng ngắn chuyển sang CONNECTION_LOST_UNVERIFIED (không tự xóa phiên)
+    sessionMgr.simulateIdleElapsedForTesting(850000); // Đang hiện cảnh báo ở tab 1
+    const multiTabPayload = sessionMgr.getSafeMultiTabPayloadForTesting();
+    const payloadJson = JSON.stringify(multiTabPayload);
+    const noSecretsInTabSync =
+      !payloadJson.includes('idToken') &&
+      !payloadJson.includes('refreshToken') &&
+      !payloadJson.includes('accessToken');
+
+    // Tab 2 gửi sự kiện hoạt động mới -> Tab 1 tự động cập nhật mốc hoạt động và ẩn cảnh báo
+    const snapAfterTab2Activity = sessionMgr.simulateMultiTabSyncPayloadForTesting({
+      type: 'USER_ACTIVITY',
+      sessionId: 'sess_active_001',
+      lastConfirmedServerActiveMs: Date.now(),
+      lastUserActivityWallMs: Date.now(),
+      time: Date.now(),
+    });
+    const d7MultiTabSyncOk =
+      noSecretsInTabSync &&
+      snapAfterTab2Activity.status === 'ACTIVE' &&
+      snapAfterTab2Activity.isIdleWarningVisible === false;
+
+    // Gián đoạn mạng ngắn -> CONNECTION_LOST_UNVERIFIED (không tự động xóa sessionId)
+    const snapNetworkDisconnect = sessionMgr.simulateNetworkDisconnectForTesting();
+    const d6NetworkResilienceOk =
+      snapNetworkDisconnect.status === 'CONNECTION_LOST_UNVERIFIED' &&
+      snapNetworkDisconnect.sessionId === 'sess_active_001';
+
+    // Khôi phục lại ACTIVE để test D4 (> 15 phút) và D8 (Thiết bị khác chiếm phiên)
+    sessionMgr.initMockActiveSessionForTesting({
+      uid: 'uid_session_test',
+      sessionId: 'sess_active_001',
+      serverActiveMs: Date.now(),
+    });
+
+    // Test D8: Một thiết bị hoạt động -> khi phát hiện thiết bị khác trên server, chuyển sang DISPLACED
+    const snapDisplaced = sessionMgr.simulateTabSwitchReturnForTesting({
+      backgroundDurationMs: 180000,
+      serverDocState: {
+        exists: true,
+        isActive: true,
+        deviceId: 'other_device_99999999',
+        sessionId: 'sess_other_device',
+        lastActiveAtMs: Date.now(),
+      },
+    });
+    const d8SingleDeviceDisplacedOk = snapDisplaced.status === 'DISPLACED';
+
+    // Test D4: Không hoạt động quá 15 phút (905,000ms) -> kết thúc phiên PAUSED_IDLE
+    sessionMgr.initMockActiveSessionForTesting({
+      uid: 'uid_session_test',
+      sessionId: 'sess_active_001',
+      serverActiveMs: Date.now() - 905000,
+    });
+    const snapAfter15Min = sessionMgr.simulateIdleElapsedForTesting(905000);
+    const d4FifteenMinTimeoutOk =
+      snapAfter15Min.status === 'PAUSED_IDLE' && snapAfter15Min.sessionId === null;
+
+    const passed =
+      d1FiveMinTabSwitchOk &&
+      d2TenMinTabSwitchOk &&
+      d3WarningAndContinueOk &&
+      d4FifteenMinTimeoutOk &&
+      d6NetworkResilienceOk &&
+      d7MultiTabSyncOk &&
+      d8SingleDeviceDisplacedOk;
+
+    results.push({
+      id: 'M7_3_T60',
+      name: 'T60: M7.3.11 Nhóm D (Test D1–D9) – Bảo vệ phiên đăng nhập: Chuyển tab 5 phút & 10 phút giữ nguyên ACTIVE, Cảnh báo phút 14 + Tiếp tục phiên, Timeout 15 phút & Đồng bộ đa tab không lộ token',
+      passed,
+      details: `D1(5mTab)=${d1FiveMinTabSwitchOk}, D2(10mTab)=${d2TenMinTabSwitchOk}, D3(14mWarnContinue)=${d3WarningAndContinueOk}, D4(15mTimeout)=${d4FifteenMinTimeoutOk}, D6(NetResilience)=${d6NetworkResilienceOk}, D7(MultiTabNoToken)=${d7MultiTabSyncOk}, D8(SingleDevice)=${d8SingleDeviceDisplacedOk}`,
     });
   }
 

@@ -69,6 +69,7 @@ export default function App() {
 
   // Screen View Routing: 'WELCOME' | 'MAIN_MENU' | 'MODE_SELECTION' | 'BATTLE'
   const [currentUser, setCurrentUser] = useState(() => authManager.getCurrentUser());
+  const [isAuthReady, setIsAuthReady] = useState<boolean>(() => authManager.isAuthReady());
   const [sessionSnapshot, setSessionSnapshot] = useState(() => sessionManager.getSnapshot());
   const [appScreen, setAppScreen] = useState<'WELCOME' | 'MAIN_MENU' | 'MODE_SELECTION' | 'BATTLE'>(() => {
     return authManager.getCurrentUser() ? 'MAIN_MENU' : 'WELCOME';
@@ -194,6 +195,10 @@ export default function App() {
   useEffect(() => {
     MusicManager.getInstance().syncRoleFromAuthUser(authManager.getCurrentUser());
 
+    const unsubReady = authManager.subscribeAuthReady((ready) => {
+      setIsAuthReady(ready);
+    });
+
     const unsubAuth = authManager.subscribe((u) => {
       setCurrentUser(u);
       MusicManager.getInstance().syncRoleFromAuthUser(u);
@@ -205,7 +210,7 @@ export default function App() {
         if (sessionManager.getSnapshot().status === 'NO_SESSION') {
           sessionManager.acquireSession(u.uid);
         }
-      } else if (!authManager.isTrialMode()) {
+      } else if (authManager.isAuthReady() && !authManager.isTrialMode()) {
         setIsTrialMode(false);
         setIsDevDrawerOpen(false);
         setAppScreen('WELCOME');
@@ -229,6 +234,7 @@ export default function App() {
     });
 
     return () => {
+      unsubReady();
       unsubAuth();
       unsubSession();
     };
@@ -580,6 +586,11 @@ export default function App() {
   if ((!currentUser && (!isTrialMode || appScreen !== 'BATTLE')) || appScreen === 'WELCOME') {
     return (
       <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+        {!isAuthReady && (
+          <div className="w-full bg-neutral-900/90 border-b border-neutral-800 px-3 py-1 text-center text-[11px] font-mono text-amber-300/90">
+            Đang kiểm tra trạng thái phiên đăng nhập...
+          </div>
+        )}
         <WelcomeScreen
           onSignIn={handleSignIn}
           onStartTrialMode={handleStartTrialMode}

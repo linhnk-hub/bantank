@@ -121,6 +121,7 @@ export const SUB_TILE_MASKS = {
  */
 export interface RuntimeTerrainState {
   currentMap: number[][];
+  initialMap?: number[][];
   brickSubTiles: Record<string, number>; // key: `${row}_${col}` -> bitmask 0..15
   isBaseDestroyed: boolean;
 }
@@ -271,6 +272,7 @@ export interface GameCoreState {
   };
   currentStageId: number;
   currentStageName: string;
+  currentStageVersion?: number;
   stageElapsedSeconds: number;
   matchDurationSeconds: number;
   remainingTicks: number;
