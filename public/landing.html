@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101827">
+  <meta name="description" content="Bắn Tank Online – Chiến trường huyền thoại">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Bắn Tank Online">
+  <meta property="og:description" content="Chiến trường huyền thoại">
+  <meta property="og:url" content="https://bantank.online/">
+  <link rel="canonical" href="https://bantank.online/">
+  <title>Bắn Tank Online – Chiến trường huyền thoại</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { color-scheme: dark; }
+    html { scroll-behavior: smooth; }
+    body {
+      background:
+        radial-gradient(ellipse at 50% 0%, rgba(36, 91, 115, .25), transparent 48%),
+        #101827;
+    }
+    .grid-bg {
+      background-image: linear-gradient(rgba(148,163,184,.055) 1px, transparent 1px),
+                        linear-gradient(90deg, rgba(148,163,184,.055) 1px, transparent 1px);
+      background-size: 28px 28px;
+    }
+    .pixel { image-rendering: pixelated; }
+    .tank {
+      width: 58px; height: 42px; position: relative; border: 4px solid #17251d;
+      border-radius: 8px; background: #65a34f; box-shadow: inset 0 0 0 3px #9acb65, 0 8px 22px #0008;
+    }
+    .tank:before {
+      content:""; position:absolute; width:22px;height:22px;left:14px;top:6px;
+      border:4px solid #233a28;border-radius:50%;background:#8fbd5c;
+    }
+    .tank:after {
+      content:"";position:absolute;width:7px;height:22px;left:25px;top:-15px;
+      background:#c6d5a0;border:2px solid #263b2a;border-radius:3px;
+    }
+    .track { position:absolute;top:-4px;bottom:-4px;width:7px;background:#26342b;border-radius:3px; }
+    .track.left {left:-8px}.track.right {right:-8px}
+    .glass { background: linear-gradient(145deg, rgba(30,48,65,.94), rgba(15,25,40,.94)); }
+    .btn-primary { background:#d5a63c;color:#17202a; }
+    .btn-primary:hover { background:#f0c65c; transform:translateY(-1px); }
+    .btn-secondary { border:1px solid #536579;background:rgba(30,41,59,.65); }
+    .btn-secondary:hover { background:rgba(51,65,85,.85); }
+  </style>
+</head>
+<body class="min-h-screen text-slate-100 antialiased">
+  <header class="sticky top-0 z-50 border-b border-slate-700/70 bg-[#101827]/90 backdrop-blur-xl">
+    <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+      <a href="#" class="flex items-center gap-3" aria-label="Bắn Tank Online - Trang chủ">
+        <div class="grid h-10 w-10 place-items-center rounded-xl border border-emerald-300/30 bg-emerald-400/10 text-xl">▣</div>
+        <div>
+          <div class="font-black tracking-wide text-white">BẮN TANK ONLINE</div>
+          <div class="text-[10px] uppercase tracking-[.22em] text-emerald-300">Chiến trường huyền thoại</div>
+        </div>
+      </a>
+      <nav class="hidden items-center gap-7 text-sm text-slate-300 md:flex">
+        <a class="hover:text-white" href="#gioi-thieu">Giới thiệu</a>
+        <a class="hover:text-white" href="#tinh-nang">Tính năng</a>
+        <a class="hover:text-white" href="#cach-choi">Cách chơi</a>
+        <a class="hover:text-white" href="privacy.html">Chính sách quyền riêng tư</a>
+      </nav>
+      <a href="#tham-gia" class="btn-primary rounded-lg px-4 py-2 text-sm font-extrabold transition">Vào trò chơi</a>
+    </div>
+  </header>
+
+  <main>
+    <section class="grid-bg relative overflow-hidden">
+      <div class="mx-auto grid max-w-7xl items-center gap-12 px-4 py-16 sm:px-6 sm:py-24 lg:grid-cols-2 lg:px-8 lg:py-28">
+        <div class="relative z-10">
+          <div class="mb-6 inline-flex items-center gap-2 rounded-full border border-emerald-300/25 bg-emerald-400/10 px-3 py-1.5 text-xs font-semibold text-emerald-200">
+            <span class="h-2 w-2 rounded-full bg-emerald-400"></span>
+            Chơi trực tiếp trên trình duyệt
+          </div>
+          <h1 class="max-w-2xl text-4xl font-black leading-tight tracking-tight text-white sm:text-5xl lg:text-6xl">
+            Lăn bánh vào<br><span class="text-emerald-300">chiến trường</span>
+          </h1>
+          <p class="mt-6 max-w-xl text-base leading-8 text-slate-300 sm:text-lg">
+            Bắn Tank Online mang phong cách xe tăng cổ điển trở lại với trải nghiệm điều khiển trực quan,
+            vượt màn và phối hợp cùng đồng đội ngay trên trình duyệt.
+          </p>
+          <div id="tham-gia" class="mt-8 flex flex-col gap-3 sm:flex-row">
+            <!-- AI Studio: thay href bên dưới bằng route mở màn hình đăng nhập Google hiện có của ứng dụng. -->
+            <a id="login-link" href="#login" class="btn-primary inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3.5 font-extrabold shadow-lg shadow-amber-950/30 transition">
+              <span>Đăng nhập bằng Google</span><span aria-hidden="true">→</span>
+            </a>
+            <!-- Chỉ giữ nút này nếu Trial Mode đã được tích hợp và kiểm thử trong ứng dụng. -->
+            <a id="trial-link" href="#trial" class="btn-secondary inline-flex items-center justify-center rounded-xl px-6 py-3.5 font-bold text-white transition">
+              Chơi thử
+            </a>
+          </div>
+          <p class="mt-4 text-xs leading-6 text-slate-400">
+            Đăng nhập để sử dụng các tính năng trực tuyến. Chơi thử (nếu được bật) không tạo tài khoản và không lưu tiến trình.
+          </p>
+        </div>
+
+        <div class="relative mx-auto w-full max-w-xl">
+          <div class="absolute -inset-8 rounded-full bg-emerald-400/10 blur-3xl"></div>
+          <div class="glass relative overflow-hidden rounded-3xl border border-slate-600/70 p-4 shadow-2xl shadow-black/40 sm:p-6">
+            <div class="mb-4 flex items-center justify-between border-b border-slate-700 pb-3">
+              <div class="text-xs font-bold tracking-[.2em] text-slate-300">BATTLEFIELD · STAGE 1</div>
+              <div class="flex gap-1"><i class="h-2 w-2 rounded-full bg-red-400"></i><i class="h-2 w-2 rounded-full bg-amber-300"></i><i class="h-2 w-2 rounded-full bg-emerald-400"></i></div>
+            </div>
+            <div class="grid-bg relative mx-auto aspect-square max-w-[390px] overflow-hidden rounded-xl border-4 border-slate-600 bg-[#182b2d] p-3">
+              <div class="absolute inset-0 opacity-60" style="background:linear-gradient(90deg,transparent 49%,#29434a 50%,transparent 51%),linear-gradient(transparent 49%,#29434a 50%,transparent 51%);background-size:32px 32px"></div>
+              <div class="absolute left-[12%] top-[12%] grid grid-cols-3 gap-1">
+                <span class="h-7 w-7 border-2 border-amber-900 bg-amber-600"></span><span class="h-7 w-7 border-2 border-amber-900 bg-amber-600"></span>
+                <span class="h-7 w-7 border-2 border-amber-900 bg-amber-600"></span>
+              </div>
+              <div class="absolute right-[13%] top-[30%] grid grid-cols-2 gap-1">
+                <span class="h-7 w-7 border-2 border-slate-500 bg-slate-400"></span><span class="h-7 w-7 border-2 border-slate-500 bg-slate-400"></span>
+                <span class="h-7 w-7 border-2 border-slate-500 bg-slate-400"></span><span class="h-7 w-7 border-2 border-slate-500 bg-slate-400"></span>
+              </div>
+              <div class="absolute bottom-[20%] left-[22%] h-8 w-8 rotate-45 border-2 border-cyan-200/70 bg-cyan-300/20"></div>
+              <div class="absolute bottom-[18%] right-[18%] h-8 w-8 rotate-45 border-2 border-cyan-200/70 bg-cyan-300/20"></div>
+              <div class="absolute left-[44%] top-[36%] h-1 w-14 rotate-45 rounded-full bg-amber-200 shadow-[0_0_14px_#fbbf24]"></div>
+              <div class="absolute left-[22%] top-[26%] scale-75"><div class="tank"><i class="track left"></i><i class="track right"></i></div></div>
+              <div class="absolute right-[22%] top-[53%] rotate-180 scale-75"><div class="tank" style="background:#b65b48;box-shadow:inset 0 0 0 3px #e99b72,0 8px 22px #0008"><i class="track left"></i><i class="track right"></i></div></div>
+              <div class="absolute bottom-[9%] left-[42%] scale-90"><div class="tank"><i class="track left"></i><i class="track right"></i></div></div>
+              <div class="absolute bottom-3 left-3 rounded bg-black/50 px-2 py-1 text-[10px] font-bold tracking-wider text-emerald-200">PLAYER 1</div>
+              <div class="absolute bottom-3 right-3 rounded bg-black/50 px-2 py-1 text-[10px] font-bold tracking-wider text-slate-300">MISSION: DEFEND</div>
+            </div>
+            <div class="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
+              <div class="rounded-lg bg-slate-800/80 p-3"><div class="text-slate-400">ĐIỀU KHIỂN</div><div class="mt-1 font-bold text-white">Trực quan</div></div>
+              <div class="rounded-lg bg-slate-800/80 p-3"><div class="text-slate-400">NỀN TẢNG</div><div class="mt-1 font-bold text-white">Trình duyệt</div></div>
+              <div class="rounded-lg bg-slate-800/80 p-3"><div class="text-slate-400">PHONG CÁCH</div><div class="mt-1 font-bold text-white">Cổ điển</div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="gioi-thieu" class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+      <div class="mx-auto max-w-3xl text-center">
+        <p class="text-xs font-bold uppercase tracking-[.25em] text-emerald-300">Giới thiệu</p>
+        <h2 class="mt-3 text-3xl font-black text-white sm:text-4xl">Một chiến trường nhỏ, nhiều thử thách</h2>
+        <p class="mt-5 leading-8 text-slate-300">
+          Điều khiển xe tăng, né đạn, phá chướng ngại và bảo vệ căn cứ. Bắn Tank Online được thiết kế để
+          bạn có thể bắt đầu nhanh trên máy tính, điện thoại hoặc máy tính bảng mà không cần cài đặt.
+        </p>
+      </div>
+    </section>
+
+    <section id="tinh-nang" class="border-y border-slate-700/70 bg-slate-900/35">
+      <div class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+        <div class="text-center">
+          <p class="text-xs font-bold uppercase tracking-[.25em] text-emerald-300">Điểm nổi bật</p>
+          <h2 class="mt-3 text-3xl font-black text-white sm:text-4xl">Sẵn sàng xuất kích?</h2>
+        </div>
+        <div class="mt-10 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <article class="glass rounded-2xl border border-slate-700 p-6">
+            <div class="text-3xl">🎮</div><h3 class="mt-4 font-extrabold text-white">Điều khiển dễ làm quen</h3>
+            <p class="mt-2 text-sm leading-7 text-slate-400">Joystick cảm ứng trên thiết bị di động và điều khiển phù hợp trên máy tính.</p>
+          </article>
+          <article class="glass rounded-2xl border border-slate-700 p-6">
+            <div class="text-3xl">🛡️</div><h3 class="mt-4 font-extrabold text-white">Bảo vệ căn cứ</h3>
+            <p class="mt-2 text-sm leading-7 text-slate-400">Quan sát chiến trường, chọn hướng di chuyển và giữ an toàn cho căn cứ.</p>
+          </article>
+          <article class="glass rounded-2xl border border-slate-700 p-6">
+            <div class="text-3xl">🤝</div><h3 class="mt-4 font-extrabold text-white">Chơi phối hợp trực tuyến</h3>
+            <p class="mt-2 text-sm leading-7 text-slate-400">Tham gia trận đấu trực tuyến và phối hợp cùng người chơi khác khi chế độ được mở.</p>
+          </article>
+          <article class="glass rounded-2xl border border-slate-700 p-6">
+            <div class="text-3xl">📱</div><h3 class="mt-4 font-extrabold text-white">Đa thiết bị</h3>
+            <p class="mt-2 text-sm leading-7 text-slate-400">Giao diện thích ứng với màn hình máy tính, điện thoại và máy tính bảng.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="cach-choi" class="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
+      <div class="grid gap-10 lg:grid-cols-2 lg:items-center">
+        <div>
+          <p class="text-xs font-bold uppercase tracking-[.25em] text-emerald-300">Bắt đầu trong vài bước</p>
+          <h2 class="mt-3 text-3xl font-black text-white sm:text-4xl">Cách tham gia</h2>
+          <ol class="mt-8 space-y-6">
+            <li class="flex gap-4"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-400/15 font-black text-emerald-300">01</span><div><h3 class="font-bold text-white">Mở trò chơi</h3><p class="mt-1 text-sm leading-6 text-slate-400">Truy cập Bắn Tank Online bằng trình duyệt hiện đại.</p></div></li>
+            <li class="flex gap-4"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-400/15 font-black text-emerald-300">02</span><div><h3 class="font-bold text-white">Đăng nhập Google</h3><p class="mt-1 text-sm leading-6 text-slate-400">Đăng nhập để sử dụng tài khoản và các tính năng trực tuyến.</p></div></li>
+            <li class="flex gap-4"><span class="grid h-9 w-9 shrink-0 place-items-center rounded-lg bg-emerald-400/15 font-black text-emerald-300">03</span><div><h3 class="font-bold text-white">Chọn chế độ và xuất kích</h3><p class="mt-1 text-sm leading-6 text-slate-400">Làm quen điều khiển, phối hợp chiến thuật và bảo vệ căn cứ.</p></div></li>
+          </ol>
+        </div>
+        <div class="glass rounded-3xl border border-slate-700 p-7 sm:p-9">
+          <div class="text-5xl">🏆</div>
+          <h3 class="mt-5 text-2xl font-black text-white">Sẵn sàng vào trận?</h3>
+          <p class="mt-3 leading-7 text-slate-300">Đăng nhập để tiếp tục đến khu vực trò chơi. Bạn có thể xem chính sách quyền riêng tư trước khi sử dụng dịch vụ.</p>
+          <a href="#tham-gia" class="btn-primary mt-7 inline-flex rounded-xl px-6 py-3 font-extrabold transition">Đến khu vực đăng nhập</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-slate-700 bg-[#0b1220]">
+    <div class="mx-auto flex max-w-7xl flex-col gap-6 px-4 py-8 text-sm sm:px-6 md:flex-row md:items-center md:justify-between lg:px-8">
+      <div><div class="font-extrabold tracking-wide text-white">BẮN TANK ONLINE</div><p class="mt-1 text-xs text-slate-500">Chiến trường huyền thoại</p></div>
+      <nav class="flex flex-wrap gap-x-6 gap-y-3 text-slate-400">
+        <a class="hover:text-white" href="privacy.html">Chính sách quyền riêng tư</a>
+        <a class="hover:text-white" href="#cach-choi">Hướng dẫn</a>
+        <a class="hover:text-white" href="#tham-gia">Đăng nhập</a>
+      </nav>
+      <p class="text-xs text-slate-500">© 2026 Bắn Tank Online</p>
+    </div>
+  </footer>
+  <script>
+    document.getElementById('year').textContent = new Date().getFullYear();
+    /*
+      TÍCH HỢP VÀO ỨNG DỤNG:
+      - Đổi #login thành route/method đăng nhập Google đang có trong dự án.
+      - Đổi #trial thành route/method Trial Mode hiện có; nếu Trial chưa hoạt động ổn định,
+        hãy ẩn nút Chơi thử thay vì để liên kết giả.
+      - Kiểm tra đường dẫn privacy.html đúng với file Privacy Policy thực tế trong repo.
+      - Không đặt Firebase Auth guard lên trang chủ này; chỉ bảo vệ khu vực game/tài khoản.
+    */
+  </script>
+</body>
+</html>
