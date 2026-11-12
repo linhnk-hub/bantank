@@ -1,167 +1,631 @@
 <!doctype html>
-<html lang="vi">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Chính sách quyền riêng tư của trò chơi Bắn Tank Online.">
-  <meta name="robots" content="index,follow">
-  <title>Chính sách quyền riêng tư – Bắn Tank Online</title>
-  <style>
-    :root {
-      color-scheme: dark;
-      --bg: #0b1220;
-      --panel: #121d30;
-      --panel-2: #17243a;
-      --text: #e8eef8;
-      --muted: #a9b8ce;
-      --accent: #65d6a5;
-      --line: #2b3b55;
-      --link: #8fc5ff;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      background: radial-gradient(ellipse at top, #172944 0, var(--bg) 55%);
-      color: var(--text);
-      font: 16px/1.7 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    }
-    .wrap { width: min(900px, calc(100% - 32px)); margin: 0 auto; padding: 36px 0 56px; }
-    header { margin-bottom: 22px; }
-    .brand { color: var(--accent); font-weight: 800; letter-spacing: .08em; text-transform: uppercase; font-size: .82rem; }
-    h1 { font-size: clamp(2rem, 5vw, 3rem); line-height: 1.15; margin: 10px 0 12px; }
-    .updated { color: var(--muted); font-size: .92rem; }
-    .intro, article {
-      background: rgba(18, 29, 48, .94);
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: clamp(20px, 4vw, 30px);
-      box-shadow: 0 14px 40px rgba(0,0,0,.18);
-    }
-    .intro { border-left: 4px solid var(--accent); margin-bottom: 18px; }
-    article { margin-top: 16px; }
-    h2 { color: var(--accent); font-size: 1.22rem; margin: 0 0 10px; }
-    p { margin: 8px 0 12px; }
-    ul { padding-left: 22px; margin: 8px 0 14px; }
-    li { margin: 5px 0; }
-    a { color: var(--link); }
-    .note {
-      background: var(--panel-2);
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      padding: 12px 14px;
-      color: var(--muted);
-      font-size: .94rem;
-    }
-    footer { text-align: center; color: var(--muted); font-size: .9rem; padding-top: 24px; }
-    .back { display: inline-block; margin-top: 18px; text-decoration: none; font-weight: 650; }
-    @media (max-width: 560px) {
-      .wrap { width: min(100% - 22px, 900px); padding-top: 24px; }
-      .intro, article { border-radius: 12px; }
-    }
-  </style>
-</head>
-<body>
-  <main class="wrap">
-    <header>
-      <div class="brand">Bắn Tank Online</div>
-      <h1>Chính sách quyền riêng tư</h1>
-      <div class="updated">Ngày có hiệu lực: 11/11/2026 · Phiên bản 1.0</div>
+<html lang="vi" class="scroll-smooth">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="description" content="Chính sách quyền riêng tư của trò chơi Bắn Tank Online – Game bắn xe tăng chiến thuật 2D trực tuyến." />
+    <meta name="robots" content="index, follow" />
+    <title>Chính sách quyền riêng tư – Bắn Tank Online</title>
+    <link rel="canonical" href="https://bantank.online/privacy.html" />
+    <link rel="icon" type="image/png" href="/logo-bantank.png" />
+    <link rel="apple-touch-icon" href="/logo-bantank.png" />
+    <meta property="og:title" content="Chính sách quyền riêng tư – Bắn Tank Online" />
+    <meta
+      property="og:description"
+      content="Chính sách quyền riêng tư của trò chơi Bắn Tank Online – thông tin thu thập, mục đích xử lý, dịch vụ Google/Firebase và quyền của người chơi."
+    />
+    <meta property="og:url" content="https://bantank.online/privacy.html" />
+    <meta property="og:site_name" content="Bắn Tank Online" />
+    <meta property="og:locale" content="vi_VN" />
+    <meta property="og:image" content="https://bantank.online/logo-bantank.png" />
+    <meta property="og:type" content="website" />
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        background-color: #0a0a0a;
+        color: #f5f5f5;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen w-full bg-neutral-950 text-neutral-100 font-sans selection:bg-amber-500 selection:text-black overflow-x-hidden flex flex-col">
+    <!-- =====================================================================
+         THANH ĐIỀU HƯỚNG ĐẦU TRANG (ĐỒNG BỘ VỚI LANDING PAGE)
+    ====================================================================== -->
+    <header class="sticky top-0 z-40 w-full bg-neutral-950/90 backdrop-blur-md border-b border-neutral-800/80">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
+        <!-- Thương hiệu & Logo -->
+        <a
+          href="/"
+          class="flex items-center gap-3 group focus:outline-none"
+          aria-label="Trang chủ Bắn Tank Online"
+        >
+          <img
+            src="/logo-bantank.png"
+            alt="Logo Bắn Tank Online"
+            class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-contain border border-amber-500/40 bg-neutral-900 p-1 shadow-md group-hover:border-amber-400 transition-colors"
+          />
+          <div class="flex flex-col">
+            <span class="text-base sm:text-lg font-black uppercase tracking-wider text-white group-hover:text-amber-400 transition-colors">
+              Bắn Tank Online
+            </span>
+            <span class="text-[11px] text-neutral-400 font-medium hidden sm:inline">
+              Game bắn xe tăng chiến thuật trực tuyến
+            </span>
+          </div>
+        </a>
+
+        <!-- Liên kết điều hướng trên Desktop -->
+        <nav
+          class="hidden md:flex items-center gap-6 lg:gap-8 text-sm font-semibold text-neutral-300"
+          aria-label="Điều hướng chính"
+        >
+          <a href="/#gioi-thieu" class="hover:text-amber-400 transition-colors py-1">Giới thiệu</a>
+          <a href="/#tinh-nang" class="hover:text-amber-400 transition-colors py-1">Tính năng</a>
+          <a href="/#che-do-choi" class="hover:text-amber-400 transition-colors py-1">Chế độ chơi</a>
+          <a href="/#huong-dan" class="hover:text-amber-400 transition-colors py-1">Hướng dẫn</a>
+          <a
+            href="/privacy.html"
+            aria-current="page"
+            class="text-amber-400 font-bold border-b-2 border-amber-400 py-1"
+          >
+            Quyền riêng tư
+          </a>
+        </nav>
+
+        <!-- Cụm nút hành động bên phải -->
+        <div class="hidden sm:flex items-center gap-2.5">
+          <a
+            href="/?mode=trial"
+            class="px-3.5 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 hover:border-amber-500/50 text-amber-300 font-bold text-xs uppercase tracking-wider transition-all active:scale-[0.98]"
+          >
+            Chơi thử
+          </a>
+          <a
+            href="/?mode=play"
+            class="px-4 sm:px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs sm:text-sm uppercase tracking-wider transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2 active:scale-[0.98]"
+          >
+            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span>Chơi ngay</span>
+          </a>
+        </div>
+
+        <!-- Nút mở menu trên Mobile -->
+        <div class="flex items-center gap-2 sm:hidden">
+          <a
+            href="/"
+            class="px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-800 hover:border-amber-500/40 text-amber-300 font-bold text-xs uppercase tracking-wider"
+          >
+            ← Trang chủ
+          </a>
+          <button
+            id="mobile-menu-toggle"
+            type="button"
+            class="p-2 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-white"
+            aria-label="Mở menu điều hướng"
+            aria-expanded="false"
+          >
+            <svg id="icon-menu-open" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <line x1="4" y1="6" x2="20" y2="6"></line>
+              <line x1="4" y1="12" x2="20" y2="12"></line>
+              <line x1="4" y1="18" x2="20" y2="18"></line>
+            </svg>
+            <svg id="icon-menu-close" class="w-5 h-5 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Menu điều hướng thu gọn trên Mobile -->
+      <nav
+        id="mobile-menu-panel"
+        class="hidden md:hidden bg-neutral-900/95 border-b border-neutral-800 px-4 pt-3 pb-4 space-y-2"
+        aria-label="Menu di động"
+      >
+        <div class="grid grid-cols-2 gap-2 text-sm font-semibold">
+          <a
+            href="/#gioi-thieu"
+            class="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+          >
+            Giới thiệu
+          </a>
+          <a
+            href="/#tinh-nang"
+            class="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+          >
+            Tính năng
+          </a>
+          <a
+            href="/#che-do-choi"
+            class="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+          >
+            Chế độ chơi
+          </a>
+          <a
+            href="/#huong-dan"
+            class="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+          >
+            Hướng dẫn
+          </a>
+        </div>
+        <div class="pt-2 flex flex-col gap-2">
+          <a
+            href="/?mode=play"
+            class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+          >
+            <span>Chơi ngay</span>
+          </a>
+          <a
+            href="/?mode=trial"
+            class="w-full py-2.5 rounded-xl bg-neutral-950 border border-amber-500/40 text-amber-300 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+          >
+            <span>Chơi thử ngay (Không cần đăng nhập)</span>
+          </a>
+        </div>
+      </nav>
     </header>
 
-    <section class="intro">
-      <p><strong>Bắn Tank Online</strong> tôn trọng quyền riêng tư của người chơi. Chính sách này giải thích những loại thông tin có thể được xử lý khi bạn đăng nhập, chơi game và sử dụng các tính năng trực tuyến; mục đích sử dụng; cách bảo vệ và lựa chọn của bạn.</p>
-      <p>Khi sử dụng trò chơi, bạn xác nhận đã đọc chính sách này. Nếu không đồng ý, vui lòng ngừng sử dụng trò chơi.</p>
-    </section>
+    <!-- =====================================================================
+         NỘI DUNG CHÍNH: CHÍNH SÁCH QUYỀN RIÊNG TƯ
+    ====================================================================== -->
+    <main id="top" class="flex-1 relative">
+      <!-- Ánh sáng nền đồng bộ với Hero của Landing Page -->
+      <div
+        class="absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_75%_60%_at_50%_-10%,rgba(245,158,11,0.15),rgba(10,10,10,0))] pointer-events-none"
+      ></div>
 
-    <article>
-      <h2>1. Thông tin chúng tôi xử lý</h2>
-      <p>Tùy theo tính năng bạn sử dụng, Bắn Tank Online có thể xử lý các nhóm thông tin sau:</p>
-      <ul>
-        <li><strong>Thông tin đăng nhập Google:</strong> mã định danh tài khoản do Firebase Authentication cung cấp (UID), địa chỉ email, tên hiển thị và ảnh hồ sơ nếu bạn cho phép Google cung cấp các thông tin đó.</li>
-        <li><strong>Thông tin hồ sơ trong game:</strong> tên/ảnh đại diện được chọn, thiết lập tài khoản và các lựa chọn cá nhân trong trò chơi.</li>
-        <li><strong>Dữ liệu trò chơi:</strong> tiến trình, điểm số, XP, Xu, cấp bậc, thành tích, lịch sử hoặc trạng thái trận đấu và dữ liệu cần thiết để vận hành các chế độ chơi.</li>
-        <li><strong>Dữ liệu tính năng cộng đồng:</strong> thông tin bạn tạo hoặc gửi khi sử dụng bạn bè, clan, lời mời, tin nhắn hoặc tính năng tương tác khác, nếu các tính năng đó được bật.</li>
-        <li><strong>Dữ liệu kỹ thuật và an toàn:</strong> trạng thái phiên đăng nhập, thông tin thiết bị/phiên cần thiết để quản lý đăng nhập, phát hiện sử dụng bất thường, duy trì kết nối và xử lý lỗi. Nhà cung cấp hạ tầng có thể tự xử lý một số nhật ký kỹ thuật theo tài liệu và chính sách riêng của họ.</li>
-      </ul>
-      <p>Chúng tôi không yêu cầu bạn cung cấp mật khẩu Google. Việc xác thực được thực hiện thông qua cơ chế đăng nhập của Google và Firebase Authentication.</p>
-    </article>
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 relative z-10 space-y-6">
+        <!-- Phần mở đầu tiêu đề trang -->
+        <div class="space-y-4 pb-4 border-b border-neutral-800/90">
+          <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold uppercase tracking-wider">
+            <span>Tài liệu pháp lý công khai • Bắn Tank Online</span>
+          </div>
+          <h1 class="text-3xl sm:text-4xl lg:text-5xl font-black uppercase tracking-tight text-white leading-tight">
+            Chính sách <span class="text-amber-400">Quyền riêng tư</span>
+          </h1>
+          <div class="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-neutral-400">
+            <span class="px-2.5 py-1 rounded-md bg-neutral-900 border border-neutral-800 text-neutral-300 font-medium">
+              Ngày có hiệu lực: 11/11/2026
+            </span>
+            <span class="px-2.5 py-1 rounded-md bg-neutral-900 border border-neutral-800 text-neutral-300 font-medium">
+              Phiên bản 1.0
+            </span>
+            <span class="text-neutral-400">
+              Áp dụng cho: <a href="https://bantank.online/" class="text-amber-400 hover:underline font-semibold">https://bantank.online/</a>
+            </span>
+          </div>
+        </div>
 
-    <article>
-      <h2>2. Mục đích sử dụng thông tin</h2>
-      <ul>
-        <li>Xác thực người chơi và duy trì tài khoản.</li>
-        <li>Lưu, đồng bộ tiến trình, hồ sơ và dữ liệu trong game giữa các lần chơi.</li>
-        <li>Vận hành trận đấu trực tuyến, tính năng nhiều người chơi và các tính năng cộng đồng.</li>
-        <li>Quản lý phiên đăng nhập, bảo vệ tài khoản và hạn chế hành vi gian lận hoặc truy cập trái phép.</li>
-        <li>Khắc phục lỗi, bảo trì, cải thiện độ ổn định và an toàn của trò chơi.</li>
-        <li>Phản hồi yêu cầu hỗ trợ và thực hiện nghĩa vụ pháp lý hợp lệ (nếu có).</li>
-      </ul>
-    </article>
+        <!-- Khung giới thiệu tổng quan -->
+        <section class="rounded-2xl bg-neutral-900/90 border border-amber-500/40 border-l-4 border-l-amber-400 p-6 sm:p-7 space-y-3 shadow-xl">
+          <p class="text-sm sm:text-base text-neutral-200 leading-relaxed">
+            <strong class="text-white">Bắn Tank Online</strong> tôn trọng quyền riêng tư của người chơi. Chính sách này giải thích những loại thông tin có thể được xử lý khi bạn đăng nhập, chơi game và sử dụng các tính năng trực tuyến; mục đích sử dụng; cách bảo vệ và lựa chọn của bạn.
+          </p>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Khi sử dụng trò chơi, bạn xác nhận đã đọc chính sách này. Khách truy cập có thể xem toàn bộ trang chủ giới thiệu, đọc chính sách này hoặc trải nghiệm chế độ <strong>Chơi thử</strong> mà không cần đăng nhập tài khoản. Nếu không đồng ý với chính sách này, vui lòng ngừng sử dụng trò chơi.
+          </p>
+        </section>
 
-    <article>
-      <h2>3. Đăng nhập Google và dịch vụ Firebase</h2>
-      <p>Trò chơi sử dụng dịch vụ Google/Firebase, bao gồm Firebase Authentication để xác thực tài khoản và Cloud Firestore để lưu trữ, đồng bộ dữ liệu cần thiết cho trò chơi.</p>
-      <p>Khi bạn chọn đăng nhập Google, Google xử lý thông tin đăng nhập theo <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer">Chính sách quyền riêng tư của Google</a>. Firebase xử lý dữ liệu theo <a href="https://firebase.google.com/support/privacy" target="_blank" rel="noopener noreferrer">Thông tin quyền riêng tư và bảo mật của Firebase</a>.</p>
-      <p>Việc sử dụng các dịch vụ này có thể khiến dữ liệu được xử lý trên hệ thống máy chủ của Google theo cấu hình dịch vụ, điều khoản và chính sách áp dụng của Google.</p>
-    </article>
+        <!-- Mục 1 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              01
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Thông tin chúng tôi xử lý
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Tùy theo tính năng bạn sử dụng, Bắn Tank Online có thể xử lý các nhóm thông tin sau:
+          </p>
+          <ul class="space-y-2.5 text-sm text-neutral-300 leading-relaxed pl-1">
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold mt-0.5">•</span>
+              <span>
+                <strong class="text-white">Thông tin đăng nhập Google:</strong> mã định danh tài khoản do Firebase Authentication cung cấp (UID), địa chỉ email, tên hiển thị và ảnh hồ sơ nếu bạn cho phép Google cung cấp các thông tin đó.
+              </span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold mt-0.5">•</span>
+              <span>
+                <strong class="text-white">Thông tin hồ sơ trong game:</strong> tên/ảnh đại diện được chọn, thiết lập tài khoản và các lựa chọn cá nhân trong trò chơi.
+              </span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold mt-0.5">•</span>
+              <span>
+                <strong class="text-white">Dữ liệu trò chơi:</strong> tiến trình, điểm số, XP, Xu, cấp bậc, thành tích, lịch sử hoặc trạng thái trận đấu và dữ liệu cần thiết để vận hành các chế độ chơi.
+              </span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold mt-0.5">•</span>
+              <span>
+                <strong class="text-white">Dữ liệu tính năng cộng đồng:</strong> thông tin bạn tạo hoặc gửi khi sử dụng bạn bè, clan, lời mời, tin nhắn hoặc tính năng tương tác khác, nếu các tính năng đó được bật.
+              </span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold mt-0.5">•</span>
+              <span>
+                <strong class="text-white">Dữ liệu kỹ thuật và an toàn:</strong> trạng thái phiên đăng nhập, thông tin thiết bị/phiên cần thiết để quản lý đăng nhập, phát hiện sử dụng bất thường, duy trì kết nối và xử lý lỗi. Nhà cung cấp hạ tầng có thể tự xử lý một số nhật ký kỹ thuật theo tài liệu và chính sách riêng của họ.
+              </span>
+            </li>
+          </ul>
+          <div class="pt-2">
+            <p class="p-3.5 rounded-xl bg-neutral-950/80 border border-neutral-800 text-xs sm:text-sm text-neutral-300">
+              Chúng tôi <strong class="text-amber-300">không yêu cầu bạn cung cấp mật khẩu Google</strong>. Việc xác thực được thực hiện thông qua cơ chế đăng nhập chính thức của Google và Firebase Authentication.
+            </p>
+          </div>
+        </article>
 
-    <article>
-      <h2>4. Chia sẻ thông tin</h2>
-      <p>Chúng tôi không bán thông tin cá nhân của người chơi.</p>
-      <p>Thông tin chỉ được chia sẻ hoặc xử lý trong phạm vi cần thiết với:</p>
-      <ul>
-        <li>Google/Firebase và các nhà cung cấp hạ tầng phục vụ xác thực, lưu trữ, kết nối và vận hành trò chơi.</li>
-        <li>Người chơi khác, trong phạm vi thông tin hồ sơ, trạng thái hoặc hoạt động mà tính năng nhiều người chơi/cộng đồng cần hiển thị.</li>
-        <li>Cơ quan có thẩm quyền khi có yêu cầu hợp pháp hoặc khi cần thiết để bảo vệ quyền, an toàn và tính toàn vẹn của dịch vụ.</li>
-      </ul>
-      <p>Chúng tôi không chủ động công khai địa chỉ email của bạn cho người chơi khác, trừ khi một tính năng cụ thể thông báo rõ và cần thông tin đó để hoạt động.</p>
-    </article>
+        <!-- Mục 2 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              02
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Mục đích sử dụng thông tin
+            </h2>
+          </div>
+          <ul class="space-y-2 text-sm text-neutral-300 leading-relaxed pl-1">
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Xác thực người chơi và duy trì tài khoản.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Lưu, đồng bộ tiến trình, hồ sơ và dữ liệu trong game giữa các lần chơi.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Vận hành trận đấu trực tuyến, tính năng nhiều người chơi và các tính năng cộng đồng.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Quản lý phiên đăng nhập, bảo vệ tài khoản và hạn chế hành vi gian lận hoặc truy cập trái phép.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Khắc phục lỗi, bảo trì, cải thiện độ ổn định và an toàn của trò chơi.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Phản hồi yêu cầu hỗ trợ và thực hiện nghĩa vụ pháp lý hợp lệ (nếu có).</span>
+            </li>
+          </ul>
+        </article>
 
-    <article>
-      <h2>5. Lưu trữ và bảo mật dữ liệu</h2>
-      <p>Dữ liệu được lưu trong các dịch vụ Google/Firebase được cấu hình cho Bắn Tank Online. Chúng tôi áp dụng các biện pháp hợp lý trong phạm vi khả năng quản trị, chẳng hạn như kiểm soát quyền truy cập và sử dụng quy tắc bảo mật của Firestore.</p>
-      <p>Không có phương thức truyền tải hoặc lưu trữ điện tử nào bảo đảm an toàn tuyệt đối. Bạn nên bảo vệ tài khoản Google và không chia sẻ quyền truy cập tài khoản của mình.</p>
-      <p>Dữ liệu được lưu trong thời gian cần thiết để cung cấp trò chơi, duy trì tiến trình, bảo đảm an toàn hoặc đáp ứng nghĩa vụ pháp lý. Thời gian lưu cụ thể có thể phụ thuộc vào loại dữ liệu và cấu hình của dịch vụ.</p>
-    </article>
+        <!-- Mục 3 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              03
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Đăng nhập Google và dịch vụ Firebase
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Trò chơi sử dụng dịch vụ Google/Firebase, bao gồm Firebase Authentication để xác thực tài khoản và Cloud Firestore để lưu trữ, đồng bộ dữ liệu cần thiết cho trò chơi.
+          </p>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Khi bạn chọn đăng nhập Google, Google xử lý thông tin đăng nhập theo
+            <a
+              href="https://policies.google.com/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-amber-400 hover:text-amber-300 underline font-semibold"
+            >Chính sách quyền riêng tư của Google</a>.
+            Firebase xử lý dữ liệu theo
+            <a
+              href="https://firebase.google.com/support/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-amber-400 hover:text-amber-300 underline font-semibold"
+            >Thông tin quyền riêng tư và bảo mật của Firebase</a>.
+          </p>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Việc sử dụng các dịch vụ này có thể khiến dữ liệu được xử lý trên hệ thống máy chủ của Google theo cấu hình dịch vụ, điều khoản và chính sách áp dụng của Google.
+          </p>
+        </article>
 
-    <article>
-      <h2>6. Phiên đăng nhập và thiết bị</h2>
-      <p>Trò chơi có thể áp dụng cơ chế quản lý phiên để bảo vệ tài khoản, bao gồm giới hạn phiên hoạt động và tự kết thúc phiên khi không có hoạt động trong một khoảng thời gian theo cấu hình hiện hành.</p>
-      <p>Thông tin phiên có thể được xử lý để phát hiện đăng nhập đồng thời hoặc hoạt động bất thường. Khi phiên hết hạn, bạn có thể cần đăng nhập lại để tiếp tục chơi.</p>
-    </article>
+        <!-- Mục 4 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              04
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Chia sẻ thông tin
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-200 font-semibold">
+            Chúng tôi không bán thông tin cá nhân của người chơi.
+          </p>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Thông tin chỉ được chia sẻ hoặc xử lý trong phạm vi cần thiết với:
+          </p>
+          <ul class="space-y-2 text-sm text-neutral-300 leading-relaxed pl-1">
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold">•</span>
+              <span>Google/Firebase và các nhà cung cấp hạ tầng phục vụ xác thực, lưu trữ, kết nối và vận hành trò chơi.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold">•</span>
+              <span>Người chơi khác, trong phạm vi thông tin hồ sơ, trạng thái hoặc hoạt động mà tính năng nhiều người chơi/cộng đồng cần hiển thị.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold">•</span>
+              <span>Cơ quan có thẩm quyền khi có yêu cầu hợp pháp hoặc khi cần thiết để bảo vệ quyền, an toàn và tính toàn vẹn của dịch vụ.</span>
+            </li>
+          </ul>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Chúng tôi không chủ động công khai địa chỉ email của bạn cho người chơi khác, trừ khi một tính năng cụ thể thông báo rõ và cần thông tin đó để hoạt động.
+          </p>
+        </article>
 
-    <article>
-      <h2>7. Quyền và lựa chọn của người chơi</h2>
-      <p>Bạn có thể:</p>
-      <ul>
-        <li>Ngừng sử dụng trò chơi bất cứ lúc nào.</li>
-        <li>Quản lý quyền truy cập tài khoản Google đối với ứng dụng trong phần cài đặt tài khoản Google.</li>
-        <li>Yêu cầu xem, chỉnh sửa hoặc xóa dữ liệu tài khoản trong phạm vi chúng tôi có thể xác minh và xử lý.</li>
-        <li>Gửi yêu cầu hỗ trợ hoặc yêu cầu xóa tài khoản/dữ liệu qua địa chỉ liên hệ ở cuối chính sách.</li>
-      </ul>
-      <p>Khi tiếp nhận yêu cầu xóa, chúng tôi có thể cần xác minh bạn là chủ tài khoản. Một số dữ liệu có thể được giữ lại trong thời gian cần thiết để bảo đảm an toàn, giải quyết tranh chấp hoặc tuân thủ quy định pháp luật; dữ liệu trong bản sao lưu của nhà cung cấp có thể được xóa theo chu kỳ lưu giữ của họ.</p>
-    </article>
+        <!-- Mục 5 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              05
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Lưu trữ và bảo mật dữ liệu
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Dữ liệu được lưu trong các dịch vụ Google/Firebase được cấu hình cho Bắn Tank Online. Chúng tôi áp dụng các biện pháp hợp lý trong phạm vi khả năng quản trị, chẳng hạn như kiểm soát quyền truy cập và sử dụng quy tắc bảo mật của Firestore.
+          </p>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Không có phương thức truyền tải hoặc lưu trữ điện tử nào bảo đảm an toàn tuyệt đối. Bạn nên bảo vệ tài khoản Google và không chia sẻ quyền truy cập tài khoản của mình.
+          </p>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Dữ liệu được lưu trong thời gian cần thiết để cung cấp trò chơi, duy trì tiến trình, bảo đảm an toàn hoặc đáp ứng nghĩa vụ pháp lý. Thời gian lưu cụ thể có thể phụ thuộc vào loại dữ liệu và cấu hình của dịch vụ.
+          </p>
+        </article>
 
-    <article>
-      <h2>8. Quyền riêng tư của trẻ em</h2>
-      <p>Trò chơi không chủ đích yêu cầu trẻ em cung cấp thông tin cá nhân ngoài thông tin cần thiết cho việc đăng nhập và vận hành tài khoản. Nếu bạn là cha mẹ/người giám hộ và cho rằng trẻ đã cung cấp thông tin cá nhân không phù hợp, vui lòng liên hệ với chúng tôi để được hỗ trợ xem xét.</p>
-    </article>
+        <!-- Mục 6 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              06
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Phiên đăng nhập và thiết bị
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Trò chơi có thể áp dụng cơ chế quản lý phiên để bảo vệ tài khoản, bao gồm giới hạn phiên hoạt động và tự kết thúc phiên khi không có hoạt động trong một khoảng thời gian theo cấu hình hiện hành.
+          </p>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Thông tin phiên có thể được xử lý để phát hiện đăng nhập đồng thời hoặc hoạt động bất thường. Khi phiên hết hạn, bạn có thể cần đăng nhập lại để tiếp tục chơi.
+          </p>
+        </article>
 
-    <article>
-      <h2>9. Thay đổi chính sách</h2>
-      <p>Chúng tôi có thể cập nhật chính sách này khi trò chơi thay đổi tính năng, cách xử lý dữ liệu hoặc yêu cầu pháp lý. Bản cập nhật sẽ được đăng tại trang này cùng ngày có hiệu lực mới. Bạn nên kiểm tra trang định kỳ.</p>
-    </article>
+        <!-- Mục 7 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              07
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Quyền và lựa chọn của người chơi
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Bạn có thể:
+          </p>
+          <ul class="space-y-2 text-sm text-neutral-300 leading-relaxed pl-1">
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Ngừng sử dụng trò chơi bất cứ lúc nào.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Quản lý quyền truy cập tài khoản Google đối với ứng dụng trong phần cài đặt tài khoản Google.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Yêu cầu xem, chỉnh sửa hoặc xóa dữ liệu tài khoản trong phạm vi chúng tôi có thể xác minh và xử lý.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Gửi yêu cầu hỗ trợ hoặc yêu cầu xóa tài khoản/dữ liệu qua địa chỉ liên hệ ở cuối chính sách.</span>
+            </li>
+          </ul>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Khi tiếp nhận yêu cầu xóa, chúng tôi có thể cần xác minh bạn là chủ tài khoản. Một số dữ liệu có thể được giữ lại trong thời gian cần thiết để bảo đảm an toàn, giải quyết tranh chấp hoặc tuân thủ quy định pháp luật; dữ liệu trong bản sao lưu của nhà cung cấp có thể được xóa theo chu kỳ lưu giữ của họ.
+          </p>
+        </article>
 
-    <article>
-      <h2>10. Liên hệ</h2>
-      <p>Nếu có câu hỏi, yêu cầu truy cập, chỉnh sửa hoặc xóa dữ liệu, vui lòng liên hệ:</p>
-      <p><strong>Bắn Tank Online</strong><br>
-      Email: admin@bantank.online<br>
-      Website: <a href="https://bantank.online/">https://bantank.online/</a></p>
-      <a class="back" href="https://bantank.online/">← Quay lại Bắn Tank Online</a>
-    </article>
+        <!-- Mục 8 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              08
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Quyền riêng tư của trẻ em
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Trò chơi không chủ đích yêu cầu trẻ em cung cấp thông tin cá nhân ngoài thông tin cần thiết cho việc đăng nhập và vận hành tài khoản. Nếu bạn là cha mẹ/người giám hộ và cho rằng trẻ đã cung cấp thông tin cá nhân không phù hợp, vui lòng liên hệ với chúng tôi để được hỗ trợ xem xét.
+          </p>
+        </article>
 
-    <footer>Bắn Tank Online © 2026</footer>
-  </main>
-</body>
+        <!-- Mục 9 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              09
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Thay đổi chính sách
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Chúng tôi có thể cập nhật chính sách này khi trò chơi thay đổi tính năng, cách xử lý dữ liệu hoặc yêu cầu pháp lý. Bản cập nhật sẽ được đăng tại trang này cùng ngày có hiệu lực mới. Bạn nên kiểm tra trang định kỳ.
+          </p>
+        </article>
+
+        <!-- Mục 10 -->
+        <article class="rounded-2xl bg-gradient-to-r from-neutral-900 via-neutral-900 to-amber-950/30 border border-amber-500/40 p-6 sm:p-7 space-y-4">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300">
+              10
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Thông tin liên hệ
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Nếu có câu hỏi, yêu cầu truy cập, chỉnh sửa hoặc xóa dữ liệu, vui lòng liên hệ:
+          </p>
+          <div class="p-4 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-1.5 text-sm text-neutral-200">
+            <div class="font-black text-amber-400 uppercase tracking-wider">Bắn Tank Online</div>
+            <div>
+              Email hỗ trợ:
+              <a href="mailto:admin@bantank.online" class="text-amber-300 hover:underline font-semibold">
+                admin@bantank.online
+              </a>
+            </div>
+            <div>
+              Website chính thức:
+              <a href="https://bantank.online/" class="text-amber-300 hover:underline font-semibold">
+                https://bantank.online/
+              </a>
+            </div>
+          </div>
+          <div class="pt-2 flex flex-wrap items-center gap-3">
+            <a
+              href="/"
+              class="px-5 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs sm:text-sm uppercase tracking-wider transition-all shadow-lg inline-flex items-center gap-2"
+            >
+              <span>← Quay lại trang chủ Bắn Tank Online</span>
+            </a>
+            <a
+              href="/?mode=trial"
+              class="px-5 py-3 rounded-xl bg-neutral-950 hover:bg-neutral-800 border border-amber-500/40 text-amber-300 font-bold text-xs sm:text-sm uppercase tracking-wider transition-all inline-flex items-center gap-2"
+            >
+              <span>Chơi thử Màn 1</span>
+            </a>
+          </div>
+        </article>
+      </div>
+    </main>
+
+    <!-- =====================================================================
+         FOOTER CÔNG KHAI (ĐỒNG BỘ VỚI LANDING PAGE)
+    ====================================================================== -->
+    <footer class="bg-neutral-950 border-t border-neutral-800/90 text-neutral-400 text-xs sm:text-sm mt-10">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-8 pb-8 border-b border-neutral-900">
+          <!-- Cột 1: Thương hiệu & Mô tả -->
+          <div class="md:col-span-5 space-y-3">
+            <div class="flex items-center gap-3">
+              <img
+                src="/logo-bantank.png"
+                alt="Logo Bắn Tank Online"
+                class="w-9 h-9 rounded-lg object-contain border border-amber-500/40 bg-neutral-900 p-1"
+              />
+              <span class="text-base font-black uppercase tracking-wider text-white">
+                Bắn Tank Online
+              </span>
+            </div>
+            <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed max-w-md">
+              Trò chơi bắn xe tăng chiến thuật 2D trực tuyến trên trình duyệt web. Hỗ trợ chơi đơn (Solo), phối hợp đồng đội AI, chơi trực tuyến 2 người (Co-op Online) và chế độ Chơi thử không cần đăng nhập.
+            </p>
+            <p class="text-xs text-neutral-500">
+              Trang chủ chính thức:
+              <a href="https://bantank.online/" class="text-neutral-300 hover:text-amber-400 underline">https://bantank.online/</a>
+            </p>
+          </div>
+
+          <!-- Cột 2: Liên kết điều hướng nhanh -->
+          <div class="md:col-span-3 space-y-2.5">
+            <div class="text-xs font-black uppercase tracking-wider text-neutral-200">
+              Danh mục trang chủ
+            </div>
+            <ul class="space-y-2 text-xs sm:text-sm">
+              <li><a href="/#gioi-thieu" class="hover:text-amber-400 transition-colors">Giới thiệu trò chơi</a></li>
+              <li><a href="/#tinh-nang" class="hover:text-amber-400 transition-colors">Tính năng nổi bật</a></li>
+              <li><a href="/#che-do-choi" class="hover:text-amber-400 transition-colors">Các chế độ chơi</a></li>
+              <li><a href="/#huong-dan" class="hover:text-amber-400 transition-colors">Hướng dẫn bắt đầu</a></li>
+            </ul>
+          </div>
+
+          <!-- Cột 3: Pháp lý, Quyền riêng tư & Liên hệ hỗ trợ -->
+          <div class="md:col-span-4 space-y-2.5">
+            <div class="text-xs font-black uppercase tracking-wider text-neutral-200">
+              Pháp lý &amp; Hỗ trợ người chơi
+            </div>
+            <ul class="space-y-2 text-xs sm:text-sm">
+              <li>
+                <a
+                  href="/privacy.html"
+                  class="inline-flex items-center gap-1.5 text-amber-400 hover:text-amber-300 font-semibold transition-colors"
+                >
+                  <span>Chính sách quyền riêng tư (Privacy Policy)</span>
+                </a>
+              </li>
+              <li class="flex items-center gap-1.5 text-neutral-300">
+                <span>Liên hệ hỗ trợ:</span>
+                <a href="mailto:admin@bantank.online" class="text-neutral-200 hover:text-amber-400 underline">
+                  admin@bantank.online
+                </a>
+              </li>
+            </ul>
+            <p class="text-[11px] text-neutral-500 leading-relaxed pt-1">
+              Việc xác thực tài khoản được thực hiện thông qua Google OAuth &amp; Firebase Authentication. Khách truy cập có thể xem toàn bộ thông tin giới thiệu và Chính sách quyền riêng tư mà không cần đăng nhập.
+            </p>
+          </div>
+        </div>
+
+        <!-- Dòng bản quyền dưới cùng -->
+        <div class="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-500">
+          <div>© 2026 Bắn Tank Online. Bảo lưu mọi quyền.</div>
+          <div class="flex items-center gap-4">
+            <a href="/" class="hover:text-neutral-300 transition-colors">Trang chủ</a>
+            <span>•</span>
+            <a href="#top" class="hover:text-neutral-300 transition-colors">Lên đầu trang ↑</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      (function () {
+        var toggleBtn = document.getElementById('mobile-menu-toggle');
+        var panel = document.getElementById('mobile-menu-panel');
+        var iconOpen = document.getElementById('icon-menu-open');
+        var iconClose = document.getElementById('icon-menu-close');
+        if (!toggleBtn || !panel) return;
+        toggleBtn.addEventListener('click', function () {
+          var isHidden = panel.classList.contains('hidden');
+          if (isHidden) {
+            panel.classList.remove('hidden');
+            toggleBtn.setAttribute('aria-expanded', 'true');
+            if (iconOpen) iconOpen.classList.add('hidden');
+            if (iconClose) iconClose.classList.remove('hidden');
+          } else {
+            panel.classList.add('hidden');
+            toggleBtn.setAttribute('aria-expanded', 'false');
+            if (iconOpen) iconOpen.classList.remove('hidden');
+            if (iconClose) iconClose.classList.add('hidden');
+          }
+        });
+      })();
+    </script>
+  </body>
 </html>
+
