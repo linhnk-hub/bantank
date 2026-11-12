@@ -4,10 +4,11 @@
  */
 
 import React from 'react';
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Gamepad2 } from 'lucide-react';
 
 export interface WelcomeScreenProps {
   onSignIn: () => Promise<void>;
+  onStartTrialMode?: () => void;
   isProcessing: boolean;
   errorMessage: string | null;
   successMessage: string | null;
@@ -16,6 +17,7 @@ export interface WelcomeScreenProps {
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onSignIn,
+  onStartTrialMode,
   isProcessing,
   errorMessage,
   successMessage,
@@ -117,6 +119,19 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 {isProcessing ? 'ĐANG KẾT NỐI GOOGLE...' : 'ĐĂNG NHẬP BẰNG GOOGLE'}
               </span>
             </button>
+
+            {onStartTrialMode && (
+              <button
+                type="button"
+                data-testid="welcome-trial-play-btn"
+                onClick={onStartTrialMode}
+                disabled={isProcessing}
+                className="w-full py-3 px-6 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-amber-300 font-extrabold text-xs sm:text-sm border border-amber-500/40 hover:border-amber-400 transition-all transform active:scale-95 flex items-center justify-center gap-2.5 shadow-lg cursor-pointer disabled:opacity-50"
+              >
+                <Gamepad2 className="w-4 h-4 text-amber-400" />
+                <span className="tracking-wider uppercase">Chơi thử</span>
+              </button>
+            )}
           </div>
         </div>
       </main>
@@ -124,7 +139,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       {/* Footer Strip */}
       <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">
         <div className="max-w-4xl mx-auto flex items-center justify-center">
-          <span>Bắn Tank Online © 2026</span>
+          <span>© 2026</span>
         </div>
       </footer>
     </div>

@@ -12,6 +12,7 @@ interface StageClearModalProps {
   state: GameCoreState | null;
   onNextStageOrReplay: () => void;
   onQuitToMenu: () => void;
+  isTrialMode?: boolean;
 }
 
 export const StageClearModal: React.FC<StageClearModalProps> = ({
@@ -19,6 +20,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
   state,
   onNextStageOrReplay,
   onQuitToMenu,
+  isTrialMode = false,
 }) => {
   if (!isOpen || !state) return null;
 
@@ -126,22 +128,29 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
 
         {/* Sticky Action Footer: ALWAYS accessible */}
         <div className="p-3 sm:p-4 bg-neutral-950/95 border-t border-neutral-800 flex gap-2.5 shrink-0 safe-area-inset">
-          <button
-            type="button"
-            onClick={onNextStageOrReplay}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs transition-all shadow-lg shadow-amber-500/20 active:scale-95"
-          >
-            <RotateCcw className="w-4 h-4" />
-            <span>CHƠI LẠI / TIẾP TỤC</span>
-          </button>
+          {!isTrialMode && (
+            <button
+              type="button"
+              onClick={onNextStageOrReplay}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs transition-all shadow-lg shadow-amber-500/20 active:scale-95"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>CHƠI LẠI / TIẾP TỤC</span>
+            </button>
+          )}
 
           <button
             type="button"
+            data-testid={isTrialMode ? 'trial-return-login-btn' : 'stageclear-quit-menu-btn'}
             onClick={onQuitToMenu}
-            className="flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs transition-all border border-neutral-700 active:scale-95"
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 ${
+              isTrialMode
+                ? 'bg-amber-500 hover:bg-amber-400 text-black font-extrabold shadow-lg shadow-amber-500/20'
+                : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700'
+            }`}
           >
             <Home className="w-4 h-4" />
-            <span>VỀ MENU</span>
+            <span>{isTrialMode ? 'Quay về màn hình đăng nhập' : 'VỀ MENU'}</span>
           </button>
         </div>
       </div>

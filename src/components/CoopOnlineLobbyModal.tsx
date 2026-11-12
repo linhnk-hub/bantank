@@ -329,17 +329,6 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                 </button>
               </div>
             </div>
-
-            <div className="flex justify-start pt-1">
-              <button
-                type="button"
-                onClick={onBackToDifficulty}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs font-bold text-neutral-300 transition-all cursor-pointer"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Quay lại chọn chế độ</span>
-              </button>
-            </div>
           </>
         )}
 

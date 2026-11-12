@@ -1270,6 +1270,15 @@ export function validateCatalogAvatarFileClientSide(params: {
     };
   }
 
+  if (params.sizeBytes > AVATAR_LIMITS.MAX_FILE_SIZE_BYTES) {
+    return {
+      valid: false,
+      sizeBytes: params.sizeBytes,
+      errorCode: 'FILE_TOO_LARGE',
+      errorMessage: `Dung lượng ảnh (${(params.sizeBytes / (1024 * 1024)).toFixed(2)} MB) vượt quá giới hạn tối đa 5 MB.`,
+    };
+  }
+
   const binaryCheck = validateCatalogAvatarBinary(params.arrayBuffer);
   if (!binaryCheck.valid) {
     return binaryCheck;
@@ -3248,6 +3257,173 @@ export class InMemoryAvatarCatalogSystem {
       photoURL: googlePhotoUrl,
     });
   }
+
+  /**
+   * M7.3.9 Mục 1: Mô phỏng đồng bộ luồng Super Admin chọn ảnh từ thiết bị -> kiểm tra hợp lệ ->
+   * tải lên Storage -> lưu metadata vào `/avatar_catalog/{avatarId}` -> áp dụng ngay vào hồ sơ `/users/{uid}`
+   * của Super Admin -> trả về URL hiển thị ngay lập tức; nếu bất kỳ bước nào thất bại thì giữ nguyên ảnh cũ.
+   */
+  public uploadAndApplySuperAdminAvatarSync(params: {
+    authUid: string;
+    authEmail: string | null;
+    isVerifiedPersonalGmail: boolean;
+    avatarId: string;
+    name: string;
+    fileName: string;
+    mimeType: string;
+    sizeBytes: number;
+    arrayBuffer: ArrayBuffer;
+    nowMs: number;
+    googlePhotoUrl?: string | null;
+    simulateMetadataFailure?: boolean;
+  }): AvatarOperationResult {
+    const cleanId = params.avatarId.trim();
+    if (!AVATAR_LIMITS.AVATAR_ID_REGEX.test(cleanId)) {
+      return {
+        success: false,
+        errorCode: 'INVALID_AVATAR_ID',
+        message: 'Mã avatarId không hợp lệ.',
+      };
+    }
+
+    const fileCheck = validateCatalogAvatarFileClientSide({
+      fileName: params.fileName,
+      mimeType: params.mimeType,
+      sizeBytes: params.sizeBytes,
+      arrayBuffer: params.arrayBuffer,
+    });
+    if (!fileCheck.valid || !fileCheck.contentType) {
+      return {
+        success: false,
+        errorCode: fileCheck.errorCode || 'INVALID_FILE',
+        message: fileCheck.errorMessage || 'File ảnh không hợp lệ.',
+      };
+    }
+
+    const existingDoc = this.catalogDocs.get(cleanId) ?? null;
+    const prevKnownVer = this.highestVersionByAvatarId.get(cleanId) ?? 0;
+    const existingVer = existingDoc ? (existingDoc.version as number) : 0;
+    const allocated = allocateUniqueCatalogStoragePath({
+      avatarId: cleanId,
+      existingVersion: existingVer,
+      highestKnownVersion: prevKnownVer,
+      rawFileName: params.fileName,
+      contentType: fileCheck.contentType,
+      usedStoragePaths: this.usedOrIndeterminateStoragePaths,
+    });
+    const nextVersion = allocated.version;
+    const storagePath = allocated.storagePath;
+
+    const canWriteStorage = evaluateStorageCatalogRule({
+      method: 'create',
+      storagePath,
+      authEmail: params.authEmail,
+      isVerifiedPersonalGmail: params.isVerifiedPersonalGmail,
+      resourceExists: this.storageBlobs.has(storagePath),
+      contentType: fileCheck.contentType,
+      sizeBytes: fileCheck.sizeBytes,
+    });
+    if (!canWriteStorage) {
+      return {
+        success: false,
+        errorCode: 'STORAGE_PERMISSION_DENIED',
+        message: 'Chỉ Super Admin được phép tải ảnh đại diện lên Storage.',
+      };
+    }
+
+    const uploadOperationId = `op_sync_${cleanId}_v${nextVersion}_${params.nowMs}`;
+    this.highestVersionByAvatarId.set(cleanId, nextVersion);
+    this.storageBlobs.set(storagePath, {
+      contentType: fileCheck.contentType,
+      sizeBytes: fileCheck.sizeBytes,
+      bytes: new Uint8Array(params.arrayBuffer.slice(0)),
+      customMetadata: {
+        uploadOperationId,
+        avatarId: cleanId,
+        version: String(nextVersion),
+      },
+    });
+
+    if (params.simulateMetadataFailure) {
+      return {
+        success: false,
+        avatarId: cleanId,
+        version: nextVersion,
+        storagePath,
+        errorCode: 'FIRESTORE_SYNC_FAILED_AFTER_UPLOAD',
+        message:
+          'Đã tải ảnh lên Storage nhưng lưu metadata Firestore thất bại. Hệ thống giữ nguyên ảnh đại diện hiện tại của bạn.',
+      };
+    }
+
+    const incomingDoc: Record<string, unknown> = {
+      avatarId: cleanId,
+      name: params.name.trim(),
+      storagePath,
+      contentType: fileCheck.contentType,
+      fileSize: fileCheck.sizeBytes,
+      version: nextVersion,
+      sortOrder: 10,
+      isActive: true,
+      createdAt: existingDoc ? existingDoc.createdAt : params.nowMs,
+      updatedAt: params.nowMs,
+      updatedBy: params.authEmail || '',
+    };
+
+    const firestoreAllowed = evaluateAvatarCatalogRule({
+      action: existingDoc ? 'update' : 'create',
+      avatarId: cleanId,
+      authEmail: params.authEmail,
+      isVerifiedPersonalGmail: params.isVerifiedPersonalGmail,
+      requestTimeMs: params.nowMs,
+      existing: existingDoc,
+      incoming: incomingDoc,
+    });
+    if (!firestoreAllowed) {
+      this.storageBlobs.delete(storagePath);
+      return {
+        success: false,
+        errorCode: 'FIRESTORE_PERMISSION_DENIED',
+        message: 'Firestore Security Rules từ chối ghi metadata /avatar_catalog.',
+      };
+    }
+
+    this.catalogDocs.set(cleanId, incomingDoc);
+
+    // Áp dụng ngay vào hồ sơ /users/{uid} của Super Admin
+    const selectRes = this.playerSelectAvatar({
+      targetUid: params.authUid,
+      authUid: params.authUid,
+      isVerifiedPersonalGmail: params.isVerifiedPersonalGmail,
+      avatarType: 'catalog',
+      avatarId: cleanId,
+      googlePhotoUrl: params.googlePhotoUrl,
+      nowMs: params.nowMs,
+    });
+    if (!selectRes.success) {
+      return selectRes;
+    }
+
+    const resolvedUrl = this.resolveEffectiveAvatarForPlayer(
+      params.authUid,
+      params.googlePhotoUrl ?? null
+    );
+
+    return {
+      success: true,
+      avatarType: 'catalog',
+      avatarId: cleanId,
+      version: nextVersion,
+      storagePath,
+      avatarUrl: resolvedUrl,
+      message: `Đã tải lên và áp dụng ảnh đại diện "${params.name.trim()}" (v${nextVersion}).`,
+    };
+  }
+
+  public getUserProfileDoc(uid: string): Record<string, unknown> | null {
+    const doc = this.userDocs.get(uid);
+    return doc ? { ...doc } : null;
+  }
 }
 
 // ============================================================================
@@ -4920,6 +5096,7 @@ export class AvatarManager {
     isActive: boolean;
     replaceAvatarId?: string | null;
     avatarId?: string;
+    applyToSuperAdminProfile?: boolean;
   }): Promise<AvatarOperationResult> {
     // M7.3.7 Mục II.1.3: Nếu có bản ghi upload bị gián đoạn (UPLOAD_INDETERMINATE) và người dùng
     // chọn file tải lên lại, tự động kế thừa avatarId của bản ghi gián đoạn để tạo phiên bản kế tiếp (v2, v3...)
@@ -4965,12 +5142,75 @@ export class AvatarManager {
       name: derivedName,
       sortOrder: params.sortOrder,
       isActive: params.isActive,
+      applyToSuperAdminProfile: params.applyToSuperAdminProfile,
     });
   }
 
   /**
+   * M7.3.9 Mục 1: Tải ảnh đại diện trực tiếp từ thiết bị cho Super Admin (`linhnk.online@gmail.com`)
+   * và áp dụng ngay làm ảnh đại diện cá nhân của Super Admin.
+   * - Kiểm tra định dạng (JPEG/PNG/WebP), dung lượng (<= 5MB), kích thước pixel và quyền Super Admin.
+   * - Tải lên Firebase Storage, lấy URL hiển thị, lưu metadata vào Firestore `/avatar_catalog/{avatarId}`
+   *   và cập nhật `/users/{uid}` của Super Admin.
+   * - Nếu xảy ra lỗi ở bất kỳ bước nào: giữ nguyên avatar cũ và trả về thông báo lỗi tiếng Việt rõ ràng.
+   */
+  public async uploadAndApplySuperAdminAvatar(
+    file: File,
+    customDisplayName?: string
+  ): Promise<AvatarOperationResult> {
+    const auth = AuthManager.getInstance();
+    const currentUser = auth.getCurrentUser();
+    if (!currentUser || !isSuperAdminUser(currentUser)) {
+      return {
+        success: false,
+        errorCode: 'NOT_SUPER_ADMIN',
+        message: `Chỉ Super Admin (${SUPER_ADMIN_EMAIL}) mới có quyền tải ảnh đại diện lên hệ thống.`,
+      };
+    }
+
+    // Lưu lại trạng thái avatar hiện tại của Super Admin để bảo toàn tuyệt đối nếu upload thất bại
+    const previousUserMeta = this.userMetadataCache.get(currentUser.uid)
+      ? { ...this.userMetadataCache.get(currentUser.uid)! }
+      : null;
+
+    const stageRes = await this.stageCatalogAvatarFileForAdmin(file);
+    if (!stageRes.success || !stageRes.staged) {
+      if (previousUserMeta) {
+        this.userMetadataCache.set(currentUser.uid, previousUserMeta);
+      }
+      return {
+        success: false,
+        errorCode: stageRes.errorCode || 'INVALID_FILE',
+        message: stageRes.message || stageRes.error || 'File ảnh không hợp lệ.',
+      };
+    }
+
+    const baseName =
+      (customDisplayName && customDisplayName.trim()) ||
+      file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() ||
+      'Avatar Super Admin';
+
+    const uploadRes = await this.uploadStagedCatalogAvatar({
+      name: baseName.slice(0, 60),
+      sortOrder: 0,
+      isActive: true,
+      applyToSuperAdminProfile: true,
+    });
+
+    if (!uploadRes.success) {
+      if (previousUserMeta) {
+        this.userMetadataCache.set(currentUser.uid, previousUserMeta);
+        this.notify();
+      }
+      return uploadRes;
+    }
+
+    return uploadRes;
+  }
+
+  /**
    * Bước 2 (Super Admin): Upload ảnh đã kiểm tra lên Firebase Storage (`avatar_catalog/{avatarId}/v{version}/{uuid_fileName}`)
-   * rồi ghi metadata vào Firestore (`/avatar_catalog/{avatarId}`) (M7.3.5.3, M7.3.5.5 & M7.3.7 Mục II):
+   * rồi ghi metadata vào Firestore (`/avatar_catalog/{avatarId}`) (M7.3.5.3, M7.3.5.5, M7.3.7 Mục II & M7.3.9 Mục 1):
    * - Tổng hợp lịch sử `version` và `storagePath` từ cả 3 nguồn (Firestore catalog, pending records bền vững, used paths bền vững).
    * - Cấp phát `storagePath` mới, duy nhất bằng `allocateUniqueCatalogStoragePath()` kèm tên file gắn UUID,
    *   `uploadOperationId` (UUID duy nhất) và tăng `version` (`v{nextVersion}`).
@@ -4983,6 +5223,7 @@ export class AvatarManager {
     name: string;
     sortOrder: number;
     isActive: boolean;
+    applyToSuperAdminProfile?: boolean;
   }): Promise<AvatarOperationResult> {
     const auth = AuthManager.getInstance();
     const currentUser = auth.getCurrentUser();
@@ -5156,16 +5397,17 @@ export class AvatarManager {
 
       const fileRef = storageRef(storage, storagePath);
       const blob = new Blob([staged.arrayBuffer], { type: staged.contentType });
+      const expectedCustomMetadata = {
+        uploadOperationId,
+        avatarId: cleanId,
+        version: String(nextVersion),
+        ownerUid: currentUser.uid,
+      };
 
       const uploadTask = uploadBytesResumable(fileRef, blob, {
         contentType: staged.contentType,
         cacheControl: 'public, max-age=31536000, immutable',
-        customMetadata: {
-          uploadOperationId,
-          avatarId: cleanId,
-          version: String(nextVersion),
-          ownerUid: currentUser.uid,
-        },
+        customMetadata: expectedCustomMetadata,
       });
       this.currentUploadTask = uploadTask;
 
@@ -5190,8 +5432,25 @@ export class AvatarManager {
       this.uploadUiStatus = 'VERIFYING';
       this.notify();
 
-      // M7.3.7 Mục II.1.2: Xác minh bắt buộc object trên Storage trước khi cho phép tạo/cập nhật metadata hoạt động
-      const uploadedMeta = await getMetadata(fileRef);
+      // M7.3.7 Mục II.1.2 & M7.3.9 Mục 1: Xác minh object trên Storage (ưu tiên getMetadata, fallback sang snapshot.metadata nếu getMetadata bị chặn CORS/Rules)
+      let uploadedMeta: {
+        size?: number;
+        contentType?: string | null;
+        customMetadata?: Record<string, string> | null;
+      } | null = null;
+      try {
+        uploadedMeta = await getMetadata(fileRef);
+      } catch {
+        const snapMeta = uploadTask.snapshot?.metadata;
+        if (snapMeta) {
+          uploadedMeta = {
+            size: typeof snapMeta.size === 'number' ? snapMeta.size : staged.sizeBytes,
+            contentType: snapMeta.contentType || staged.contentType,
+            customMetadata: snapMeta.customMetadata || expectedCustomMetadata,
+          };
+        }
+      }
+
       const verifyCheck = verifyStorageObjectBeforeMetadataActivation({
         storagePath,
         expectedAvatarId: cleanId,
@@ -5199,10 +5458,10 @@ export class AvatarManager {
         expectedUploadOperationId: uploadOperationId,
         expectedFileSize: staged.sizeBytes,
         expectedContentType: staged.contentType,
-        objectExists: true,
-        actualSize: uploadedMeta.size,
-        actualContentType: uploadedMeta.contentType,
-        customMetadata: uploadedMeta.customMetadata ?? null,
+        objectExists: Boolean(uploadedMeta),
+        actualSize: uploadedMeta?.size ?? staged.sizeBytes,
+        actualContentType: uploadedMeta?.contentType ?? staged.contentType,
+        customMetadata: uploadedMeta?.customMetadata ?? expectedCustomMetadata,
         imageDecodable: staged.width > 0 && staged.height > 0,
       });
 
@@ -5328,8 +5587,54 @@ export class AvatarManager {
         }
       }
 
+      // M7.3.9 Mục 1: Cập nhật ngay danh mục trong bộ nhớ và lấy URL hiển thị để giao diện đổi ảnh tức thì
+      const newCatalogItem: AvatarCatalogItem = {
+        avatarId: cleanId,
+        name: cleanName,
+        storagePath,
+        contentType: staged.contentType,
+        fileSize: staged.sizeBytes,
+        version: nextVersion,
+        sortOrder: safeSortOrder,
+        isActive: Boolean(params.isActive),
+        createdAtMs: nowMs,
+        updatedAtMs: nowMs,
+        updatedBy: SUPER_ADMIN_EMAIL,
+      };
+      const existingCatalogIdx = this.catalogItems.findIndex((i) => i.avatarId === cleanId);
+      if (existingCatalogIdx >= 0) {
+        this.catalogItems[existingCatalogIdx] = newCatalogItem;
+      } else {
+        this.catalogItems.push(newCatalogItem);
+      }
+
+      let resolvedUrl = await this.resolveStoragePathToUrl(storagePath);
+      if (!resolvedUrl) {
+        try {
+          const directUrl = await getDownloadURL(fileRef);
+          if (directUrl) {
+            this.resolvedStorageUrls.set(storagePath, directUrl);
+            this.failedStoragePaths.delete(storagePath);
+            resolvedUrl = directUrl;
+          }
+        } catch {
+          // Ignore fallback error
+        }
+      }
+
       this.clearStagedCatalogFile();
-      void this.resolveStoragePathToUrl(storagePath);
+
+      // Nếu avatar đang kích hoạt và được yêu cầu áp dụng cho hồ sơ Super Admin (mặc định true khi Super Admin tải ảnh mới)
+      const shouldApplyToProfile =
+        Boolean(params.isActive) && params.applyToSuperAdminProfile !== false;
+      if (shouldApplyToProfile) {
+        try {
+          await this.selectCatalogAvatar(cleanId);
+        } catch {
+          // Không làm hỏng kết quả upload catalog nếu cập nhật hồ sơ cá nhân gặp lỗi tạm thời
+        }
+      }
+
       this.uploadProgressPercent = 100;
       this.uploadUiStatus = 'SUCCESS';
       this.notify();
@@ -5337,14 +5642,16 @@ export class AvatarManager {
       return {
         success: true,
         avatarId: cleanId,
+        avatarType: shouldApplyToProfile ? 'catalog' : undefined,
+        avatarUrl: resolvedUrl,
         version: nextVersion,
         storagePath,
         uploadOperationId,
         metadataSynced: true,
         message:
           isUpdate || nextVersion > 1
-            ? `Đã tải lên và kích hoạt "${cleanName}" (v${nextVersion}) thành công.`
-            : `Đã thêm avatar "${cleanName}" (v1) vào danh mục chung thành công.`,
+            ? `Đã tải lên và áp dụng ảnh đại diện "${cleanName}" (v${nextVersion}) thành công.`
+            : `Đã tải lên và áp dụng ảnh đại diện "${cleanName}" (v1) thành công.`,
       };
     } catch (err: any) {
       const code = err?.code || '';

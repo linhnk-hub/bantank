@@ -185,21 +185,18 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       {/* Main Container */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-6 max-w-4xl mx-auto w-full">
         <div className="w-full max-w-md flex flex-col items-center text-center">
-          {/* Emblem & Title Banner */}
+          {/* Emblem Banner */}
           <div className="mb-6">
-            <div className="flex justify-center mb-3 p-0 m-0">
+            <div className="flex justify-center p-0 m-0">
               <img
                 src="/logo-bantank.png"
-                alt="Bắn Tank Online Logo"
+                alt="Chiến trường huyền thoại"
                 className="w-32 h-32 sm:w-40 sm:h-40 object-contain drop-shadow-xl p-0 m-0"
                 onError={(e) => {
                   e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
                 }}
               />
             </div>
-            <h1 className="text-2xl sm:text-4xl font-black text-white tracking-wide font-mono">
-              BẮN TANK ONLINE
-            </h1>
           </div>
 
           {/* Real Error Alert Card (Only shown if an actual failure occurred, M7.3.4 V.2) */}
@@ -259,17 +256,17 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 className="py-3 px-4 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 hover:border-sky-500/50 text-neutral-100 font-extrabold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow active:scale-95 cursor-pointer"
               >
                 <HelpCircle className="w-4 h-4 text-sky-400" />
-                <span>HỖ TRỢ</span>
+                <span>HƯỚNG DẪN</span>
               </button>
             </div>
           </div>
         </div>
       </main>
 
-      {/* Footer — Only "Bắn Tank Online © 2026" */}
+      {/* Footer */}
       <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">
         <div className="max-w-4xl mx-auto flex items-center justify-center">
-          <span>Bắn Tank Online © 2026</span>
+          <span>© 2026</span>
         </div>
       </footer>
     </div>

@@ -27,6 +27,9 @@ import {
   Image as ImageIcon,
   Gamepad2,
   Shield,
+  Users,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react';
 import { SoundManager, type AudioSettings } from '../core/audio.ts';
 import { MusicManager } from '../core/musicManager.ts';
@@ -41,9 +44,11 @@ import {
 import {
   AuthManager,
   SUPER_ADMIN_EMAIL,
+  USER_ACCOUNTS_PAGE_SIZE,
   resolveUserRole,
   getRoleNameFrameClasses,
   getRoleDisplayInfo,
+  type UserAccountSummary,
 } from '../core/authManager.ts';
 import { MusicAdminPanel } from './MusicAdminPanel.tsx';
 
@@ -52,7 +57,8 @@ export type SettingsTabId =
   | 'IMAGE_SETTINGS'
   | 'AUDIO_SETTINGS'
   | 'GAME_MODE_SETTINGS'
-  | 'ADMIN_OTHER';
+  | 'ADMIN_OTHER'
+  | 'USER_ACCOUNTS';
 
 export interface SettingsModalProps {
   isOpen: boolean;
@@ -69,6 +75,62 @@ export interface SettingsModalProps {
     role?: string | null;
   } | null;
   onProfileUpdated?: () => void;
+}
+
+/**
+ * M7.3.9 Mục 3 & 4: Trả về danh sách các mục trong Cài đặt Hệ thống theo đúng quyền hạn thực tế:
+ * - Người chơi thường chỉ thấy: `Thông tin` (`ACCOUNT`) và `Âm thanh` (`AUDIO_SETTINGS`).
+ * - Tuyệt đối ẩn và chặn truy cập `Chế độ chơi` (`GAME_MODE_SETTINGS`), `Hình ảnh` (`IMAGE_SETTINGS`),
+ *   `Cấp quyền` (`ADMIN_OTHER`) và `Tài khoản` (`USER_ACCOUNTS`) đối với người chơi thường.
+ */
+export function getAvailableSettingsTabsForRole(isVerifiedSuperAdmin: boolean): Array<{
+  id: SettingsTabId;
+  label: string;
+  adminOnly: boolean;
+}> {
+  const tabs: Array<{ id: SettingsTabId; label: string; adminOnly: boolean }> = [
+    {
+      id: 'ACCOUNT',
+      label: 'Thông tin',
+      adminOnly: false,
+    },
+  ];
+
+  if (isVerifiedSuperAdmin) {
+    tabs.push({
+      id: 'IMAGE_SETTINGS',
+      label: 'Hình ảnh',
+      adminOnly: true,
+    });
+  }
+
+  tabs.push({
+    id: 'AUDIO_SETTINGS',
+    label: 'Âm thanh',
+    adminOnly: false,
+  });
+
+  if (isVerifiedSuperAdmin) {
+    tabs.push(
+      {
+        id: 'GAME_MODE_SETTINGS',
+        label: 'Chế độ chơi',
+        adminOnly: true,
+      },
+      {
+        id: 'ADMIN_OTHER',
+        label: 'Cấp quyền',
+        adminOnly: true,
+      },
+      {
+        id: 'USER_ACCOUNTS',
+        label: 'Tài khoản',
+        adminOnly: true,
+      }
+    );
+  }
+
+  return tabs;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -141,7 +203,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [catalogSortOrderInput, setCatalogSortOrderInput] = useState<number>(10);
   const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
 
+  // Super Admin User Accounts Pagination state (M7.3.9 Mục 3)
+  const [accountsPageList, setAccountsPageList] = useState<UserAccountSummary[]>([]);
+  const [accountsPageIndex, setAccountsPageIndex] = useState<number>(0);
+  const [accountsCursorHistory, setAccountsCursorHistory] = useState<Array<unknown | null>>([null]);
+  const [accountsHasNextPage, setAccountsHasNextPage] = useState<boolean>(false);
+  const [accountsNextCursor, setAccountsNextCursor] = useState<unknown | null>(null);
+  const [isLoadingAccounts, setIsLoadingAccounts] = useState<boolean>(false);
+  const [accountsError, setAccountsError] = useState<string | null>(null);
+
   const adminFileInputRef = useRef<HTMLInputElement | null>(null);
+  const quickProfileAvatarInputRef = useRef<HTMLInputElement | null>(null);
+
+  const loadUserAccountsPage = async (targetPageIndex: number, cursor: unknown | null) => {
+    if (!isVerifiedSuperAdmin) return;
+    setIsLoadingAccounts(true);
+    setAccountsError(null);
+    try {
+      const res = await authManager.fetchPaginatedUserAccounts({
+        pageSize: USER_ACCOUNTS_PAGE_SIZE,
+        cursor,
+      });
+      if (!res.success) {
+        setAccountsError(res.errorMessage || 'Không thể tải danh sách tài khoản.');
+      } else {
+        setAccountsPageList(res.accounts);
+        setAccountsPageIndex(targetPageIndex);
+        setAccountsHasNextPage(res.hasNextPage);
+        setAccountsNextCursor(res.nextCursor);
+      }
+    } catch (err: any) {
+      setAccountsError(err?.message || 'Lỗi tải danh sách tài khoản.');
+    } finally {
+      setIsLoadingAccounts(false);
+    }
+  };
 
   useEffect(() => {
     if (!isOpen) return;
@@ -160,11 +256,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     // Reset to ACCOUNT tab if current tab is admin-only and user is not Super Admin
     if (
       !isVerifiedSuperAdmin &&
-      (activeTab === 'IMAGE_SETTINGS' || activeTab === 'ADMIN_OTHER')
+      (activeTab === 'IMAGE_SETTINGS' ||
+        activeTab === 'GAME_MODE_SETTINGS' ||
+        activeTab === 'ADMIN_OTHER' ||
+        activeTab === 'USER_ACCOUNTS')
     ) {
       setActiveTab('ACCOUNT');
     }
   }, [isOpen, currentUid, isVerifiedSuperAdmin]);
+
+  useEffect(() => {
+    if (isOpen && activeTab === 'USER_ACCOUNTS' && isVerifiedSuperAdmin) {
+      setAccountsCursorHistory([null]);
+      void loadUserAccountsPage(0, null);
+    }
+  }, [isOpen, activeTab, isVerifiedSuperAdmin]);
 
   useEffect(() => {
     const unsub = avatarManager.subscribe(() => {
@@ -270,6 +376,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  const handleSuperAdminQuickUploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setFeedback(null);
+    setIsBusy(true);
+    try {
+      const res = await avatarManager.uploadAndApplySuperAdminAvatar(file, displayName);
+      setFeedback({
+        type: res.success ? 'success' : 'error',
+        text:
+          res.message ||
+          (res.success
+            ? 'Đã tải lên và áp dụng ảnh đại diện mới thành công!'
+            : 'Tải ảnh đại diện thất bại. Ảnh cũ vẫn được giữ nguyên.'),
+      });
+      if (res.success) {
+        setAvatarLoadError(false);
+        onProfileUpdated?.();
+      }
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
   const handleSaveDisplayName = async (e: React.FormEvent) => {
     e.preventDefault();
     setFeedback(null);
@@ -346,9 +478,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         text: res.message || (res.success ? 'Tải lên thành công!' : 'Tải lên thất bại.'),
       });
       if (res.success) {
+        setAvatarLoadError(false);
         setReplaceTargetId(null);
         setCatalogNameInput('');
         setCatalogSortOrderInput((prev) => prev + 10);
+        onProfileUpdated?.();
       }
     } finally {
       setIsBusy(false);
@@ -410,54 +544,49 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  const handleNextAccountsPage = () => {
+    if (!accountsHasNextPage || isLoadingAccounts) return;
+    const nextIdx = accountsPageIndex + 1;
+    const nextHistory = [...accountsCursorHistory];
+    nextHistory[nextIdx] = accountsNextCursor;
+    setAccountsCursorHistory(nextHistory);
+    void loadUserAccountsPage(nextIdx, accountsNextCursor);
+  };
+
+  const handlePrevAccountsPage = () => {
+    if (accountsPageIndex <= 0 || isLoadingAccounts) return;
+    const prevIdx = accountsPageIndex - 1;
+    const prevCursor = accountsCursorHistory[prevIdx] ?? null;
+    void loadUserAccountsPage(prevIdx, prevCursor);
+  };
+
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
   };
 
-  const availableTabs: Array<{
-    id: SettingsTabId;
-    label: string;
-    icon: React.ReactNode;
-    adminOnly?: boolean;
-  }> = [
-    {
-      id: 'ACCOUNT',
-      label: 'Tài khoản cá nhân',
-      icon: <User className="w-3.5 h-3.5" />,
-    },
-    ...(isVerifiedSuperAdmin
-      ? [
-          {
-            id: 'IMAGE_SETTINGS' as SettingsTabId,
-            label: 'Cài đặt hình ảnh',
-            icon: <ImageIcon className="w-3.5 h-3.5" />,
-            adminOnly: true,
-          },
-        ]
-      : []),
-    {
-      id: 'AUDIO_SETTINGS',
-      label: 'Cài đặt âm thanh',
-      icon: <Music className="w-3.5 h-3.5" />,
-    },
-    {
-      id: 'GAME_MODE_SETTINGS',
-      label: 'Cài đặt chế độ chơi',
-      icon: <Gamepad2 className="w-3.5 h-3.5" />,
-    },
-    ...(isVerifiedSuperAdmin
-      ? [
-          {
-            id: 'ADMIN_OTHER' as SettingsTabId,
-            label: 'Quản trị & Phân quyền',
-            icon: <Shield className="w-3.5 h-3.5" />,
-            adminOnly: true,
-          },
-        ]
-      : []),
-  ];
+  const getTabIcon = (tabId: SettingsTabId) => {
+    switch (tabId) {
+      case 'ACCOUNT':
+        return <User className="w-3.5 h-3.5" />;
+      case 'IMAGE_SETTINGS':
+        return <ImageIcon className="w-3.5 h-3.5" />;
+      case 'AUDIO_SETTINGS':
+        return <Music className="w-3.5 h-3.5" />;
+      case 'GAME_MODE_SETTINGS':
+        return <Gamepad2 className="w-3.5 h-3.5" />;
+      case 'ADMIN_OTHER':
+        return <Shield className="w-3.5 h-3.5" />;
+      case 'USER_ACCOUNTS':
+        return <Users className="w-3.5 h-3.5" />;
+    }
+  };
+
+  const availableTabs = getAvailableSettingsTabsForRole(isVerifiedSuperAdmin).map((tab) => ({
+    ...tab,
+    icon: getTabIcon(tab.id),
+  }));
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/80 backdrop-blur-md animate-fade-in select-none">
@@ -485,7 +614,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
         </div>
 
-        {/* Navigation Tabs (Hạng mục 2 - M7.3.7 Mục III.2.1: Tách các mục cài đặt riêng biệt) */}
+        {/* Navigation Tabs (M7.3.9 Mục 3 & 4) */}
         <div className="bg-neutral-950/90 px-3 py-2 border-b border-neutral-800 flex items-center gap-1.5 overflow-x-auto shrink-0">
           {availableTabs.map((tab) => {
             const isSelected = activeTab === tab.id;
@@ -544,14 +673,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* =========================================================================
-              TAB 1: TÀI KHOẢN CÁ NHÂN (MỌI NGƯỜI CHƠI)
+              TAB 1: THÔNG TIN (MỌI NGƯỜI CHƠI)
              ========================================================================= */}
           {activeTab === 'ACCOUNT' && currentUser && (
             <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-4 space-y-4">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
                   <User className="w-4 h-4 text-amber-400" />
-                  <span>TÀI KHOẢN CÁ NHÂN</span>
+                  <span>THÔNG TIN CÁ NHÂN</span>
                 </div>
                 <div className="flex items-center gap-2">
                   {/* Khung tên người chơi có màu viền phân quyền (M7.3.7 Mục III.2.2) */}
@@ -571,16 +700,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Khu vực ẢNH ĐẠI DIỆN NGƯỜI CHƠI (Chọn Ảnh Google hoặc Danh mục Avatar chung) */}
+              {/* Khu vực ẢNH ĐẠI DIỆN NGƯỜI CHƠI (Chọn Ảnh Google hoặc Danh mục Avatar chung + Tải ảnh trực tiếp cho Super Admin) */}
               <div className="p-3.5 rounded-xl bg-neutral-900/80 border border-neutral-800 space-y-3.5">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="flex items-center gap-1.5 font-bold text-amber-300">
                     <Camera className="w-4 h-4 text-amber-400" />
                     <span>CHỌN ẢNH ĐẠI DIỆN</span>
                   </div>
-                  <span className="text-[10px] text-neutral-400 font-mono">
-                    Ảnh Google hoặc Danh mục Avatar chung
-                  </span>
+                  {isVerifiedSuperAdmin ? (
+                    <>
+                      <input
+                        ref={quickProfileAvatarInputRef}
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                        onChange={handleSuperAdminQuickUploadAvatar}
+                        className="hidden"
+                      />
+                      <button
+                        type="button"
+                        disabled={isBusy}
+                        onClick={() => quickProfileAvatarInputRef.current?.click()}
+                        className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-[11px] flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
+                      >
+                        <Upload className="w-3.5 h-3.5" />
+                        <span>{isBusy ? 'ĐANG XỬ LÝ...' : 'TẢI ẢNH TỪ THIẾT BỊ'}</span>
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-[10px] text-neutral-400 font-mono">
+                      Ảnh Google hoặc Danh mục Avatar chung
+                    </span>
+                  )}
                 </div>
 
                 {/* Current Active Avatar Preview */}
@@ -757,14 +907,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* =========================================================================
-              TAB 2: CÀI ĐẶT HÌNH ẢNH (CHỈ DÀNH CHO SUPER ADMIN linhnk.online@gmail.com)
+              TAB 2: HÌNH ẢNH (CHỈ DÀNH CHO SUPER ADMIN linhnk.online@gmail.com)
              ========================================================================= */}
           {activeTab === 'IMAGE_SETTINGS' && isVerifiedSuperAdmin && (
             <section className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/40 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/20 pb-2.5">
                 <div className="flex items-center gap-1.5 font-extrabold text-amber-300 uppercase">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>CÀI ĐẶT HÌNH ẢNH • QUẢN LÝ DANH MỤC AVATAR (SUPER ADMIN)</span>
+                  <span>HÌNH ẢNH • QUẢN LÝ DANH MỤC AVATAR (SUPER ADMIN)</span>
                 </div>
                 <span className="text-[10px] text-amber-200/80 font-mono">
                   JPEG / PNG / WebP • ≤ 5 MB • ≤ 2048×2048 px
@@ -1114,7 +1264,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* =========================================================================
-              TAB 3: CÀI ĐẶT ÂM THANH (BGM & SFX CÁ NHÂN + QUẢN LÝ NHẠC NỀN SUPER ADMIN)
+              TAB 3: ÂM THANH (BGM & SFX CÁ NHÂN + QUẢN LÝ NHẠC NỀN SUPER ADMIN)
              ========================================================================= */}
           {activeTab === 'AUDIO_SETTINGS' && (
             <>
@@ -1122,7 +1272,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
                   <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
                     <Music className="w-4 h-4 text-amber-400" />
-                    <span>CÀI ĐẶT ÂM THANH</span>
+                    <span>ÂM THANH</span>
                   </div>
                   <span className="text-[10px] text-neutral-400 font-mono">
                     BGM &amp; SFX Độc Lập • Chỉ 1 nguồn BGM phát tại 1 thời điểm
@@ -1239,14 +1389,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* =========================================================================
-              TAB 4: CÀI ĐẶT CHẾ ĐỘ CHƠI (M7.3.7 MỤC III.2.1)
+              TAB 4: CHẾ ĐỘ CHƠI (M7.3.9 MỤC 4: CHỈ HIỂN THỊ VỚI SUPER ADMIN)
              ========================================================================= */}
-          {activeTab === 'GAME_MODE_SETTINGS' && (
+          {activeTab === 'GAME_MODE_SETTINGS' && isVerifiedSuperAdmin && (
             <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-4 space-y-4">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
                 <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
                   <Gamepad2 className="w-4 h-4 text-amber-400" />
-                  <span>CÀI ĐẶT CHẾ ĐỘ CHƠI</span>
+                  <span>CHẾ ĐỘ CHƠI (SUPER ADMIN)</span>
                 </div>
                 <span className="text-[10px] text-neutral-400 font-mono">
                   Chơi đơn • Co-op 2 người • Co-op Online
@@ -1312,14 +1462,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* =========================================================================
-              TAB 5: QUẢN TRỊ & PHÂN QUYỀN (CHỈ DÀNH CHO SUPER ADMIN linhnk.online@gmail.com)
+              TAB 5: CẤP QUYỀN (CHỈ DÀNH CHO SUPER ADMIN linhnk.online@gmail.com)
              ========================================================================= */}
           {activeTab === 'ADMIN_OTHER' && isVerifiedSuperAdmin && (
             <section className="p-4 rounded-xl bg-red-950/20 border border-red-500/40 space-y-4">
               <div className="flex items-center justify-between border-b border-red-500/20 pb-2.5 flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-extrabold text-red-300 uppercase tracking-wider">
                   <Shield className="w-4 h-4 text-red-400" />
-                  <span>QUẢN TRỊ HỆ THỐNG &amp; PHÂN QUYỀN (SUPER ADMIN)</span>
+                  <span>CẤP QUYỀN HỆ THỐNG (SUPER ADMIN)</span>
                 </div>
                 <span className="text-[10px] font-mono text-red-200/80">
                   Super Admin duy nhất: {SUPER_ADMIN_EMAIL}
@@ -1359,6 +1509,140 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <p className="text-[11px] text-neutral-400 leading-relaxed">
                   Quyền hiển thị và phân quyền quản trị được xác định trực tiếp từ dữ liệu xác thực Google Auth và tài liệu máy chủ đã xác minh, tuyệt đối không tin tưởng dữ liệu tự sửa trong <span className="font-mono text-neutral-300">localStorage</span>.
                 </p>
+              </div>
+            </section>
+          )}
+
+          {/* =========================================================================
+              TAB 6: TÀI KHOẢN (M7.3.9 MỤC 3: CHỈ DÀNH CHO SUPER ADMIN, PHÂN TRANG 10 TÀI KHOẢN / TRANG)
+             ========================================================================= */}
+          {activeTab === 'USER_ACCOUNTS' && isVerifiedSuperAdmin && (
+            <section className="p-4 rounded-xl bg-neutral-950/80 border border-red-500/40 space-y-4">
+              <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 flex-wrap gap-2">
+                <div className="flex items-center gap-2 font-extrabold text-red-300 uppercase tracking-wider">
+                  <Users className="w-4 h-4 text-red-400" />
+                  <span>DANH SÁCH TÀI KHOẢN ĐÃ THAM GIA (SUPER ADMIN)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-mono text-neutral-400">
+                    Tối đa {USER_ACCOUNTS_PAGE_SIZE} tài khoản / trang
+                  </span>
+                  <button
+                    type="button"
+                    disabled={isLoadingAccounts}
+                    onClick={() =>
+                      void loadUserAccountsPage(
+                        accountsPageIndex,
+                        accountsCursorHistory[accountsPageIndex] ?? null
+                      )
+                    }
+                    className="px-2 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isLoadingAccounts ? 'animate-spin' : ''}`} />
+                    <span>Làm mới</span>
+                  </button>
+                </div>
+              </div>
+
+              {accountsError && (
+                <div className="p-3 rounded-xl bg-rose-950/80 border border-rose-800 text-rose-200 text-xs flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <span>{accountsError}</span>
+                </div>
+              )}
+
+              {isLoadingAccounts ? (
+                <div className="py-8 flex flex-col items-center justify-center gap-2 text-neutral-400">
+                  <RefreshCw className="w-5 h-5 text-amber-400 animate-spin" />
+                  <span className="text-xs font-mono">Đang tải trang {accountsPageIndex + 1}...</span>
+                </div>
+              ) : accountsPageList.length === 0 ? (
+                <div className="py-6 text-center text-neutral-400 text-xs">
+                  Chưa có dữ liệu tài khoản trên trang này.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {accountsPageList.map((acc, idx) => {
+                    const accRoleInfo = getRoleDisplayInfo(acc.role);
+                    const rowNumber = accountsPageIndex * USER_ACCOUNTS_PAGE_SIZE + idx + 1;
+                    return (
+                      <div
+                        key={acc.uid}
+                        className="p-2.5 rounded-xl bg-neutral-900/90 border border-neutral-800 flex items-center justify-between gap-3 flex-wrap"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="w-6 text-center font-mono text-[11px] text-neutral-500 font-bold shrink-0">
+                            #{rowNumber}
+                          </span>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span
+                                className={`px-2 py-0.5 rounded-md bg-neutral-950 text-xs font-extrabold text-white ${accRoleInfo.frameClass}`}
+                              >
+                                {acc.displayName}
+                              </span>
+                              <span className="text-[10px] font-mono font-bold text-amber-300">
+                                [{accRoleInfo.label}]
+                              </span>
+                              <span
+                                className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+                                  acc.status === 'ACTIVE'
+                                    ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
+                                    : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
+                                }`}
+                              >
+                                {acc.status === 'ACTIVE' ? 'Trực tuyến' : 'Ngoại tuyến'}
+                              </span>
+                            </div>
+                            <div className="text-[11px] font-mono text-neutral-400 truncate mt-1">
+                              {acc.email ? `${acc.email} • ` : ''}UID: {acc.uid}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="text-right font-mono text-[10px] text-neutral-400 shrink-0">
+                          <div>
+                            Avatar: {acc.avatarType === 'catalog' ? `Danh mục (${acc.avatarId || 'N/A'})` : 'Google'}
+                          </div>
+                          {acc.lastLoginAtMs > 0 && (
+                            <div className="text-neutral-500">
+                              Hoạt động: {new Date(acc.lastLoginAtMs).toLocaleString('vi-VN')}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Pagination Controls: Trước / Sau */}
+              <div className="pt-2 border-t border-neutral-800 flex items-center justify-between gap-2">
+                <span className="text-[11px] font-mono text-neutral-400">
+                  Trang <strong className="text-white">{accountsPageIndex + 1}</strong> • Hiển thị{' '}
+                  <strong className="text-white">{accountsPageList.length}</strong> / tối đa{' '}
+                  {USER_ACCOUNTS_PAGE_SIZE} tài khoản
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={accountsPageIndex <= 0 || isLoadingAccounts}
+                    onClick={handlePrevAccountsPage}
+                    className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <span>Trước</span>
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!accountsHasNextPage || isLoadingAccounts}
+                    onClick={handleNextAccountsPage}
+                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    <span>Sau</span>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </section>
           )}

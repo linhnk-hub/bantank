@@ -51,13 +51,46 @@ export class ScoreManager implements EconomyConversionInterface {
   };
   private static inMemoryFallback: Map<string, string> = new Map();
   private storageKey: string;
+  private trialMode: boolean = false;
+  private static globalTrialMode: boolean = false;
 
   constructor(customStorageKey: string = HIGH_SCORE_STORAGE_KEY) {
     this.storageKey = customStorageKey;
+    this.trialMode = ScoreManager.globalTrialMode;
     this.highScore = this.loadHighScore();
   }
 
+  /**
+   * M7.3.9: Bật/tắt chế độ Chơi thử (Trial Mode) ở cấp toàn cục hoặc theo instance.
+   * Khi ở chế độ Chơi thử, mọi thao tác đọc/ghi dữ liệu persistent (localStorage) đều bị chặn tuyệt đối.
+   */
+  public static setGlobalTrialMode(enabled: boolean): void {
+    ScoreManager.globalTrialMode = enabled;
+  }
+
+  public static isGlobalTrialMode(): boolean {
+    return ScoreManager.globalTrialMode;
+  }
+
+  public setTrialMode(enabled: boolean): void {
+    this.trialMode = enabled;
+    ScoreManager.globalTrialMode = enabled;
+    this.resetRun();
+    if (enabled) {
+      this.highScore = 0;
+    } else {
+      this.highScore = this.loadHighScore();
+    }
+  }
+
+  public isTrialMode(): boolean {
+    return this.trialMode || ScoreManager.globalTrialMode;
+  }
+
   private getStorageItem(key: string): string | null {
+    if (this.isTrialMode()) {
+      return null;
+    }
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         return window.localStorage.getItem(key);
@@ -69,6 +102,10 @@ export class ScoreManager implements EconomyConversionInterface {
   }
 
   private setStorageItem(key: string, value: string): void {
+    if (this.isTrialMode()) {
+      // M7.3.9: Tuyệt đối không ghi dữ liệu trong chế độ Chơi thử
+      return;
+    }
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.setItem(key, value);
@@ -81,6 +118,9 @@ export class ScoreManager implements EconomyConversionInterface {
   }
 
   private removeStorageItem(key: string): void {
+    if (this.isTrialMode()) {
+      return;
+    }
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.removeItem(key);
@@ -96,6 +136,9 @@ export class ScoreManager implements EconomyConversionInterface {
    * Safely loads high score from persistent storage.
    */
   public loadHighScore(): number {
+    if (this.isTrialMode()) {
+      return 0;
+    }
     const stored = this.getStorageItem(this.storageKey);
     if (stored) {
       const parsed = parseInt(stored, 10);
@@ -112,7 +155,9 @@ export class ScoreManager implements EconomyConversionInterface {
     const total = this.getTotalScore();
     if (total > this.highScore) {
       this.highScore = total;
-      this.setStorageItem(this.storageKey, this.highScore.toString());
+      if (!this.isTrialMode()) {
+        this.setStorageItem(this.storageKey, this.highScore.toString());
+      }
       return true;
     }
     return false;

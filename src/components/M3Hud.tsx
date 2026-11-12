@@ -21,7 +21,10 @@ import {
   Skull,
   User,
   Clock,
+  Eye,
+  UserMinus,
 } from 'lucide-react';
+import { CoopOnlineManager, type CoopPlayerRole } from '../core/coopOnlineManager.ts';
 
 interface M3HudProps {
   state: GameCoreState | null;
@@ -29,9 +32,17 @@ interface M3HudProps {
   onSpawnEnemy: () => void;
   onPause?: () => void;
   isSuperAdmin?: boolean;
+  localOnlineRole?: CoopPlayerRole;
 }
 
-export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy, onPause, isSuperAdmin = false }) => {
+export const M3Hud: React.FC<M3HudProps> = ({
+  state,
+  onReset,
+  onSpawnEnemy,
+  onPause,
+  isSuperAdmin = false,
+  localOnlineRole,
+}) => {
   if (!state) {
     return null;
   }
@@ -41,6 +52,34 @@ export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy, onPa
   const enemies = state.enemies;
   const isBaseDestroyed = state.terrain.isBaseDestroyed;
   const isCoop = state.gameMode === 'TWO_PLAYERS_AI' || state.gameMode === 'TWO_PLAYERS_ONLINE';
+  const effectiveOnlineRole =
+    localOnlineRole !== undefined
+      ? localOnlineRole
+      : state.gameMode === 'TWO_PLAYERS_ONLINE'
+      ? CoopOnlineManager.getInstance().getRole()
+      : null;
+
+  const isLocalP1Spectator = Boolean(
+    p1State.isSpectator || (p1State.isDead && p1State.lives <= 0)
+  );
+  const isLocalP2Spectator = Boolean(
+    state.p2State &&
+      (state.p2State.isSpectator || (state.p2State.isDead && state.p2State.lives <= 0))
+  );
+  const isLocalSpectator =
+    !state.isGameOver &&
+    !state.isStageClear &&
+    isCoop &&
+    (state.gameMode === 'TWO_PLAYERS_ONLINE' && effectiveOnlineRole === 'GUEST'
+      ? isLocalP2Spectator
+      : isLocalP1Spectator);
+
+  const peerLeaveNotice =
+    state.peerLeaveNotice ||
+    (state.gameMode === 'TWO_PLAYERS_ONLINE'
+      ? CoopOnlineManager.getInstance().getLastPeerLeaveNotice()
+      : null);
+
   const remainingSeconds =
     typeof state.remainingSeconds === 'number'
       ? state.remainingSeconds
@@ -160,6 +199,35 @@ export const M3Hud: React.FC<M3HudProps> = ({ state, onReset, onSpawnEnemy, onPa
           </button>
         </div>
       </div>
+
+      {/* Spectator Mode Banner (M7.3.9 Cases B & C) */}
+      {isLocalSpectator && (
+        <div
+          data-testid="hud-spectator-banner"
+          className="p-2.5 rounded-lg bg-sky-950/90 border border-sky-500/50 flex items-center justify-between text-sky-200 font-semibold shadow-md"
+        >
+          <div className="flex items-center gap-2">
+            <Eye className="w-4 h-4 text-sky-400 shrink-0" />
+            <span className="text-xs font-bold">
+              Bạn đã hết mạng, đang ở chế độ khán giả
+            </span>
+          </div>
+          <span className="text-[10px] px-2 py-0.5 rounded bg-sky-900/80 border border-sky-700 text-sky-200 font-mono">
+            SPECTATOR
+          </span>
+        </div>
+      )}
+
+      {/* Peer Active Leave Notice (M7.3.9 Case E) */}
+      {peerLeaveNotice && !state.isGameOver && (
+        <div
+          data-testid="hud-peer-leave-banner"
+          className="p-2.5 rounded-lg bg-amber-950/85 border border-amber-500/50 flex items-center gap-2 text-amber-200 font-semibold shadow-md"
+        >
+          <UserMinus className="w-4 h-4 text-amber-400 shrink-0" />
+          <span className="text-xs font-bold">{peerLeaveNotice}</span>
+        </div>
+      )}
 
       {/* Stage Clear Banner */}
       {state.isStageClear && (

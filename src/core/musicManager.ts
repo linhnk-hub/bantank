@@ -1194,7 +1194,9 @@ export class MusicManager {
     this.currentRole = role;
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
-        window.localStorage.removeItem(MUSIC_STORAGE_KEYS.USER_ROLE);
+        if (window.localStorage.getItem(MUSIC_STORAGE_KEYS.USER_ROLE) !== null) {
+          window.localStorage.removeItem(MUSIC_STORAGE_KEYS.USER_ROLE);
+        }
       } catch {
         // ignore
       }
@@ -2567,10 +2569,10 @@ export class MusicManager {
       this.isPlaying = true;
       this.startTrackBufferPlayback(resolved.trackId);
     } else {
-      // Fallback safely to built-in procedural BGM
+      // M7.3.9 Requirement 8: Built-in 8-bit procedural BGM is disabled; stay silent when no custom track is active
       soundManager.setCustomBgmActive(false);
-      this.isPlaying = true;
-      soundManager.resumeBgm();
+      soundManager.stopBgm();
+      this.isPlaying = false;
     }
 
     this.notify();
@@ -2588,7 +2590,8 @@ export class MusicManager {
 
     if (!buffer || !meta) {
       soundManager.setCustomBgmActive(false);
-      soundManager.resumeBgm();
+      soundManager.stopBgm();
+      this.isPlaying = false;
       return;
     }
 
@@ -2699,7 +2702,8 @@ export class MusicManager {
     } catch {
       this.stopAllCustomSources();
       soundManager.setCustomBgmActive(false);
-      soundManager.resumeBgm();
+      soundManager.stopBgm();
+      this.isPlaying = false;
     }
   }
 
@@ -2829,9 +2833,13 @@ export class MusicManager {
     if (typeof window === 'undefined') return;
     try {
       // M7.3 Security Enforcement: Never load user role from localStorage.
-      // Remove any legacy or tampered role key if present.
-      localStorage.removeItem(MUSIC_STORAGE_KEYS.USER_ROLE);
-      localStorage.removeItem(MUSIC_STORAGE_KEYS.TRACKS_META);
+      // Remove any legacy or tampered role key only if present.
+      if (localStorage.getItem(MUSIC_STORAGE_KEYS.USER_ROLE) !== null) {
+        localStorage.removeItem(MUSIC_STORAGE_KEYS.USER_ROLE);
+      }
+      if (localStorage.getItem(MUSIC_STORAGE_KEYS.TRACKS_META) !== null) {
+        localStorage.removeItem(MUSIC_STORAGE_KEYS.TRACKS_META);
+      }
 
       const configStr = localStorage.getItem(MUSIC_STORAGE_KEYS.LOOP_CONFIG);
       if (configStr) {
@@ -2862,7 +2870,9 @@ export class MusicManager {
       localStorage.setItem(MUSIC_STORAGE_KEYS.LOOP_CONFIG, JSON.stringify(this.loopConfig));
       localStorage.setItem(MUSIC_STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(this.assignments));
       // M7.3.3: Không lưu file nhạc hay danh sách nhạc nhị phân vào localStorage
-      localStorage.removeItem(MUSIC_STORAGE_KEYS.TRACKS_META);
+      if (localStorage.getItem(MUSIC_STORAGE_KEYS.TRACKS_META) !== null) {
+        localStorage.removeItem(MUSIC_STORAGE_KEYS.TRACKS_META);
+      }
     } catch {
       // ignore quota errors
     }

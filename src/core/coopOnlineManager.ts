@@ -80,12 +80,14 @@ export interface CoopAuthoritativeSnapshot {
   isStageClear: boolean;
   isTimeoutGameOver: boolean;
   gameOverReason: string | null;
+  peerLeaveNotice?: string | null;
   matchState: GameCoreState['matchState'];
 }
 
 export type CoopDataChannelMessage =
   | { type: 'GUEST_INPUT'; packet: SequencedInputPacket }
   | { type: 'HOST_SNAPSHOT'; snapshot: CoopAuthoritativeSnapshot }
+  | { type: 'PLAYER_LEFT'; role: 'HOST' | 'GUEST'; reason: string; timestamp: number }
   | { type: 'PING'; timestamp: number };
 
 /**
@@ -615,6 +617,7 @@ export function buildAuthoritativeSnapshot(
     isStageClear: state.isStageClear,
     isTimeoutGameOver: Boolean(state.isTimeoutGameOver),
     gameOverReason: state.gameOverReason,
+    peerLeaveNotice: state.peerLeaveNotice ?? null,
     matchState: state.matchState,
   };
 }
@@ -1946,6 +1949,13 @@ export class CoopOnlineManager {
   private guestLastAppliedTickCount: number = -1;
   private snapshotListeners: Set<(snapshot: CoopAuthoritativeSnapshot) => boolean | void> = new Set();
 
+  // Spectator & Active Peer Leave Tracking (M7.3.9)
+  private isLocalGuestSpectator: boolean = false;
+  private isRemoteGuestSpectator: boolean = false;
+  private processedPeerLeaveRoles: Set<'HOST' | 'GUEST'> = new Set();
+  private lastPeerLeaveNotice: string | null = null;
+  private peerLeaveListeners: Set<(event: { role: 'HOST' | 'GUEST'; message: string }) => void> = new Set();
+
   public constructor(customAdapter?: CoopStorageAdapter) {
     this.adapter = customAdapter ?? new FirestoreCoopStorageAdapter();
   }
@@ -2080,6 +2090,59 @@ export class CoopOnlineManager {
     return () => {
       this.snapshotListeners.delete(listener);
     };
+  }
+
+  public setLocalGuestSpectator(isSpectator: boolean): void {
+    this.isLocalGuestSpectator = Boolean(isSpectator);
+  }
+
+  public isGuestInSpectatorMode(): boolean {
+    return this.isLocalGuestSpectator;
+  }
+
+  public setRemoteGuestSpectator(isSpectator: boolean): void {
+    this.isRemoteGuestSpectator = Boolean(isSpectator);
+    if (this.isRemoteGuestSpectator) {
+      this.clearLatchedGuestInput();
+    }
+  }
+
+  public subscribePeerLeave(
+    listener: (event: { role: 'HOST' | 'GUEST'; message: string }) => void
+  ): () => void {
+    this.peerLeaveListeners.add(listener);
+    return () => {
+      this.peerLeaveListeners.delete(listener);
+    };
+  }
+
+  public getLastPeerLeaveNotice(): string | null {
+    return this.lastPeerLeaveNotice;
+  }
+
+  public hasPeerActivelyLeft(peerRole: 'HOST' | 'GUEST'): boolean {
+    return this.processedPeerLeaveRoles.has(peerRole);
+  }
+
+  public recordPeerActiveLeave(leftRole: 'HOST' | 'GUEST', customReason?: string): boolean {
+    if (this.processedPeerLeaveRoles.has(leftRole)) {
+      return false;
+    }
+    this.processedPeerLeaveRoles.add(leftRole);
+    const canonicalMessage = leftRole === 'HOST' ? 'P1 đã rời trận.' : 'P2 đã rời trận.';
+    this.lastPeerLeaveNotice = canonicalMessage;
+    if (leftRole === 'GUEST') {
+      this.isRemoteGuestSpectator = true;
+      this.clearLatchedGuestInput();
+    }
+    this.peerLeaveListeners.forEach((cb) => {
+      try {
+        cb({ role: leftRole, message: customReason ? canonicalMessage : canonicalMessage });
+      } catch (e) {
+        console.error('[CoopOnlineManager] peerLeaveListener error:', e);
+      }
+    });
+    return true;
   }
 
   private notifyListeners(): void {
@@ -2874,6 +2937,14 @@ export class CoopOnlineManager {
       return { success: false, message: 'Chỉ người chơi 2 (Guest) mới gửi gói điều khiển P2.' };
     }
 
+    if (this.isLocalGuestSpectator) {
+      return {
+        success: false,
+        errorCode: 'INVALID_ROOM_STATE',
+        message: 'Bạn đã hết mạng, đang ở chế độ khán giả (không gửi gói điều khiển P2).',
+      };
+    }
+
     const sig = `${input.up ? 1 : 0}${input.down ? 1 : 0}${input.left ? 1 : 0}${input.right ? 1 : 0}${input.shoot ? 1 : 0}`;
     const elapsedSinceLast = nowMs - this.lastGuestInputSentAt;
 
@@ -2945,12 +3016,17 @@ export class CoopOnlineManager {
 
   /**
    * Host (P1) kiểm tra và áp dụng gói tin điều khiển từ Guest (P2) nhận qua DataChannel.
-   * Bỏ qua gói tin trùng lặp hoặc sai thứ tự (`seq <= hostLastProcessedGuestSeq`).
+   * Bỏ qua gói tin trùng lặp, sai thứ tự (`seq <= hostLastProcessedGuestSeq`), hoặc khi P2 đã ở chế độ khán giả / rời trận.
    */
   public processIncomingGuestInput(
     rawPacket: unknown,
     nowMs: number = Date.now()
   ): { accepted: boolean; input?: InputState; errorCode?: CoopActionResult['errorCode'] } {
+    if (this.isRemoteGuestSpectator || this.processedPeerLeaveRoles.has('GUEST')) {
+      this.clearLatchedGuestInput();
+      return { accepted: false, errorCode: 'INVALID_ROOM_STATE' };
+    }
+
     const validation = sanitizeAndValidateInputPacket(rawPacket);
     if (!validation.valid || !validation.sanitized) {
       return { accepted: false, errorCode: 'INVALID_PACKET' };
@@ -3851,6 +3927,15 @@ export class CoopOnlineManager {
   ): void {
     const room = this.currentRoom;
     const currentRole = this.role;
+    if (room && (currentRole === 'HOST' || currentRole === 'GUEST') && this.isP2PDataChannelOpen()) {
+      const leaveMsg = currentRole === 'HOST' ? 'P1 đã rời trận.' : 'P2 đã rời trận.';
+      this.sendOverDataChannel({
+        type: 'PLAYER_LEFT',
+        role: currentRole,
+        reason: reason || leaveMsg,
+        timestamp: nowMs,
+      });
+    }
     this.cleanupSubscription();
     this.closeWebRTC();
     this.currentRoom = null;
@@ -3868,7 +3953,7 @@ export class CoopOnlineManager {
           rtcConnectionState: 'DISCONNECTED',
           hostLastActiveAt: nowMs,
           disconnectReason:
-            reason || 'Chủ phòng (P1) đã rời phòng. Trận đấu kết thúc an toàn.',
+            reason || 'P1 đã rời trận.',
         });
       } else if (currentRole === 'GUEST') {
         if (room.status === 'WAITING') {
@@ -3882,7 +3967,7 @@ export class CoopOnlineManager {
           storage.updateRoomSync(room.roomCode, {
             status: 'ABANDONED',
             guestLastActiveAt: nowMs,
-            disconnectReason: reason || 'Người chơi 2 (P2) đã rời trận đấu.',
+            disconnectReason: reason || 'P2 đã rời trận.',
           });
         }
       }
@@ -4131,6 +4216,14 @@ export class CoopOnlineManager {
     this.lastBroadcastStageId = state.currentStageId;
     this.hostOutgoingSnapshotSeq += 1;
 
+    const p2St = state.p2State;
+    this.isRemoteGuestSpectator = Boolean(
+      p2St && (p2St.isSpectator || p2St.hasLeftMatch || (p2St.isDead && p2St.lives <= 0))
+    );
+    if (this.isRemoteGuestSpectator) {
+      this.clearLatchedGuestInput();
+    }
+
     const snapshot = buildAuthoritativeSnapshot(state, this.hostOutgoingSnapshotSeq, nowMs);
     const sentOverP2P = this.sendOverDataChannel({
       type: 'HOST_SNAPSHOT',
@@ -4165,6 +4258,13 @@ export class CoopOnlineManager {
     if (!msg || typeof msg !== 'object') return;
     this.lastPeerP2PActiveAt = nowMs;
 
+    if (msg.type === 'PLAYER_LEFT') {
+      if (msg.role === 'HOST' || msg.role === 'GUEST') {
+        this.recordPeerActiveLeave(msg.role, msg.reason);
+      }
+      return;
+    }
+
     if (msg.type === 'GUEST_INPUT' && this.role === 'HOST') {
       this.processIncomingGuestInput(msg.packet, nowMs);
     } else if (msg.type === 'HOST_SNAPSHOT' && this.role === 'GUEST') {
@@ -4178,6 +4278,11 @@ export class CoopOnlineManager {
         return;
       }
       const normalizedSnap = validation.normalized;
+      const p2St = normalizedSnap.p2State;
+      this.isLocalGuestSpectator = Boolean(
+        p2St && (p2St.isSpectator || p2St.hasLeftMatch || (p2St.isDead && p2St.lives <= 0))
+      );
+
       let rejectedByEngineListener = false;
       this.snapshotListeners.forEach((cb) => {
         try {
@@ -4300,12 +4405,41 @@ export class CoopOnlineManager {
       return { peerConnected: false, warningMessage: null, isTimedOut: false };
     }
 
+    // M7.3.9 Trường hợp E: Nếu P2 (Guest) đã chủ động rời trận khi Host (P1) đang chơi,
+    // Host nhận thông báo "P2 đã rời trận." và tiếp tục chơi solo (không báo timeout dừng trận của P1).
+    if (this.role === 'HOST' && this.processedPeerLeaveRoles.has('GUEST')) {
+      return {
+        peerConnected: false,
+        warningMessage: 'P2 đã rời trận.',
+        isTimedOut: false,
+      };
+    }
+
+    if (this.role === 'GUEST' && this.processedPeerLeaveRoles.has('HOST')) {
+      return {
+        peerConnected: false,
+        warningMessage: 'P1 đã rời trận.',
+        isTimedOut: true,
+      };
+    }
+
     if (this.currentRoom.status === 'ABANDONED') {
+      if (this.role === 'HOST' && this.currentRoom.disconnectReason === 'P2 đã rời trận.') {
+        this.recordPeerActiveLeave('GUEST', this.currentRoom.disconnectReason);
+        return {
+          peerConnected: false,
+          warningMessage: 'P2 đã rời trận.',
+          isTimedOut: false,
+        };
+      }
+      if (this.role === 'GUEST') {
+        this.recordPeerActiveLeave('HOST', this.currentRoom.disconnectReason || 'P1 đã rời trận.');
+      }
       return {
         peerConnected: false,
         warningMessage:
           this.currentRoom.disconnectReason ||
-          'Người chơi cùng phòng đã rời trận đấu.',
+          (this.role === 'HOST' ? 'P2 đã rời trận.' : 'P1 đã rời trận.'),
         isTimedOut: true,
       };
     }
@@ -4365,13 +4499,22 @@ export class CoopOnlineManager {
 
   /**
    * Rời khỏi phòng chơi hiện tại một cách an toàn.
-   * - Nếu Chủ phòng (Host) rời: đóng phòng (`ABANDONED`), đặt `rtcConnectionState: 'DISCONNECTED'` và thông báo cho P2.
-   * - Nếu Khách (Guest) rời khi đang WAITING: giải phóng 4 trường của Guest về null (giữ nguyên `rtcConnectionState` và `disconnectReason`; Host sẽ tự động cập nhật `rtcConnectionState: 'NEW'` và reset `private/signaling`).
-   * - Nếu Khách (Guest) rời khi đang PLAYING: đánh dấu `ABANDONED` kèm lý do (giữ nguyên `rtcConnectionState`).
+   * - Nếu Chủ phòng (Host) rời: gửi thông điệp PLAYER_LEFT, đóng phòng (`ABANDONED`), đặt `rtcConnectionState: 'DISCONNECTED'` và thông báo cho P2.
+   * - Nếu Khách (Guest) rời khi đang WAITING: giải phóng 4 trường của Guest về null.
+   * - Nếu Khách (Guest) rời khi đang PLAYING: gửi thông điệp PLAYER_LEFT, đánh dấu `ABANDONED` kèm lý do để P1 nhận thông báo "P2 đã rời trận." và tiếp tục chơi.
    */
   public async leaveRoom(reason?: string, nowMs: number = Date.now()): Promise<void> {
     const room = this.currentRoom;
     const currentRole = this.role;
+    if (room && (currentRole === 'HOST' || currentRole === 'GUEST') && this.isP2PDataChannelOpen()) {
+      const leaveMsg = currentRole === 'HOST' ? 'P1 đã rời trận.' : 'P2 đã rời trận.';
+      this.sendOverDataChannel({
+        type: 'PLAYER_LEFT',
+        role: currentRole,
+        reason: reason || leaveMsg,
+        timestamp: nowMs,
+      });
+    }
     this.cleanupSubscription();
     this.closeWebRTC();
     this.currentRoom = null;
@@ -4389,7 +4532,7 @@ export class CoopOnlineManager {
           rtcConnectionState: 'DISCONNECTED',
           hostLastActiveAt: nowMs,
           disconnectReason:
-            reason || 'Chủ phòng (P1) đã rời phòng. Trận đấu kết thúc an toàn.',
+            reason || 'P1 đã rời trận.',
         });
       } else if (currentRole === 'GUEST') {
         if (room.status === 'WAITING') {
@@ -4404,7 +4547,7 @@ export class CoopOnlineManager {
             status: 'ABANDONED',
             guestLastActiveAt: nowMs,
             disconnectReason:
-              reason || 'Người chơi 2 (P2) đã rời trận đấu.',
+              reason || 'P2 đã rời trận.',
           });
         }
       }
@@ -4418,6 +4561,10 @@ export class CoopOnlineManager {
       if (!updatedLobby) {
         this.currentRoom = null;
       } else {
+        if (updatedLobby.status === 'ABANDONED' && this.role) {
+          const peerRole = this.role === 'HOST' ? 'GUEST' : 'HOST';
+          this.recordPeerActiveLeave(peerRole, updatedLobby.disconnectReason || undefined);
+        }
         this.currentRoom = mergeLobbyAndSignaling(updatedLobby, this.currentSignaling);
         this.coordinateWebRTCSignaling();
       }
@@ -4866,6 +5013,10 @@ export class CoopOnlineManager {
     this.guestLastAppliedStageRunSeq = 0;
     this.guestLastAppliedTickCount = -1;
     this.lastPingSentAt = 0;
+    this.isLocalGuestSpectator = false;
+    this.isRemoteGuestSpectator = false;
+    this.processedPeerLeaveRoles.clear();
+    this.lastPeerLeaveNotice = null;
   }
 
   private cleanupSubscription(): void {

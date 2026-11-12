@@ -12,7 +12,21 @@ import {
   updateProfile,
   type User,
 } from 'firebase/auth';
-import { getFirebaseAuth } from './firebaseConfig.ts';
+import {
+  collection,
+  doc,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  startAfter,
+  type QueryDocumentSnapshot,
+} from 'firebase/firestore';
+import { getFirebaseAuth, getFirebaseDb } from './firebaseConfig.ts';
+import { ScoreManager } from './scoreManager.ts';
 
 export interface AuthValidationResult {
   isValid: boolean;
@@ -26,6 +40,149 @@ export type AuthStateListener = (user: User | null) => void;
  * Địa chỉ email Super Admin chính thức và duy nhất của hệ thống Bắn Tank Online.
  */
 export const SUPER_ADMIN_EMAIL = 'linhnk.online@gmail.com';
+
+export const USER_ACCOUNTS_PAGE_SIZE = 10;
+
+export interface UserAccountSummary {
+  uid: string;
+  email: string;
+  displayName: string;
+  role: UserRoleType;
+  avatarType: 'google' | 'catalog';
+  avatarId: string | null;
+  lastLoginAtMs: number;
+  createdAtMs: number;
+  status: 'ACTIVE' | 'OFFLINE';
+}
+
+export interface PaginatedUserAccountsResult {
+  success: boolean;
+  accounts: UserAccountSummary[];
+  pageSize: number;
+  hasNextPage: boolean;
+  nextCursor: unknown | null;
+  errorMessage?: string;
+}
+
+export interface UserAccountsPaginationAdapter {
+  fetchPage(params: {
+    pageSize: number;
+    cursor?: unknown | null;
+  }): Promise<{
+    items: UserAccountSummary[];
+    hasNextPage: boolean;
+    nextCursor: unknown | null;
+  }>;
+}
+
+/**
+ * Bộ điều hợp phân trang trên bộ nhớ (dùng cho kiểm thử tự động M7.3.9) mô phỏng chính xác
+ * truy vấn `orderBy('lastLoginAtMs', 'desc') + limit(pageSize) + startAfter(cursor)`.
+ */
+export class InMemoryUserAccountsPaginationAdapter implements UserAccountsPaginationAdapter {
+  private readonly sortedRecords: UserAccountSummary[];
+
+  constructor(records: UserAccountSummary[]) {
+    this.sortedRecords = [...records].sort((a, b) => {
+      if (b.lastLoginAtMs !== a.lastLoginAtMs) {
+        return b.lastLoginAtMs - a.lastLoginAtMs;
+      }
+      return a.uid.localeCompare(b.uid);
+    });
+  }
+
+  public queryPageSync(
+    pageSize: number = USER_ACCOUNTS_PAGE_SIZE,
+    cursor: unknown | null = null
+  ): {
+    accounts: UserAccountSummary[];
+    items: UserAccountSummary[];
+    hasNextPage: boolean;
+    nextCursor: unknown | null;
+  } {
+    const safePageSize = Math.max(
+      1,
+      Math.min(USER_ACCOUNTS_PAGE_SIZE, Math.floor(pageSize || USER_ACCOUNTS_PAGE_SIZE))
+    );
+    let startIndex = 0;
+    if (typeof cursor === 'string' && cursor.length > 0) {
+      const idx = this.sortedRecords.findIndex((r) => r.uid === cursor);
+      if (idx >= 0) {
+        startIndex = idx + 1;
+      }
+    }
+    const slice = this.sortedRecords.slice(startIndex, startIndex + safePageSize + 1);
+    const hasNextPage = slice.length > safePageSize;
+    const items = slice.slice(0, safePageSize).map((item) => sanitizeUserAccountSummary(item));
+    const nextCursor = hasNextPage && items.length > 0 ? items[items.length - 1].uid : null;
+    return {
+      accounts: items,
+      items,
+      hasNextPage,
+      nextCursor,
+    };
+  }
+
+  public async fetchPage(params: {
+    pageSize: number;
+    cursor?: unknown | null;
+  }): Promise<{
+    items: UserAccountSummary[];
+    hasNextPage: boolean;
+    nextCursor: unknown | null;
+  }> {
+    const res = this.queryPageSync(params.pageSize, params.cursor ?? null);
+    return {
+      items: res.items,
+      hasNextPage: res.hasNextPage,
+      nextCursor: res.nextCursor,
+    };
+  }
+}
+
+/**
+ * Làm sạch dữ liệu tài khoản trước khi trả về UI:
+ * Tuyệt đối không bao giờ chứa password, idToken, refreshToken, accessToken hoặc thông tin xác thực nhạy cảm.
+ */
+export function sanitizeUserAccountSummary(
+  rawInput: Partial<UserAccountSummary> | Record<string, unknown>
+): UserAccountSummary {
+  const raw = rawInput as Record<string, unknown>;
+  const uid = typeof raw.uid === 'string' && raw.uid.trim().length > 0 ? raw.uid.trim() : 'unknown';
+  const email = typeof raw.email === 'string' ? raw.email.trim().toLowerCase() : '';
+  const displayName =
+    typeof raw.displayName === 'string' && raw.displayName.trim().length > 0
+      ? raw.displayName.trim()
+      : getUserDisplayLabel({ displayName: null, email });
+  const role = resolveUserRole({
+    uid,
+    email,
+    serverRole: typeof raw.role === 'string' ? raw.role : null,
+  });
+  const avatarType = raw.avatarType === 'catalog' ? 'catalog' : 'google';
+  const avatarId = typeof raw.avatarId === 'string' && raw.avatarId.trim().length > 0 ? raw.avatarId.trim() : null;
+  const lastLoginAtMs =
+    typeof raw.lastLoginAtMs === 'number' && Number.isFinite(raw.lastLoginAtMs) && raw.lastLoginAtMs > 0
+      ? Math.floor(raw.lastLoginAtMs)
+      : 0;
+  const createdAtMs =
+    typeof raw.createdAtMs === 'number' && Number.isFinite(raw.createdAtMs) && raw.createdAtMs > 0
+      ? Math.floor(raw.createdAtMs)
+      : lastLoginAtMs;
+  const status = raw.status === 'ACTIVE' ? 'ACTIVE' : 'OFFLINE';
+
+  return {
+    uid,
+    email,
+    displayName,
+    role,
+    avatarType,
+    avatarId,
+    lastLoginAtMs,
+    createdAtMs,
+    status,
+  };
+}
 
 export interface ValidatedUserAccount {
   uid: string;
@@ -264,15 +421,38 @@ export type TokenRefreshResult =
   | { status: 'AUTH_INVALID'; error: Error }
   | { status: 'UNCLASSIFIED'; error: Error };
 
+function parseFirestoreTimestampMs(val: unknown): number {
+  if (typeof val === 'number' && Number.isFinite(val) && val > 0) {
+    return Math.floor(val);
+  }
+  if (val && typeof val === 'object') {
+    const maybeTs = val as { toMillis?: () => number; seconds?: number };
+    if (typeof maybeTs.toMillis === 'function') {
+      try {
+        return Math.floor(maybeTs.toMillis());
+      } catch {
+        // ignore
+      }
+    }
+    if (typeof maybeTs.seconds === 'number' && Number.isFinite(maybeTs.seconds)) {
+      return Math.floor(maybeTs.seconds * 1000);
+    }
+  }
+  return 0;
+}
+
 export class AuthManager {
   private static instance: AuthManager;
   private currentUser: User | null = null;
   private listeners: Set<AuthStateListener> = new Set();
   private auth = getFirebaseAuth();
+  private trialModeActive: boolean = false;
+  private customPaginationAdapter: UserAccountsPaginationAdapter | null = null;
 
   private constructor() {
     onAuthStateChanged(this.auth, (user) => {
       if (user) {
+        this.trialModeActive = false;
         this.applyStoredProfileOverride(user);
       }
       this.currentUser = user;
@@ -287,6 +467,28 @@ export class AuthManager {
     return AuthManager.instance;
   }
 
+  /**
+   * M7.3.9: Quản lý trạng thái Chơi thử (Trial Mode) không cần đăng nhập Google.
+   * Không tạo tài khoản tạm/ẩn danh, không ghi bất kỳ dữ liệu nào lên Firebase hay localStorage.
+   */
+  public startTrialMode(): void {
+    this.trialModeActive = true;
+    ScoreManager.setGlobalTrialMode(true);
+  }
+
+  public exitTrialMode(): void {
+    this.trialModeActive = false;
+    ScoreManager.setGlobalTrialMode(false);
+  }
+
+  public isTrialMode(): boolean {
+    return this.trialModeActive && !this.getCurrentUser();
+  }
+
+  public setCustomPaginationAdapterForTesting(adapter: UserAccountsPaginationAdapter | null): void {
+    this.customPaginationAdapter = adapter;
+  }
+
   public isSuperAdmin(): boolean {
     return isSuperAdminUser(this.getCurrentUser());
   }
@@ -296,6 +498,7 @@ export class AuthManager {
   }
 
   private applyStoredProfileOverride(user: User): void {
+    if (this.trialModeActive) return;
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         const raw = window.localStorage.getItem(this.getProfileStorageKey(user));
@@ -344,6 +547,247 @@ export class AuthManager {
   }
 
   /**
+   * M7.3.9: Ghi nhận mốc thời gian đăng nhập cuối (`lastLoginAt`) cho người dùng đã xác thực Google hợp lệ.
+   * Không bao giờ thực thi trong chế độ Chơi thử (Trial Mode).
+   */
+  public async recordUserLoginTimestamp(user?: User | null): Promise<void> {
+    if (this.trialModeActive) return;
+    const targetUser = user ?? this.getCurrentUser();
+    if (!targetUser) return;
+    const validation = validatePersonalGmailUser(targetUser);
+    if (!validation.isValid) return;
+
+    try {
+      const db = getFirebaseDb();
+      const userRef = doc(db, 'users', targetUser.uid);
+      const snap = await getDoc(userRef);
+      const existing = snap.exists() ? (snap.data() as Record<string, unknown>) : null;
+      const avatarType = existing?.avatarType === 'catalog' ? 'catalog' : 'google';
+      const avatarId =
+        avatarType === 'catalog' && typeof existing?.avatarId === 'string' ? existing.avatarId : null;
+      const existingDisplayName =
+        typeof existing?.displayName === 'string' && existing.displayName.trim().length > 0
+          ? existing.displayName.trim()
+          : getUserDisplayLabel(targetUser);
+
+      // Ghi theo schema chuẩn của /users/{uid}; bọc try/catch an toàn để tương thích cả khi Production Rules chưa cập nhật trường mới
+      await setDoc(
+        userRef,
+        {
+          uid: targetUser.uid,
+          email: (targetUser.email || '').trim().toLowerCase(),
+          displayName: existingDisplayName.slice(0, 64),
+          avatarType,
+          avatarId,
+          avatarUpdatedAt: existing?.avatarUpdatedAt ?? serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+        },
+        { merge: true }
+      ).catch(async () => {
+        // Fallback tương thích ngược với Firestore Rules hiện tại nếu chỉ cho phép 5 trường
+        await setDoc(
+          userRef,
+          {
+            uid: targetUser.uid,
+            displayName: existingDisplayName.slice(0, 64),
+            avatarType,
+            avatarId,
+            avatarUpdatedAt: existing?.avatarUpdatedAt ?? serverTimestamp(),
+          },
+          { merge: true }
+        ).catch(() => {
+          // Bỏ qua nếu offline
+        });
+      });
+    } catch {
+      // Không làm gián đoạn luồng đăng nhập nếu Firestore tạm thời không phản hồi
+    }
+  }
+
+  /**
+   * M7.3.9 Mục 3: Truy vấn phân trang danh sách tài khoản đã đăng nhập và tham gia trò chơi.
+   * - BẮT BUỘC kiểm tra quyền Super Admin (`linhnk.online@gmail.com`) ngay ở tầng truy cập dữ liệu.
+   * - Phân trang ở tầng truy vấn dữ liệu (tối đa 10 tài khoản / trang, `limit(pageSize + 1)`, `orderBy`, `startAfter`).
+   * - Không tải toàn bộ danh sách người dùng về trình duyệt rồi mới cắt trang.
+   * - Không bao giờ trả về mật khẩu, Firebase ID Token, refresh token hoặc dữ liệu nhạy cảm.
+   */
+  public async fetchPaginatedUserAccounts(options?: {
+    pageSize?: number;
+    cursor?: unknown | null;
+    overrideCallerForTesting?: ValidatedUserAccount | User | null;
+  }): Promise<PaginatedUserAccountsResult> {
+    const caller =
+      options && 'overrideCallerForTesting' in options
+        ? options.overrideCallerForTesting
+        : this.getCurrentUser();
+
+    if (!isSuperAdminUser(caller)) {
+      return {
+        success: false,
+        accounts: [],
+        pageSize: USER_ACCOUNTS_PAGE_SIZE,
+        hasNextPage: false,
+        nextCursor: null,
+        errorMessage: 'Truy cập bị từ chối: Chỉ Super Admin mới có quyền xem danh sách tài khoản.',
+      };
+    }
+
+    const pageSize = Math.max(
+      1,
+      Math.min(USER_ACCOUNTS_PAGE_SIZE, Math.floor(options?.pageSize || USER_ACCOUNTS_PAGE_SIZE))
+    );
+
+    if (this.customPaginationAdapter) {
+      const res = await this.customPaginationAdapter.fetchPage({
+        pageSize,
+        cursor: options?.cursor ?? null,
+      });
+      return {
+        success: true,
+        accounts: res.items.map((item) => sanitizeUserAccountSummary(item)),
+        pageSize,
+        hasNextPage: res.hasNextPage,
+        nextCursor: res.nextCursor,
+      };
+    }
+
+    try {
+      const db = getFirebaseDb();
+      const usersCol = collection(db, 'users');
+      const cursorSnap = options?.cursor as QueryDocumentSnapshot | undefined;
+
+      // Truy vấn chính sử dụng orderBy('avatarUpdatedAt', 'desc') + limit(pageSize + 1) + startAfter
+      // (tương thích với mọi bản ghi /users/{uid} hiện có và bản ghi mới có lastLoginAt)
+      let snap;
+      try {
+        const q = cursorSnap
+          ? query(
+              usersCol,
+              orderBy('avatarUpdatedAt', 'desc'),
+              startAfter(cursorSnap),
+              limit(pageSize + 1)
+            )
+          : query(usersCol, orderBy('avatarUpdatedAt', 'desc'), limit(pageSize + 1));
+        snap = await getDocs(q);
+      } catch {
+        const fallbackQ = cursorSnap
+          ? query(usersCol, startAfter(cursorSnap), limit(pageSize + 1))
+          : query(usersCol, limit(pageSize + 1));
+        snap = await getDocs(fallbackQ);
+      }
+
+      const docs = snap.docs;
+      const hasNextPage = docs.length > pageSize;
+      const pageDocs = docs.slice(0, pageSize);
+      const nextCursor = hasNextPage && pageDocs.length > 0 ? pageDocs[pageDocs.length - 1] : null;
+
+      // Bổ sung thông tin email / trạng thái phiên từ /user_sessions/{uid} cho từng tài khoản trong trang (tối đa 10 doc)
+      const summaries = await Promise.all(
+        pageDocs.map(async (d) => {
+          const data = (d.data() || {}) as Record<string, unknown>;
+          const uid = typeof data.uid === 'string' && data.uid.trim() ? data.uid.trim() : d.id;
+          let email = typeof data.email === 'string' ? data.email.trim().toLowerCase() : '';
+          let sessionUpdatedAtMs = 0;
+          let sessionStatus: 'ACTIVE' | 'OFFLINE' = 'OFFLINE';
+
+          try {
+            const sessionSnap = await getDoc(doc(db, 'user_sessions', uid));
+            if (sessionSnap.exists()) {
+              const sData = sessionSnap.data() as Record<string, unknown>;
+              if (!email && typeof sData.email === 'string') {
+                email = sData.email.trim().toLowerCase();
+              }
+              sessionUpdatedAtMs = parseFirestoreTimestampMs(sData.updatedAt || sData.createdAt);
+              if (sData.status === 'ACTIVE') {
+                sessionStatus = 'ACTIVE';
+              }
+            }
+          } catch {
+            // Bỏ qua nếu không đọc được phiên của user
+          }
+
+          let serverRole: string | null = typeof data.role === 'string' ? data.role : null;
+          if (!serverRole) {
+            try {
+              const adminSnap = await getDoc(doc(db, 'admins', uid));
+              if (adminSnap.exists()) {
+                const aData = adminSnap.data() as Record<string, unknown>;
+                if (typeof aData.role === 'string') {
+                  serverRole = aData.role;
+                } else {
+                  serverRole = 'ADMIN';
+                }
+              }
+            } catch {
+              // ignore
+            }
+          }
+
+          const lastLoginAtMs =
+            parseFirestoreTimestampMs(data.lastLoginAt) ||
+            sessionUpdatedAtMs ||
+            parseFirestoreTimestampMs(data.avatarUpdatedAt) ||
+            0;
+          const createdAtMs =
+            parseFirestoreTimestampMs(data.createdAt) ||
+            parseFirestoreTimestampMs(data.avatarUpdatedAt) ||
+            lastLoginAtMs;
+
+          return sanitizeUserAccountSummary({
+            uid,
+            email,
+            displayName:
+              typeof data.displayName === 'string' && data.displayName.trim().length > 0
+                ? data.displayName.trim()
+                : getUserDisplayLabel({ displayName: null, email }),
+            role: resolveUserRole({ uid, email, serverRole }),
+            avatarType: data.avatarType === 'catalog' ? 'catalog' : 'google',
+            avatarId: typeof data.avatarId === 'string' ? data.avatarId : null,
+            lastLoginAtMs,
+            createdAtMs,
+            status: sessionStatus,
+          });
+        })
+      );
+
+      // Nếu danh sách /users trống nhưng người dùng hiện tại là Super Admin đang đăng nhập, vẫn hiển thị bản ghi của Super Admin
+      if (summaries.length === 0 && !cursorSnap && caller && caller.uid) {
+        summaries.push(
+          sanitizeUserAccountSummary({
+            uid: caller.uid,
+            email: caller.email || SUPER_ADMIN_EMAIL,
+            displayName: getUserDisplayLabel(caller),
+            role: 'SUPER_ADMIN',
+            avatarType: 'google',
+            avatarId: null,
+            lastLoginAtMs: Date.now(),
+            createdAtMs: Date.now(),
+            status: 'ACTIVE',
+          })
+        );
+      }
+
+      return {
+        success: true,
+        accounts: summaries,
+        pageSize,
+        hasNextPage,
+        nextCursor,
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        accounts: [],
+        pageSize,
+        hasNextPage: false,
+        nextCursor: null,
+        errorMessage:
+          err?.message || 'Không thể tải danh sách tài khoản từ Firestore. Vui lòng thử lại.',
+      };
+    }
+  }
+
+  /**
    * Signs in using GoogleAuthProvider popup.
    * Enforces strict personal Gmail validation; immediately signs out if invalid.
    */
@@ -352,6 +796,7 @@ export class AuthManager {
     provider.setCustomParameters({ prompt: 'select_account' });
 
     try {
+      this.trialModeActive = false;
       const result = await signInWithPopup(this.auth, provider);
       const validation = validatePersonalGmailUser(result.user);
 
@@ -367,6 +812,7 @@ export class AuthManager {
 
       this.applyStoredProfileOverride(result.user);
       this.currentUser = result.user;
+      void this.recordUserLoginTimestamp(result.user);
       return validation;
     } catch (error: any) {
       return {
@@ -425,6 +871,9 @@ export class AuthManager {
    * Strictly preserves email, UID, tokens, and Firestore security rules.
    */
   public async updateUserProfile(profile: { displayName?: string; photoURL?: string }): Promise<{ success: boolean; error?: string }> {
+    if (this.trialModeActive) {
+      return { success: false, error: 'Chế độ Chơi thử không cho phép lưu hồ sơ.' };
+    }
     const user = this.getCurrentUser();
     if (!user) {
       return { success: false, error: 'Chưa đăng nhập.' };
@@ -467,6 +916,7 @@ export class AuthManager {
   }
 
   public async signOut(): Promise<void> {
+    this.trialModeActive = false;
     try {
       await fbSignOut(this.auth);
     } catch (e) {

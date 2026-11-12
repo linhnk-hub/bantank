@@ -90,6 +90,7 @@ export default function App() {
   const [profileRevision, setProfileRevision] = useState<number>(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [isMatchAllowed, setIsMatchAllowed] = useState<boolean>(false);
+  const [isTrialMode, setIsTrialMode] = useState<boolean>(() => authManager.isTrialMode());
 
   // Desktop PC detection: screen width >= 1024px with fine pointer (mouse/trackpad)
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
@@ -145,12 +146,47 @@ export default function App() {
   // Validate the official Stage 1 map using pure Game Core validator (M1)
   const validation = useMemo(() => validateStageMap(STAGE_1_MAP), []);
 
+  const clearVirtualTouchInputs = useCallback(() => {
+    landscapeDirRef.current = null;
+    setLandscapeDirection(null);
+    setLandscapeShooting(false);
+    gameEngine.clearAllInputs();
+  }, [gameEngine]);
+
   const handlePause = useCallback(() => {
+    clearVirtualTouchInputs();
     gameEngine.pause();
     setIsPaused(true);
     MusicManager.getInstance().pause();
     setGameState({ ...gameEngine.getState() });
-  }, [gameEngine]);
+  }, [gameEngine, clearVirtualTouchInputs]);
+
+  // Synchronize React isPaused state when GameEngine enters PAUSED internally (e.g. Forced Safety Pause)
+  useEffect(() => {
+    if (gameState?.matchState === 'PAUSED' && !isPaused) {
+      clearVirtualTouchInputs();
+      setIsPaused(true);
+      MusicManager.getInstance().pause();
+    }
+  }, [gameState?.matchState, isPaused, clearVirtualTouchInputs]);
+
+  // Neutralize any held virtual touch controls when window loses focus or tab becomes hidden
+  useEffect(() => {
+    const onBlurOrVisibility = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        clearVirtualTouchInputs();
+      }
+    };
+    const onWindowBlur = () => {
+      clearVirtualTouchInputs();
+    };
+    window.addEventListener('blur', onWindowBlur);
+    document.addEventListener('visibilitychange', onBlurOrVisibility);
+    return () => {
+      window.removeEventListener('blur', onWindowBlur);
+      document.removeEventListener('visibilitychange', onBlurOrVisibility);
+    };
+  }, [clearVirtualTouchInputs]);
 
   // Global subscription to AuthManager & SessionManager
   useEffect(() => {
@@ -161,12 +197,14 @@ export default function App() {
       MusicManager.getInstance().syncRoleFromAuthUser(u);
       setProfileRevision((r) => r + 1);
       if (u) {
+        setIsTrialMode(false);
         setLogoutSuccessNotice(null);
         setAppScreen((prev) => (prev === 'WELCOME' ? 'MAIN_MENU' : prev));
         if (sessionManager.getSnapshot().status === 'NO_SESSION') {
           sessionManager.acquireSession(u.uid);
         }
-      } else {
+      } else if (!authManager.isTrialMode()) {
+        setIsTrialMode(false);
         setIsDevDrawerOpen(false);
         setAppScreen('WELCOME');
       }
@@ -194,15 +232,31 @@ export default function App() {
     };
   }, [authManager, sessionManager, handlePause]);
 
-  // Monitor Co-op Online Room for peer disconnection during BATTLE
+  // Monitor Co-op Online Room for peer disconnection / leave during BATTLE
   useEffect(() => {
     if (appScreen !== 'BATTLE') return;
     const unsubCoop = coopManager.subscribe((room) => {
       if (gameEngine.getState().gameMode !== 'TWO_PLAYERS_ONLINE') return;
+      const localRole = coopManager.getLocalRole();
       if (!room) {
-        setOnlineDisconnectMsg('Phòng Co-op Online đã đóng.');
-        handlePause();
+        if (localRole === 'GUEST') {
+          setOnlineDisconnectMsg('P1 đã rời trận.');
+          handlePause();
+        }
         return;
+      }
+      if (room.status === 'ABANDONED') {
+        if (localRole === 'HOST') {
+          // Case E: Guest P2 left while Host P1 is playing -> P1 continues solo without pausing
+          gameEngine.handlePeerPlayerLeft('P2');
+          setGameState({ ...gameEngine.getState() });
+          return;
+        } else if (localRole === 'GUEST') {
+          gameEngine.handlePeerPlayerLeft('P1');
+          setOnlineDisconnectMsg('P1 đã rời trận.');
+          handlePause();
+          return;
+        }
       }
       const status = coopManager.evaluatePeerConnectionStatus(Date.now());
       if (status.isTimedOut) {
@@ -210,23 +264,40 @@ export default function App() {
         handlePause();
       }
     });
-    return () => unsubCoop();
+
+    const unsubPeerLeave = coopManager.subscribePeerLeave((event) => {
+      if (gameEngine.getState().gameMode !== 'TWO_PLAYERS_ONLINE') return;
+      const leftPlayer = event.role === 'HOST' ? 'P1' : 'P2';
+      gameEngine.handlePeerPlayerLeft(leftPlayer);
+      setGameState({ ...gameEngine.getState() });
+      if (event.role === 'HOST') {
+        setOnlineDisconnectMsg(event.message);
+        handlePause();
+      }
+    });
+
+    return () => {
+      unsubCoop();
+      unsubPeerLeave();
+    };
   }, [appScreen, coopManager, gameEngine, handlePause]);
 
   const handleResume = useCallback(() => {
+    clearVirtualTouchInputs();
     gameEngine.resume();
     setIsPaused(false);
     MusicManager.getInstance().resume();
     setGameState({ ...gameEngine.getState() });
-  }, [gameEngine]);
+  }, [gameEngine, clearVirtualTouchInputs]);
 
   const handleRestart = useCallback(() => {
+    clearVirtualTouchInputs();
     gameEngine.restartStage();
     setIsPaused(false);
     const st = gameEngine.getState();
     MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
     setGameState({ ...st });
-  }, [gameEngine]);
+  }, [gameEngine, clearVirtualTouchInputs]);
 
   const handleStartMatch = useCallback(
     (mode: 'SOLO' | 'TWO_PLAYERS' = 'SOLO', twoPlayerOption?: 'P2_AI' | 'P2_REAL') => {
@@ -258,15 +329,37 @@ export default function App() {
     [sessionSnapshot.status, gameEngine]
   );
 
+  const handleStartTrialMode = useCallback(() => {
+    authManager.startTrialMode();
+    setIsTrialMode(true);
+    setIsMatchAllowed(true);
+    setOnlineDisconnectMsg(null);
+    setDifficulty('DEFAULT');
+    setSelectedMode('SOLO');
+    gameEngine.startMatch('SOLO', 'DEFAULT');
+    setIsPaused(false);
+    const st = gameEngine.getState();
+    MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
+    setGameState({ ...st });
+    setAppScreen('BATTLE');
+  }, [authManager, gameEngine]);
+
   const handleQuitToMenu = useCallback(() => {
-    void coopManager.leaveRoom();
+    const wasTrial = authManager.isTrialMode() || isTrialMode;
+    if (wasTrial) {
+      authManager.exitTrialMode();
+      setIsTrialMode(false);
+      setIsMatchAllowed(false);
+    } else {
+      void coopManager.leaveRoom();
+    }
     setOnlineDisconnectMsg(null);
     gameEngine.quitToMenu();
     setIsPaused(false);
     MusicManager.getInstance().pause();
     setGameState({ ...gameEngine.getState() });
-    setAppScreen('MAIN_MENU');
-  }, [gameEngine, coopManager]);
+    setAppScreen(wasTrial || !authManager.getCurrentUser() ? 'WELCOME' : 'MAIN_MENU');
+  }, [authManager, isTrialMode, gameEngine, coopManager]);
 
   const handleSignIn = useCallback(async () => {
     setAuthProcessing(true);
@@ -327,6 +420,10 @@ export default function App() {
   }, [sessionManager]);
 
   const handleNextStageOrReplay = useCallback(() => {
+    if (authManager.isTrialMode() || isTrialMode) {
+      handleQuitToMenu();
+      return;
+    }
     if (!gameEngine.advanceToNextStage()) {
       gameEngine.restartStage();
     }
@@ -334,7 +431,7 @@ export default function App() {
     const st = gameEngine.getState();
     MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
     setGameState({ ...st });
-  }, [gameEngine]);
+  }, [authManager, isTrialMode, handleQuitToMenu, gameEngine]);
 
   const handleResetGame = useCallback(() => {
     gameEngine.restartStage();
@@ -464,11 +561,12 @@ export default function App() {
   }, [authManager]);
 
   // View 1: Welcome Screen (Unauthenticated user or initial landing - V.1: Clean screen without Top Menu)
-  if (!currentUser || appScreen === 'WELCOME') {
+  if ((!currentUser && (!isTrialMode || appScreen !== 'BATTLE')) || appScreen === 'WELCOME') {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         <WelcomeScreen
           onSignIn={handleSignIn}
+          onStartTrialMode={handleStartTrialMode}
           isProcessing={authProcessing}
           errorMessage={authErrorMsg}
           successMessage={logoutSuccessNotice}
@@ -482,7 +580,7 @@ export default function App() {
   }
 
   // View 2: Main Menu Screen (Authenticated user before entering battle)
-  if (appScreen === 'MAIN_MENU') {
+  if (appScreen === 'MAIN_MENU' && currentUser) {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         {isSuperAdmin && (
@@ -539,7 +637,7 @@ export default function App() {
   }
 
   // View 2.5: Mode Selection Screen (Select SOLO vs CO-OP AI vs CO-OP ONLINE)
-  if (appScreen === 'MODE_SELECTION') {
+  if (appScreen === 'MODE_SELECTION' && currentUser) {
     return (
       <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         {isSuperAdmin && (
@@ -795,7 +893,7 @@ export default function App() {
                 <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20 rounded-sm">
                   <img
                     src="/logo-bantank.png"
-                    alt="Bắn Tank Online"
+                    alt="Chiến trường huyền thoại"
                     className="w-20 h-20 object-contain mb-2 drop-shadow-lg p-0 m-0"
                     onError={(e) => {
                       e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
@@ -908,7 +1006,7 @@ export default function App() {
                 type="button"
                 onClick={() => setIsSupportOpen(true)}
                 className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-sky-500 text-neutral-300"
-                title="Hỗ trợ & Hướng dẫn điều khiển"
+                title="Hướng dẫn điều khiển"
               >
                 <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
               </button>
@@ -952,7 +1050,7 @@ export default function App() {
                 <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20 rounded-xl">
                   <img
                     src="/logo-bantank.png"
-                    alt="Bắn Tank Online"
+                    alt="Chiến trường huyền thoại"
                     className="w-20 h-20 object-contain mb-2 drop-shadow-lg p-0 m-0"
                     onError={(e) => {
                       e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
@@ -1011,11 +1109,8 @@ export default function App() {
           {/* Header (M7.3.2: Removed mini logo on top menu; M7.3.4 V.4: Removed Fullscreen button) */}
           <header className="border-b border-neutral-800 bg-neutral-900/90 backdrop-blur px-4 py-2.5 sticky top-0 z-30 shadow-md">
             <div className="max-w-[1560px] mx-auto flex items-center justify-between gap-2">
-              {/* Brand */}
+              {/* Stage Indicator */}
               <div className="flex items-center gap-2">
-                <span className="text-sm sm:text-base font-extrabold tracking-tight text-white">
-                  BẮN TANK ONLINE
-                </span>
                 <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono font-bold">
                   STAGE {gameState?.currentStageId ?? 1}
                 </span>
@@ -1023,24 +1118,26 @@ export default function App() {
 
               {/* Header Right Actions */}
               <div className="flex items-center gap-1.5 text-xs">
-                <button
-                  type="button"
-                  onClick={() => setIsSettingsOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
-                  title="Cài đặt Tài khoản & Âm thanh"
-                >
-                  <Settings className="w-3.5 h-3.5 text-amber-400" />
-                  <span className="hidden sm:inline">Cài đặt</span>
-                </button>
+                {!isTrialMode && (
+                  <button
+                    type="button"
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
+                    title="Cài đặt Tài khoản & Âm thanh"
+                  >
+                    <Settings className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="hidden sm:inline">Cài đặt</span>
+                  </button>
+                )}
 
                 <button
                   type="button"
                   onClick={() => setIsSupportOpen(true)}
                   className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-sky-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
-                  title="Hỗ trợ & Hướng dẫn điều khiển"
+                  title="Hướng dẫn điều khiển"
                 >
                   <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
-                  <span className="hidden sm:inline">Hỗ trợ</span>
+                  <span className="hidden sm:inline">Hướng dẫn</span>
                 </button>
 
                 {isSuperAdmin && (
@@ -1153,7 +1250,7 @@ export default function App() {
                     <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-20 rounded-xl">
                       <img
                         src="/logo-bantank.png"
-                        alt="Bắn Tank Online"
+                        alt="Chiến trường huyền thoại"
                         className="w-24 h-24 object-contain mb-3 drop-shadow-xl p-0 m-0"
                         onError={(e) => {
                           e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
@@ -1179,7 +1276,7 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Viewport Footer (M7.3.4 V.3: Control guide moved to SupportModal) */}
+                {/* Viewport Footer */}
                 <div className="bg-neutral-950 px-4 py-2 border-t border-neutral-800 flex flex-wrap items-center justify-between text-xs gap-2">
                   <button
                     type="button"
@@ -1187,7 +1284,7 @@ export default function App() {
                     className="flex items-center gap-1.5 text-neutral-400 hover:text-sky-400 text-[11px] transition-colors cursor-pointer"
                   >
                     <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Xem hướng dẫn điều khiển trong mục Hỗ trợ</span>
+                    <span>Xem hướng dẫn điều khiển trong mục Hướng dẫn</span>
                   </button>
                   <div className="text-[11px] text-neutral-500 font-mono">
                     60 FPS
@@ -1213,6 +1310,7 @@ export default function App() {
                 onSpawnEnemy={handleSpawnNextEnemy}
                 onPause={handlePause}
                 isSuperAdmin={isSuperAdmin}
+                localOnlineRole={coopManager.getLocalRole()}
               />
 
               {/* Super Admin Only: Terrain Legend & QA Quick Access Card */}
@@ -1246,7 +1344,7 @@ export default function App() {
 
           {/* Footer */}
           <footer className="border-t border-neutral-900 bg-neutral-950/90 py-3 px-4 text-center text-[11px] text-neutral-500 mt-auto">
-            Bắn Tank Online © 2026
+            © 2026
           </footer>
         </div>
       )}
@@ -1260,6 +1358,7 @@ export default function App() {
         onRestart={handleRestart}
         onQuitToMenu={handleQuitToMenu}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        isTrialMode={isTrialMode}
       />
 
       <GameOverModal
@@ -1267,6 +1366,7 @@ export default function App() {
         state={gameState}
         onRestart={handleRestart}
         onQuitToMenu={handleQuitToMenu}
+        isTrialMode={isTrialMode}
       />
 
       <StageClearModal
@@ -1274,6 +1374,7 @@ export default function App() {
         state={gameState}
         onNextStageOrReplay={handleNextStageOrReplay}
         onQuitToMenu={handleQuitToMenu}
+        isTrialMode={isTrialMode}
       />
     </div>
   );

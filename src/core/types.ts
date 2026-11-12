@@ -206,6 +206,8 @@ export interface P1PlayerState {
   waitingForClearSpawn: boolean; // True if spawn point (48, 192) is occupied
   spawnCheckTimer: number; // Re-check every 100ms when waiting
   occupiedDuration?: number; // Continuous seconds the spawn point has been occupied
+  isSpectator?: boolean; // True when lives <= 0 && isDead in Co-op mode
+  hasLeftMatch?: boolean; // True when player actively left an online match
 }
 
 /* ====================================================================
@@ -279,6 +281,7 @@ export interface GameCoreState {
   isTimeoutGameOver: boolean;
   gameOverReason: string | null;
   diagnosticLog?: string | null;
+  peerLeaveNotice?: string | null;
   difficulty?: 'DEFAULT' | 'EXTREME';
   gameMode?: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE';
   p2?: TankStructure | null;

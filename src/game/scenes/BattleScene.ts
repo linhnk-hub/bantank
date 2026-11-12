@@ -51,9 +51,12 @@ export class BattleScene extends Phaser.Scene {
   private fpsAccumulatorMs = 0;
   private fpsFrameCount = 0;
   private unsubOnlineSnapshots?: () => void;
+  private unsubPeerLeave?: () => void;
   private lastDispatchMonotonicMs: number = 0;
   private bgTimerId: ReturnType<typeof setInterval> | null = null;
   private visibilityChangeHandler?: () => void;
+  private windowBlurHandler?: () => void;
+  private windowFocusHandler?: () => void;
 
   private cursors?: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd?: {
@@ -124,7 +127,34 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  public resetLocalInputState(): void {
+    this.engine.clearAllInputs();
+    try {
+      this.cursors?.up?.reset();
+      this.cursors?.down?.reset();
+      this.cursors?.left?.reset();
+      this.cursors?.right?.reset();
+      this.cursors?.space?.reset();
+      this.cursors?.shift?.reset();
+      this.wasd?.W?.reset();
+      this.wasd?.A?.reset();
+      this.wasd?.S?.reset();
+      this.wasd?.D?.reset();
+      this.wasd?.J?.reset();
+      this.wasd?.SPACE?.reset();
+      this.input?.keyboard?.resetKeys();
+    } catch {
+      // Ignore if keyboard plugin is not initialized in headless test environment
+    }
+  }
+
   private readCurrentLocalInput(): InputState {
+    const state = this.engine.getState();
+    const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    if (state.matchState !== 'PLAYING' || isHidden) {
+      this.resetLocalInputState();
+      return { ...NEUTRAL_INPUT };
+    }
     const ext = this.engine.getExternalInput();
     return {
       up: Boolean(this.cursors?.up.isDown || this.wasd?.W.isDown || ext.up),
@@ -143,7 +173,7 @@ export class BattleScene extends Phaser.Scene {
   private reportHudStateIfNeeded(elapsedMs: number, state: GameCoreState): void {
     if (!this.onStateCallback) return;
     this.hudSyncAccumulatorMs += elapsedMs;
-    const sig = `${state.matchState}|${state.stageRunSeq}|${state.remainingSeconds}|${state.score}|${state.p1State.lives}|${state.p1State.isDead}|${state.p2State?.lives ?? -1}|${state.p2State?.isDead ?? false}|${state.totalDefeatedEnemies}|${state.enemyQueue.length}|${state.enemies.length}|${state.isGameOver}|${state.isStageClear}|${state.isTimeoutGameOver}|${state.terrain.isBaseDestroyed}`;
+    const sig = `${state.matchState}|${state.stageRunSeq}|${state.remainingSeconds}|${state.score}|${state.p1State.lives}|${state.p1State.isDead}|${Boolean(state.p1State.isSpectator)}|${state.p2State?.lives ?? -1}|${state.p2State?.isDead ?? false}|${Boolean(state.p2State?.isSpectator)}|${state.peerLeaveNotice ?? ''}|${state.totalDefeatedEnemies}|${state.enemyQueue.length}|${state.enemies.length}|${state.isGameOver}|${state.isStageClear}|${state.isTimeoutGameOver}|${state.terrain.isBaseDestroyed}`;
     if (sig !== this.lastHudSignature || this.hudSyncAccumulatorMs >= 100) {
       this.lastHudSignature = sig;
       this.hudSyncAccumulatorMs = 0;
@@ -185,25 +215,41 @@ export class BattleScene extends Phaser.Scene {
       const coopManager = CoopOnlineManager.getInstance();
       const onlineRole = coopManager.getRole();
       if (onlineRole === 'HOST') {
+        if (coopManager.hasPeerActivelyLeft('GUEST')) {
+          this.engine.handlePeerPlayerLeft('P2');
+        }
         const isHostHidden =
           typeof document !== 'undefined' && document.visibilityState === 'hidden';
-        const effectiveHostInput = isHostHidden ? { ...NEUTRAL_INPUT } : input;
-        if (isHostHidden) {
+        const isHostSpectator = this.engine.isPlayerSpectator('P1');
+        const effectiveHostInput =
+          isHostHidden || isHostSpectator ? { ...NEUTRAL_INPUT } : input;
+        if (isHostHidden || isHostSpectator) {
           this.engine.setExternalInput({ ...NEUTRAL_INPUT });
         }
         this.engine.setExternalInputP2(coopManager.getLatestValidatedGuestInput(Date.now()));
         this.engine.advanceTime(rawElapsedMs, effectiveHostInput, { isHostHidden });
         void coopManager.onHostSimulationFrame(rawElapsedMs, this.engine.getState());
       } else if (onlineRole === 'GUEST') {
+        if (coopManager.hasPeerActivelyLeft('HOST')) {
+          this.engine.handlePeerPlayerLeft('P1');
+        }
         // Guest tuyệt đối không gọi advanceTime hay stepTick
-        void coopManager.submitGuestInput(input);
-        this.engine.setExternalInputP2(input);
+        const isGuestSpectator = this.engine.isPlayerSpectator('P2');
+        coopManager.setLocalGuestSpectator(isGuestSpectator);
+        if (isGuestSpectator) {
+          this.engine.setExternalInputP2({ ...NEUTRAL_INPUT });
+        } else {
+          void coopManager.submitGuestInput(input);
+          this.engine.setExternalInputP2(input);
+        }
         this.engine.advanceGuestVisualInterpolation(rawElapsedMs);
       } else {
         this.engine.advanceTime(rawElapsedMs, input);
       }
     } else {
-      this.engine.advanceTime(rawElapsedMs, input);
+      const isP1Spectator = this.engine.isPlayerSpectator('P1');
+      const effectiveInput = isP1Spectator ? { ...NEUTRAL_INPUT } : input;
+      this.engine.advanceTime(rawElapsedMs, effectiveInput);
     }
 
     if (source === 'BG_TIMER') {
@@ -296,42 +342,91 @@ export class BattleScene extends Phaser.Scene {
       return true;
     });
 
-    // 9. Setup visibilitychange listener for SOLO/AI safety pause and TWO_PLAYERS_ONLINE Host BG_TIMER
+    if (this.unsubPeerLeave) {
+      this.unsubPeerLeave();
+    }
+    this.unsubPeerLeave = CoopOnlineManager.getInstance().subscribePeerLeave((event) => {
+      if (this.engine.getGameMode() !== 'TWO_PLAYERS_ONLINE') return;
+      const myRole = CoopOnlineManager.getInstance().getRole();
+      if (myRole === 'HOST' && event.role === 'GUEST') {
+        this.engine.handlePeerPlayerLeft('P2', event.message);
+        this.reportHudStateIfNeeded(0, this.engine.getState());
+      } else if (myRole === 'GUEST' && event.role === 'HOST') {
+        this.engine.handlePeerPlayerLeft('P1', event.message);
+        this.reportHudStateIfNeeded(0, this.engine.getState());
+      }
+    });
+
+    // 9. Setup visibilitychange and window blur/focus listeners for input neutralization, SOLO/AI safety pause, and TWO_PLAYERS_ONLINE Host BG_TIMER
     if (typeof document !== 'undefined') {
       if (this.visibilityChangeHandler) {
         document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
       }
       this.visibilityChangeHandler = () => {
+        this.resetLocalInputState();
         if (document.visibilityState === 'hidden') {
           const mode = this.engine.getGameMode();
           const role = CoopOnlineManager.getInstance().getRole();
           if (mode === 'TWO_PLAYERS_ONLINE' && role === 'HOST') {
-            this.engine.setExternalInput({ ...NEUTRAL_INPUT });
+            this.engine.handleVisibilityChange(false);
             this.startBackgroundHostTimer();
           } else if (
             (mode === 'SOLO' || mode === 'TWO_PLAYERS_AI') &&
             this.engine.getState().matchState === 'PLAYING'
           ) {
-            this.engine.setExternalInput({ ...NEUTRAL_INPUT });
-            this.engine.pauseMatch();
+            this.engine.handleVisibilityChange(false, { triggerSafetyPause: true });
             this.reportHudStateIfNeeded(0, this.engine.getState());
           }
         } else {
           this.stopBackgroundHostTimer();
+          this.engine.handleVisibilityChange(true);
+          this.reportHudStateIfNeeded(0, this.engine.getState());
         }
       };
       document.addEventListener('visibilitychange', this.visibilityChangeHandler);
     }
 
+    if (typeof window !== 'undefined') {
+      if (this.windowBlurHandler) {
+        window.removeEventListener('blur', this.windowBlurHandler);
+      }
+      if (this.windowFocusHandler) {
+        window.removeEventListener('focus', this.windowFocusHandler);
+      }
+      this.windowBlurHandler = () => {
+        this.resetLocalInputState();
+      };
+      this.windowFocusHandler = () => {
+        this.resetLocalInputState();
+      };
+      window.addEventListener('blur', this.windowBlurHandler);
+      window.addEventListener('focus', this.windowFocusHandler);
+    }
+
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.stopBackgroundHostTimer();
+      this.resetLocalInputState();
       if (this.unsubOnlineSnapshots) {
         this.unsubOnlineSnapshots();
         this.unsubOnlineSnapshots = undefined;
       }
+      if (this.unsubPeerLeave) {
+        this.unsubPeerLeave();
+        this.unsubPeerLeave = undefined;
+      }
       if (typeof document !== 'undefined' && this.visibilityChangeHandler) {
         document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
         this.visibilityChangeHandler = undefined;
+      }
+      if (typeof window !== 'undefined') {
+        if (this.windowBlurHandler) {
+          window.removeEventListener('blur', this.windowBlurHandler);
+          this.windowBlurHandler = undefined;
+        }
+        if (this.windowFocusHandler) {
+          window.removeEventListener('focus', this.windowFocusHandler);
+          this.windowFocusHandler = undefined;
+        }
       }
     });
   }
@@ -835,13 +930,17 @@ export class BattleScene extends Phaser.Scene {
     // Audio match state change handling (pause/resume/gameover/stageclear)
     if (this.lastMatchState !== state.matchState) {
       if (state.matchState === 'PAUSED') {
+        this.resetLocalInputState();
         SoundManager.getInstance().pauseBgm();
       } else if (state.matchState === 'PLAYING') {
+        this.resetLocalInputState();
         SoundManager.getInstance().resumeBgm();
       } else if (state.matchState === 'STAGE_CLEAR') {
+        this.resetLocalInputState();
         SoundManager.getInstance().stopBgm();
         SoundManager.getInstance().playStageClear();
       } else if (state.matchState === 'GAME_OVER') {
+        this.resetLocalInputState();
         SoundManager.getInstance().stopBgm();
         SoundManager.getInstance().playGameOver();
       }

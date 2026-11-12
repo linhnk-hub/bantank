@@ -238,6 +238,7 @@ export class GameEngine {
   private catchUpTicksRemaining: number = 0;
   private justResumed: boolean = false;
   private isPaused: boolean = false;
+  private isForcedSafetyPaused: boolean = false;
   private totalRealElapsedMs: number = 0;
   private totalDroppedMs: number = 0;
   private tpsAccumulatorMs: number = 0;
@@ -282,9 +283,104 @@ export class GameEngine {
     stageRunSeq: number,
     tickCount: number
   ) => void;
+  private processedPeerLeavePlayers: Set<'P1' | 'P2'> = new Set();
 
   public isCoopMode(): boolean {
     return this.gameMode === 'TWO_PLAYERS_AI' || this.gameMode === 'TWO_PLAYERS_ONLINE';
+  }
+
+  public isPlayerSpectator(player: 'P1' | 'P2'): boolean {
+    if (player === 'P1') {
+      return Boolean(
+        this.state.p1State.isSpectator ||
+          this.state.p1State.hasLeftMatch ||
+          (this.state.p1State.isDead && this.state.p1State.lives <= 0)
+      );
+    }
+    if (!this.state.p2State) return false;
+    return Boolean(
+      this.state.p2State.isSpectator ||
+        this.state.p2State.hasLeftMatch ||
+        (this.state.p2State.isDead && this.state.p2State.lives <= 0)
+    );
+  }
+
+  /**
+   * Xử lý sự kiện một người chơi chủ động rời trận trong chế độ TWO_PLAYERS_ONLINE (M7.3.9 Mục 2 - Trường hợp E):
+   * - Xử lý đúng 1 lần duy nhất cho mỗi người chơi trong một trận (deduplicated).
+   * - Nếu P2 rời trận khi P1 còn sống: P1 nhận thông báo "P2 đã rời trận." và tiếp tục chơi đến khi thắng hoặc thua.
+   * - Nếu P1 (Host) rời trận: Guest nhận thông báo "P1 đã rời trận." và kết thúc phiên chơi an toàn.
+   */
+  public handlePeerPlayerLeft(
+    leftPlayer: 'P1' | 'P2',
+    customReason?: string
+  ): { processed: boolean; noticeMessage: string; matchEnded: boolean } {
+    const canonicalNotice = leftPlayer === 'P1' ? 'P1 đã rời trận.' : 'P2 đã rời trận.';
+    if (this.processedPeerLeavePlayers.has(leftPlayer)) {
+      return {
+        processed: false,
+        noticeMessage: canonicalNotice,
+        matchEnded: Boolean(this.state.isGameOver || this.state.isStageClear),
+      };
+    }
+    this.processedPeerLeavePlayers.add(leftPlayer);
+
+    if (leftPlayer === 'P2') {
+      if (this.state.p2 && this.state.p2State) {
+        this.state.p2.isAlive = false;
+        this.state.p2State.lives = 0;
+        this.state.p2State.isDead = true;
+        this.state.p2State.isSpectator = true;
+        this.state.p2State.hasLeftMatch = true;
+        this.state.p2State.respawnTimer = 0;
+        this.state.p2State.waitingForClearSpawn = false;
+      }
+      this.externalInputP2 = { ...NEUTRAL_INPUT };
+      this.state.bullets = this.state.bullets.filter((b) => b.ownerId !== 'p2');
+      this.state.peerLeaveNotice = canonicalNotice;
+      this.state.diagnosticLog = customReason || canonicalNotice;
+
+      const p1CanContinue = this.state.p1State.lives > 0 || !this.state.p1State.isDead;
+      if (!p1CanContinue && !this.state.isGameOver && !this.state.isStageClear) {
+        this.state.isGameOver = true;
+        this.state.isStageClear = false;
+        this.state.isTimeoutGameOver = false;
+        this.state.gameOverReason = 'Cả hai người chơi đều hết mạng! Game Over.';
+        this.state.matchState = MATCH_STATES.GAME_OVER;
+        this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
+      }
+
+      return {
+        processed: true,
+        noticeMessage: canonicalNotice,
+        matchEnded: Boolean(this.state.isGameOver || this.state.isStageClear),
+      };
+    }
+
+    // leftPlayer === 'P1' (Host left match)
+    this.state.p1.isAlive = false;
+    this.state.p1State.lives = 0;
+    this.state.p1State.isDead = true;
+    this.state.p1State.isSpectator = true;
+    this.state.p1State.hasLeftMatch = true;
+    this.state.p1State.respawnTimer = 0;
+    this.clearAllInputs();
+    this.state.peerLeaveNotice = canonicalNotice;
+    this.state.diagnosticLog = customReason || canonicalNotice;
+
+    if (!this.state.isStageClear) {
+      this.state.isGameOver = true;
+      this.state.isTimeoutGameOver = false;
+      this.state.gameOverReason = canonicalNotice;
+      this.state.matchState = MATCH_STATES.GAME_OVER;
+      this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
+    }
+
+    return {
+      processed: true,
+      noticeMessage: canonicalNotice,
+      matchEnded: true,
+    };
   }
 
   public on(event: string, callback: (payload: any) => void): () => void {
@@ -439,7 +535,28 @@ export class GameEngine {
     return this.state.matchState;
   }
 
+  public isSafetyPaused(): boolean {
+    return this.isForcedSafetyPaused;
+  }
+
+  public clearAllInputs(): void {
+    this.externalInput = { ...NEUTRAL_INPUT };
+    this.externalInputP2 = { ...NEUTRAL_INPUT };
+    this.lastShootState = false;
+  }
+
   public setExternalInput(input: Partial<InputState>): void {
+    if (
+      this.isPaused ||
+      this.isForcedSafetyPaused ||
+      this.state.matchState !== MATCH_STATES.PLAYING ||
+      this.state.p1State.isDead ||
+      this.state.p1State.isSpectator ||
+      this.state.p1State.hasLeftMatch
+    ) {
+      this.externalInput = { ...NEUTRAL_INPUT };
+      return;
+    }
     this.externalInput = {
       ...this.externalInput,
       ...input,
@@ -451,6 +568,18 @@ export class GameEngine {
   }
 
   public setExternalInputP2(input: Partial<InputState>): void {
+    if (
+      this.isPaused ||
+      this.isForcedSafetyPaused ||
+      this.state.matchState !== MATCH_STATES.PLAYING ||
+      !this.state.p2 ||
+      this.state.p2State?.isDead ||
+      this.state.p2State?.isSpectator ||
+      this.state.p2State?.hasLeftMatch
+    ) {
+      this.externalInputP2 = { ...NEUTRAL_INPUT };
+      return;
+    }
     this.externalInputP2 = {
       ...this.externalInputP2,
       ...input,
@@ -462,6 +591,7 @@ export class GameEngine {
   }
 
   public pause(): boolean {
+    this.clearAllInputs();
     if (this.state.matchState === MATCH_STATES.PLAYING) {
       const trans = this.matchStateMachine.transitionTo(MATCH_STATES.PAUSED);
       if (trans.success) {
@@ -471,9 +601,6 @@ export class GameEngine {
         this.catchUpTicksRemaining = 0;
         this.justResumed = false;
         this.state.matchState = MATCH_STATES.PAUSED;
-        // Clear inputs upon pausing
-        this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
-        this.externalInputP2 = { up: false, down: false, left: false, right: false, shoot: false };
         return true;
       }
     }
@@ -485,10 +612,12 @@ export class GameEngine {
       const trans = this.matchStateMachine.transitionTo(MATCH_STATES.PLAYING);
       if (trans.success) {
         this.isPaused = false;
+        this.isForcedSafetyPaused = false;
         this.accumulatorMs = 0; // Essential: reset backlog so no time-jump occurs
         this.lastDroppedBacklogMs = 0;
         this.catchUpTicksRemaining = 0;
         this.justResumed = true;
+        this.clearAllInputs();
         this.state.matchState = MATCH_STATES.PLAYING;
         return true;
       }
@@ -510,10 +639,10 @@ export class GameEngine {
     this.tpsAccumulatorMs = 0;
     this.tpsTicksThisWindow = 0;
     this.recentTps = 60;
-    this.lastShootState = false;
     this.isPaused = false;
-    this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
-    this.externalInputP2 = { up: false, down: false, left: false, right: false, shoot: false };
+    this.isForcedSafetyPaused = false;
+    this.processedPeerLeavePlayers.clear();
+    this.clearAllInputs();
     this.combatEvents = [];
     this.enemyManager.reset(stage.enemyQueue);
     this.scoreManager.resetRun();
@@ -533,6 +662,8 @@ export class GameEngine {
         shieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,
         waitingForClearSpawn: false,
         spawnCheckTimer: 0,
+        isSpectator: false,
+        hasLeftMatch: false,
       },
       p2: this.isCoopMode() ? createP2Tank() : null,
       p2State: this.isCoopMode() ? {
@@ -542,6 +673,8 @@ export class GameEngine {
         shieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,
         waitingForClearSpawn: false,
         spawnCheckTimer: 0,
+        isSpectator: false,
+        hasLeftMatch: false,
       } : null,
       gameMode: this.gameMode,
       bullet: null,
@@ -564,6 +697,7 @@ export class GameEngine {
       isTimeoutGameOver: false,
       gameOverReason: null,
       diagnosticLog: null,
+      peerLeaveNotice: null,
       difficulty: this.difficulty,
       matchState: MATCH_STATES.PLAYING,
     };
@@ -573,17 +707,19 @@ export class GameEngine {
 
   public quitToMenu(): void {
     this.isPaused = true;
+    this.isForcedSafetyPaused = false;
     this.accumulatorMs = 0;
     this.lastDroppedBacklogMs = 0;
     this.catchUpTicksRemaining = 0;
+    this.processedPeerLeavePlayers.clear();
     this.resetGuestSnapshotTracking();
-    this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
-    this.externalInputP2 = { up: false, down: false, left: false, right: false, shoot: false };
+    this.clearAllInputs();
     this.combatEvents = [];
     this.state.isGameOver = false;
     this.state.isStageClear = false;
     this.state.isTimeoutGameOver = false;
     this.state.gameOverReason = null;
+    this.state.peerLeaveNotice = null;
     this.state.bullets = [];
     this.state.bullet = null;
     this.state.matchState = MATCH_STATES.MENU;
@@ -617,37 +753,60 @@ export class GameEngine {
     this.accumulatorMs = 0;
     this.lastDroppedBacklogMs = 0;
     this.catchUpTicksRemaining = 0;
+    this.justResumed = false;
     this.isPaused = false;
+    this.isForcedSafetyPaused = false;
+    this.clearAllInputs();
     this.combatEvents = [];
     this.enemyManager.reset(stage.enemyQueue);
     this.allyAI.reset();
 
-    // Carry forward P1 lives and existing total score
+    // Carry forward P1/P2 lives and existing total score
     const preservedLives = this.state.p1State.lives;
+    const p1Eliminated = Boolean(this.state.p1State.isDead && preservedLives <= 0);
     const preservedP2Lives = this.state.p2State?.lives ?? P1_CONFIG.STARTING_LIVES;
+    const p2HasLeft = Boolean(this.state.p2State?.hasLeftMatch || this.processedPeerLeavePlayers.has('P2'));
+    const p2Eliminated = Boolean(
+      p2HasLeft || (this.state.p2State?.isDead && preservedP2Lives <= 0)
+    );
     const matchDurationSeconds = getMatchDurationSecondsForDifficulty(this.difficulty);
     const remainingTicks = matchDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
+
+    const nextP1 = createP1Tank();
+    if (p1Eliminated) {
+      nextP1.isAlive = false;
+      nextP1.isShielded = false;
+    }
+    const nextP2 = this.isCoopMode() ? createP2Tank() : null;
+    if (nextP2 && p2Eliminated) {
+      nextP2.isAlive = false;
+      nextP2.isShielded = false;
+    }
 
     this.state = {
       tickCount: 0,
       stageRunSeq: this.stageRunSeq,
-      p1: createP1Tank(),
+      p1: nextP1,
       p1State: {
         lives: preservedLives,
-        isDead: false,
+        isDead: p1Eliminated,
         respawnTimer: 0,
-        shieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,
+        shieldTimer: p1Eliminated ? 0 : P1_CONFIG.RESPAWN_SHIELD_S,
         waitingForClearSpawn: false,
         spawnCheckTimer: 0,
+        isSpectator: p1Eliminated,
+        hasLeftMatch: Boolean(this.state.p1State.hasLeftMatch),
       },
-      p2: this.isCoopMode() ? createP2Tank() : null,
+      p2: nextP2,
       p2State: this.isCoopMode() ? {
-        lives: preservedP2Lives,
-        isDead: false,
+        lives: p2HasLeft ? 0 : preservedP2Lives,
+        isDead: p2Eliminated,
         respawnTimer: 0,
-        shieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,
+        shieldTimer: p2Eliminated ? 0 : P1_CONFIG.RESPAWN_SHIELD_S,
         waitingForClearSpawn: false,
         spawnCheckTimer: 0,
+        isSpectator: p2Eliminated,
+        hasLeftMatch: p2HasLeft,
       } : null,
       gameMode: this.gameMode,
       bullet: null,
@@ -670,6 +829,7 @@ export class GameEngine {
       isTimeoutGameOver: false,
       gameOverReason: null,
       diagnosticLog: null,
+      peerLeaveNotice: this.state.peerLeaveNotice ?? null,
       difficulty: this.difficulty,
       matchState: MATCH_STATES.PLAYING,
     };
@@ -691,9 +851,11 @@ export class GameEngine {
     this.lastDroppedBacklogComponentMs = 0;
     this.catchUpTicksRemaining = 0;
     this.justResumed = false;
+    this.processedPeerLeavePlayers.clear();
     this.resetGuestSnapshotTracking();
-    this.lastShootState = false;
     this.isPaused = false;
+    this.isForcedSafetyPaused = false;
+    this.clearAllInputs();
     this.combatEvents = [];
     this.enableEnemies = enableEnemies;
     this.enemyManager.reset(customEnemyQueue);
@@ -752,8 +914,7 @@ export class GameEngine {
     isVisible: boolean,
     options?: { triggerSafetyPause?: boolean }
   ): void {
-    this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
-    this.externalInputP2 = { up: false, down: false, left: false, right: false, shoot: false };
+    this.clearAllInputs();
 
     if (this.gameMode === 'TWO_PLAYERS_ONLINE') {
       if (!isVisible) {
@@ -769,6 +930,7 @@ export class GameEngine {
     this.catchUpTicksRemaining = 0;
     if (!isVisible) {
       if (options?.triggerSafetyPause) {
+        this.isForcedSafetyPaused = true;
         this.pause();
         this.state.diagnosticLog = 'Forced Safety Pause: tab hidden';
       } else {
@@ -776,7 +938,7 @@ export class GameEngine {
         this.justResumed = false;
       }
     } else {
-      if (this.state.matchState !== MATCH_STATES.PAUSED) {
+      if (!this.isForcedSafetyPaused && this.state.matchState !== MATCH_STATES.PAUSED) {
         this.isPaused = false;
         this.justResumed = true; // Prevents any catch-up frame burst upon returning
         this.state.diagnosticLog = 'Resumed from background tab: accumulator reset';
@@ -854,9 +1016,14 @@ export class GameEngine {
     this.state.tickCount++;
     const dt = SIMULATION_CONFIG.FIXED_DT_S;
 
-    // 1. P1 Respawn & Shield Handling (Point H & Point A)
+    // 1. P1 Respawn, Spectator & Shield Handling (Point H & Point A & M7.3.9)
     if (this.state.p1State.isDead) {
-      if (this.state.p1State.respawnTimer > 0) {
+      if (this.state.p1State.lives <= 0) {
+        this.state.p1State.respawnTimer = 0;
+        this.state.p1State.waitingForClearSpawn = false;
+        this.state.p1State.isSpectator = true;
+        this.state.p1.isAlive = false;
+      } else if (this.state.p1State.respawnTimer > 0) {
         this.state.p1State.respawnTimer -= dt;
       } else if (this.state.p1State.lives > 0) {
         // Check if spawn position (48, 192) is occupied by any enemy tank
@@ -878,6 +1045,7 @@ export class GameEngine {
         } else {
           // Clear to spawn at fixed (48, 192)
           this.state.p1State.isDead = false;
+          this.state.p1State.isSpectator = false;
           this.state.p1State.waitingForClearSpawn = false;
           this.state.p1State.spawnCheckTimer = 0;
           this.state.p1State.occupiedDuration = 0;
@@ -896,40 +1064,47 @@ export class GameEngine {
       this.state.p1.isShielded = this.state.p1State.shieldTimer > 0;
     }
 
-    // 1b. P2 Respawn & Shield Handling (Co-op AI & Co-op Online)
+    // 1b. P2 Respawn, Spectator & Shield Handling (Co-op AI & Co-op Online)
     if (this.isCoopMode() && this.state.p2 && this.state.p2State) {
       if (this.state.p2State.isDead) {
-        if (this.state.p2State.respawnTimer > 0) {
+        if (this.state.p2State.lives <= 0 || this.state.p2State.hasLeftMatch) {
+          this.state.p2State.respawnTimer = 0;
+          this.state.p2State.waitingForClearSpawn = false;
+          this.state.p2State.isSpectator = true;
+          this.state.p2.isAlive = false;
+          this.externalInputP2 = { ...NEUTRAL_INPUT };
+        } else if (this.state.p2State.respawnTimer > 0) {
           this.state.p2State.respawnTimer -= dt;
         } else if (this.state.p2State.lives > 0) {
           const p2SpawnBox = getTankHitbox(144, 192);
-            const otherTanks = [this.state.p1, ...this.state.enemies];
-            const isOccupiedByTank = checkTankVsTanks('p2_respawn_probe', p2SpawnBox, otherTanks);
-            const isOccupiedByBullet = this.state.bullets.some((b) =>
-              intersectAABB(p2SpawnBox, getBulletHitbox(b.x, b.y))
-            );
-            if (isOccupiedByTank || isOccupiedByBullet) {
-              this.state.p2State.occupiedDuration = (this.state.p2State.occupiedDuration || 0) + dt;
-              this.state.p2State.waitingForClearSpawn = true;
-              this.state.p2State.spawnCheckTimer = (this.state.p2State.spawnCheckTimer || 0.1) - dt;
-              if (this.state.p2State.spawnCheckTimer <= 0) {
-                this.state.p2State.spawnCheckTimer = 0.1;
-                if (this.state.p2State.occupiedDuration >= 2.0) {
-                  this.triggerSpawnAvoidance(p2SpawnBox);
-                }
+          const otherTanks = [this.state.p1, ...this.state.enemies];
+          const isOccupiedByTank = checkTankVsTanks('p2_respawn_probe', p2SpawnBox, otherTanks);
+          const isOccupiedByBullet = this.state.bullets.some((b) =>
+            intersectAABB(p2SpawnBox, getBulletHitbox(b.x, b.y))
+          );
+          if (isOccupiedByTank || isOccupiedByBullet) {
+            this.state.p2State.occupiedDuration = (this.state.p2State.occupiedDuration || 0) + dt;
+            this.state.p2State.waitingForClearSpawn = true;
+            this.state.p2State.spawnCheckTimer = (this.state.p2State.spawnCheckTimer || 0.1) - dt;
+            if (this.state.p2State.spawnCheckTimer <= 0) {
+              this.state.p2State.spawnCheckTimer = 0.1;
+              if (this.state.p2State.occupiedDuration >= 2.0) {
+                this.triggerSpawnAvoidance(p2SpawnBox);
               }
-            } else {
-              this.state.p2State.isDead = false;
-              this.state.p2State.waitingForClearSpawn = false;
-              this.state.p2State.spawnCheckTimer = 0;
-              this.state.p2State.occupiedDuration = 0;
-              this.state.p2State.shieldTimer = P1_CONFIG.RESPAWN_SHIELD_S;
-              this.state.p2.x = 144;
-              this.state.p2.y = 192;
-              this.state.p2.direction = 'UP';
-              this.state.p2.isAlive = true;
-              this.state.p2.isShielded = true;
             }
+          } else {
+            this.state.p2State.isDead = false;
+            this.state.p2State.isSpectator = false;
+            this.state.p2State.waitingForClearSpawn = false;
+            this.state.p2State.spawnCheckTimer = 0;
+            this.state.p2State.occupiedDuration = 0;
+            this.state.p2State.shieldTimer = P1_CONFIG.RESPAWN_SHIELD_S;
+            this.state.p2.x = 144;
+            this.state.p2.y = 192;
+            this.state.p2.direction = 'UP';
+            this.state.p2.isAlive = true;
+            this.state.p2.isShielded = true;
+          }
         }
       }
 
@@ -939,8 +1114,13 @@ export class GameEngine {
       }
     }
 
-    // 2. P1 Tank Movement & Continuous Shooting
-    if (this.state.p1.isAlive && !this.state.p1State.isDead) {
+    // 2. P1 Tank Movement & Continuous Shooting (disabled when dead or in Spectator mode)
+    if (
+      this.state.p1.isAlive &&
+      !this.state.p1State.isDead &&
+      !this.state.p1State.isSpectator &&
+      !this.state.p1State.hasLeftMatch
+    ) {
       const obstaclesForP1 = (this.state.p2 && this.state.p2.isAlive && !this.state.p2State?.isDead)
         ? [...this.state.enemies, this.state.p2]
         : this.state.enemies;
@@ -961,11 +1141,18 @@ export class GameEngine {
       }
       this.lastShootState = input.shoot;
     } else {
-      this.lastShootState = input.shoot;
+      this.lastShootState = false;
     }
 
     // 2b. P2 Movement & Shooting (AI in TWO_PLAYERS_AI, Human Remote Input in TWO_PLAYERS_ONLINE)
-    if (this.gameMode === 'TWO_PLAYERS_AI' && this.state.p2 && this.state.p2State && this.state.p2.isAlive && !this.state.p2State.isDead) {
+    if (
+      this.gameMode === 'TWO_PLAYERS_AI' &&
+      this.state.p2 &&
+      this.state.p2State &&
+      this.state.p2.isAlive &&
+      !this.state.p2State.isDead &&
+      !this.state.p2State.isSpectator
+    ) {
       const p2HasBullet = this.state.bullets.some((b) => b.ownerId === 'p2');
       const p2Decision = this.allyAI.update(
         dt,
@@ -1006,7 +1193,15 @@ export class GameEngine {
           this.emit('P2_SHOOT', p2Bullet);
         }
       }
-    } else if (this.gameMode === 'TWO_PLAYERS_ONLINE' && this.state.p2 && this.state.p2State && this.state.p2.isAlive && !this.state.p2State.isDead) {
+    } else if (
+      this.gameMode === 'TWO_PLAYERS_ONLINE' &&
+      this.state.p2 &&
+      this.state.p2State &&
+      this.state.p2.isAlive &&
+      !this.state.p2State.isDead &&
+      !this.state.p2State.isSpectator &&
+      !this.state.p2State.hasLeftMatch
+    ) {
       const obstaclesForP2 = (this.state.p1 && this.state.p1.isAlive && !this.state.p1State.isDead)
         ? [this.state.p1, ...this.state.enemies]
         : this.state.enemies;
@@ -1144,12 +1339,18 @@ export class GameEngine {
           if (!this.state.p1.isShielded && this.state.p1State.shieldTimer <= 0) {
             // If P1 is NOT shielded: P1 dies with dedicated P1_EXPLOSION!
             this.emitCombatEvent('P1_EXPLOSION', this.state.p1.x + 8, this.state.p1.y + 8);
-            this.state.p1State.lives -= 1;
+            this.state.p1State.lives = Math.max(0, this.state.p1State.lives - 1);
             this.state.p1State.isDead = true;
             this.state.p1.isAlive = false;
-            this.state.p1State.respawnTimer = P1_CONFIG.RESPAWN_DELAY_S;
             this.state.p1State.waitingForClearSpawn = false;
             this.state.p1State.spawnCheckTimer = 0;
+            if (this.state.p1State.lives > 0) {
+              this.state.p1State.respawnTimer = P1_CONFIG.RESPAWN_DELAY_S;
+              this.state.p1State.isSpectator = false;
+            } else {
+              this.state.p1State.respawnTimer = 0;
+              this.state.p1State.isSpectator = true;
+            }
 
             // Immediately delete player 1 bullets; enemy bullets keep flying! (Point H)
             this.state.bullets = this.state.bullets.filter(
@@ -1170,12 +1371,19 @@ export class GameEngine {
           consumedBulletIds.add(eb.id);
           if (!this.state.p2.isShielded && this.state.p2State.shieldTimer <= 0) {
             this.emitCombatEvent('TANK_EXPLOSION', this.state.p2.x + 8, this.state.p2.y + 8);
-            this.state.p2State.lives -= 1;
+            this.state.p2State.lives = Math.max(0, this.state.p2State.lives - 1);
             this.state.p2State.isDead = true;
             this.state.p2.isAlive = false;
-            this.state.p2State.respawnTimer = P1_CONFIG.RESPAWN_DELAY_S;
             this.state.p2State.waitingForClearSpawn = false;
             this.state.p2State.spawnCheckTimer = 0;
+            if (this.state.p2State.lives > 0) {
+              this.state.p2State.respawnTimer = P1_CONFIG.RESPAWN_DELAY_S;
+              this.state.p2State.isSpectator = false;
+            } else {
+              this.state.p2State.respawnTimer = 0;
+              this.state.p2State.isSpectator = true;
+              this.externalInputP2 = { ...NEUTRAL_INPUT };
+            }
             this.state.bullets = this.state.bullets.filter(
               (b) => b.ownerId !== 'p2'
             );
@@ -1370,7 +1578,13 @@ export class GameEngine {
       );
     }
 
-    if (!this.state.p2 || !this.state.p2.isAlive || this.state.p2State?.isDead) {
+    if (
+      !this.state.p2 ||
+      !this.state.p2.isAlive ||
+      this.state.p2State?.isDead ||
+      this.state.p2State?.isSpectator ||
+      this.state.p2State?.hasLeftMatch
+    ) {
       return;
     }
 
@@ -1485,9 +1699,23 @@ export class GameEngine {
     this.state.remainingSeconds = snapshot.remainingSeconds;
     this.state.stageElapsedSeconds = snapshot.stageElapsedSeconds;
     this.state.p1 = { ...snapshot.p1 };
-    this.state.p1State = { ...snapshot.p1State };
+    const nextP1State = { ...snapshot.p1State };
+    if (nextP1State.isDead && nextP1State.lives <= 0) {
+      nextP1State.isSpectator = true;
+      nextP1State.respawnTimer = 0;
+    }
+    this.state.p1State = nextP1State;
     this.state.p2 = snapshot.p2 ? { ...snapshot.p2 } : null;
-    this.state.p2State = snapshot.p2State ? { ...snapshot.p2State } : null;
+    if (snapshot.p2State) {
+      const nextP2State = { ...snapshot.p2State };
+      if (nextP2State.isDead && nextP2State.lives <= 0) {
+        nextP2State.isSpectator = true;
+        nextP2State.respawnTimer = 0;
+      }
+      this.state.p2State = nextP2State;
+    } else {
+      this.state.p2State = null;
+    }
     this.state.bullets = Array.isArray(snapshot.bullets)
       ? snapshot.bullets.map((b: BulletStructure) => ({ ...b }))
       : [];
@@ -1524,6 +1752,7 @@ export class GameEngine {
     this.state.isStageClear = snapshot.isStageClear;
     this.state.isTimeoutGameOver = snapshot.isTimeoutGameOver;
     this.state.gameOverReason = snapshot.gameOverReason ?? null;
+    this.state.peerLeaveNotice = snapshot.peerLeaveNotice ?? this.state.peerLeaveNotice ?? null;
     this.state.matchState = snapshot.matchState;
     this.matchStateMachine.transitionTo(snapshot.matchState as any, true);
 
@@ -1567,11 +1796,13 @@ export class GameEngine {
   ): number {
     if (
       this.isPaused ||
+      this.isForcedSafetyPaused ||
       this.state.matchState === MATCH_STATES.PAUSED ||
       this.state.matchState === MATCH_STATES.MENU ||
       this.state.isGameOver ||
       this.state.isStageClear
     ) {
+      this.clearAllInputs();
       return 0;
     }
 
@@ -1583,11 +1814,13 @@ export class GameEngine {
       return 0;
     }
 
-    // Discard any lingering backlog or massive delta immediately upon resuming from pause/tab switch
+    // Discard any lingering backlog, massive delta, or stale latched input immediately upon resuming from pause/tab switch
+    const wasJustResumed = this.justResumed;
     if (this.justResumed) {
       this.justResumed = false;
       this.accumulatorMs = 0;
       this.catchUpTicksRemaining = 0;
+      this.clearAllInputs();
       rawElapsedMs = Math.min(rawElapsedMs, SIMULATION_CONFIG.FIXED_DT_MS);
     }
 
@@ -1609,6 +1842,8 @@ export class GameEngine {
       this.lastDroppedBacklogMs = droppedInputMs + droppedBacklogMs;
       this.totalDroppedMs += this.lastDroppedBacklogMs;
       this.totalRealElapsedMs += rawElapsedMs;
+      this.isForcedSafetyPaused = true;
+      this.clearAllInputs();
       this.state.diagnosticLog = `Forced Safety Pause: backlog ${rawTotalBacklogMs.toFixed(1)}ms > ${SIMULATION_CONFIG.MAX_ACCUMULATOR_BACKLOG_MS}ms`;
       this.pause();
       return 0;
@@ -1631,18 +1866,20 @@ export class GameEngine {
       this.state.diagnosticLog = 'Simulation backlog clamped';
     }
 
-    // 4. Neutral Input Policy for Historical Catch-Up Ticks
+    // 4. Neutral Input Policy for Historical Catch-Up Ticks & Resume Transition Frame
     const isHostHidden = Boolean(options?.isHostHidden);
     const maxSingleFrameBudgetMs =
       SIMULATION_CONFIG.MAX_TICKS_PER_FRAME * SIMULATION_CONFIG.FIXED_DT_MS; // 250ms
     const isFreezeRecoveryFrame =
       rawElapsedMs > maxSingleFrameBudgetMs + SIMULATION_CONFIG.SIMULATION_EPSILON_MS;
 
-    if (isFreezeRecoveryFrame || isHostHidden) {
-      this.externalInput = { up: false, down: false, left: false, right: false, shoot: false };
+    if (isFreezeRecoveryFrame || isHostHidden || wasJustResumed) {
+      this.externalInput = { ...NEUTRAL_INPUT };
+    }
+    if (isFreezeRecoveryFrame || wasJustResumed) {
+      this.externalInputP2 = { ...NEUTRAL_INPUT };
     }
     if (isFreezeRecoveryFrame) {
-      this.externalInputP2 = { up: false, down: false, left: false, right: false, shoot: false };
       this.catchUpTicksRemaining = Math.floor(
         (this.accumulatorMs + SIMULATION_CONFIG.SIMULATION_EPSILON_MS) /
           SIMULATION_CONFIG.FIXED_DT_MS
@@ -1677,10 +1914,11 @@ export class GameEngine {
       }
 
       const effectiveP1Input: InputState =
-        isHostHidden || isHistoricalCatchUpTick ? NEUTRAL_INPUT : input;
-      this.externalInputP2 = isHistoricalCatchUpTick
-        ? { ...NEUTRAL_INPUT }
-        : savedExternalInputP2;
+        wasJustResumed || isHostHidden || isHistoricalCatchUpTick ? NEUTRAL_INPUT : input;
+      this.externalInputP2 =
+        wasJustResumed || isHistoricalCatchUpTick
+          ? { ...NEUTRAL_INPUT }
+          : savedExternalInputP2;
 
       this.stepTick(effectiveP1Input);
 
@@ -1697,7 +1935,8 @@ export class GameEngine {
       }
     }
 
-    this.externalInputP2 = isFreezeRecoveryFrame ? { ...NEUTRAL_INPUT } : savedExternalInputP2;
+    this.externalInputP2 =
+      isFreezeRecoveryFrame || wasJustResumed ? { ...NEUTRAL_INPUT } : savedExternalInputP2;
 
     // Measure live Simulation Ticks Per Second (TPS) over 500ms sliding windows
     this.tpsAccumulatorMs += rawElapsedMs;

@@ -501,18 +501,6 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   </div>
                 </div>
               </div>
-
-              {/* Step 1 Navigation Button (Hạng mục 4 - M7.3.7 Mục V.4.1: Chỉ giữ nút Quay lại, đã bỏ nút Tiếp tục ngoài khung) */}
-              <div className="w-full flex items-center justify-center">
-                <button
-                  type="button"
-                  onClick={onBack}
-                  className="w-full sm:w-auto min-w-[220px] py-3.5 px-6 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 font-bold text-sm border border-neutral-700 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>QUAY LẠI MENU</span>
-                </button>
-              </div>
             </>
           )}
 
@@ -621,18 +609,6 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   </div>
                 </div>
               </div>
-
-              {/* Step 2 Navigation Button (Hạng mục 4 - M7.3.7 Mục V.4.2: Chỉ giữ nút Đổi chế độ chơi, đã bỏ nút Xác nhận trùng ngoài khung) */}
-              <div className="w-full flex items-center justify-center">
-                <button
-                  type="button"
-                  onClick={() => setFlowStep('SELECT_MODE')}
-                  className="w-full sm:w-auto min-w-[220px] py-3.5 px-6 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-neutral-200 font-bold text-sm border border-neutral-700 transition-all active:scale-95 flex items-center justify-center gap-2 cursor-pointer shadow"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>ĐỔI CHẾ ĐỘ CHƠI</span>
-                </button>
-              </div>
             </>
           )}
 
@@ -663,10 +639,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
         </div>
       </main>
 
-      {/* Footer — M7.3 VI: Only "Bắn Tank Online © 2026" */}
+      {/* Footer */}
       <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">
         <div className="max-w-4xl mx-auto flex items-center justify-center">
-          <span>Bắn Tank Online © 2026</span>
+          <span>© 2026</span>
         </div>
       </footer>
     </div>

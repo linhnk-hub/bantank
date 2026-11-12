@@ -3,8 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
-import { AuthManager } from '../core/authManager.ts';
+import React, { useState, useEffect, useRef } from 'react';
+import { AuthManager, SUPER_ADMIN_EMAIL, isSuperAdminUser } from '../core/authManager.ts';
+import { AvatarManager } from '../core/avatarManager.ts';
 import {
   X,
   User,
@@ -15,12 +16,14 @@ import {
   Save,
   Camera,
   ShieldCheck,
+  Upload,
 } from 'lucide-react';
 
 export interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
   user: {
+    uid?: string;
     email: string | null;
     displayName?: string | null;
     photoURL?: string | null;
@@ -34,17 +37,30 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   user,
   onProfileUpdated,
 }) => {
+  const avatarManager = AvatarManager.getInstance();
+  const authManager = AuthManager.getInstance();
   const [displayName, setDisplayName] = useState<string>('');
   const [photoURL, setPhotoURL] = useState<string>('');
   const [avatarLoadError, setAvatarLoadError] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isUploadingFile, setIsUploadingFile] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const currentUser = authManager.getCurrentUser();
+  const isSuperAdmin =
+    isSuperAdminUser(currentUser) ||
+    Boolean(user?.email && user.email.trim().toLowerCase() === SUPER_ADMIN_EMAIL);
 
   useEffect(() => {
     if (user && isOpen) {
       setDisplayName(user.displayName || '');
-      setPhotoURL(user.photoURL || '');
+      const effectiveUrl = avatarManager.getEffectivePlayerAvatarUrl({
+        uid: user.uid || currentUser?.uid,
+        photoURL: user.photoURL,
+      });
+      setPhotoURL(effectiveUrl || user.photoURL || '');
       setAvatarLoadError(false);
       setErrorMessage(null);
       setSuccessMessage(null);
@@ -57,24 +73,66 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   if (!isOpen || !user) return null;
 
+  const handleSuperAdminFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsUploadingFile(true);
+
+    try {
+      const res = await avatarManager.uploadAndApplySuperAdminAvatar(file, displayName);
+      if (!res.success) {
+        setErrorMessage(res.message || 'Không thể tải ảnh đại diện lên. Ảnh cũ vẫn được giữ nguyên.');
+      } else {
+        const nextUrl =
+          res.avatarUrl ||
+          avatarManager.getEffectivePlayerAvatarUrl({
+            uid: user.uid || currentUser?.uid,
+            photoURL: user.photoURL,
+          });
+        if (nextUrl) {
+          setPhotoURL(nextUrl);
+          setAvatarLoadError(false);
+        }
+        setSuccessMessage(res.message || 'Đã tải lên và cập nhật ảnh đại diện thành công!');
+        onProfileUpdated?.();
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Lỗi khi tải ảnh đại diện lên hệ thống.');
+    } finally {
+      setIsUploadingFile(false);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     setErrorMessage(null);
     setSuccessMessage(null);
 
-    // Basic URL validation if photoURL provided
+    // Basic URL validation if photoURL provided (allow blob: or https:// or http://)
     const trimmedPhoto = photoURL.trim();
-    if (trimmedPhoto && !trimmedPhoto.startsWith('http://') && !trimmedPhoto.startsWith('https://')) {
+    if (
+      trimmedPhoto &&
+      !trimmedPhoto.startsWith('http://') &&
+      !trimmedPhoto.startsWith('https://') &&
+      !trimmedPhoto.startsWith('blob:')
+    ) {
       setIsSaving(false);
       setErrorMessage('Đường dẫn ảnh đại diện phải bắt đầu bằng http:// hoặc https://');
       return;
     }
 
     try {
-      const res = await AuthManager.getInstance().updateUserProfile({
+      if (displayName.trim()) {
+        await avatarManager.updateDisplayName(displayName.trim()).catch(() => {});
+      }
+      const res = await authManager.updateUserProfile({
         displayName: displayName.trim(),
-        photoURL: trimmedPhoto,
+        photoURL: trimmedPhoto.startsWith('blob:') ? (user.photoURL || '') : trimmedPhoto,
       });
 
       if (!res.success) {
@@ -126,8 +184,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         {/* Modal Body / Form */}
         <form onSubmit={handleSave} className="p-5 flex-1 overflow-y-auto space-y-4">
           {/* Avatar Preview Section */}
-          <div className="flex flex-col items-center justify-center pt-1 pb-3">
-            <div className="relative w-20 h-20 rounded-full border-2 border-amber-500/50 p-1 bg-neutral-950 overflow-hidden shadow-lg flex items-center justify-center mb-2">
+          <div className="flex flex-col items-center justify-center pt-1 pb-3 gap-2">
+            <div className="relative w-20 h-20 rounded-full border-2 border-amber-500/50 p-1 bg-neutral-950 overflow-hidden shadow-lg flex items-center justify-center">
               {photoURL.trim() && !avatarLoadError ? (
                 <img
                   src={photoURL.trim()}
@@ -146,6 +204,29 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <span className="text-[11px] text-neutral-400 font-medium">
               Ảnh xem trước (Live Preview)
             </span>
+
+            {isSuperAdmin && (
+              <>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                  onChange={handleSuperAdminFileUpload}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  disabled={isUploadingFile || isSaving}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>
+                    {isUploadingFile ? 'ĐANG TẢI ẢNH LÊN...' : 'TẢI ẢNH ĐẠI DIỆN TỪ THIẾT BỊ'}
+                  </span>
+                </button>
+              </>
+            )}
           </div>
 
           {/* Feedback messages */}
@@ -219,7 +300,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-800/80 border border-neutral-700 text-white text-xs font-mono focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-neutral-500"
             />
             <span className="text-[10px] text-neutral-500 mt-1 block">
-              Hỗ trợ ảnh định dạng PNG, JPG, WebP qua đường dẫn mạng hợp lệ.
+              Hỗ trợ ảnh định dạng PNG, JPG, WebP (tối đa 5 MB).
             </span>
           </div>
 
@@ -228,14 +309,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              disabled={isSaving}
+              disabled={isSaving || isUploadingFile}
               className="w-1/3 py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold text-xs border border-neutral-700 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
             >
               HỦY
             </button>
             <button
               type="submit"
-              disabled={isSaving}
+              disabled={isSaving || isUploadingFile}
               className="w-2/3 py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
             >
               {isSaving ? (

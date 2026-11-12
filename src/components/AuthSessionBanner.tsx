@@ -11,6 +11,7 @@ import {
   getRoleNameFrameClasses,
 } from '../core/authManager.ts';
 import { SessionManager, type SessionStateSnapshot, type SessionStateStatus } from '../core/sessionManager.ts';
+import { AvatarManager } from '../core/avatarManager.ts';
 import {
   LogIn,
   LogOut,
@@ -146,9 +147,11 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
 }) => {
   const authManager = AuthManager.getInstance();
   const sessionManager = SessionManager.getInstance();
+  const avatarManager = AvatarManager.getInstance();
 
   const [user, setUser] = useState(() => authManager.getCurrentUser());
   const [session, setSession] = useState<SessionStateSnapshot>(() => sessionManager.getSnapshot());
+  const [, setAvatarTick] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'error' | 'success'; text: string } | null>(
     null
@@ -168,15 +171,20 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
         setFeedbackMsg({ type: 'error', text: formatAccountStatusMessage(s.message, s.status) });
       }
       if (onStartMatchAllowedChange) {
-        onStartMatchAllowedChange(s.status === 'ACTIVE');
+        onStartMatchAllowedChange(s.status === 'ACTIVE' || authManager.isTrialMode());
       }
+    });
+
+    const unsubAvatar = avatarManager.subscribe(() => {
+      setAvatarTick((t) => t + 1);
     });
 
     return () => {
       unsubAuth();
       unsubSession();
+      unsubAvatar();
     };
-  }, [authManager, sessionManager, onStartMatchAllowedChange]);
+  }, [authManager, sessionManager, avatarManager, onStartMatchAllowedChange]);
 
   const handleSignIn = async () => {
     setIsProcessing(true);
@@ -234,12 +242,21 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
     }
   };
 
+  const isTrialMode = authManager.isTrialMode();
+
   const badgeInfo = getSessionBadgeInfo(
     session.status,
     isProcessing,
     session.isHeartbeatInFlight ?? false,
     Boolean(user)
   );
+
+  const effectiveAvatarUrl = user
+    ? avatarManager.getEffectivePlayerAvatarUrl({
+        uid: user.uid,
+        photoURL: user.photoURL,
+      })
+    : null;
 
   return (
     <>
@@ -252,9 +269,9 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
                 resolveUserRole(user)
               )}`}
             >
-              {user.photoURL ? (
+              {effectiveAvatarUrl ? (
                 <img
-                  src={user.photoURL}
+                  src={effectiveAvatarUrl}
                   alt={getUserDisplayLabel(user)}
                   className="w-5 h-5 rounded-full object-cover border border-amber-500/40 shrink-0"
                   referrerPolicy="no-referrer"
@@ -270,6 +287,11 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
                   {badgeInfo.label}
                 </span>
               )}
+            </div>
+          ) : isTrialMode ? (
+            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-amber-950/70 border border-amber-500/40 text-amber-300 font-bold">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+              <span>Chế độ Chơi thử • Stage 1 (Không lưu dữ liệu)</span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 text-amber-400">

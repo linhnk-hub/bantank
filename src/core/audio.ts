@@ -16,6 +16,8 @@ export interface AudioSettings {
   sfxVolume: number; // 0.0 to 1.0
 }
 
+import { ScoreManager } from './scoreManager.ts';
+
 const STORAGE_KEYS = {
   BGM_ENABLED: 'bantank_bgm_enabled',
   SFX_ENABLED: 'bantank_sfx_enabled',
@@ -91,7 +93,7 @@ export class SoundManager {
   }
 
   private saveSettings(): void {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || ScoreManager.isGlobalTrialMode()) return;
     try {
       localStorage.setItem(STORAGE_KEYS.BGM_ENABLED, String(this.settings.bgmEnabled));
       localStorage.setItem(STORAGE_KEYS.SFX_ENABLED, String(this.settings.sfxEnabled));
@@ -519,14 +521,12 @@ export class SoundManager {
     196, 196, 220, 220, 196, 165, 146.83, 146.83,
   ];
 
+  /**
+   * M7.3.9 Requirement 8: Built-in 8-bit procedural BGM fallback has been disabled.
+   * Only BGM uploaded and configured by Super Admin in MusicManager is played.
+   */
   public startBgm(): void {
-    if (!this.settings.bgmEnabled || this.isBgmPlaying || this.customBgmActive) return;
-    this.initContext();
-    if (!this.ctx || this.ctx.state !== 'running') return;
-
-    this.isBgmPlaying = true;
-    this.bgmStep = 0;
-    this.scheduleNextBgmStep();
+    this.pauseBgm();
   }
 
   private scheduleNextBgmStep(): void {

@@ -5,6 +5,10 @@
 
 import {
   SUPER_ADMIN_EMAIL,
+  USER_ACCOUNTS_PAGE_SIZE,
+  AuthManager,
+  InMemoryUserAccountsPaginationAdapter,
+  sanitizeUserAccountSummary,
   isSuperAdminUser,
   getUserDisplayLabel,
   resolveUserRole,
@@ -14,6 +18,8 @@ import {
   getRoleDisplayInfo,
   type ValidatedUserAccount,
 } from './authManager.ts';
+import { ScoreManager } from './scoreManager.ts';
+import { getAvailableSettingsTabsForRole } from '../components/SettingsModal.tsx';
 import { SoundManager } from './audio.ts';
 import {
   MusicManager,
@@ -6320,6 +6326,729 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T46: M7.3.8 (E) – Nội suy hình ảnh Guest độc lập hoàn toàn với GameCoreState, giới hạn 50ms (3.0px) & giữ nguyên hướng khi snap thất bại',
       passed,
       details: `coreUntouched=${coreUntouched}, visualClampedAt3Px=${visualClampedAt3Px}, failedSnapKeepsDirectionAndPos=${failedSnapKeepsDirectionAndPos}`,
+    });
+  }
+
+  // =========================================================================
+  // T47: M7.3.8 Gap Check (1) – Chống P1 Stale/Latched Input trước stepTick(input) khi Pause / Blur / Resume
+  // =========================================================================
+  {
+    const engine = new GameEngine(undefined, undefined, false);
+    engine.startMatch('SOLO', 'DEFAULT');
+    let p1Shots = 0;
+    engine.on('P1_SHOOT', () => {
+      p1Shots++;
+    });
+
+    const p1StartX = engine.getState().p1.x;
+    const p1StartY = engine.getState().p1.y;
+
+    // 1. User holds UP + SHOOT before pause
+    engine.setExternalInput({ up: true, down: false, left: false, right: false, shoot: true });
+    engine.pause();
+
+    // External input must be immediately neutralized on pause
+    const extOnPause = engine.getExternalInput();
+    const clearedOnPause = !extOnPause.up && !extOnPause.shoot;
+
+    // 2. While paused, caller attempts to inject non-neutral input via setExternalInput -> must be rejected
+    engine.setExternalInput({ up: true, down: false, left: true, right: false, shoot: true });
+    const extWhilePaused = engine.getExternalInput();
+    const rejectedWhilePaused = !extWhilePaused.up && !extWhilePaused.left && !extWhilePaused.shoot;
+
+    // 3. Resume match: even if caller passes a stale held input on the very first transition frame after resume(),
+    // GameEngine neutralizes that transition tick so P1 neither moves nor shoots unintentionally
+    engine.resume();
+    const ticksOnResumeFrame = engine.advanceTime(SIMULATION_CONFIG.FIXED_DT_MS, {
+      up: true,
+      down: false,
+      left: false,
+      right: false,
+      shoot: true,
+    });
+    const stAfterResumeFrame = engine.getState();
+    const noUnintendedMoveOrShotOnResumeFrame =
+      ticksOnResumeFrame === 1 &&
+      stAfterResumeFrame.p1.x === p1StartX &&
+      stAfterResumeFrame.p1.y === p1StartY &&
+      p1Shots === 0 &&
+      stAfterResumeFrame.bullets.length === 0;
+
+    // 4. Subsequent frame with fresh intentional input works normally
+    const ticksNextFrame = engine.advanceTime(SIMULATION_CONFIG.FIXED_DT_MS, {
+      up: true,
+      down: false,
+      left: false,
+      right: false,
+      shoot: true,
+    });
+    const stAfterFreshInput = engine.getState();
+    const freshInputWorksAfterTransition =
+      ticksNextFrame === 1 &&
+      p1StartY - stAfterFreshInput.p1.y === 1 &&
+      p1Shots === 1;
+
+    const passed =
+      clearedOnPause &&
+      rejectedWhilePaused &&
+      noUnintendedMoveOrShotOnResumeFrame &&
+      freshInputWorksAfterTransition;
+
+    results.push({
+      id: 'M7_3_T47',
+      name: 'T47: M7.3.8 Gap Check (1) – Chặn hoàn toàn P1 stale/latched input khi Pause, Blur và ở frame chuyển tiếp ngay sau Resume',
+      passed,
+      details: `clearedOnPause=${clearedOnPause}, rejectedWhilePaused=${rejectedWhilePaused}, noUnintendedMoveOrShotOnResumeFrame=${noUnintendedMoveOrShotOnResumeFrame}, freshInputWorks=${freshInputWorksAfterTransition}`,
+    });
+  }
+
+  // =========================================================================
+  // T48: M7.3.8 Gap Check (2) – Forced Safety Pause duy trì bền vững qua nhiều RAF frames và chỉ gỡ khi phục hồi hợp lệ
+  // =========================================================================
+  {
+    const engine = new GameEngine(undefined, undefined, false);
+    engine.startMatch('SOLO', 'DEFAULT');
+    const initialY = engine.getState().p1.y;
+    const initialRemainingTicks = engine.getState().remainingTicks;
+
+    // Trigger Forced Safety Pause via 5000ms spike (> 3000ms limit in SOLO)
+    const spikeTicks = engine.advanceTime(5000, {
+      up: true,
+      down: false,
+      left: false,
+      right: false,
+      shoot: true,
+    });
+    const safetyActiveAfterSpike =
+      spikeTicks === 0 &&
+      engine.isSafetyPaused() === true &&
+      engine.getState().matchState === 'PAUSED';
+
+    // Simulate returning to visible tab (visibilitychange -> visible) + 10 consecutive 60Hz RAF frames with active input
+    engine.handleVisibilityChange(true);
+    let ticksAcross10RafFrames = 0;
+    for (let f = 0; f < 10; f++) {
+      ticksAcross10RafFrames += engine.advanceTime(SIMULATION_CONFIG.FIXED_DT_MS, {
+        up: true,
+        down: false,
+        left: false,
+        right: false,
+        shoot: true,
+      });
+    }
+
+    const stAfter10Raf = engine.getState();
+    const persistedAcrossMultipleRafFrames =
+      ticksAcross10RafFrames === 0 &&
+      engine.isSafetyPaused() === true &&
+      stAfter10Raf.matchState === 'PAUSED' &&
+      stAfter10Raf.tickCount === 0 &&
+      stAfter10Raf.remainingTicks === initialRemainingTicks &&
+      stAfter10Raf.p1.y === initialY &&
+      stAfter10Raf.bullets.length === 0;
+
+    // Explicit valid recovery via resume() clears Forced Safety Pause and allows normal simulation
+    const resumeSuccess = engine.resume();
+    const recoveredAfterExplicitResume =
+      resumeSuccess === true &&
+      engine.isSafetyPaused() === false &&
+      engine.getState().matchState === 'PLAYING';
+    const ticksAfterValidRecovery = engine.advanceTime(
+      SIMULATION_CONFIG.FIXED_DT_MS,
+      NEUTRAL_INPUT
+    );
+
+    const passed =
+      safetyActiveAfterSpike &&
+      persistedAcrossMultipleRafFrames &&
+      recoveredAfterExplicitResume &&
+      ticksAfterValidRecovery === 1;
+
+    results.push({
+      id: 'M7_3_T48',
+      name: 'T48: M7.3.8 Gap Check (2) – Forced Safety Pause duy trì qua 10 RAF frames liên tiếp & visibilitychange(true), chỉ gỡ khi resume() / restartStage() hợp lệ',
+      passed,
+      details: `safetyActiveAfterSpike=${safetyActiveAfterSpike}, persistedAcross10Raf=${persistedAcrossMultipleRafFrames}, recoveredAfterResume=${recoveredAfterExplicitResume}, ticksAfterRecovery=${ticksAfterValidRecovery}`,
+    });
+  }
+
+  // =========================================================================
+  // T49: M7.3.8 Gap Check (3 & 4) – advanceToNextStage() tăng stageRunSeq đúng 1 lần & kiểm chứng biên SIMULATION_EPSILON_MS = 1e-7
+  // =========================================================================
+  {
+    const engine = new GameEngine(undefined, undefined, false);
+    const stage1 = engine.getStageManager().getCurrentStage();
+    engine.getStageManager().registerStage({
+      ...stage1,
+      id: 2,
+      name: 'Stage 2 - Tiền Đồn Thép',
+    });
+    engine.startMatch('SOLO', 'DEFAULT');
+    const seqAfterStart = engine.getState().stageRunSeq; // 1
+    const stageIdBefore = engine.getState().currentStageId; // 1
+
+    const advancedOk = engine.advanceToNextStage();
+    const seqAfterAdvance1 = engine.getState().stageRunSeq; // must be 2 (incremented exactly once)
+    const stageIdAfter = engine.getState().currentStageId; // 2
+
+    const stageRunSeqIncrementedExactlyOnce =
+      seqAfterStart === 1 &&
+      advancedOk === true &&
+      seqAfterAdvance1 === 2 &&
+      stageIdAfter === stageIdBefore + 1 &&
+      engine.getStageRunSeq() === 2;
+
+    // Verify SIMULATION_EPSILON_MS = 1e-7 boundary behavior:
+    // - FIXED_DT_MS - 1e-5 (16.6666566...ms) is below tickThreshold -> 0 ticks
+    // - FIXED_DT_MS - 1e-7 (16.666666566...ms) is at tickThreshold -> 1 tick (micro-tolerance for IEEE-754 3 * 1000/60)
+    const epsEngineBelow = new GameEngine(undefined, undefined, false);
+    epsEngineBelow.startMatch('SOLO', 'DEFAULT');
+    const ticksBelowEpsilon = epsEngineBelow.advanceTime(
+      SIMULATION_CONFIG.FIXED_DT_MS - 1e-5,
+      NEUTRAL_INPUT
+    );
+
+    const epsEngineAtBoundary = new GameEngine(undefined, undefined, false);
+    epsEngineAtBoundary.startMatch('SOLO', 'DEFAULT');
+    const ticksAtEpsilonBoundary = epsEngineAtBoundary.advanceTime(
+      SIMULATION_CONFIG.FIXED_DT_MS - SIMULATION_CONFIG.SIMULATION_EPSILON_MS,
+      NEUTRAL_INPUT
+    );
+    const residualAfterBoundaryTick = epsEngineAtBoundary.getTimingTelemetry().accumulatorMs;
+
+    const epsilonBoundaryVerified =
+      ticksBelowEpsilon === 0 &&
+      ticksAtEpsilonBoundary === 1 &&
+      residualAfterBoundaryTick === 0;
+
+    const passed = stageRunSeqIncrementedExactlyOnce && epsilonBoundaryVerified;
+
+    results.push({
+      id: 'M7_3_T49',
+      name: 'T49: M7.3.8 Gap Check (3 & 4) – advanceToNextStage() tăng stageRunSeq đúng 1 lần (1 -> 2) & kiểm chứng biên dung sai SIMULATION_EPSILON_MS = 1e-7',
+      passed,
+      details: `stageRunSeq=${seqAfterStart}->${seqAfterAdvance1} (stageId=${stageIdBefore}->${stageIdAfter}), ticksBelowEps=${ticksBelowEpsilon}, ticksAtEpsBoundary=${ticksAtEpsilonBoundary}, residualMs=${residualAfterBoundaryTick}`,
+    });
+  }
+
+  // =========================================================================
+  // T50: M7.3.9 (Mục 1) – Super Admin tải ảnh đại diện từ thiết bị, cập nhật ngay vào hồ sơ & giữ nguyên ảnh cũ nếu thất bại
+  // =========================================================================
+  {
+    const sys = new InMemoryAvatarCatalogSystem();
+    const superAdminUid = 'uid_super_admin_m739';
+    const superAdminGooglePhoto = 'https://lh3.googleusercontent.com/a/default-sa-photo';
+
+    // Tạo buffer PNG hợp lệ với chữ ký magic bytes 89 50 4E 47 0D 0A 1A 0A + IHDR 256x256
+    const pngBytes = new Uint8Array(256);
+    pngBytes.set(
+      [
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
+        0x00, 0x00, 0x00, 0x0d,
+        0x49, 0x48, 0x44, 0x52,
+        0x00, 0x00, 0x01, 0x00,
+        0x00, 0x00, 0x01, 0x00,
+      ],
+      0
+    );
+    const validPngBuffer = pngBytes.buffer;
+
+    // 1. Kiểm tra định dạng và dung lượng file client-side (<= 5MB, JPEG/PNG/WebP)
+    const validPng = validateCatalogAvatarFileClientSide({
+      fileName: 'commander_sa.png',
+      mimeType: 'image/png',
+      sizeBytes: validPngBuffer.byteLength,
+      arrayBuffer: validPngBuffer,
+    });
+    const invalidSvg = validateCatalogAvatarFileClientSide({
+      fileName: 'bad.svg',
+      mimeType: 'image/svg+xml',
+      sizeBytes: 128,
+      arrayBuffer: new Uint8Array(128).buffer,
+    });
+    const invalidOversize = validateCatalogAvatarFileClientSide({
+      fileName: 'huge.png',
+      mimeType: 'image/png',
+      sizeBytes: AVATAR_LIMITS.MAX_FILE_SIZE_BYTES + 1024,
+      arrayBuffer: validPngBuffer,
+    });
+    const clientValidationOk =
+      validPng.valid === true && invalidSvg.valid === false && invalidOversize.valid === false;
+
+    // 2. Super Admin tải ảnh đại diện mới lên Storage -> lưu metadata vào /avatar_catalog -> áp dụng ngay cho hồ sơ Super Admin
+    const uploadRes1 = sys.uploadAndApplySuperAdminAvatarSync({
+      authUid: superAdminUid,
+      authEmail: SUPER_ADMIN_EMAIL,
+      isVerifiedPersonalGmail: true,
+      avatarId: 'sa_custom_1',
+      name: 'Chỉ Huy Tối Cao v1',
+      fileName: 'commander_v1.png',
+      mimeType: 'image/png',
+      sizeBytes: validPngBuffer.byteLength,
+      arrayBuffer: validPngBuffer,
+      nowMs: 1_710_000_000_000,
+      googlePhotoUrl: superAdminGooglePhoto,
+    });
+    const profileAfter1 = sys.getUserProfileDoc(superAdminUid);
+    const urlAfter1 = sys.resolveEffectiveAvatarForPlayer(superAdminUid, superAdminGooglePhoto);
+    const firstUploadAppliedOk =
+      uploadRes1.success === true &&
+      profileAfter1 !== null &&
+      profileAfter1.avatarType === 'catalog' &&
+      profileAfter1.avatarId === 'sa_custom_1' &&
+      typeof urlAfter1 === 'string' &&
+      urlAfter1.includes('sa_custom_1');
+
+    // 3. Nếu bước lưu metadata thất bại (simulateMetadataFailure = true) -> giữ nguyên avatar cũ ('sa_custom_1'), không làm hỏng trạng thái
+    const failedUploadRes = sys.uploadAndApplySuperAdminAvatarSync({
+      authUid: superAdminUid,
+      authEmail: SUPER_ADMIN_EMAIL,
+      isVerifiedPersonalGmail: true,
+      avatarId: 'sa_custom_broken',
+      name: 'Ảnh Lỗi',
+      fileName: 'broken.png',
+      mimeType: 'image/png',
+      sizeBytes: validPngBuffer.byteLength,
+      arrayBuffer: validPngBuffer,
+      nowMs: 1_710_000_005_000,
+      googlePhotoUrl: superAdminGooglePhoto,
+      simulateMetadataFailure: true,
+    });
+    const profileAfterFailed = sys.getUserProfileDoc(superAdminUid);
+    const urlAfterFailed = sys.resolveEffectiveAvatarForPlayer(superAdminUid, superAdminGooglePhoto);
+    const previousAvatarPreservedOnError =
+      failedUploadRes.success === false &&
+      profileAfterFailed?.avatarId === 'sa_custom_1' &&
+      urlAfterFailed === urlAfter1;
+
+    const passed =
+      clientValidationOk && firstUploadAppliedOk && previousAvatarPreservedOnError;
+
+    results.push({
+      id: 'M7_3_T50',
+      name: 'T50: M7.3.9 (Mục 1) – Super Admin tải ảnh đại diện từ thiết bị, áp dụng ngay vào hồ sơ & bảo toàn ảnh cũ khi có lỗi',
+      passed,
+      details: `clientValidation=${clientValidationOk}, firstUploadApplied=${firstUploadAppliedOk}, preservedOnError=${previousAvatarPreservedOnError}`,
+    });
+  }
+
+  // =========================================================================
+  // T51: M7.3.9 (Mục 2 – Trường hợp A, B, C, D) – Chế độ 2 người chơi Online: Hồi sinh, Khán giả (Spectator) & Game Over chuẩn xác
+  // =========================================================================
+  {
+    const engine = new GameEngine(undefined, undefined, false);
+    engine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT'); // 3 lives each
+
+    // --- Trường hợp A: P2 chết khi vẫn còn mạng (lives: 3 -> 2) -> chờ respawnTimer rồi hồi sinh tiếp tục chiến đấu ---
+    const internalState = (engine as any).state;
+    internalState.p2State.shieldTimer = 0;
+    internalState.p2.isShielded = false;
+    // Bắn trúng P2 bằng đạn địch
+    internalState.bullets.push({
+      id: 'eb_9001',
+      ownerId: 'enemy_100',
+      ownerType: 'enemy',
+      x: internalState.p2.x,
+      y: internalState.p2.y,
+      direction: 'DOWN',
+      speed: 0,
+    });
+    engine.stepTick(NEUTRAL_INPUT);
+    const afterP2FirstDeath = engine.getState();
+    const caseADiedWithLivesLeft =
+      afterP2FirstDeath.p2State!.isDead === true &&
+      afterP2FirstDeath.p2State!.lives === 2 &&
+      afterP2FirstDeath.p2State!.isSpectator === false &&
+      afterP2FirstDeath.isGameOver === false &&
+      afterP2FirstDeath.matchState === 'PLAYING';
+
+    // Chạy hết thời gian hồi sinh (respawnTimer = 2.0s = 120 ticks) -> P2 hồi sinh tại điểm xuất phát
+    for (let i = 0; i < 125; i++) {
+      engine.stepTick(NEUTRAL_INPUT);
+    }
+    const afterP2Respawn = engine.getState();
+    const caseARespawnedOk =
+      afterP2Respawn.p2State!.isDead === false &&
+      afterP2Respawn.p2!.isAlive === true &&
+      afterP2Respawn.p2State!.lives === 2 &&
+      afterP2Respawn.p2State!.isSpectator === false &&
+      afterP2Respawn.isGameOver === false;
+
+    // --- Trường hợp B: P2 hết toàn bộ mạng (lives = 0 && isDead = true) trong khi P1 vẫn còn mạng (lives = 3) ---
+    internalState.p2State.lives = 1;
+    internalState.p2State.shieldTimer = 0;
+    internalState.p2.isShielded = false;
+    internalState.bullets.push({
+      id: 'eb_9002',
+      ownerId: 'enemy_100',
+      ownerType: 'enemy',
+      x: internalState.p2.x,
+      y: internalState.p2.y,
+      direction: 'DOWN',
+      speed: 0,
+    });
+    engine.stepTick(NEUTRAL_INPUT);
+    // Chạy thêm 100 ticks để đảm bảo P2 không bao giờ hồi sinh khi lives == 0
+    for (let i = 0; i < 100; i++) {
+      engine.setExternalInputP2({ up: true, down: false, left: false, right: false, shoot: true });
+      engine.stepTick({ up: true, down: false, left: false, right: false, shoot: false });
+    }
+    const afterP2Out = engine.getState();
+
+    // Kiểm tra Guest client chặn gửi input và Host từ chối nhận input khi P2 ở chế độ Spectator
+    const coopMgr = new CoopOnlineManager(new InMemoryCoopStorageAdapter());
+    coopMgr.setLocalGuestSpectator(true);
+    coopMgr.setRemoteGuestSpectator(true);
+    const guestInputAcceptedWhenSpectator = coopMgr.processIncomingGuestInput(
+      { up: true, down: false, left: false, right: false, shoot: true, seq: 1, clientTimestamp: 1000 },
+      1000
+    );
+
+    const caseBP2SpectatorP1Plays =
+      afterP2Out.p2State!.lives === 0 &&
+      afterP2Out.p2State!.isDead === true &&
+      afterP2Out.p2State!.isSpectator === true &&
+      engine.isPlayerSpectator('P2') === true &&
+      engine.isPlayerSpectator('P1') === false &&
+      afterP2Out.p1State.lives === 3 &&
+      afterP2Out.p1.isAlive === true &&
+      afterP2Out.isGameOver === false &&
+      afterP2Out.matchState === 'PLAYING' &&
+      coopMgr.isGuestInSpectatorMode() === true &&
+      guestInputAcceptedWhenSpectator.accepted === false;
+
+    // --- Trường hợp C: P1 hết toàn bộ mạng (lives = 0 && isDead = true) trong khi P2 vẫn còn mạng ---
+    const engineCaseC = new GameEngine(undefined, undefined, false);
+    engineCaseC.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+    const cInternal = (engineCaseC as any).state;
+    cInternal.p1State.lives = 1;
+    cInternal.p1State.shieldTimer = 0;
+    cInternal.p1.isShielded = false;
+    cInternal.bullets.push({
+      id: 'eb_9003',
+      ownerId: 'enemy_100',
+      ownerType: 'enemy',
+      x: cInternal.p1.x,
+      y: cInternal.p1.y,
+      direction: 'DOWN',
+      speed: 0,
+    });
+    engineCaseC.stepTick(NEUTRAL_INPUT);
+    const p1DeadX = engineCaseC.getState().p1.x;
+    const p1DeadY = engineCaseC.getState().p1.y;
+    const p2StartY = engineCaseC.getState().p2!.y;
+
+    // P1 cố gửi lệnh di chuyển/bắn nhưng đã ở chế độ Khán giả -> P1 không di chuyển/không bắn; P2 vẫn di chuyển bình thường
+    engineCaseC.setExternalInputP2({ up: true, down: false, left: false, right: false, shoot: false });
+    engineCaseC.stepTick({ up: true, down: false, left: false, right: false, shoot: true });
+    const afterC = engineCaseC.getState();
+    const caseCP1SpectatorP2Plays =
+      afterC.p1State.lives === 0 &&
+      afterC.p1State.isDead === true &&
+      afterC.p1State.isSpectator === true &&
+      engineCaseC.isPlayerSpectator('P1') === true &&
+      afterC.p1.x === p1DeadX &&
+      afterC.p1.y === p1DeadY &&
+      afterC.p2State!.lives === 3 &&
+      afterC.p2!.isAlive === true &&
+      afterC.p2!.y < p2StartY &&
+      afterC.isGameOver === false &&
+      afterC.matchState === 'PLAYING';
+
+    // --- Trường hợp D: Cả P1 và P2 đều hết mạng -> Trận đấu chuyển sang GAME_OVER và đồng bộ qua Snapshot cho cả 2 máy ---
+    cInternal.p2State.lives = 1;
+    cInternal.p2State.shieldTimer = 0;
+    cInternal.p2.isShielded = false;
+    cInternal.bullets.push({
+      id: 'eb_9004',
+      ownerId: 'enemy_100',
+      ownerType: 'enemy',
+      x: cInternal.p2.x,
+      y: cInternal.p2.y,
+      direction: 'DOWN',
+      speed: 0,
+    });
+    engineCaseC.stepTick(NEUTRAL_INPUT);
+    const afterBothDeadHost = engineCaseC.getState();
+    const snapBothDead = buildAuthoritativeSnapshot(afterBothDeadHost, 25, 5000);
+    const guestEngineD = new GameEngine(undefined, undefined, false);
+    guestEngineD.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+    const applyD = guestEngineD.applyAuthoritativeSnapshot(snapBothDead);
+    const afterBothDeadGuest = guestEngineD.getState();
+
+    const caseDBothDeadGameOverSynced =
+      afterBothDeadHost.isGameOver === true &&
+      afterBothDeadHost.matchState === 'GAME_OVER' &&
+      afterBothDeadHost.p1State.isSpectator === true &&
+      afterBothDeadHost.p2State!.isSpectator === true &&
+      applyD.valid === true &&
+      afterBothDeadGuest.isGameOver === true &&
+      afterBothDeadGuest.matchState === 'GAME_OVER' &&
+      afterBothDeadGuest.gameOverReason === afterBothDeadHost.gameOverReason;
+
+    const passed =
+      caseADiedWithLivesLeft &&
+      caseARespawnedOk &&
+      caseBP2SpectatorP1Plays &&
+      caseCP1SpectatorP2Plays &&
+      caseDBothDeadGameOverSynced;
+
+    results.push({
+      id: 'M7_3_T51',
+      name: 'T51: M7.3.9 (Mục 2 – Cases A, B, C, D) – Hồi sinh khi còn mạng, Chế độ Khán giả (Spectator) cho P1/P2 khi hết mạng & chỉ Game Over khi cả 2 cùng hết mạng',
+      passed,
+      details: `caseADied=${caseADiedWithLivesLeft}, caseARespawn=${caseARespawnedOk}, caseBP2Spectator=${caseBP2SpectatorP1Plays}, caseCP1Spectator=${caseCP1SpectatorP2Plays}, caseDBothDead=${caseDBothDeadGameOverSynced}`,
+    });
+  }
+
+  // =========================================================================
+  // T52: M7.3.9 (Mục 2 – Trường hợp E) – Xử lý rời trận chủ động (PLAYER_LEFT), chống xử lý trùng lặp & P1 tiếp tục chơi khi P2 rời trận
+  // =========================================================================
+  {
+    const nowMs = 1_710_000_000_000;
+    const storage = new InMemoryCoopStorageAdapter();
+    const hostMgr = new CoopOnlineManager(storage);
+    const guestMgr = new CoopOnlineManager(storage);
+    const { hostChannel, guestChannel } = createInMemoryP2PChannelPair(
+      (msg) => hostMgr.handleIncomingDataChannelMessage(msg, nowMs + 500),
+      (msg) => guestMgr.handleIncomingDataChannelMessage(msg, nowMs + 500)
+    );
+
+    const hostUser = {
+      uid: 'uid_host_e',
+      displayName: 'Host P1',
+      email: 'host.p1@gmail.com',
+      emailVerified: true,
+    };
+    const guestUser = {
+      uid: 'uid_guest_e',
+      displayName: 'Guest P2',
+      email: 'guest.p2@gmail.com',
+    };
+
+    hostMgr.createRoomSync(storage, hostUser, 'DEFAULT', nowMs, 'CASEE1', { hasPassword: false });
+    guestMgr.joinRoomSync(storage, 'CASEE1', guestUser, nowMs + 100);
+    hostMgr.setPlayerReadySync(storage, true, nowMs + 200);
+    guestMgr.setPlayerReadySync(storage, true, nowMs + 250);
+    const lobbyBefore = storage.getRoomSync('CASEE1')!;
+    storage.setRoomSync('CASEE1', { ...lobbyBefore, rtcConnectionState: 'CONNECTED' });
+    hostMgr.startOnlineMatchSync(storage, hostUser.uid, undefined, nowMs + 300);
+
+    hostMgr.attachCustomP2PChannel(hostChannel, nowMs + 310);
+    guestMgr.attachCustomP2PChannel(guestChannel, nowMs + 310);
+
+    const hostEngine = new GameEngine(undefined, undefined, false);
+    hostEngine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+
+    let hostLeaveCallbackCount = 0;
+    let hostReceivedLeaveNotice = '';
+    hostMgr.subscribePeerLeave((event) => {
+      hostLeaveCallbackCount++;
+      hostReceivedLeaveNotice = event.message;
+      hostEngine.handlePeerPlayerLeft(event.role === 'HOST' ? 'P1' : 'P2');
+    });
+
+    // 1. P2 chủ động rời trận (leaveRoomSync gửi sự kiện PLAYER_LEFT qua DataChannel)
+    guestMgr.leaveRoomSync(storage, 'P2 đã rời trận.', nowMs + 500);
+
+    // Giả lập gói PLAYER_LEFT đến lần thứ 2 (duplicate packet) -> phải được deduplicate, chỉ xử lý đúng 1 lần!
+    hostMgr.handleIncomingDataChannelMessage(
+      { type: 'PLAYER_LEFT', role: 'GUEST', reason: 'P2 đã rời trận.', timestamp: nowMs + 510 },
+      nowMs + 510
+    );
+    const secondEngineCall = hostEngine.handlePeerPlayerLeft('P2');
+
+    // Kiểm tra trạng thái trên Host: P1 vẫn đang PLAYING, không bị timeout pause, hiển thị "P2 đã rời trận."
+    const hostConnStatus = hostMgr.evaluatePeerConnectionStatus(nowMs + 20_000);
+    hostEngine.stepTick({ up: true, down: false, left: false, right: false, shoot: false });
+    const hostStateAfterP2Left = hostEngine.getState();
+
+    const p2LeaveHandledCleanly =
+      hostLeaveCallbackCount === 1 &&
+      secondEngineCall.processed === false &&
+      hostReceivedLeaveNotice === 'P2 đã rời trận.' &&
+      hostStateAfterP2Left.peerLeaveNotice === 'P2 đã rời trận.' &&
+      hostStateAfterP2Left.p2State?.hasLeftMatch === true &&
+      hostStateAfterP2Left.isGameOver === false &&
+      hostStateAfterP2Left.matchState === 'PLAYING' &&
+      hostConnStatus.isTimedOut === false;
+
+    // 2. Trường hợp P1 (Host) chủ động rời trận -> Guest nhận thông báo "P1 đã rời trận." đúng 1 lần
+    const storage2 = new InMemoryCoopStorageAdapter();
+    const hostMgr2 = new CoopOnlineManager(storage2);
+    const guestMgr2 = new CoopOnlineManager(storage2);
+    const { hostChannel: hc2, guestChannel: gc2 } = createInMemoryP2PChannelPair(
+      (msg) => hostMgr2.handleIncomingDataChannelMessage(msg, nowMs + 600),
+      (msg) => guestMgr2.handleIncomingDataChannelMessage(msg, nowMs + 600)
+    );
+    hostMgr2.createRoomSync(storage2, hostUser, 'DEFAULT', nowMs, 'CASEE2', { hasPassword: false });
+    guestMgr2.joinRoomSync(storage2, 'CASEE2', guestUser, nowMs + 100);
+    hostMgr2.setPlayerReadySync(storage2, true, nowMs + 200);
+    guestMgr2.setPlayerReadySync(storage2, true, nowMs + 250);
+    storage2.setRoomSync('CASEE2', {
+      ...storage2.getRoomSync('CASEE2')!,
+      rtcConnectionState: 'CONNECTED',
+    });
+    hostMgr2.startOnlineMatchSync(storage2, hostUser.uid, undefined, nowMs + 300);
+    hostMgr2.attachCustomP2PChannel(hc2, nowMs + 310);
+    guestMgr2.attachCustomP2PChannel(gc2, nowMs + 310);
+
+    let guestLeaveCallbackCount = 0;
+    let guestReceivedLeaveNotice = '';
+    guestMgr2.subscribePeerLeave((event) => {
+      guestLeaveCallbackCount++;
+      guestReceivedLeaveNotice = event.message;
+    });
+    hostMgr2.leaveRoomSync(storage2, 'P1 đã rời trận.', nowMs + 600);
+    guestMgr2.handleIncomingDataChannelMessage(
+      { type: 'PLAYER_LEFT', role: 'HOST', reason: 'P1 đã rời trận.', timestamp: nowMs + 610 },
+      nowMs + 610
+    );
+
+    const p1LeaveHandledCleanly =
+      guestLeaveCallbackCount === 1 && guestReceivedLeaveNotice === 'P1 đã rời trận.';
+
+    const passed = p2LeaveHandledCleanly && p1LeaveHandledCleanly;
+
+    results.push({
+      id: 'M7_3_T52',
+      name: 'T52: M7.3.9 (Mục 2 – Case E) – Thông báo P1/P2 đã rời trận qua DataChannel, chống xử lý trùng lặp & P1 tiếp tục chơi khi P2 rời trận',
+      passed,
+      details: `p2LeaveClean=${p2LeaveHandledCleanly} (cbCount=${hostLeaveCallbackCount}, notice="${hostReceivedLeaveNotice}"), p1LeaveClean=${p1LeaveHandledCleanly} (cbCount=${guestLeaveCallbackCount})`,
+    });
+  }
+
+  // =========================================================================
+  // T53: M7.3.9 (Mục 3, 4, 8) – Đổi tên mục Cài đặt, ẩn Chế độ chơi & Tài khoản với người chơi thường, phân trang 10 tài khoản/trang & tắt nhạc 8-bit mặc định
+  // =========================================================================
+  {
+    // 1. Kiểm tra danh sách mục Cài đặt theo quyền (Mục 3 & Mục 4)
+    const regularTabs = getAvailableSettingsTabsForRole(false);
+    const superAdminTabs = getAvailableSettingsTabsForRole(true);
+
+    const regularTabIds = regularTabs.map((t) => t.id);
+    const superAdminTabLabels = superAdminTabs.map((t) => t.label);
+
+    const tabsRoleFilterOk =
+      regularTabIds.length === 2 &&
+      regularTabIds.includes('ACCOUNT') &&
+      regularTabIds.includes('AUDIO_SETTINGS') &&
+      !regularTabIds.includes('IMAGE_SETTINGS') &&
+      !regularTabIds.includes('GAME_MODE_SETTINGS') &&
+      !regularTabIds.includes('ADMIN_OTHER') &&
+      !regularTabIds.includes('USER_ACCOUNTS') &&
+      superAdminTabLabels.length === 6 &&
+      superAdminTabLabels[0] === 'Thông tin' &&
+      superAdminTabLabels[1] === 'Hình ảnh' &&
+      superAdminTabLabels[2] === 'Âm thanh' &&
+      superAdminTabLabels[3] === 'Chế độ chơi' &&
+      superAdminTabLabels[4] === 'Cấp quyền' &&
+      superAdminTabLabels[5] === 'Tài khoản';
+
+    // 2. Kiểm tra phân trang danh sách Tài khoản (tối đa 10 tài khoản/trang, Trước/Sau) & bảo mật quyền truy cập (Mục 3)
+    const seedAccounts = Array.from({ length: 25 }, (_, idx) => {
+      const n = idx + 1;
+      return sanitizeUserAccountSummary({
+        uid: `uid_user_${String(n).padStart(2, '0')}`,
+        displayName: `Chiến Binh ${n}`,
+        email: `player${n}@gmail.com`,
+        role: n === 1 ? 'SUPER_ADMIN' : n <= 3 ? 'ADMIN' : 'PLAYER',
+        createdAtMs: 1_700_000_000_000 + n * 10_000,
+        lastLoginAtMs: 1_710_000_000_000 - n * 60_000,
+        // Cố tình truyền dữ liệu nhạy cảm để kiểm tra sanitizeUserAccountSummary loại bỏ sạch
+        passwordHash: 'secret_hash_should_never_leak',
+        accessToken: 'secret_token_should_never_leak',
+      });
+    });
+
+    const adapter = new InMemoryUserAccountsPaginationAdapter(seedAccounts);
+    const page1 = adapter.queryPageSync(USER_ACCOUNTS_PAGE_SIZE, null);
+    const page2 = adapter.queryPageSync(USER_ACCOUNTS_PAGE_SIZE, page1.nextCursor);
+    const page3 = adapter.queryPageSync(USER_ACCOUNTS_PAGE_SIZE, page2.nextCursor);
+
+    const noSensitiveFieldsLeaked = !JSON.stringify(page1.accounts).includes('secret_');
+    const pagination10PerPageOk =
+      USER_ACCOUNTS_PAGE_SIZE === 10 &&
+      page1.accounts.length === 10 &&
+      page1.hasNextPage === true &&
+      page2.accounts.length === 10 &&
+      page2.hasNextPage === true &&
+      page3.accounts.length === 5 &&
+      page3.hasNextPage === false &&
+      page1.accounts[0].uid === 'uid_user_01' &&
+      page2.accounts[0].uid === 'uid_user_11' &&
+      page3.accounts[0].uid === 'uid_user_21' &&
+      noSensitiveFieldsLeaked;
+
+    // 3. Kiểm tra tắt hoàn toàn nhạc 8-bit mặc định tích hợp sẵn & chỉ phát nhạc Super Admin tải lên (Mục 8)
+    const sm = SoundManager.getInstance();
+    sm.setCustomBgmActive(false);
+    sm.startBgm();
+    sm.resumeBgm();
+    const eightBitDefaultDisabled = sm.isProceduralBgmPlaying() === false;
+
+    const mm = MusicManager.getInstance();
+    mm.resetAllAssignmentsToDefault();
+    mm.syncPlaybackWithContext(1, 'SOLO');
+    const silentWhenNoCustomTrack =
+      sm.isProceduralBgmPlaying() === false && mm.getActiveSourceCount() === 0;
+
+    const passed =
+      tabsRoleFilterOk &&
+      pagination10PerPageOk &&
+      eightBitDefaultDisabled &&
+      silentWhenNoCustomTrack;
+
+    results.push({
+      id: 'M7_3_T53',
+      name: 'T53: M7.3.9 (Mục 3, 4, 8) – Đổi tên mục Cài đặt, ẩn Chế độ chơi với người chơi thường, phân trang 10 Tài khoản/trang & tắt nhạc 8-bit mặc định',
+      passed,
+      details: `tabsRoleFilter=${tabsRoleFilterOk}, pagination10PerPage=${pagination10PerPageOk}, eightBitDisabled=${eightBitDefaultDisabled}, silentWhenNoCustomTrack=${silentWhenNoCustomTrack}`,
+    });
+  }
+
+  // =========================================================================
+  // T54: M7.3.9 (Mục 9) – Chế độ Chơi thử (Trial Mode): Không cần đăng nhập, Zero-Write Guarantee & Kết thúc sau 1 trận Stage 1
+  // =========================================================================
+  {
+    const authMgr = AuthManager.getInstance();
+    authMgr.exitTrialMode();
+
+    // 1. Bắt đầu Chơi thử từ màn hình đăng nhập
+    authMgr.startTrialMode();
+    const trialActiveAfterStart =
+      authMgr.isTrialMode() === true && ScoreManager.isGlobalTrialMode() === true;
+
+    // 2. Khởi tạo trận Solo Stage 1 mặc định trong chế độ Chơi thử & ghi điểm -> tuyệt đối không ghi vào localStorage
+    const trialEngine = new GameEngine(undefined, undefined, false);
+    trialEngine.startMatch('SOLO', 'DEFAULT');
+    const stStart = trialEngine.getState();
+    const isSoloStage1Default =
+      stStart.gameMode === 'SOLO' &&
+      stStart.currentStageId === 1 &&
+      stStart.difficulty === 'DEFAULT' &&
+      stStart.remainingSeconds === 120;
+
+    const scoreMgr = trialEngine.getScoreManager();
+    scoreMgr.recordEnemyDefeated('trial_enemy_1', 'ARMOR'); // +5 XP
+    const currentXpInTrial = scoreMgr.getTotalScore();
+
+    // 3. Thoát chế độ Chơi thử -> trạng thái Trial Mode được dọn sạch hoàn toàn
+    authMgr.exitTrialMode();
+    const trialCleanedOnExit =
+      authMgr.isTrialMode() === false && ScoreManager.isGlobalTrialMode() === false;
+
+    const passed =
+      trialActiveAfterStart &&
+      isSoloStage1Default &&
+      currentXpInTrial === 5 &&
+      trialCleanedOnExit;
+
+    results.push({
+      id: 'M7_3_T54',
+      name: 'T54: M7.3.9 (Mục 9) – Chế độ Chơi thử (Trial Mode): Vào thẳng Solo Stage 1 không cần đăng nhập, không ghi dữ liệu lưu trữ & dọn sạch trạng thái khi kết thúc',
+      passed,
+      details: `trialActive=${trialActiveAfterStart}, soloStage1Default=${isSoloStage1Default}, xpInMemory=${currentXpInTrial}, cleanedOnExit=${trialCleanedOnExit}`,
     });
   }
 

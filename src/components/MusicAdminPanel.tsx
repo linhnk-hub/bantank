@@ -319,7 +319,7 @@ export const MusicAdminPanel: React.FC = () => {
                 ? 'Đang kiểm tra & đồng bộ...'
                 : sharedConfig
                   ? `${sharedConfig.displayName || sharedConfig.fileName} (v${sharedConfig.version})`
-                  : `Mặc định 8-Bit (${PIXABAY_TARGET_TRACK_SPEC.title})`}
+                  : 'Chưa cấu hình nhạc nền Super Admin'}
             </span>
           </div>
           <p className="text-[11px] text-neutral-400">
@@ -332,12 +332,12 @@ export const MusicAdminPanel: React.FC = () => {
                 ({formatBytes(sharedConfig.fileSize)}) • Cập nhật bởi:{' '}
                 <strong className="text-emerald-400">{sharedConfig.updatedBy}</strong> • Trạng thái:{' '}
                 <strong className={sharedConfig.isEnabled ? 'text-emerald-400' : 'text-amber-400'}>
-                  {sharedConfig.isEnabled ? 'ĐANG BẬT CHO TẤT CẢ NGƯỜI CHƠI' : 'ĐANG TẮT (DÙNG NHẠC 8-BIT MẶC ĐỊNH)'}
+                  {sharedConfig.isEnabled ? 'ĐANG BẬT CHO TẤT CẢ NGƯỜI CHƠI' : 'ĐANG TẮT NHẠC NỀN CHUNG'}
                 </strong>
               </>
             ) : (
               <>
-                Chưa kích hoạt file nhạc tĩnh trong <code className="font-mono">public/audio/</code> • Toàn bộ người chơi đang nghe nhạc nền 8-bit mặc định.
+                Chưa kích hoạt file nhạc tĩnh trong <code className="font-mono">public/audio/</code> • Hệ thống chỉ phát nhạc nền do Super Admin tải lên.
               </>
             )}
           </p>
@@ -360,7 +360,7 @@ export const MusicAdminPanel: React.FC = () => {
           <div className="text-[10px] font-mono px-2.5 py-1 rounded bg-neutral-900 border border-neutral-800 text-neutral-300">
             Đang phát Stage 1:{' '}
             <strong className="text-emerald-400">
-              {effectiveStage1.track ? effectiveStage1.track.displayName : '8-Bit Arcade Mặc Định'}
+              {effectiveStage1.track ? effectiveStage1.track.displayName : 'Chưa phát (Chờ nhạc Super Admin)'}
             </strong>{' '}
             ({effectiveStage1.resolvedScope})
           </div>

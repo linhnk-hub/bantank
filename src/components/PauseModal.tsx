@@ -12,6 +12,7 @@ interface PauseModalProps {
   onRestart: () => void;
   onQuitToMenu: () => void;
   onOpenSettings?: () => void;
+  isTrialMode?: boolean;
 }
 
 export const PauseModal: React.FC<PauseModalProps> = ({
@@ -20,6 +21,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
   onRestart,
   onQuitToMenu,
   onOpenSettings,
+  isTrialMode = false,
 }) => {
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
 
@@ -52,7 +54,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
                 <span>TIẾP TỤC</span>
               </button>
 
-              {onOpenSettings && (
+              {onOpenSettings && !isTrialMode && (
                 <button
                   type="button"
                   onClick={onOpenSettings}
@@ -63,22 +65,24 @@ export const PauseModal: React.FC<PauseModalProps> = ({
                 </button>
               )}
 
-              <button
-                type="button"
-                onClick={onRestart}
-                className="w-full flex items-center justify-center gap-2 py-2 sm:py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs transition-colors border border-neutral-700 active:scale-95"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>CHƠI LẠI MÀN NÀY</span>
-              </button>
+              {!isTrialMode && (
+                <button
+                  type="button"
+                  onClick={onRestart}
+                  className="w-full flex items-center justify-center gap-2 py-2 sm:py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs transition-colors border border-neutral-700 active:scale-95"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>CHƠI LẠI MÀN NÀY</span>
+                </button>
+              )}
 
               <button
                 type="button"
-                onClick={() => setShowQuitConfirm(true)}
+                onClick={() => (isTrialMode ? onQuitToMenu() : setShowQuitConfirm(true))}
                 className="w-full flex items-center justify-center gap-2 py-2 sm:py-2.5 px-4 rounded-xl bg-red-950/40 hover:bg-red-900/50 text-red-300 font-semibold text-xs transition-colors border border-red-800/40 active:scale-95"
               >
                 <LogOut className="w-4 h-4" />
-                <span>THOÁT VỀ MENU</span>
+                <span>{isTrialMode ? 'Quay về màn hình đăng nhập' : 'THOÁT VỀ MENU'}</span>
               </button>
             </div>
           </>
@@ -110,7 +114,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
                 }}
                 className="flex-1 py-2 sm:py-2.5 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition-colors shadow-lg shadow-red-600/30 active:scale-95"
               >
-                THOÁT VỀ MENU
+                {isTrialMode ? 'Quay về màn hình đăng nhập' : 'THOÁT VỀ MENU'}
               </button>
             </div>
           </div>
