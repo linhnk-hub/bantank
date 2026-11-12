@@ -577,7 +577,7 @@ export default function App() {
   // View 1: Welcome Screen (Unauthenticated user or initial landing - V.1: Clean screen without Top Menu)
   if ((!currentUser && (!isTrialMode || appScreen !== 'BATTLE')) || appScreen === 'WELCOME') {
     return (
-      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+      <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         <WelcomeScreen
           onSignIn={handleSignIn}
           onStartTrialMode={handleStartTrialMode}
@@ -596,7 +596,7 @@ export default function App() {
   // View 2: Main Menu Screen (Authenticated user before entering battle)
   if (appScreen === 'MAIN_MENU' && currentUser) {
     return (
-      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+      <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         {isSuperAdmin && (
           <DevToolsDrawer
             isOpen={isDevDrawerOpen}
@@ -653,7 +653,7 @@ export default function App() {
   // View 2.5: Mode Selection Screen (Select SOLO vs CO-OP AI vs CO-OP ONLINE)
   if (appScreen === 'MODE_SELECTION' && currentUser) {
     return (
-      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+      <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         {isSuperAdmin && (
           <DevToolsDrawer
             isOpen={isDevDrawerOpen}
@@ -716,7 +716,7 @@ export default function App() {
 
   // View 3: Battle Arena with Canvas (Only mounted when player clicked "Chơi ngay")
   return (
-    <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+    <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
       {/* Developer & QA Test Suite Drawer (Super Admin Only) */}
       {isSuperAdmin && (
         <DevToolsDrawer
@@ -773,10 +773,10 @@ export default function App() {
       )}
 
       {/* =========================================================================
-          LANDSCAPE MODE (Mobile / Tablet 3-Column Ergonomic Layout)
+          LANDSCAPE MODE (Mobile / Tablet 3-Column Ergonomic Layout - Top Aligned)
          ========================================================================= */}
       {(!isDesktop && layout.isLandscape) ? (
-        <div className="flex-1 flex flex-col h-screen w-screen overflow-hidden safe-area-inset">
+        <div className="flex-1 flex flex-col justify-start h-[100dvh] max-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
           {/* Slim Landscape Top HUD (32px) */}
           <header className="h-8 bg-neutral-950/95 border-b border-neutral-800 px-2 sm:px-3 flex items-center justify-between text-xs shrink-0 z-30">
             {/* Left: Stage Status */}
@@ -863,15 +863,15 @@ export default function App() {
             </div>
           </header>
 
-          {/* Landscape Main 3-Column Combat View */}
-          <main className="flex-1 flex flex-row items-center justify-center w-full h-[calc(100dvh-32px)] px-1 sm:px-2 py-0 overflow-hidden">
+          {/* Landscape Main 3-Column Combat View - Top Aligned */}
+          <main className="flex-1 flex flex-row items-start justify-center w-full min-h-[calc(100dvh-32px)] px-1 sm:px-2 pt-1 pb-1 overflow-x-hidden overflow-y-auto">
             {/* Left Column: Virtual Joystick */}
             <div
               style={{
                 width: `${layout.leftControlWidthPx}px`,
                 minWidth: '90px',
               }}
-              className="flex-1 flex items-center justify-center h-full"
+              className="flex-1 self-stretch flex items-center justify-center"
             >
               <VirtualJoystick
                 activeDirection={landscapeDirection}
@@ -883,7 +883,7 @@ export default function App() {
               />
             </div>
 
-            {/* Center Column: Game Canvas Maximized 1:1 Aspect Ratio */}
+            {/* Center Column: Game Canvas Maximized 1:1 Aspect Ratio (Top Aligned) */}
             <div
               style={{
                 width: `${layout.canvasSizePx}px`,
@@ -891,7 +891,7 @@ export default function App() {
                 maxWidth: `${layout.canvasSizePx}px`,
                 maxHeight: `${layout.canvasSizePx}px`,
               }}
-              className="flex-none flex items-center justify-center overflow-hidden p-0 relative mx-auto"
+              className="flex-none flex items-start justify-center overflow-hidden p-0 relative mx-auto"
             >
               <PhaserGame
                 mode="battle"
@@ -904,7 +904,7 @@ export default function App() {
 
               {/* In MENU state: Overlay allowing immediate match start */}
               {gameState?.matchState === 'MENU' && (
-                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20 rounded-sm">
+                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-4 px-4 pb-3 text-center z-20 rounded-sm overflow-y-auto">
                   <img
                     src="/logo-bantank.png"
                     alt="Chiến trường huyền thoại"
@@ -939,7 +939,7 @@ export default function App() {
                 width: `${layout.rightControlWidthPx}px`,
                 minWidth: '90px',
               }}
-              className="flex-1 flex items-center justify-center h-full"
+              className="flex-1 self-stretch flex items-center justify-center"
             >
               <VirtualShootButton
                 isShooting={landscapeShooting}
@@ -953,7 +953,7 @@ export default function App() {
         /* =========================================================================
             MOBILE / TABLET PORTRAIT MODE (Dedicated 100dvh Top-to-Bottom Stack)
            ========================================================================= */
-        <div className="flex-1 flex flex-col h-[100dvh] max-h-[100dvh] w-screen overflow-hidden safe-area-inset bg-neutral-950">
+        <div className="flex-1 flex flex-col justify-start min-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] bg-neutral-950">
           {/* Slim Portrait Top HUD */}
           <header className="h-9 bg-neutral-950/95 border-b border-neutral-800 px-3 flex items-center justify-between text-xs shrink-0 z-30">
             {/* Left: Stage Status */}
@@ -1040,7 +1040,7 @@ export default function App() {
           </header>
 
           {/* Main Content Stack: HUD -> Canvas -> Controls -> Safe Bottom Spacer */}
-          <div className="flex-1 flex flex-col items-center justify-start w-full overflow-hidden px-2 pt-1 pb-1">
+          <div className="flex-1 flex flex-col items-center justify-start w-full overflow-x-hidden overflow-y-auto px-2 pt-1 pb-2">
             <main
               style={{
                 width: `${layout.canvasSizePx}px`,
@@ -1048,7 +1048,7 @@ export default function App() {
                 maxWidth: `${layout.canvasSizePx}px`,
                 maxHeight: `${layout.canvasSizePx}px`,
               }}
-              className="shrink-0 flex items-center justify-center overflow-hidden relative mx-auto rounded-xl border border-neutral-800 bg-black shadow-2xl mt-0.5 sm:mt-1"
+              className="shrink-0 flex items-start justify-center overflow-hidden relative mx-auto rounded-xl border border-neutral-800 bg-black shadow-2xl mt-0.5 sm:mt-1"
             >
               <PhaserGame
                 mode="battle"
@@ -1061,7 +1061,7 @@ export default function App() {
 
               {/* In MENU state: Overlay allowing immediate match start */}
               {gameState?.matchState === 'MENU' && (
-                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20 rounded-xl">
+                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-6 px-4 pb-4 text-center z-20 rounded-xl overflow-y-auto">
                   <img
                     src="/logo-bantank.png"
                     alt="Chiến trường huyền thoại"
@@ -1117,11 +1117,11 @@ export default function App() {
         </div>
       ) : (
         /* =========================================================================
-            ENLARGED DESKTOP PC MODE (8/4 Grid Layout with Full Visibility)
+            ENLARGED DESKTOP PC MODE (8/4 Grid Layout with Top Alignment)
            ========================================================================= */
-        <div className="flex-1 flex flex-col w-full">
+        <div className="flex-1 flex flex-col justify-start w-full">
           {/* Header (M7.3.2: Removed mini logo on top menu; M7.3.4 V.4: Removed Fullscreen button) */}
-          <header className="border-b border-neutral-800 bg-neutral-900/90 backdrop-blur px-4 py-2.5 sticky top-0 z-30 shadow-md">
+          <header className="border-b border-neutral-800 bg-neutral-900/90 backdrop-blur px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 sticky top-0 z-30 shadow-md">
             <div className="max-w-[1560px] mx-auto flex items-center justify-between gap-2">
               {/* Stage Indicator */}
               <div className="flex items-center gap-2">
@@ -1201,11 +1201,11 @@ export default function App() {
             )}
           </header>
 
-          {/* Main Content Area */}
-          <main className="flex-1 max-w-[1560px] mx-auto w-full p-3 sm:p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-start">
+          {/* Main Content Area - Top Aligned */}
+          <main className="max-w-[1560px] mx-auto w-full px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 pb-6 grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-start">
             {/* Left Column: Enlarged Phaser Game Canvas */}
-            <section className="lg:col-span-8 flex flex-col gap-3">
-              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col">
+            <section className="lg:col-span-8 flex flex-col justify-start gap-3">
+              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col justify-start">
                 {/* Viewport Header */}
                 <div className="bg-neutral-950 px-4 py-2.5 border-b border-neutral-800 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2.5">
@@ -1246,9 +1246,9 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Canvas Container */}
-                <div className="p-3 sm:p-5 lg:p-6 bg-neutral-950/80 flex items-center justify-center min-h-[380px] sm:min-h-[500px] lg:min-h-[640px] xl:min-h-[720px] relative">
-                  <div className="w-full max-w-[min(calc(100vh-140px),832px)] aspect-square flex items-center justify-center">
+                {/* Canvas Container - Top Aligned */}
+                <div className="p-3 sm:p-4 lg:p-5 bg-neutral-950/80 flex items-start justify-center relative">
+                  <div className="w-full max-w-[min(calc(100dvh-140px),832px)] aspect-square flex items-start justify-center">
                     <PhaserGame
                       mode="battle"
                       engine={gameEngine}
@@ -1261,7 +1261,7 @@ export default function App() {
 
                   {/* In MENU state: Overlay allowing immediate match start */}
                   {gameState?.matchState === 'MENU' && (
-                    <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-center p-6 text-center z-20 rounded-xl">
+                    <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-8 px-6 pb-6 text-center z-20 rounded-xl overflow-y-auto">
                       <img
                         src="/logo-bantank.png"
                         alt="Chiến trường huyền thoại"

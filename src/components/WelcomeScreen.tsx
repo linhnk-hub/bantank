@@ -24,13 +24,13 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onClearFeedback,
 }) => {
   return (
-    <div className="relative min-h-screen w-full flex flex-col bg-neutral-950 text-neutral-100 select-none overflow-x-hidden">
+    <div className="relative min-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]">
       {/* Background Ambience: Subtle retro scanlines and radial glow */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.15),rgba(255,255,255,0))] pointer-events-none" />
       <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
 
       {/* Notifications: Logout notice / Error alert */}
-      <div className="relative z-20 max-w-xl mx-auto w-full px-4 pt-6">
+      <div className="relative z-20 max-w-xl mx-auto w-full px-4 pt-2 sm:pt-4">
         {successMessage && (
           <div className="mb-2 p-3.5 rounded-xl bg-emerald-950/90 border border-emerald-800 text-emerald-200 text-xs sm:text-sm flex items-center justify-between shadow-xl animate-fade-in">
             <div className="flex items-center gap-2.5">
@@ -62,15 +62,15 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         )}
       </div>
 
-      {/* Main Welcome Content (M7.3.4 V.1: Clean welcome screen without Top Menu) */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-8 max-w-4xl mx-auto w-full">
+      {/* Main Welcome Content (M7.3.4 V.1: Clean welcome screen without Top Menu, Top Aligned) */}
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-4 pt-2 sm:pt-6 pb-6 max-w-4xl mx-auto w-full">
         <div className="flex flex-col items-center text-center max-w-2xl">
           {/* Official Game Logo Hero */}
           <div className="flex justify-center items-center p-0 m-0 mb-3">
             <img
               src="/logo-bantank.png"
               alt="Chiến trường huyền thoại"
-              className="w-48 h-48 sm:w-60 sm:h-60 md:w-72 md:h-72 object-contain p-0 m-0 drop-shadow-2xl"
+              className="w-40 h-40 sm:w-52 sm:h-52 md:w-64 md:h-64 object-contain p-0 m-0 drop-shadow-2xl"
               onError={(e) => {
                 e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
               }}
@@ -139,7 +139,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       {/* Footer Strip */}
       <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">
         <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
-          <span>© 2026</span>
+          <span>© 2026 Bắn Tank Online</span>
           <span>•</span>
           <a href="/landing.html" className="hover:text-amber-400 transition-colors">
             Giới thiệu

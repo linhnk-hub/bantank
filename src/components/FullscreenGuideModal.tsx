@@ -18,8 +18,8 @@ export const FullscreenGuideModal: React.FC<FullscreenGuideModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 select-none animate-in fade-in duration-150">
-      <div className="bg-neutral-900 border border-neutral-700 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl relative">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 backdrop-blur-sm pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-4 select-none animate-in fade-in duration-150">
+      <div className="bg-neutral-900 border border-neutral-700 rounded-2xl max-w-sm w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] overflow-y-auto p-5 space-y-4 shadow-2xl relative">
         <button
           onClick={onClose}
           className="absolute top-3.5 right-3.5 p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white"

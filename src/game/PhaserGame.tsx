@@ -161,11 +161,11 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   }, [canvasSizePx]);
 
   return (
-    <div className="relative flex items-center justify-center w-full h-full select-none overflow-hidden p-0 m-0">
+    <div className="relative flex items-start justify-center w-full h-full select-none overflow-hidden p-0 m-0">
       {/* Crisp pixel scaling container: strictly aspect-square 1:1, 1px thin border, no rounded-corner clipping */}
       <div
         ref={containerRef}
-        className="game-canvas-container aspect-square rounded-none sm:rounded-sm border border-neutral-800/90 shadow-2xl overflow-hidden bg-black flex items-center justify-center shrink-0 p-0 m-0"
+        className="game-canvas-container aspect-square rounded-none sm:rounded-sm border border-neutral-800/90 shadow-2xl overflow-hidden bg-black flex items-start justify-center shrink-0 p-0 m-0"
         style={{
           boxSizing: 'content-box',
           width: canvasSizePx ? `${canvasSizePx}px` : '100%',

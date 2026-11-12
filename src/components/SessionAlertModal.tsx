@@ -32,8 +32,8 @@ export const SessionAlertModal: React.FC<SessionAlertModalProps> = ({
   if (!showModal) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in select-none">
-      <div className="bg-neutral-900 border border-neutral-700 rounded-2xl max-w-md w-full p-5 sm:p-6 shadow-2xl flex flex-col gap-4 text-center">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-4 bg-black/85 backdrop-blur-md animate-fade-in select-none">
+      <div className="bg-neutral-900 border border-neutral-700 rounded-2xl max-w-md w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl flex flex-col gap-4 text-center">
         <div className="w-14 h-14 rounded-full mx-auto flex items-center justify-center bg-amber-500/10 border border-amber-500/30 text-amber-400">
           {session.status === 'CONNECTION_LOST_UNVERIFIED' ? (
             <WifiOff className="w-7 h-7" />

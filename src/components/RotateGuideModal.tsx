@@ -15,8 +15,8 @@ export const RotateGuideModal: React.FC<RotateGuideModalProps> = ({ isOpen, onCl
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-sm animate-fade-in select-none">
-      <div className="bg-neutral-900 border-2 border-amber-500/80 rounded-2xl p-6 max-w-sm w-full shadow-2xl text-center flex flex-col items-center gap-4">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-4 bg-black/85 backdrop-blur-sm animate-fade-in select-none">
+      <div className="bg-neutral-900 border-2 border-amber-500/80 rounded-2xl p-6 max-w-sm w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] overflow-y-auto shadow-2xl text-center flex flex-col items-center gap-4">
         {/* Animated Rotating Phone Graphic */}
         <div className="relative w-24 h-24 flex items-center justify-center bg-neutral-950 rounded-2xl border border-neutral-800 shadow-inner">
           <Smartphone className="w-12 h-12 text-amber-400 animate-pulse" />

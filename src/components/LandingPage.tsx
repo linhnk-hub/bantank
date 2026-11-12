@@ -244,11 +244,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   };
 
   return (
-    <div className="min-h-screen w-full bg-neutral-950 text-neutral-100 font-sans selection:bg-amber-500 selection:text-black overflow-x-hidden flex flex-col">
+    <div className="min-h-[100dvh] w-full bg-neutral-950 text-neutral-100 font-sans selection:bg-amber-500 selection:text-black overflow-x-hidden flex flex-col justify-start">
       {/* =====================================================================
           A. THANH ĐIỀU HƯỚNG ĐẦU TRANG (TOP NAVIGATION BAR)
       ====================================================================== */}
-      <header className="sticky top-0 z-40 w-full bg-neutral-950/90 backdrop-blur-md border-b border-neutral-800/80">
+      <header className="sticky top-0 z-40 w-full bg-neutral-950/90 backdrop-blur-md border-b border-neutral-800/80 pt-[env(safe-area-inset-top)]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
           {/* Thương hiệu & Logo */}
           <a
@@ -621,7 +621,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     </div>
 
                     {/* Khu vực trung tâm: Địa hình & Giao tranh */}
-                    <div className="relative z-10 my-auto py-4 flex flex-col items-center justify-center gap-4">
+                    <div className="relative z-10 py-4 flex flex-col items-center justify-start gap-4">
                       <img
                         src="/logo-bantank.png"
                         alt="Bắn Tank Online"

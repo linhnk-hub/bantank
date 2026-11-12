@@ -39,8 +39,8 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
     : 'HẾT MẠNG CHIẾN ĐẤU';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-md p-2 sm:p-4 select-none animate-in fade-in duration-200">
-      <div className="bg-neutral-900 border border-red-900/60 rounded-2xl max-w-md w-full max-h-[94dvh] sm:max-h-[88vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/85 backdrop-blur-md pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-2 sm:px-4 select-none animate-in fade-in duration-200">
+      <div className="bg-neutral-900 border border-red-900/60 rounded-2xl max-w-md w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-2xl overflow-hidden">
         {/* Scrollable Content Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 sm:space-y-4 scrollbar-thin">
           {/* Header */}

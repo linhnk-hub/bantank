@@ -114,12 +114,12 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   }, [isSessionActive, isProcessing, onPlay]);
 
   return (
-    <div className="relative min-h-screen w-full flex flex-col bg-neutral-950 text-neutral-100 select-none overflow-x-hidden">
+    <div className="relative min-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {/* Background Ambience */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.18),rgba(255,255,255,0))] pointer-events-none" />
 
       {/* Top Header Bar — M7.3.4: Simplified without mini logo, Fullscreen or duplicate Profile button */}
-      <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-3 sm:px-4 py-2.5">
+      <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-3 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 shrink-0">
         <div className="max-w-6xl mx-auto flex items-center justify-end gap-2">
           <div className="flex items-center gap-2">
             <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg bg-neutral-800/80 text-xs ${roleFrameClasses}`}>
@@ -182,11 +182,11 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
         </div>
       </header>
 
-      {/* Main Container */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-4 py-6 max-w-4xl mx-auto w-full">
+      {/* Main Container - Top Aligned */}
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-4 pt-4 sm:pt-8 pb-6 max-w-4xl mx-auto w-full">
         <div className="w-full max-w-md flex flex-col items-center text-center">
           {/* Emblem Banner */}
-          <div className="mb-6">
+          <div className="mb-5">
             <div className="flex justify-center p-0 m-0">
               <img
                 src="/logo-bantank.png"
