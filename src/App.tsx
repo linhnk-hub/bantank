@@ -40,7 +40,7 @@ import type { GameCoreState, InputState } from './core/types.ts';
 import { AuthSessionBanner } from './components/AuthSessionBanner.tsx';
 import { SessionManager } from './core/sessionManager.ts';
 import { AuthManager, isSuperAdminUser } from './core/authManager.ts';
-import { LandingPage } from './components/LandingPage.tsx';
+import { WelcomeScreen } from './components/WelcomeScreen.tsx';
 import { MainMenuScreen } from './components/MainMenuScreen.tsx';
 import { ModeSelectionScreen } from './components/ModeSelectionScreen.tsx';
 import { SessionAlertModal } from './components/SessionAlertModal.tsx';
@@ -574,14 +574,12 @@ export default function App() {
     setProfileRevision((r) => r + 1);
   }, [authManager]);
 
-  // View 1: Public Landing Page at '/' (Accessible without login; supports Google Sign-In, Trial Mode, or entering game if already authenticated)
+  // View 1: Welcome Screen (Unauthenticated user or initial landing - V.1: Clean screen without Top Menu)
   if ((!currentUser && (!isTrialMode || appScreen !== 'BATTLE')) || appScreen === 'WELCOME') {
     return (
-      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans overflow-x-hidden selection:bg-amber-500 selection:text-black">
-        <LandingPage
-          currentUser={currentUser}
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+        <WelcomeScreen
           onSignIn={handleSignIn}
-          onEnterGame={() => setAppScreen('MAIN_MENU')}
           onStartTrialMode={handleStartTrialMode}
           isProcessing={authProcessing}
           errorMessage={authErrorMsg}
