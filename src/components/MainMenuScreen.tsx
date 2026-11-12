@@ -265,8 +265,16 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
 
       {/* Footer */}
       <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">
-        <div className="max-w-4xl mx-auto flex items-center justify-center">
-          <span>© 2026</span>
+        <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
+          <span>© 2026 Bắn Tank Online</span>
+          <span>•</span>
+          <a href="/landing.html" className="hover:text-amber-400 transition-colors">
+            Giới thiệu
+          </a>
+          <span>•</span>
+          <a href="/privacy.html" className="hover:text-amber-400 transition-colors">
+            Chính sách quyền riêng tư
+          </a>
         </div>
       </footer>
     </div>

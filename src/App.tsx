@@ -1357,9 +1357,19 @@ export default function App() {
           </main>
 
           {/* Footer */}
-          <footer className="border-t border-neutral-900 bg-neutral-950/90 py-3 px-4 text-center text-[11px] text-neutral-500 mt-auto">
-            © 2026
-          </footer>
+      <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">
+        <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
+          <span>© 2026 Bắn Tank Online</span>
+          <span>•</span>
+          <a href="/landing.html" className="hover:text-amber-400 transition-colors">
+            Giới thiệu
+          </a>
+          <span>•</span>
+          <a href="/privacy.html" className="hover:text-amber-400 transition-colors">
+            Chính sách quyền riêng tư
+          </a>
+        </div>
+      </footer>
         </div>
       )}
 
