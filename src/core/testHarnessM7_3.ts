@@ -20,6 +20,11 @@ import {
 } from './authManager.ts';
 import { ScoreManager } from './scoreManager.ts';
 import { getAvailableSettingsTabsForRole } from '../components/SettingsModal.tsx';
+import {
+  LANDING_SUPPORT_CONTACT,
+  LANDING_PAGE_FEATURES,
+  LANDING_PAGE_MODES,
+} from '../components/LandingPage.tsx';
 import { SoundManager } from './audio.ts';
 import {
   MusicManager,
@@ -7052,6 +7057,47 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     });
   }
 
+  // =========================================================================
+  // T55: M7.3.9.2 – Public Landing Page & Google Branding Verification (Truy cập công khai không cần đăng nhập)
+  // =========================================================================
+  {
+    const brandConfigOk =
+      LANDING_SUPPORT_CONTACT.brandName === 'Bắn Tank Online' &&
+      LANDING_SUPPORT_CONTACT.officialDomain === 'https://bantank.online/' &&
+      LANDING_SUPPORT_CONTACT.privacyPolicyUrl === '/privacy.html' &&
+      LANDING_SUPPORT_CONTACT.supportEmail.includes('@');
+
+    const featuresComplete =
+      LANDING_PAGE_FEATURES.length === 6 &&
+      LANDING_PAGE_FEATURES.every(
+        (f) => f.title.trim().length > 0 && f.description.trim().length > 0 && f.highlights.length >= 2
+      );
+
+    const modesComplete =
+      LANDING_PAGE_MODES.length === 3 &&
+      LANDING_PAGE_MODES.some((m) => m.id === 'SOLO_AND_AI' && m.actionType === 'PLAY_AUTH') &&
+      LANDING_PAGE_MODES.some((m) => m.id === 'COOP_ONLINE' && m.actionType === 'PLAY_AUTH') &&
+      LANDING_PAGE_MODES.some((m) => m.id === 'TRIAL_MODE' && m.actionType === 'PLAY_TRIAL');
+
+    const authMgr = AuthManager.getInstance();
+    authMgr.exitTrialMode();
+    const unauthenticatedPublicAccessOk =
+      authMgr.getCurrentUser() === null && authMgr.isTrialMode() === false;
+
+    const passed =
+      brandConfigOk &&
+      featuresComplete &&
+      modesComplete &&
+      unauthenticatedPublicAccessOk;
+
+    results.push({
+      id: 'M7_3_T55',
+      name: 'T55: M7.3.9.2 – Public Landing Page: Thương hiệu Bắn Tank Online, 6 nhóm tính năng, 3 chế độ chơi, liên kết Chính sách quyền riêng tư & truy cập công khai không cần đăng nhập',
+      passed,
+      details: `brandConfig=${brandConfigOk}, features=${LANDING_PAGE_FEATURES.length}, modes=${LANDING_PAGE_MODES.length}, publicAccessNoAuth=${unauthenticatedPublicAccessOk}`,
+    });
+  }
+
   return {
     total: results.length,
     passed: results.filter((r) => r.passed).length,
@@ -7059,6 +7105,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     results,
   };
 }
+
 
 
 

@@ -40,7 +40,7 @@ import type { GameCoreState, InputState } from './core/types.ts';
 import { AuthSessionBanner } from './components/AuthSessionBanner.tsx';
 import { SessionManager } from './core/sessionManager.ts';
 import { AuthManager, isSuperAdminUser } from './core/authManager.ts';
-import { WelcomeScreen } from './components/WelcomeScreen.tsx';
+import { LandingPage } from './components/LandingPage.tsx';
 import { MainMenuScreen } from './components/MainMenuScreen.tsx';
 import { ModeSelectionScreen } from './components/ModeSelectionScreen.tsx';
 import { SessionAlertModal } from './components/SessionAlertModal.tsx';
@@ -344,6 +344,20 @@ export default function App() {
     setAppScreen('BATTLE');
   }, [authManager, gameEngine]);
 
+  // Support direct navigation from landing.html (?mode=trial)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const modeParam = params.get('mode');
+    if (modeParam === 'trial') {
+      params.delete('mode');
+      const cleanSearch = params.toString();
+      const nextUrl = window.location.pathname + (cleanSearch ? `?${cleanSearch}` : '') + window.location.hash;
+      window.history.replaceState({}, '', nextUrl);
+      handleStartTrialMode();
+    }
+  }, [handleStartTrialMode]);
+
   const handleQuitToMenu = useCallback(() => {
     const wasTrial = authManager.isTrialMode() || isTrialMode;
     if (wasTrial) {
@@ -560,12 +574,14 @@ export default function App() {
     setProfileRevision((r) => r + 1);
   }, [authManager]);
 
-  // View 1: Welcome Screen (Unauthenticated user or initial landing - V.1: Clean screen without Top Menu)
+  // View 1: Public Landing Page at '/' (Accessible without login; supports Google Sign-In, Trial Mode, or entering game if already authenticated)
   if ((!currentUser && (!isTrialMode || appScreen !== 'BATTLE')) || appScreen === 'WELCOME') {
     return (
-      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
-        <WelcomeScreen
+      <div className="min-h-screen bg-neutral-950 text-neutral-100 flex flex-col font-sans overflow-x-hidden selection:bg-amber-500 selection:text-black">
+        <LandingPage
+          currentUser={currentUser}
           onSignIn={handleSignIn}
+          onEnterGame={() => setAppScreen('MAIN_MENU')}
           onStartTrialMode={handleStartTrialMode}
           isProcessing={authProcessing}
           errorMessage={authErrorMsg}

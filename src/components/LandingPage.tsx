@@ -1,0 +1,1249 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState } from 'react';
+import {
+  Play,
+  Gamepad2,
+  Shield,
+  Users,
+  Bot,
+  Globe,
+  Clock,
+  Trophy,
+  Volume2,
+  Smartphone,
+  Keyboard,
+  Tablet,
+  CheckCircle2,
+  ChevronRight,
+  Menu,
+  X,
+  AlertCircle,
+  Sparkles,
+  FileText,
+  Mail,
+  ExternalLink,
+  Crosshair,
+  Award,
+  Layers,
+} from 'lucide-react';
+
+/**
+ * Cấu hình thông tin liên hệ hỗ trợ hiển thị ở Footer của Landing Page.
+ * Quản trị viên có thể cập nhật trực tiếp hằng số này khi muốn thay đổi email hoặc kênh hỗ trợ.
+ */
+export const LANDING_SUPPORT_CONTACT = {
+  brandName: 'Bắn Tank Online',
+  officialDomain: 'https://bantank.online/',
+  supportEmail: 'admin@bantank.online',
+  privacyPolicyUrl: '/privacy.html',
+  copyrightYear: 2026,
+} as const;
+
+export interface LandingPageFeatureItem {
+  id: string;
+  numberLabel: string;
+  title: string;
+  description: string;
+  highlights: string[];
+}
+
+export interface LandingPageModeItem {
+  id: 'SOLO_AND_AI' | 'COOP_ONLINE' | 'TRIAL_MODE';
+  badge: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  specs: string[];
+  actionType: 'PLAY_AUTH' | 'PLAY_TRIAL';
+  actionLabel: string;
+}
+
+export const LANDING_PAGE_FEATURES: readonly LandingPageFeatureItem[] = [
+  {
+    id: 'precision-control',
+    numberLabel: '01',
+    title: 'Điều khiển xe tăng 60Hz chuẩn xác',
+    description:
+      'Hệ thống mô phỏng vòng lặp 60 ticks/giây cố định giúp mọi thao tác di chuyển, xoay nòng và khai hỏa phản hồi tức thì trên cả máy tính lẫn thiết bị di động.',
+    highlights: [
+      'Bàn phím PC: Cụm phím WASD / Mũi tên và phím Space hoặc J để bắn',
+      'Điện thoại & Máy tính bảng: Cần gạt D-Pad cảm ứng và nút Khai Hỏa đa điểm',
+      'Hỗ trợ đầy đủ cả giao diện màn hình Dọc (Portrait) và màn hình Ngang (Landscape)',
+    ],
+  },
+  {
+    id: 'tactical-combat',
+    numberLabel: '02',
+    title: 'Chiến đấu chiến thuật & Bảo vệ Căn cứ Đại Bàng',
+    description:
+      'Đối đầu 30 xe tăng địch trong mỗi màn chơi thuộc 4 chủng loại chiến thuật khác nhau, đồng thời bảo vệ Căn cứ Đại Bàng tại trung tâm tuyến dưới bản đồ.',
+    highlights: [
+      '4 loại xe địch: Xe Cơ Bản, Xe Trinh Sát Nhanh, Xe Hỏa Lực Mạnh và Xe Thiết Giáp (4 HP)',
+      'Địa hình tương tác: Tường gạch phá hủy chi tiết 4x4, tường thép, rừng cây ẩn nấp, sông nước và băng trượt',
+      'Khiên bảo vệ bất tử tạm thời khi xuất kích hoặc vừa hồi sinh trên chiến trường',
+    ],
+  },
+  {
+    id: 'stages-and-countdown',
+    numberLabel: '03',
+    title: 'Hệ thống màn chơi & Đồng hồ đếm ngược thời gian thực',
+    description:
+      'Thử thách khả năng điều phối chiến thuật qua từng màn chơi với đồng hồ đếm ngược MM:SS chính xác đến từng tick và cảnh báo trực quan khi bước vào giai đoạn quyết định.',
+    highlights: [
+      'Chế độ Giải trí (120 giây/màn): Phù hợp làm quen nhịp độ và phối hợp phòng thủ',
+      'Chế độ Thử thách (60 giây/màn): Đòi hỏi tốc độ tiến công cao và hỏa lực dồn dập',
+      'Cảnh báo màu vàng ở mốc 30 giây và nhấp nháy đỏ khi còn 10 giây cuối',
+    ],
+  },
+  {
+    id: 'coop-online-p2p',
+    numberLabel: '04',
+    title: 'Phối hợp 2 người chơi trực tuyến (Co-op Online)',
+    description:
+      'Kết nối trực tiếp giữa hai người chơi qua giao thức WebRTC P2P DataChannel với cơ chế đồng bộ trạng thái Host/Guest mượt mà.',
+    highlights: [
+      'Tạo phòng nhanh với mã phòng 6 ký tự hoặc sử dụng tính năng Vào nhanh phòng đang chờ',
+      'Hỗ trợ đồng đội hồi sinh trong trận hoặc chuyển sang chế độ Khán giả (Spectator) khi hết lượt',
+      'Tự động xử lý tiếp tục trận đấu an toàn nếu đồng đội ngắt kết nối giữa chừng',
+    ],
+  },
+  {
+    id: 'account-progression',
+    numberLabel: '05',
+    title: 'Hồ sơ người chơi, Quân hàm & Điểm kinh nghiệm (XP)',
+    description:
+      'Đăng nhập bằng tài khoản Google để lưu trữ toàn bộ tiến trình chiến đấu, tích lũy điểm kinh nghiệm XP qua từng loại xe địch tiêu diệt và thăng cấp quân hàm.',
+    highlights: [
+      'Tính điểm XP theo từng mục tiêu hạ gục (+1 đến +5 XP mỗi xe tăng địch)',
+      'Hệ thống cấp bậc quân hàm và sao huân chương hiển thị trực tiếp trên hồ sơ',
+      'Tùy chọn ảnh đại diện (Avatar) cá nhân và bảo vệ phiên đăng nhập an toàn',
+    ],
+  },
+  {
+    id: 'audio-and-trial',
+    numberLabel: '06',
+    title: 'Chơi thử tức thì & Tùy chỉnh âm thanh trận đấu',
+    description:
+      'Hỗ trợ vào chơi thử ngay lập tức không cần đăng nhập tài khoản, cùng bộ điều khiển âm lượng hiệu ứng tiếng nổ và nhạc nền riêng biệt.',
+    highlights: [
+      'Chế độ Chơi thử (Trial Mode): Trải nghiệm ngay Màn 1 mà không cần đăng nhập Google',
+      'Tùy chỉnh độc lập âm lượng hiệu ứng chiến đấu (SFX) và âm lượng nhạc nền',
+      'Giao diện tối ưu hóa tốc độ tải trang và tương thích mọi trình duyệt hiện đại',
+    ],
+  },
+];
+
+export const LANDING_PAGE_MODES: readonly LandingPageModeItem[] = [
+  {
+    id: 'SOLO_AND_AI',
+    badge: 'Chiến dịch 1–2 xe tăng',
+    title: 'Chơi đơn (Solo) & Đồng đội AI',
+    subtitle: 'Chinh phục các màn chơi độc lập hoặc sát cánh cùng xe tăng AI',
+    description:
+      'Điều khiển Chiến xa P1 vượt qua chuỗi màn chơi chiến thuật. Bạn có thể chọn tác chiến độc lập ở chế độ Solo hoặc bật chế độ 2 Người (Đồng đội AI) để có thêm Chiến xa P2 tự động tìm đường, bọc lót Căn cứ Đại Bàng và tiêu diệt quân địch.',
+    specs: [
+      'Hỗ trợ cả 2 độ khó: Giải trí (120 giây) và Thử thách (60 giây)',
+      'Lưu kỷ lục điểm số và cộng dồn XP vào tài khoản Google',
+      'AI đồng đội tự động phân tích hướng tiến công và hỗ trợ phòng ngự căn cứ',
+    ],
+    actionType: 'PLAY_AUTH',
+    actionLabel: 'Chơi ngay',
+  },
+  {
+    id: 'COOP_ONLINE',
+    badge: 'Trực tuyến thời gian thực',
+    title: 'Hai người chơi Online (Co-op Online)',
+    subtitle: 'Phối hợp chiến đấu cùng bạn bè qua phòng chơi trực tuyến',
+    description:
+      'Tạo phòng chờ với mã phòng 6 ký tự để mời bạn bè hoặc bấm Vào nhanh để ghép đội cùng người chơi khác. Hai người chơi điều khiển Chiến xa P1 (Chủ phòng) và Chiến xa P2 (Khách) cùng bảo vệ căn cứ và vượt qua các màn chơi.',
+    specs: [
+      'Kết nối thời gian thực qua WebRTC DataChannel tốc độ 60Hz',
+      'Cơ chế đồng bộ điểm số, mạng sống, hồi sinh và chế độ Khán giả',
+      'Hỗ trợ tạo phòng theo độ khó Giải trí hoặc Thử thách',
+    ],
+    actionType: 'PLAY_AUTH',
+    actionLabel: 'Đăng nhập để chơi Online',
+  },
+  {
+    id: 'TRIAL_MODE',
+    badge: 'Không cần đăng nhập',
+    title: 'Chế độ Chơi thử (Trial Mode)',
+    subtitle: 'Vào thẳng Màn 1 chỉ với một cú nhấp chuột',
+    description:
+      'Dành cho khách truy cập muốn trải nghiệm ngay cảm giác điều khiển xe tăng và nhịp độ chiến đấu của Bắn Tank Online mà chưa cần đăng nhập Google. Hệ thống đưa bạn vào trực tiếp trận đấu Solo tại Màn 1 với độ khó Giải trí.',
+    specs: [
+      'Truy cập tức thì, không yêu cầu tài khoản Google hay quyền truy cập dữ liệu',
+      'Đầy đủ tính năng điều khiển xe tăng, địa hình và đồng hồ đếm ngược 120 giây',
+      'Không lưu dữ liệu cá nhân; có thể đăng nhập bất cứ lúc nào sau khi chơi thử',
+    ],
+    actionType: 'PLAY_TRIAL',
+    actionLabel: 'Chơi thử ngay',
+  },
+];
+
+export interface LandingPageProps {
+  /** Người dùng hiện tại (nếu đã đăng nhập Google) */
+  currentUser?: {
+    uid?: string;
+    email: string | null;
+    displayName?: string | null;
+    photoURL?: string | null;
+  } | null;
+  /** Bấm "Chơi ngay" / "Đăng nhập để chơi" */
+  onSignIn: () => Promise<void> | void;
+  /** Bấm "Vào game" khi người dùng đã đăng nhập sẵn */
+  onEnterGame?: () => void;
+  /** Bấm "Chơi thử" (vào thẳng Solo Stage 1 không cần đăng nhập) */
+  onStartTrialMode?: () => void;
+  /** Trạng thái đang xử lý xác thực Google */
+  isProcessing?: boolean;
+  /** Thông báo lỗi xác thực (nếu có) */
+  errorMessage?: string | null;
+  /** Thông báo thành công (ví dụ sau khi đăng xuất) */
+  successMessage?: string | null;
+  /** Xóa thông báo lỗi/thành công */
+  onClearFeedback?: () => void;
+}
+
+export const LandingPage: React.FC<LandingPageProps> = ({
+  currentUser = null,
+  onSignIn,
+  onEnterGame,
+  onStartTrialMode,
+  isProcessing = false,
+  errorMessage = null,
+  successMessage = null,
+  onClearFeedback,
+}) => {
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const isAuthenticated = Boolean(currentUser);
+
+  const handlePrimaryPlayAction = () => {
+    if (onClearFeedback) onClearFeedback();
+    if (isAuthenticated && onEnterGame) {
+      onEnterGame();
+      return;
+    }
+    void onSignIn();
+  };
+
+  const handleTrialAction = () => {
+    if (onClearFeedback) onClearFeedback();
+    if (onStartTrialMode) {
+      onStartTrialMode();
+    }
+  };
+
+  const closeMobileMenu = () => {
+    setMobileMenuOpen(false);
+  };
+
+  return (
+    <div className="min-h-screen w-full bg-neutral-950 text-neutral-100 font-sans selection:bg-amber-500 selection:text-black overflow-x-hidden flex flex-col">
+      {/* =====================================================================
+          A. THANH ĐIỀU HƯỚNG ĐẦU TRANG (TOP NAVIGATION BAR)
+      ====================================================================== */}
+      <header className="sticky top-0 z-40 w-full bg-neutral-950/90 backdrop-blur-md border-b border-neutral-800/80">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
+          {/* Thương hiệu & Logo */}
+          <a
+            href="#top"
+            className="flex items-center gap-3 group focus:outline-none"
+            aria-label="Trang chủ Bắn Tank Online"
+          >
+            <img
+              src="/logo-bantank.png"
+              alt="Logo Bắn Tank Online"
+              className="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-contain border border-amber-500/40 bg-neutral-900 p-1 shadow-md group-hover:border-amber-400 transition-colors"
+            />
+            <div className="flex flex-col">
+              <span className="text-base sm:text-lg font-black uppercase tracking-wider text-white group-hover:text-amber-400 transition-colors">
+                Bắn Tank Online
+              </span>
+              <span className="text-[11px] text-neutral-400 font-medium hidden sm:inline">
+                Game bắn xe tăng chiến thuật trực tuyến
+              </span>
+            </div>
+          </a>
+
+          {/* Liên kết điều hướng trên Desktop */}
+          <nav
+            className="hidden md:flex items-center gap-6 lg:gap-8 text-sm font-semibold text-neutral-300"
+            aria-label="Điều hướng chính"
+          >
+            <a
+              href="#gioi-thieu"
+              className="hover:text-amber-400 transition-colors py-1"
+            >
+              Giới thiệu
+            </a>
+            <a
+              href="#tinh-nang"
+              className="hover:text-amber-400 transition-colors py-1"
+            >
+              Tính năng
+            </a>
+            <a
+              href="#che-do-choi"
+              className="hover:text-amber-400 transition-colors py-1"
+            >
+              Chế độ chơi
+            </a>
+            <a
+              href="#huong-dan"
+              className="hover:text-amber-400 transition-colors py-1"
+            >
+              Hướng dẫn
+            </a>
+            <a
+              href={LANDING_SUPPORT_CONTACT.privacyPolicyUrl}
+              className="hover:text-amber-400 transition-colors py-1 text-neutral-400"
+            >
+              Quyền riêng tư
+            </a>
+          </nav>
+
+          {/* Cụm nút hành động bên phải */}
+          <div className="hidden sm:flex items-center gap-2.5">
+            {!isAuthenticated && onStartTrialMode && (
+              <button
+                type="button"
+                onClick={handleTrialAction}
+                disabled={isProcessing}
+                className="px-3.5 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 hover:border-amber-500/50 text-amber-300 font-bold text-xs uppercase tracking-wider transition-all active:scale-[0.98] disabled:opacity-50"
+              >
+                Chơi thử
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handlePrimaryPlayAction}
+              disabled={isProcessing}
+              className="px-4 sm:px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs sm:text-sm uppercase tracking-wider transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2 active:scale-[0.98] disabled:opacity-50"
+            >
+              <Play className="w-4 h-4 fill-current" />
+              <span>
+                {isProcessing
+                  ? 'Đang kết nối...'
+                  : isAuthenticated
+                  ? 'Vào game'
+                  : 'Chơi ngay'}
+              </span>
+            </button>
+          </div>
+
+          {/* Nút mở menu trên Mobile */}
+          <div className="flex items-center gap-2 sm:hidden">
+            <button
+              type="button"
+              onClick={handlePrimaryPlayAction}
+              disabled={isProcessing}
+              className="px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow"
+            >
+              <Play className="w-3.5 h-3.5 fill-current" />
+              <span>{isAuthenticated ? 'Vào game' : 'Chơi ngay'}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen((v) => !v)}
+              className="p-2 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-white"
+              aria-label={mobileMenuOpen ? 'Đóng menu' : 'Mở menu điều hướng'}
+              aria-expanded={mobileMenuOpen}
+            >
+              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
+          </div>
+        </div>
+
+        {/* Menu điều hướng thu gọn trên Mobile */}
+        {mobileMenuOpen && (
+          <nav
+            className="md:hidden bg-neutral-900/95 border-b border-neutral-800 px-4 pt-3 pb-4 space-y-2"
+            aria-label="Menu di động"
+          >
+            <div className="grid grid-cols-2 gap-2 text-sm font-semibold">
+              <a
+                href="#gioi-thieu"
+                onClick={closeMobileMenu}
+                className="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+              >
+                Giới thiệu
+              </a>
+              <a
+                href="#tinh-nang"
+                onClick={closeMobileMenu}
+                className="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+              >
+                Tính năng
+              </a>
+              <a
+                href="#che-do-choi"
+                onClick={closeMobileMenu}
+                className="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+              >
+                Chế độ chơi
+              </a>
+              <a
+                href="#huong-dan"
+                onClick={closeMobileMenu}
+                className="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+              >
+                Hướng dẫn
+              </a>
+            </div>
+            <div className="pt-2 flex flex-col gap-2">
+              {!isAuthenticated && onStartTrialMode && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    closeMobileMenu();
+                    handleTrialAction();
+                  }}
+                  disabled={isProcessing}
+                  className="w-full py-2.5 rounded-xl bg-neutral-950 border border-amber-500/40 text-amber-300 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+                >
+                  <Gamepad2 className="w-4 h-4" />
+                  <span>Chơi thử ngay (Không cần đăng nhập)</span>
+                </button>
+              )}
+              <a
+                href={LANDING_SUPPORT_CONTACT.privacyPolicyUrl}
+                onClick={closeMobileMenu}
+                className="text-center text-xs text-neutral-400 hover:text-amber-400 py-1"
+              >
+                Chính sách quyền riêng tư
+              </a>
+            </div>
+          </nav>
+        )}
+      </header>
+
+      {/* =====================================================================
+          NỘI DUNG CHÍNH CỦA TRANG CHỦ CÔNG KHAI
+      ====================================================================== */}
+      <main id="top" className="flex-1">
+        {/* Thông báo phản hồi đăng nhập / đăng xuất (nếu có) */}
+        {(errorMessage || successMessage) && (
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+            {errorMessage && (
+              <div
+                role="alert"
+                className="p-4 rounded-xl bg-rose-950/80 border border-rose-500/40 text-rose-200 text-xs sm:text-sm flex items-start justify-between gap-3 shadow-lg"
+              >
+                <div className="flex items-start gap-2.5">
+                  <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                  <div>
+                    <p className="font-bold text-rose-300">Thông báo xác thực</p>
+                    <p className="mt-0.5 leading-relaxed">{errorMessage}</p>
+                  </div>
+                </div>
+                {onClearFeedback && (
+                  <button
+                    type="button"
+                    onClick={onClearFeedback}
+                    className="text-xs font-bold text-rose-300 hover:text-white px-2 py-1 rounded bg-rose-900/50"
+                  >
+                    Đóng
+                  </button>
+                )}
+              </div>
+            )}
+
+            {successMessage && !errorMessage && (
+              <div
+                role="status"
+                className="p-4 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-200 text-xs sm:text-sm flex items-center justify-between gap-3 shadow-lg"
+              >
+                <div className="flex items-center gap-2.5">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                  <span>{successMessage}</span>
+                </div>
+                {onClearFeedback && (
+                  <button
+                    type="button"
+                    onClick={onClearFeedback}
+                    className="text-xs font-bold text-emerald-300 hover:text-white px-2 py-1 rounded bg-emerald-900/50"
+                  >
+                    Đóng
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ===================================================================
+            B. KHU VỰC MỞ ĐẦU (HERO SECTION)
+        ==================================================================== */}
+        <section
+          aria-labelledby="hero-heading"
+          className="relative py-10 sm:py-16 lg:py-20 overflow-hidden border-b border-neutral-900"
+        >
+          {/* Ánh sáng nền chiến thuật */}
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_75%_60%_at_50%_-10%,rgba(245,158,11,0.16),rgba(10,10,10,0))] pointer-events-none" />
+
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
+              {/* Cột trái: Thông điệp thương hiệu & Nút hành động */}
+              <div className="lg:col-span-7 space-y-6 text-left">
+                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold uppercase tracking-wider">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  <span>Chiến trường huyền thoại • Trực tuyến trên trình duyệt</span>
+                </div>
+
+                <div className="space-y-3">
+                  <h1
+                    id="hero-heading"
+                    className="text-3xl sm:text-5xl lg:text-6xl font-black uppercase tracking-tight text-white leading-[1.08]"
+                  >
+                    Bắn Tank <span className="text-amber-400">Online</span>
+                  </h1>
+                  <p className="text-base sm:text-lg lg:text-xl text-neutral-300 font-medium leading-relaxed max-w-2xl">
+                    Trò chơi bắn xe tăng chiến thuật 2D thời gian thực. Điều khiển chiến xa tiêu diệt toàn bộ 30 xe tăng địch trong mỗi màn chơi, tận dụng địa hình gạch – thép – rừng cây và bảo vệ Căn cứ Đại Bàng trước khi đồng hồ đếm ngược kết thúc.
+                  </p>
+                </div>
+
+                {/* Cụm nút CTA chính */}
+                <div className="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5">
+                  <button
+                    type="button"
+                    onClick={handlePrimaryPlayAction}
+                    disabled={isProcessing}
+                    className="px-6 py-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-sm sm:text-base uppercase tracking-wider transition-all shadow-xl shadow-amber-500/20 flex items-center justify-center gap-2.5 active:scale-[0.99] disabled:opacity-50"
+                  >
+                    <Play className="w-5 h-5 fill-current" />
+                    <span>
+                      {isProcessing
+                        ? 'Đang xác thực...'
+                        : isAuthenticated
+                        ? 'Vào game ngay'
+                        : 'Chơi ngay (Đăng nhập Google)'}
+                    </span>
+                  </button>
+
+                  {onStartTrialMode && (
+                    <button
+                      type="button"
+                      onClick={handleTrialAction}
+                      disabled={isProcessing}
+                      className="px-6 py-4 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-amber-300 border border-amber-500/40 hover:border-amber-400 font-bold text-sm sm:text-base uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 active:scale-[0.99] disabled:opacity-50"
+                    >
+                      <Gamepad2 className="w-5 h-5" />
+                      <span>Chơi thử Màn 1 (Không cần đăng nhập)</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Thông tin tóm tắt minh bạch bên dưới nút CTA */}
+                <div className="pt-2 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs text-neutral-400 border-t border-neutral-800/80">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Chơi đơn, Đồng đội AI &amp; 2 Người Online</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Tương thích PC, Điện thoại &amp; Tablet</span>
+                  </div>
+                  <div className="flex items-center gap-2 col-span-2 sm:col-span-1">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>Miễn phí trên trình duyệt web</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Cột phải: Khung minh họa trực quan chiến trường Bắn Tank Online */}
+              <div className="lg:col-span-5">
+                <div className="relative rounded-2xl bg-neutral-900/90 border border-neutral-800 p-4 sm:p-5 shadow-2xl">
+                  {/* Thanh trạng thái mô phỏng HUD trong trận */}
+                  <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-neutral-950 border border-neutral-800 mb-3 text-xs">
+                    <div className="flex items-center gap-2">
+                      <img
+                        src="/logo-bantank.png"
+                        alt="Biểu tượng chiến xa Bắn Tank Online"
+                        className="w-6 h-6 rounded object-contain"
+                      />
+                      <span className="font-bold text-neutral-200 uppercase tracking-wider">
+                        Màn 01 • Sa bàn 26×26
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <span className="font-mono font-bold text-amber-400 flex items-center gap-1">
+                        <Clock className="w-3.5 h-3.5" />
+                        02:00
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 font-bold text-[11px]">
+                        60 FPS
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Minh họa trực quan bản đồ chiến thuật xe tăng 2D */}
+                  <div
+                    className="relative aspect-square w-full rounded-xl bg-neutral-950 border border-neutral-800 overflow-hidden p-4 flex flex-col justify-between"
+                    aria-label="Minh họa bản đồ chiến trường Bắn Tank Online"
+                  >
+                    {/* Lưới tọa độ nền */}
+                    <div
+                      className="absolute inset-0 opacity-15 pointer-events-none"
+                      style={{
+                        backgroundImage:
+                          'linear-gradient(to right, #404040 1px, transparent 1px), linear-gradient(to bottom, #404040 1px, transparent 1px)',
+                        backgroundSize: '24px 24px',
+                      }}
+                    />
+
+                    {/* Tuyến trên: Vị trí xuất kích xe tăng địch */}
+                    <div className="relative z-10 flex items-center justify-between">
+                      <div className="px-2.5 py-1.5 rounded-lg bg-rose-950/90 border border-rose-500/40 text-rose-300 text-[11px] font-bold flex items-center gap-1.5">
+                        <Crosshair className="w-3.5 h-3.5 text-rose-400" />
+                        <span>Đội hình địch: 30 Xe Tăng</span>
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="px-2 py-1 rounded bg-neutral-900 border border-neutral-700 text-[10px] font-mono text-neutral-300">
+                          BASIC
+                        </span>
+                        <span className="px-2 py-1 rounded bg-neutral-900 border border-neutral-700 text-[10px] font-mono text-sky-300">
+                          FAST
+                        </span>
+                        <span className="px-2 py-1 rounded bg-neutral-900 border border-neutral-700 text-[10px] font-mono text-amber-300">
+                          POWER
+                        </span>
+                        <span className="px-2 py-1 rounded bg-neutral-900 border border-neutral-700 text-[10px] font-mono text-rose-300">
+                          ARMOR
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Khu vực trung tâm: Địa hình & Giao tranh */}
+                    <div className="relative z-10 my-auto py-4 flex flex-col items-center justify-center gap-4">
+                      <img
+                        src="/logo-bantank.png"
+                        alt="Bắn Tank Online"
+                        className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl object-contain border-2 border-amber-500/50 bg-neutral-900/90 p-2 shadow-xl"
+                      />
+
+                      {/* Các khối địa hình đặc trưng */}
+                      <div className="grid grid-cols-5 gap-2 w-full max-w-xs text-center text-[10px] font-bold">
+                        <div className="p-2 rounded-lg bg-orange-950/70 border border-orange-600/40 text-orange-300">
+                          Tường Gạch
+                        </div>
+                        <div className="p-2 rounded-lg bg-slate-800/80 border border-slate-500/40 text-slate-200">
+                          Tường Thép
+                        </div>
+                        <div className="p-2 rounded-lg bg-emerald-950/70 border border-emerald-600/40 text-emerald-300">
+                          Rừng Cây
+                        </div>
+                        <div className="p-2 rounded-lg bg-sky-950/70 border border-sky-600/40 text-sky-300">
+                          Sông Nước
+                        </div>
+                        <div className="p-2 rounded-lg bg-cyan-950/70 border border-cyan-500/40 text-cyan-200">
+                          Mặt Băng
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Tuyến dưới: Chiến xa P1, P2 và Căn cứ Đại Bàng */}
+                    <div className="relative z-10 grid grid-cols-3 gap-2 items-center pt-2 border-t border-neutral-800/80">
+                      <div className="p-2 rounded-lg bg-amber-500/15 border border-amber-500/40 text-center">
+                        <div className="text-[11px] font-black text-amber-300">CHIẾN XA P1</div>
+                        <div className="text-[10px] text-neutral-400">Người chơi chính</div>
+                      </div>
+
+                      <div className="p-2 rounded-lg bg-amber-950/80 border-2 border-amber-500 text-center shadow-md">
+                        <div className="text-[11px] font-black text-white uppercase flex items-center justify-center gap-1">
+                          <Shield className="w-3.5 h-3.5 text-amber-400" />
+                          <span>Căn Cứ</span>
+                        </div>
+                        <div className="text-[10px] text-amber-300 font-semibold">Mục tiêu bảo vệ</div>
+                      </div>
+
+                      <div className="p-2 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-center">
+                        <div className="text-[11px] font-black text-emerald-300">CHIẾN XA P2</div>
+                        <div className="text-[10px] text-neutral-400">AI / Đồng đội Online</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ===================================================================
+            C. GIỚI THIỆU TRÒ CHƠI (#gioi-thieu)
+        ==================================================================== */}
+        <section
+          id="gioi-thieu"
+          aria-labelledby="intro-heading"
+          className="py-12 sm:py-16 lg:py-20 bg-neutral-950 border-b border-neutral-900 scroll-mt-20"
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="max-w-3xl space-y-3 mb-10">
+              <div className="text-xs font-black uppercase tracking-widest text-amber-400">
+                Tổng quan trò chơi
+              </div>
+              <h2
+                id="intro-heading"
+                className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight"
+              >
+                Giới thiệu về Bắn Tank Online
+              </h2>
+              <p className="text-sm sm:text-base text-neutral-300 leading-relaxed">
+                <strong>Bắn Tank Online</strong> là trò chơi hành động – chiến thuật xe tăng 2D góc nhìn từ trên xuống (Top-Down Tactical Tank Action) hoạt động trực tiếp trên trình duyệt web tại địa chỉ chính thức{' '}
+                <a
+                  href="https://bantank.online/"
+                  className="text-amber-400 hover:underline font-semibold"
+                >
+                  https://bantank.online/
+                </a>
+                . Trò chơi tái hiện lối chơi bảo vệ căn cứ kinh điển kết hợp cùng cơ chế mô phỏng 60Hz hiện đại và kết nối nhiều người chơi trực tuyến.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <article className="rounded-2xl bg-neutral-900/70 border border-neutral-800 p-6 space-y-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+                  <Shield className="w-5 h-5" />
+                </div>
+                <h3 className="text-lg font-bold text-white">
+                  Mục tiêu &amp; Luật chơi cốt lõi
+                </h3>
+                <p className="text-sm text-neutral-300 leading-relaxed">
+                  Trong mỗi màn chơi, nhiệm vụ của bạn là điều khiển xe tăng tiêu diệt toàn bộ <strong>30 xe tăng địch</strong> xuất kích từ phía trên bản đồ, đồng thời bảo vệ <strong>Căn cứ Đại Bàng</strong> nằm ở chính giữa cạnh dưới. Nếu căn cứ bị đạn pháo địch bắn trúng, toàn bộ mạng sống người chơi cạn kiệt, hoặc đồng hồ đếm ngược về 00:00 trước khi hạ hết quân địch, trận đấu sẽ kết thúc.
+                </p>
+              </article>
+
+              <article className="rounded-2xl bg-neutral-900/70 border border-neutral-800 p-6 space-y-3">
+                <div className="w-10 h-10 rounded-xl bg-sky-500/15 border border-sky-500/30 flex items-center justify-center text-sky-400">
+                  <Layers className="w-5 h-5" />
+                </div>
+                <h3 className="text-lg font-bold text-white">
+                  Địa hình &amp; Tương tác vật lý 60Hz
+                </h3>
+                <p className="text-sm text-neutral-300 leading-relaxed">
+                  Chiến trường lưới 26×26 được cấu tạo từ 5 loại địa hình chiến thuật: <strong>Tường gạch</strong> (có thể bắn vỡ từng phần theo lưới phụ 4×4), <strong>Tường thép</strong> (chặn đạn pháo thông thường), <strong>Rừng cây</strong> (che khuất tầm nhìn), <strong>Sông nước</strong> (ngăn xe tăng đi qua nhưng đạn bay qua được) và <strong>Mặt băng</strong> (tạo quán tính trượt khi chuyển hướng).
+                </p>
+              </article>
+
+              <article className="rounded-2xl bg-neutral-900/70 border border-neutral-800 p-6 space-y-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Users className="w-5 h-5" />
+                </div>
+                <h3 className="text-lg font-bold text-white">
+                  Trải nghiệm Đơn, AI &amp; Trực tuyến
+                </h3>
+                <p className="text-sm text-neutral-300 leading-relaxed">
+                  Người chơi có thể lựa chọn chiến đấu độc lập (<strong>Solo</strong>), phối hợp cùng xe tăng đồng đội máy thông minh (<strong>Co-op AI</strong>) hoặc tạo phòng chơi trực tuyến cùng một người chơi thật thứ hai qua mạng Internet (<strong>Co-op Online</strong>). Ngoài ra, khách truy cập có thể nhấn <strong>Chơi thử</strong> để vào thẳng Màn 1 mà không cần đăng nhập.
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        {/* ===================================================================
+            D. CÁC TÍNH NĂNG NỔI BẬT (#tinh-nang)
+        ==================================================================== */}
+        <section
+          id="tinh-nang"
+          aria-labelledby="features-heading"
+          className="py-12 sm:py-16 lg:py-20 bg-neutral-950 border-b border-neutral-900 scroll-mt-20"
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="max-w-3xl space-y-3 mb-10">
+              <div className="text-xs font-black uppercase tracking-widest text-amber-400">
+                Hệ thống tính năng thực tế
+              </div>
+              <h2
+                id="features-heading"
+                className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight"
+              >
+                Các tính năng nổi bật trong Bắn Tank Online
+              </h2>
+              <p className="text-sm sm:text-base text-neutral-300 leading-relaxed">
+                Mọi cơ chế điều khiển, đồng hồ đếm ngược, đồng bộ mạng P2P và quản lý hồ sơ dưới đây đều được tích hợp trực tiếp trong trò chơi.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {LANDING_PAGE_FEATURES.map((feat) => (
+                <article
+                  key={feat.id}
+                  className="rounded-2xl bg-neutral-900/60 border border-neutral-800 hover:border-neutral-700 p-6 flex flex-col justify-between transition-colors"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+                        {feat.numberLabel}
+                      </span>
+                      {feat.id === 'precision-control' && (
+                        <Gamepad2 className="w-5 h-5 text-amber-400" />
+                      )}
+                      {feat.id === 'tactical-combat' && (
+                        <Shield className="w-5 h-5 text-rose-400" />
+                      )}
+                      {feat.id === 'stages-and-countdown' && (
+                        <Clock className="w-5 h-5 text-sky-400" />
+                      )}
+                      {feat.id === 'coop-online-p2p' && (
+                        <Globe className="w-5 h-5 text-emerald-400" />
+                      )}
+                      {feat.id === 'account-progression' && (
+                        <Trophy className="w-5 h-5 text-amber-400" />
+                      )}
+                      {feat.id === 'audio-and-trial' && (
+                        <Volume2 className="w-5 h-5 text-purple-400" />
+                      )}
+                    </div>
+
+                    <h3 className="text-lg font-bold text-white leading-snug">
+                      {feat.title}
+                    </h3>
+
+                    <p className="text-sm text-neutral-300 leading-relaxed">
+                      {feat.description}
+                    </p>
+                  </div>
+
+                  <ul className="mt-5 pt-4 border-t border-neutral-800/80 space-y-2 text-xs text-neutral-300">
+                    {feat.highlights.map((item, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                        <span>{item}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ===================================================================
+            E. CÁC CHẾ ĐỘ CHƠI (#che-do-choi)
+        ==================================================================== */}
+        <section
+          id="che-do-choi"
+          aria-labelledby="modes-heading"
+          className="py-12 sm:py-16 lg:py-20 bg-neutral-950 border-b border-neutral-900 scroll-mt-20"
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="max-w-3xl space-y-3 mb-10">
+              <div className="text-xs font-black uppercase tracking-widest text-amber-400">
+                Lựa chọn phương thức tác chiến
+              </div>
+              <h2
+                id="modes-heading"
+                className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight"
+              >
+                Các chế độ chơi hiện có
+              </h2>
+              <p className="text-sm sm:text-base text-neutral-300 leading-relaxed">
+                Chọn chế độ phù hợp với bạn: trải nghiệm thử ngay không cần tài khoản, vượt màn độc lập cùng đồng đội AI hoặc sát cánh cùng bạn bè qua kết nối trực tuyến.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {LANDING_PAGE_MODES.map((mode) => {
+                const isTrialCard = mode.actionType === 'PLAY_TRIAL';
+                return (
+                  <article
+                    key={mode.id}
+                    className={`rounded-2xl p-6 flex flex-col justify-between border transition-all ${
+                      isTrialCard
+                        ? 'bg-neutral-900/90 border-amber-500/40'
+                        : 'bg-neutral-900/60 border-neutral-800'
+                    }`}
+                  >
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className={`px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider ${
+                            isTrialCard
+                              ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                              : 'bg-neutral-800 text-neutral-300 border border-neutral-700'
+                          }`}
+                        >
+                          {mode.badge}
+                        </span>
+                        {mode.id === 'SOLO_AND_AI' && (
+                          <Bot className="w-5 h-5 text-emerald-400" />
+                        )}
+                        {mode.id === 'COOP_ONLINE' && (
+                          <Globe className="w-5 h-5 text-sky-400" />
+                        )}
+                        {mode.id === 'TRIAL_MODE' && (
+                          <Gamepad2 className="w-5 h-5 text-amber-400" />
+                        )}
+                      </div>
+
+                      <div>
+                        <h3 className="text-xl font-black text-white">
+                          {mode.title}
+                        </h3>
+                        <p className="text-xs text-amber-400 font-semibold mt-1">
+                          {mode.subtitle}
+                        </p>
+                      </div>
+
+                      <p className="text-sm text-neutral-300 leading-relaxed">
+                        {mode.description}
+                      </p>
+
+                      <ul className="space-y-2 pt-2 text-xs text-neutral-300">
+                        {mode.specs.map((spec, idx) => (
+                          <li key={idx} className="flex items-start gap-2">
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                            <span>{spec}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+
+                    <div className="pt-6 mt-6 border-t border-neutral-800">
+                      {isTrialCard ? (
+                        <button
+                          type="button"
+                          onClick={handleTrialAction}
+                          disabled={isProcessing || !onStartTrialMode}
+                          className="w-full py-3 px-4 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/50 text-amber-300 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-[0.99] disabled:opacity-50"
+                        >
+                          <Gamepad2 className="w-4 h-4" />
+                          <span>{mode.actionLabel}</span>
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handlePrimaryPlayAction}
+                          disabled={isProcessing}
+                          className="w-full py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-md active:scale-[0.99] disabled:opacity-50"
+                        >
+                          <Play className="w-4 h-4 fill-current" />
+                          <span>
+                            {isAuthenticated ? 'Vào game ngay' : mode.actionLabel}
+                          </span>
+                          <ChevronRight className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        {/* ===================================================================
+            F. HƯỚNG DẪN BẮT ĐẦU & ĐIỀU KHIỂN (#huong-dan)
+        ==================================================================== */}
+        <section
+          id="huong-dan"
+          aria-labelledby="guide-heading"
+          className="py-12 sm:py-16 lg:py-20 bg-neutral-950 border-b border-neutral-900 scroll-mt-20"
+        >
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
+            <div className="max-w-3xl space-y-3">
+              <div className="text-xs font-black uppercase tracking-widest text-amber-400">
+                Bắt đầu nhanh trong 4 bước
+              </div>
+              <h2
+                id="guide-heading"
+                className="text-2xl sm:text-3xl lg:text-4xl font-black text-white tracking-tight"
+              >
+                Hướng dẫn bắt đầu &amp; Điều khiển xe tăng
+              </h2>
+              <p className="text-sm sm:text-base text-neutral-300 leading-relaxed">
+                Không cần cài đặt phần mềm. Bạn có thể tham gia trận đấu ngay trên trình duyệt máy tính, điện thoại thông minh hoặc máy tính bảng.
+              </p>
+            </div>
+
+            {/* 4 bước bắt đầu */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+              <div className="rounded-2xl bg-neutral-900/70 border border-neutral-800 p-5 space-y-2.5">
+                <div className="text-xs font-mono font-black text-amber-400 uppercase">
+                  Bước 01
+                </div>
+                <h3 className="text-base font-bold text-white">
+                  Truy cập trang chủ
+                </h3>
+                <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
+                  Mở trình duyệt web trên máy tính, điện thoại hoặc máy tính bảng và truy cập địa chỉ chính thức <strong>bantank.online</strong>.
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-neutral-900/70 border border-neutral-800 p-5 space-y-2.5">
+                <div className="text-xs font-mono font-black text-amber-400 uppercase">
+                  Bước 02
+                </div>
+                <h3 className="text-base font-bold text-white">
+                  Chọn Chơi thử hoặc Đăng nhập
+                </h3>
+                <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
+                  Nhấn <strong>Chơi thử</strong> để vào ngay Màn 1 không cần tài khoản, hoặc nhấn <strong>Chơi ngay</strong> để đăng nhập Google và lưu hồ sơ XP.
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-neutral-900/70 border border-neutral-800 p-5 space-y-2.5">
+                <div className="text-xs font-mono font-black text-amber-400 uppercase">
+                  Bước 03
+                </div>
+                <h3 className="text-base font-bold text-white">
+                  Chọn chế độ &amp; Độ khó
+                </h3>
+                <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
+                  Lựa chọn <strong>Chơi đơn (Solo)</strong>, <strong>Đồng đội AI</strong> hoặc <strong>2 Người Online</strong> cùng mức thời gian Giải trí (120s) hoặc Thử thách (60s).
+                </p>
+              </div>
+
+              <div className="rounded-2xl bg-neutral-900/70 border border-neutral-800 p-5 space-y-2.5">
+                <div className="text-xs font-mono font-black text-amber-400 uppercase">
+                  Bước 04
+                </div>
+                <h3 className="text-base font-bold text-white">
+                  Điều khiển &amp; Bảo vệ Căn cứ
+                </h3>
+                <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
+                  Di chuyển chiến xa, khai hỏa tiêu diệt toàn bộ 30 xe tăng địch trong màn chơi và giữ an toàn cho Căn cứ Đại Bàng.
+                </p>
+              </div>
+            </div>
+
+            {/* Sơ đồ điều khiển trên 3 thiết bị */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="rounded-2xl bg-neutral-900/50 border border-neutral-800 p-5 space-y-3">
+                <div className="flex items-center gap-2 text-sky-400 font-bold text-sm">
+                  <Keyboard className="w-4 h-4" />
+                  <span>Điều khiển trên Máy tính (PC)</span>
+                </div>
+                <ul className="space-y-2 text-xs text-neutral-300">
+                  <li>
+                    • <strong>Di chuyển 4 hướng:</strong> Phím{' '}
+                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">
+                      W A S D
+                    </kbd>{' '}
+                    hoặc cụm phím{' '}
+                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">
+                      Mũi tên
+                    </kbd>
+                  </li>
+                  <li>
+                    • <strong>Khai hỏa đạn pháo:</strong> Phím{' '}
+                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">
+                      Space
+                    </kbd>{' '}
+                    hoặc phím{' '}
+                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">
+                      J
+                    </kbd>
+                  </li>
+                  <li>
+                    • <strong>Tạm dừng trận đấu:</strong> Phím{' '}
+                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">
+                      P
+                    </kbd>{' '}
+                    hoặc{' '}
+                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono">
+                      ESC
+                    </kbd>
+                  </li>
+                </ul>
+              </div>
+
+              <div className="rounded-2xl bg-neutral-900/50 border border-neutral-800 p-5 space-y-3">
+                <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
+                  <Smartphone className="w-4 h-4" />
+                  <span>Điều khiển trên Điện thoại (Mobile)</span>
+                </div>
+                <ul className="space-y-2 text-xs text-neutral-300">
+                  <li>
+                    • <strong>Màn hình Dọc:</strong> Cụm phím điều hướng bên trái và nút Khai Hỏa bên phải đặt ngay bên dưới bản đồ.
+                  </li>
+                  <li>
+                    • <strong>Màn hình Ngang:</strong> Bố cục 3 cột chuyên dụng (Cần gạt trái – Bản đồ giữa – Nút bắn phải) hỗ trợ thao tác 2 ngón cái.
+                  </li>
+                </ul>
+              </div>
+
+              <div className="rounded-2xl bg-neutral-900/50 border border-neutral-800 p-5 space-y-3">
+                <div className="flex items-center gap-2 text-amber-400 font-bold text-sm">
+                  <Tablet className="w-4 h-4" />
+                  <span>Điều khiển trên Máy tính bảng (Tablet)</span>
+                </div>
+                <ul className="space-y-2 text-xs text-neutral-300">
+                  <li>
+                    • <strong>Tự động co giãn tỷ lệ:</strong> Kích thước bản đồ và cụm nút cảm ứng tự động tối ưu theo độ phân giải màn hình lớn.
+                  </li>
+                  <li>
+                    • <strong>Đa điểm độc lập:</strong> Vừa giữ hướng di chuyển vừa nhấn nút Khai Hỏa liên tục không bị trễ lệnh.
+                  </li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Khối kêu gọi hành động cuối trang (Bottom Conversion Banner) */}
+            <div className="rounded-2xl bg-gradient-to-r from-neutral-900 via-neutral-900 to-amber-950/40 border border-amber-500/30 p-6 sm:p-8 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-6">
+              <div className="space-y-2 max-w-2xl">
+                <div className="inline-flex items-center gap-1.5 text-amber-400 text-xs font-black uppercase tracking-wider">
+                  <Award className="w-4 h-4" />
+                  <span>Sẵn sàng xuất kích</span>
+                </div>
+                <h3 className="text-xl sm:text-2xl font-black text-white">
+                  Tham gia chiến trường Bắn Tank Online ngay hôm nay
+                </h3>
+                <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
+                  Trải nghiệm miễn phí Màn 1 với chế độ Chơi thử hoặc đăng nhập bằng tài khoản Google để mở khóa đầy đủ các màn chơi, chế độ Co-op Online và bảng quân hàm cá nhân.
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={handlePrimaryPlayAction}
+                  disabled={isProcessing}
+                  className="px-6 py-3.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg transition-all"
+                >
+                  <Play className="w-4 h-4 fill-current" />
+                  <span>{isAuthenticated ? 'Vào game ngay' : 'Chơi ngay'}</span>
+                </button>
+                {onStartTrialMode && (
+                  <button
+                    type="button"
+                    onClick={handleTrialAction}
+                    disabled={isProcessing}
+                    className="px-5 py-3.5 rounded-xl bg-neutral-950 hover:bg-neutral-800 border border-amber-500/40 text-amber-300 font-bold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all"
+                  >
+                    <Gamepad2 className="w-4 h-4" />
+                    <span>Chơi thử</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      {/* =====================================================================
+          G. KHU VỰC CUỐI TRANG (FOOTER CÔNG KHAI)
+      ====================================================================== */}
+      <footer className="bg-neutral-950 border-t border-neutral-800/90 text-neutral-400 text-xs sm:text-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-8 pb-8 border-b border-neutral-900">
+            {/* Cột 1: Thương hiệu & Mô tả */}
+            <div className="md:col-span-5 space-y-3">
+              <div className="flex items-center gap-3">
+                <img
+                  src="/logo-bantank.png"
+                  alt="Logo Bắn Tank Online"
+                  className="w-9 h-9 rounded-lg object-contain border border-amber-500/40 bg-neutral-900 p-1"
+                />
+                <span className="text-base font-black uppercase tracking-wider text-white">
+                  {LANDING_SUPPORT_CONTACT.brandName}
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm text-neutral-400 leading-relaxed max-w-md">
+                Trò chơi bắn xe tăng chiến thuật 2D trực tuyến trên trình duyệt web. Hỗ trợ chơi đơn (Solo), phối hợp đồng đội AI, chơi trực tuyến 2 người (Co-op Online) và chế độ Chơi thử không cần đăng nhập.
+              </p>
+              <p className="text-xs text-neutral-500">
+                Trang chủ chính thức:{' '}
+                <a
+                  href={LANDING_SUPPORT_CONTACT.officialDomain}
+                  className="text-neutral-300 hover:text-amber-400 underline"
+                >
+                  {LANDING_SUPPORT_CONTACT.officialDomain}
+                </a>
+              </p>
+            </div>
+
+            {/* Cột 2: Liên kết điều hướng nhanh */}
+            <div className="md:col-span-3 space-y-2.5">
+              <div className="text-xs font-black uppercase tracking-wider text-neutral-200">
+                Danh mục trang chủ
+              </div>
+              <ul className="space-y-2 text-xs sm:text-sm">
+                <li>
+                  <a href="#gioi-thieu" className="hover:text-amber-400 transition-colors">
+                    Giới thiệu trò chơi
+                  </a>
+                </li>
+                <li>
+                  <a href="#tinh-nang" className="hover:text-amber-400 transition-colors">
+                    Tính năng nổi bật
+                  </a>
+                </li>
+                <li>
+                  <a href="#che-do-choi" className="hover:text-amber-400 transition-colors">
+                    Các chế độ chơi
+                  </a>
+                </li>
+                <li>
+                  <a href="#huong-dan" className="hover:text-amber-400 transition-colors">
+                    Hướng dẫn bắt đầu
+                  </a>
+                </li>
+              </ul>
+            </div>
+
+            {/* Cột 3: Pháp lý, Quyền riêng tư & Liên hệ hỗ trợ */}
+            <div className="md:col-span-4 space-y-2.5">
+              <div className="text-xs font-black uppercase tracking-wider text-neutral-200">
+                Pháp lý &amp; Hỗ trợ người chơi
+              </div>
+              <ul className="space-y-2 text-xs sm:text-sm">
+                <li>
+                  <a
+                    href={LANDING_SUPPORT_CONTACT.privacyPolicyUrl}
+                    className="inline-flex items-center gap-1.5 text-amber-400 hover:text-amber-300 font-semibold transition-colors"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>Chính sách quyền riêng tư (Privacy Policy)</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </li>
+                <li className="flex items-center gap-1.5 text-neutral-300">
+                  <Mail className="w-3.5 h-3.5 text-neutral-400 shrink-0" />
+                  <span>Liên hệ hỗ trợ: </span>
+                  <a
+                    href={`mailto:${LANDING_SUPPORT_CONTACT.supportEmail}`}
+                    className="text-neutral-200 hover:text-amber-400 underline"
+                  >
+                    {LANDING_SUPPORT_CONTACT.supportEmail}
+                  </a>
+                </li>
+              </ul>
+              <p className="text-[11px] text-neutral-500 leading-relaxed pt-1">
+                Việc xác thực tài khoản được thực hiện thông qua Google OAuth &amp; Firebase Authentication. Khách truy cập có thể xem toàn bộ thông tin giới thiệu và Chính sách quyền riêng tư mà không cần đăng nhập.
+              </p>
+            </div>
+          </div>
+
+          {/* Dòng bản quyền dưới cùng */}
+          <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-500">
+            <div>
+              © {LANDING_SUPPORT_CONTACT.copyrightYear} {LANDING_SUPPORT_CONTACT.brandName}. Bảo lưu mọi quyền.
+            </div>
+            <div className="flex items-center gap-4">
+              <a
+                href={LANDING_SUPPORT_CONTACT.privacyPolicyUrl}
+                className="hover:text-neutral-300 transition-colors"
+              >
+                Chính sách quyền riêng tư
+              </a>
+              <span>•</span>
+              <a href="#top" className="hover:text-neutral-300 transition-colors">
+                Lên đầu trang ↑
+              </a>
+            </div>
+          </div>
+        </div>
+      </footer>
+    </div>
+  );
+};
+
+export default LandingPage;
