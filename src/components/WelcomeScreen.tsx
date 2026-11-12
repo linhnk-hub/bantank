@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { AlertCircle, CheckCircle2, Gamepad2 } from 'lucide-react';
+import { GameLogo } from './GameLogo.tsx';
 
 export interface WelcomeScreenProps {
   onSignIn: () => Promise<void>;
@@ -24,13 +25,13 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onClearFeedback,
 }) => {
   return (
-    <div className="relative min-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+    <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]">
       {/* Background Ambience: Subtle retro scanlines and radial glow */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.15),rgba(255,255,255,0))] pointer-events-none" />
       <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
 
       {/* Notifications: Logout notice / Error alert */}
-      <div className="relative z-20 max-w-xl mx-auto w-full px-4 pt-2 sm:pt-4">
+      <div className="relative z-20 max-w-xl mx-auto w-full px-3 sm:px-4 pt-1 sm:pt-3">
         {successMessage && (
           <div className="mb-2 p-3.5 rounded-xl bg-emerald-950/90 border border-emerald-800 text-emerald-200 text-xs sm:text-sm flex items-center justify-between shadow-xl animate-fade-in">
             <div className="flex items-center gap-2.5">
@@ -63,29 +64,22 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       </div>
 
       {/* Main Welcome Content (M7.3.4 V.1: Clean welcome screen without Top Menu, Top Aligned) */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-4 pt-2 sm:pt-6 pb-6 max-w-4xl mx-auto w-full">
-        <div className="flex flex-col items-center text-center max-w-2xl">
-          {/* Official Game Logo Hero */}
-          <div className="flex justify-center items-center p-0 m-0 mb-3">
-            <img
-              src="/logo-bantank.png"
-              alt="Chiến trường huyền thoại"
-              className="w-40 h-40 sm:w-52 sm:h-52 md:w-64 md:h-64 object-contain p-0 m-0 drop-shadow-2xl"
-              onError={(e) => {
-                e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
-              }}
-            />
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-2 sm:px-4 pt-1 sm:pt-3 pb-4 max-w-4xl mx-auto w-full">
+        <div className="flex flex-col items-center text-center max-w-2xl w-full">
+          {/* Official Game Logo Hero — M7.3.10 Unified 200% Standard (320x320) */}
+          <div className="flex justify-center items-center p-0 m-0 mb-2">
+            <GameLogo />
           </div>
 
           {/* Title: Chiến trường huyền thoại with subtle yellow lines above and below */}
-          <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mb-2 sm:mb-3" />
-          <h1 className="text-[clamp(1.15rem,4.8vw,2.5rem)] whitespace-nowrap font-black uppercase text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow p-0 text-center">
+          <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mb-1.5 sm:mb-2.5" />
+          <h1 className="text-[clamp(1.1rem,4.5vw,2.35rem)] whitespace-nowrap font-black uppercase text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow p-0 text-center">
             Chiến trường huyền thoại
           </h1>
-          <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mt-2 sm:mt-3 mb-6 sm:mb-8" />
+          <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mt-1.5 sm:mt-2.5 mb-4 sm:mb-6" />
 
           {/* Google Sign-in Call To Action & Trial Mode Button */}
-          <div className="w-full max-w-sm flex flex-col items-center gap-3 mb-8">
+          <div className="w-full max-w-sm flex flex-col items-center gap-2.5 px-2 mb-4">
             <button
               type="button"
               onClick={onSignIn}

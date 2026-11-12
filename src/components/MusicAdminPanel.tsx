@@ -39,9 +39,16 @@ import {
   type UserRole,
   type GameModeScope,
 } from '../core/musicManager.ts';
+import {
+  SoundManager,
+  GAME_ACTION_SOUND_SLOTS,
+  type GameActionSoundId,
+  type CustomActionSoundTrack,
+} from '../core/audio.ts';
 
 export const MusicAdminPanel: React.FC = () => {
   const musicManager = MusicManager.getInstance();
+  const soundManager = SoundManager.getInstance();
 
   const [role, setRole] = useState<UserRole>(() => musicManager.getUserRole());
   const [tracks, setTracks] = useState<MusicTrackMetadata[]>(() => musicManager.getTracks());
@@ -70,10 +77,16 @@ export const MusicAdminPanel: React.FC = () => {
 
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const replaceInputRef = useRef<HTMLInputElement | null>(null);
+  const actionSfxInputRef = useRef<HTMLInputElement | null>(null);
   const [replacingTrackId, setReplacingTrackId] = useState<string | null>(null);
+  const [targetActionSfxId, setTargetActionSfxId] = useState<GameActionSoundId | null>(null);
+  const [actionSfxTracks, setActionSfxTracks] = useState<
+    Record<GameActionSoundId, CustomActionSoundTrack | null>
+  >(() => soundManager.getAllActionSoundTracks());
+  const [isUploadingActionSfx, setIsUploadingActionSfx] = useState<boolean>(false);
 
   useEffect(() => {
-    const unsub = musicManager.subscribe(() => {
+    const unsubMusic = musicManager.subscribe(() => {
       setRole(musicManager.getUserRole());
       setTracks(musicManager.getTracks());
       setLoopConfig(musicManager.getLoopConfig());
@@ -84,14 +97,63 @@ export const MusicAdminPanel: React.FC = () => {
       setIsCloudSyncing(musicManager.isCloudSyncing());
       setSharedSyncError(musicManager.getSharedSyncError());
     });
-    return unsub;
-  }, [musicManager]);
+    const unsubSound = soundManager.subscribe(() => {
+      setActionSfxTracks(soundManager.getAllActionSoundTracks());
+    });
+    return () => {
+      unsubMusic();
+      unsubSound();
+    };
+  }, [musicManager, soundManager]);
 
   const isSuperAdmin = role === 'SUPER_ADMIN';
 
   if (!isSuperAdmin) {
     return null;
   }
+
+  const handleActionSfxFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    const actionId = targetActionSfxId;
+    setTargetActionSfxId(null);
+    if (!file || !actionId) return;
+
+    setIsUploadingActionSfx(true);
+    try {
+      const res = await soundManager.uploadActionSound(actionId, file);
+      if (res.ok && res.track) {
+        setActionSfxTracks(soundManager.getAllActionSoundTracks());
+        setStatusMsg({
+          type: 'success',
+          text: `Đã cập nhật âm thanh hành động [${actionId}] bằng file "${res.track.fileName}" (${res.track.durationSec}s).`,
+        });
+      } else {
+        setStatusMsg({
+          type: 'error',
+          text: res.error || 'Không thể tải lên file âm thanh hành động.',
+        });
+      }
+    } finally {
+      setIsUploadingActionSfx(false);
+    }
+  };
+
+  const handleDeleteActionSfx = (actionId: GameActionSoundId, label: string) => {
+    const res = soundManager.deleteActionSound(actionId);
+    if (res.ok) {
+      setActionSfxTracks(soundManager.getAllActionSoundTracks());
+      setStatusMsg({
+        type: 'info',
+        text: `Đã xóa file tùy chỉnh và khôi phục âm thanh 8-Bit mặc định cho "${label}".`,
+      });
+    } else {
+      setStatusMsg({
+        type: 'error',
+        text: res.error || 'Không thể xóa âm thanh hành động.',
+      });
+    }
+  };
 
   const handleSelectAudioFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -913,6 +975,111 @@ export const MusicAdminPanel: React.FC = () => {
               ))}
             </select>
           </div>
+        </div>
+      </div>
+
+      {/* SECTION 5 (M7.3.10 Section 4): QUẢN LÝ & UPLOAD ÂM THANH HÀNH ĐỘNG (ACTION SFX) */}
+      <div className="p-3.5 rounded-xl bg-neutral-950 border border-amber-500/30 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 font-bold text-amber-300">
+            <FileAudio className="w-4 h-4 text-amber-400" />
+            <span>Quản Lý &amp; Upload Âm Thanh Hành Động (Action SFX)</span>
+          </div>
+          <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 font-mono text-[10px] font-bold">
+            SUPER ADMIN ONLY
+          </span>
+        </div>
+
+        <p className="text-[11px] text-neutral-400 leading-relaxed">
+          Tải lên hoặc thay thế file âm thanh riêng (<code>.mp3</code>, <code>.ogg</code>, <code>.wav</code>) cho từng hành động chiến đấu trong game. Nếu chưa tải file riêng, hệ thống tự động sử dụng bộ tổng hợp âm thanh 8-Bit mặc định.
+        </p>
+
+        <input
+          ref={actionSfxInputRef}
+          type="file"
+          accept=".mp3,.ogg,.wav,.m4a,audio/mpeg,audio/ogg,audio/wav"
+          onChange={handleActionSfxFileChange}
+          className="hidden"
+        />
+
+        <div className="space-y-2">
+          {GAME_ACTION_SOUND_SLOTS.map((slot) => {
+            const customTrack = actionSfxTracks[slot.id];
+            return (
+              <div
+                key={slot.id}
+                data-testid={`admin-action-sfx-row-${slot.id}`}
+                className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
+                  customTrack
+                    ? 'bg-amber-950/20 border-amber-500/50'
+                    : 'bg-neutral-900/90 border-neutral-800'
+                }`}
+              >
+                <div className="space-y-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="font-bold text-neutral-100 text-xs">{slot.label}</span>
+                    <span
+                      className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold border ${
+                        customTrack
+                          ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/40'
+                          : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                      }`}
+                    >
+                      {customTrack ? 'FILE TÙY CHỈNH' : '8-BIT MẶC ĐỊNH'}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-neutral-400">{slot.description}</p>
+                  {customTrack && (
+                    <div className="text-[10px] font-mono text-amber-300/90 truncate">
+                      File: {customTrack.fileName} • {customTrack.durationSec}s •{' '}
+                      {(customTrack.fileSizeBytes / 1024).toFixed(1)} KB
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      soundManager.unlock();
+                      soundManager.previewActionSound(slot.id);
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-emerald-300 border border-neutral-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                    title={`Nghe thử âm thanh ${slot.label}`}
+                  >
+                    <Play className="w-3 h-3 fill-current" />
+                    <span>Nghe thử</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    disabled={isUploadingActionSfx}
+                    onClick={() => {
+                      setTargetActionSfxId(slot.id);
+                      actionSfxInputRef.current?.click();
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
+                    title={customTrack ? 'Thay thế file âm thanh' : 'Tải lên file âm thanh'}
+                  >
+                    <Upload className="w-3 h-3" />
+                    <span>{customTrack ? 'Thay thế' : 'Upload'}</span>
+                  </button>
+
+                  {customTrack && (
+                    <button
+                      type="button"
+                      onClick={() => handleDeleteActionSfx(slot.id, slot.label)}
+                      className="px-2 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-700/50 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Xóa file tùy chỉnh và khôi phục 8-Bit mặc định"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Xóa</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

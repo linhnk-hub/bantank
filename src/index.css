@@ -26,3 +26,15 @@
   image-rendering: crisp-edges !important;
 }
 
+/* M7.3.10: Unified 200% Game Logo Standard across PC, Mobile, and Tablet (320px = 2x standard 160px) */
+.unified-game-logo {
+  width: 320px !important;
+  height: 320px !important;
+  max-width: min(320px, calc(100vw - 16px)) !important;
+  max-height: min(320px, calc(100vw - 16px)) !important;
+  aspect-ratio: 1 / 1 !important;
+  object-fit: contain !important;
+  flex-shrink: 0;
+}
+
+

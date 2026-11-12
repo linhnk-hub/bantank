@@ -13,7 +13,8 @@ import {
 } from '../core/authManager.ts';
 import { AvatarManager } from '../core/avatarManager.ts';
 import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
-import { CoopOnlineLobbyPanel } from './CoopOnlineLobbyModal.tsx';
+import { CoopOnlineLobbyPanel, type CoopLobbySubView } from './CoopOnlineLobbyModal.tsx';
+import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
 import type { CoopRoomDocument } from '../core/coopOnlineManager.ts';
 import {
   ArrowLeft,
@@ -218,9 +219,15 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     }
   };
 
+  const [onlineLobbySubView, setOnlineLobbySubView] = useState<CoopLobbySubView>('MAIN');
+
   const handleTopBack = () => {
     if (flowStep === 'COOP_ONLINE_LOBBY') {
-      setFlowStep('SELECT_MODE');
+      if (onlineLobbySubView !== 'MAIN') {
+        setOnlineLobbySubView('MAIN');
+      } else {
+        setFlowStep('SELECT_MODE');
+      }
     } else if (flowStep === 'SELECT_DIFFICULTY') {
       setFlowStep('SELECT_MODE');
     } else {
@@ -229,31 +236,31 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   };
 
   return (
-    <div className="relative min-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {/* Background Ambience */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.18),rgba(255,255,255,0))] pointer-events-none" />
       <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
 
-      {/* Top Header Bar */}
-      <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-3 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 shrink-0">
-        <div className="max-w-6xl mx-auto flex items-center justify-between gap-2">
+      {/* Top Header Bar — M7.3.10: Sticky Top Menu with Safe Area, Quick Audio Mute/Unmute, and mobile overflow protection */}
+      <header className="sticky top-0 z-40 w-full border-b border-neutral-800 bg-neutral-900/95 backdrop-blur-md px-2.5 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 shrink-0 shadow-md">
+        <div className="max-w-6xl mx-auto flex items-center justify-between gap-1.5 sm:gap-2 min-w-0">
           {/* Left: Back Button */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
             <button
               type="button"
               onClick={handleTopBack}
-              className="p-2 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 transition-all active:scale-95 shadow flex items-center gap-1.5 cursor-pointer text-xs font-bold"
+              className="px-2.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 transition-all active:scale-95 shadow flex items-center gap-1.5 cursor-pointer text-xs font-bold"
               title="Quay lại"
             >
-              <ArrowLeft className="w-4 h-4 text-amber-400" />
+              <ArrowLeft className="w-4 h-4 text-amber-400 shrink-0" />
               <span className="hidden sm:inline">Quay lại</span>
             </button>
           </div>
 
-          {/* Right: User Profile (Avatar + Display Name with Role Border Color) & Unified Cài đặt */}
-          <div className="flex items-center gap-2">
+          {/* Right: User Profile (Avatar + Display Name with Role Border Color), Quick Audio Toggle & Unified Cài đặt */}
+          <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
             <div
-              className={`flex items-center gap-2 px-2.5 py-1 rounded-lg bg-neutral-800/80 text-xs ${roleFrameClasses}`}
+              className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1 rounded-lg bg-neutral-800/80 text-xs min-w-0 ${roleFrameClasses}`}
             >
               {resolvedAvatarUrl && !avatarError ? (
                 <img
@@ -265,20 +272,23 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               ) : (
                 <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               )}
-              <span className="font-bold text-amber-300 truncate max-w-[120px] sm:max-w-[180px]">
+              <span className="font-bold text-amber-300 truncate max-w-[95px] xs:max-w-[125px] sm:max-w-[180px]">
                 {displayLabel}
               </span>
               {badgeInfo.label && (
-                <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
+                <span className={`hidden xs:inline-block text-[10px] px-1.5 py-0.2 rounded border font-medium shrink-0 ${badgeInfo.badgeStyle}`}>
                   {badgeInfo.label}
                 </span>
               )}
             </div>
 
+            {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
+            <QuickAudioToggleButton />
+
             <button
               type="button"
               onClick={onOpenSettings}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow cursor-pointer"
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow cursor-pointer shrink-0"
               title="Cài đặt Tài khoản & Âm thanh"
             >
               <Settings className="w-3.5 h-3.5 text-amber-400" />
@@ -289,7 +299,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               <button
                 type="button"
                 onClick={onOpenDevTools}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold shadow cursor-pointer"
+                className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold shadow cursor-pointer shrink-0"
                 title="Bảng Kiểm thử & QA (Super Admin)"
               >
                 <Wrench className="w-3.5 h-3.5 text-amber-400" />
@@ -301,7 +311,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       </header>
 
       {/* Main Content Area - Top Aligned */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-4 pt-4 sm:pt-6 pb-8 max-w-5xl mx-auto w-full overflow-y-auto">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-3 sm:px-4 pt-4 sm:pt-6 pb-8 max-w-5xl mx-auto w-full">
         <div className="w-full max-w-4xl flex flex-col items-center text-center">
           {/* ===================================================================
               STEP 1: CHỌN CHẾ ĐỘ CHƠI (SOLO / CO-OP AI / CO-OP ONLINE)
@@ -627,6 +637,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 user={firebaseUser ?? (user as any)}
                 difficulty={difficulty}
                 onDifficultyChange={onDifficultyChange}
+                subView={onlineLobbySubView}
+                onSubViewChange={setOnlineLobbySubView}
                 onBackToDifficulty={() => setFlowStep('SELECT_MODE')}
                 onOnlineMatchStarted={(room, role) => {
                   if (onStartOnlineMatch) {

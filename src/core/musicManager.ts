@@ -795,6 +795,16 @@ export class MusicManager {
 
   private constructor() {
     this.loadPersistedState();
+    try {
+      const globalRef = globalThis as unknown as {
+        __bantankMusicManagerSync?: () => void;
+      };
+      globalRef.__bantankMusicManagerSync = () => {
+        this.onVolumeOrToggleChanged();
+      };
+    } catch {
+      // ignore
+    }
   }
 
   public static getInstance(): MusicManager {

@@ -45,20 +45,30 @@ interface CoopOnlineLobbyPanelProps {
   onDifficultyChange?: (diff: 'DEFAULT' | 'EXTREME') => void;
   onBackToDifficulty: () => void;
   onOnlineMatchStarted: (room: CoopRoomDocument, role: 'HOST' | 'GUEST') => void;
+  subView?: CoopLobbySubView;
+  onSubViewChange?: (view: CoopLobbySubView) => void;
 }
 
 export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   user,
   difficulty,
   onDifficultyChange,
-  onBackToDifficulty,
+  onBackToDifficulty: _onBackToDifficulty,
   onOnlineMatchStarted,
+  subView: controlledSubView,
+  onSubViewChange,
 }) => {
   const coopManager = CoopOnlineManager.getInstance();
   const avatarManager = AvatarManager.getInstance();
   const [room, setRoom] = useState<CoopRoomDocument | null>(() => coopManager.getCurrentRoom());
   const [role, setRole] = useState<CoopPlayerRole>(() => coopManager.getRole());
-  const [subView, setSubView] = useState<CoopLobbySubView>('MAIN');
+  const [internalSubView, setInternalSubView] = useState<CoopLobbySubView>('MAIN');
+
+  const subView = controlledSubView ?? internalSubView;
+  const setSubView = (nextView: CoopLobbySubView) => {
+    setInternalSubView(nextView);
+    onSubViewChange?.(nextView);
+  };
 
   // Create Room config state (M7.3.7 Mục VI.5.2)
   const [createDifficulty, setCreateDifficulty] = useState<'DEFAULT' | 'EXTREME'>(difficulty);
@@ -485,23 +495,11 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
               )}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-neutral-800">
-              <button
-                type="button"
-                onClick={() => {
-                  setErrorMsg(null);
-                  setSubView('MAIN');
-                }}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs transition-all cursor-pointer"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Quay lại</span>
-              </button>
-
+            <div className="flex flex-wrap items-center justify-end gap-3 pt-2 border-t border-neutral-800">
               <button
                 type="submit"
                 disabled={isBusy}
-                className="px-6 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-black text-xs sm:text-sm uppercase tracking-wider flex items-center gap-2 shadow-lg transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                className="w-full sm:w-auto px-6 py-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
               >
                 {isBusy ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
@@ -634,21 +632,6 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                   <span>XÁC NHẬN VÀO PHÒNG</span>
                 </button>
               </form>
-            </div>
-
-            <div className="flex justify-start pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setErrorMsg(null);
-                  setQuickJoinEmptyMsg(null);
-                  setSubView('MAIN');
-                }}
-                className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-800 text-xs font-bold text-neutral-300 transition-all cursor-pointer"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                <span>Quay lại</span>
-              </button>
             </div>
           </div>
         )}

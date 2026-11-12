@@ -25,7 +25,12 @@ import {
   LANDING_PAGE_FEATURES,
   LANDING_PAGE_MODES,
 } from '../components/LandingPage.tsx';
-import { SoundManager } from './audio.ts';
+import {
+  UNIFIED_LOGO_SIZE_PX,
+  UNIFIED_LOGO_CLASSES,
+  UNIFIED_LOGO_SRC,
+} from '../components/GameLogo.tsx';
+import { SoundManager, GAME_ACTION_SOUND_SLOTS } from './audio.ts';
 import {
   MusicManager,
   InMemorySharedMusicCloudAdapter,
@@ -7095,6 +7100,124 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T55: M7.3.9.2 – Public Landing Page: Thương hiệu Bắn Tank Online, 6 nhóm tính năng, 3 chế độ chơi, liên kết Chính sách quyền riêng tư & truy cập công khai không cần đăng nhập',
       passed,
       details: `brandConfig=${brandConfigOk}, features=${LANDING_PAGE_FEATURES.length}, modes=${LANDING_PAGE_MODES.length}, publicAccessNoAuth=${unauthenticatedPublicAccessOk}`,
+    });
+  }
+
+  // =========================================================================
+  // T56: M7.3.10 – Quy chuẩn Logo 200% (320x320), Nút Tắt/Mở nhanh âm thanh trên Top Menu & Quản lý/Upload Âm thanh Hành động (Action SFX) của Super Admin
+  // =========================================================================
+  {
+    // 1. Kiểm tra quy chuẩn kích thước Logo 200% dùng chung (320px x 320px, giữ nguyên tỷ lệ object-contain)
+    const logoSpecOk =
+      UNIFIED_LOGO_SIZE_PX === 320 &&
+      UNIFIED_LOGO_SRC === '/logo-bantank.png' &&
+      UNIFIED_LOGO_CLASSES.includes('unified-game-logo') &&
+      UNIFIED_LOGO_CLASSES.includes('w-80') &&
+      UNIFIED_LOGO_CLASSES.includes('h-80') &&
+      UNIFIED_LOGO_CLASSES.includes('object-contain');
+
+    // 2. Kiểm tra nút Tắt/Mở nhanh âm thanh trên Top Menu (setMuted / toggleMute)
+    const sm = SoundManager.getInstance();
+    sm.updateSettings({
+      bgmEnabled: true,
+      sfxEnabled: true,
+      bgmVolume: 0.42,
+      sfxVolume: 0.68,
+    });
+    const initialNotMuted = sm.isMuted() === false;
+
+    // Bấm tắt nhanh âm thanh -> tắt ngay cả BGM lẫn SFX nhưng giữ nguyên bgmVolume & sfxVolume
+    const mutedStateAfterToggleOff = sm.toggleMute();
+    const afterMuteSettings = sm.getSettings();
+    const quickMuteOffOk =
+      mutedStateAfterToggleOff === true &&
+      sm.isMuted() === true &&
+      afterMuteSettings.bgmEnabled === false &&
+      afterMuteSettings.sfxEnabled === false &&
+      Math.abs(afterMuteSettings.bgmVolume - 0.42) < 0.001 &&
+      Math.abs(afterMuteSettings.sfxVolume - 0.68) < 0.001;
+
+    // Bấm mở lại âm thanh -> khôi phục trạng thái bật và giữ nguyên mức âm lượng đã cấu hình
+    const mutedStateAfterToggleOn = sm.toggleMute();
+    const afterUnmuteSettings = sm.getSettings();
+    const quickMuteOnRestoreOk =
+      mutedStateAfterToggleOn === false &&
+      sm.isMuted() === false &&
+      afterUnmuteSettings.bgmEnabled === true &&
+      afterUnmuteSettings.sfxEnabled === true &&
+      Math.abs(afterUnmuteSettings.bgmVolume - 0.42) < 0.001 &&
+      Math.abs(afterUnmuteSettings.sfxVolume - 0.68) < 0.001;
+
+    // 3. Kiểm tra phân quyền & quản lý âm thanh hành động (Action SFX) của Super Admin (Mục 4)
+    const all7ActionSlotsDefined = GAME_ACTION_SOUND_SLOTS.length === 7;
+
+    // Người chơi thường (PLAYER) bị từ chối upload và xóa
+    sm.setActionSoundAdminRole('PLAYER');
+    const fakePlayerFile = {
+      name: 'player_hack_shoot.mp3',
+      type: 'audio/mpeg',
+      size: 24500,
+    };
+    const playerUploadRes = sm.uploadActionSoundSync('P1_SHOOT', fakePlayerFile);
+    const playerDeleteRes = sm.deleteActionSound('P1_SHOOT');
+    const playerBlockedOk =
+      sm.canManageActionSounds() === false &&
+      playerUploadRes.ok === false &&
+      playerDeleteRes.ok === false &&
+      sm.getActionSoundTrack('P1_SHOOT') === null;
+
+    // Super Admin được phép upload, thay thế, phát âm thanh tùy chỉnh và xóa về mặc định
+    sm.setActionSoundAdminRole('SUPER_ADMIN');
+    const adminShootFileV1 = {
+      name: 'tank_cannon_v1.mp3',
+      type: 'audio/mpeg',
+      size: 32000,
+    };
+    const adminUploadRes = sm.uploadActionSoundSync('P1_SHOOT', adminShootFileV1);
+    const trackAfterUpload = sm.getActionSoundTrack('P1_SHOOT');
+
+    // Thay thế bằng file v2
+    const adminShootFileV2 = {
+      name: 'tank_cannon_v2.wav',
+      type: 'audio/wav',
+      size: 48000,
+    };
+    const adminReplaceRes = sm.replaceActionSoundSync('P1_SHOOT', adminShootFileV2);
+    const trackAfterReplace = sm.getActionSoundTrack('P1_SHOOT');
+
+    // Khi P1 bắn (playP1Shoot), hệ thống ghi nhận phát custom action sound P1_SHOOT
+    sm.clearLastPlayedCustomActionId();
+    sm.playP1Shoot();
+    const customActionDispatchedOnShoot = sm.getLastPlayedCustomActionId() === 'P1_SHOOT';
+
+    // Xóa file tùy chỉnh -> quay về 8-bit mặc định
+    const adminDeleteRes = sm.deleteActionSound('P1_SHOOT');
+    const trackAfterDelete = sm.getActionSoundTrack('P1_SHOOT');
+    sm.setActionSoundAdminRole(null);
+
+    const adminActionSfxLifecycleOk =
+      all7ActionSlotsDefined &&
+      playerBlockedOk &&
+      adminUploadRes.ok === true &&
+      trackAfterUpload?.fileName === 'tank_cannon_v1.mp3' &&
+      adminReplaceRes.ok === true &&
+      trackAfterReplace?.fileName === 'tank_cannon_v2.wav' &&
+      customActionDispatchedOnShoot &&
+      adminDeleteRes.ok === true &&
+      trackAfterDelete === null;
+
+    const passed =
+      logoSpecOk &&
+      initialNotMuted &&
+      quickMuteOffOk &&
+      quickMuteOnRestoreOk &&
+      adminActionSfxLifecycleOk;
+
+    results.push({
+      id: 'M7_3_T56',
+      name: 'T56: M7.3.10 – Quy chuẩn Logo 200% (320x320), Nút Tắt/Mở nhanh âm thanh trên Top Menu & Quản lý/Upload Âm thanh Hành động (Action SFX) của Super Admin',
+      passed,
+      details: `logoSpec200Pct=${logoSpecOk}, quickMuteOff=${quickMuteOffOk}, quickMuteRestore=${quickMuteOnRestoreOk}, adminActionSfx=${adminActionSfxLifecycleOk}`,
     });
   }
 

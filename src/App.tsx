@@ -44,6 +44,8 @@ import { WelcomeScreen } from './components/WelcomeScreen.tsx';
 import { MainMenuScreen } from './components/MainMenuScreen.tsx';
 import { ModeSelectionScreen } from './components/ModeSelectionScreen.tsx';
 import { SessionAlertModal } from './components/SessionAlertModal.tsx';
+import { GameLogo } from './components/GameLogo.tsx';
+import { QuickAudioToggleButton } from './components/QuickAudioToggleButton.tsx';
 import {
   RotateCcw,
   Pause,
@@ -777,8 +779,8 @@ export default function App() {
          ========================================================================= */}
       {(!isDesktop && layout.isLandscape) ? (
         <div className="flex-1 flex flex-col justify-start h-[100dvh] max-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-          {/* Slim Landscape Top HUD (32px) */}
-          <header className="h-8 bg-neutral-950/95 border-b border-neutral-800 px-2 sm:px-3 flex items-center justify-between text-xs shrink-0 z-30">
+          {/* Slim Landscape Top HUD (32px) — Sticky Top Menu */}
+          <header className="sticky top-0 z-40 h-8 bg-neutral-950/95 backdrop-blur-md border-b border-neutral-800 px-2 sm:px-3 flex items-center justify-between text-xs shrink-0 shadow">
             {/* Left: Stage Status */}
             <div className="flex items-center gap-1.5">
               <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
@@ -829,20 +831,23 @@ export default function App() {
             </div>
 
             {/* Right: Quick Action Buttons */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
+              <QuickAudioToggleButton compact />
+
               <button
                 type="button"
                 onClick={isPaused ? handleResume : handlePause}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold shadow"
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold shadow cursor-pointer"
               >
                 {isPaused ? <Play className="w-3 h-3 fill-white" /> : <Pause className="w-3 h-3 fill-white" />}
-                <span>{isPaused ? 'Tiếp tục' : 'Tạm dừng'}</span>
+                <span className="hidden xs:inline">{isPaused ? 'Tiếp tục' : 'Tạm dừng'}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setIsSettingsOpen(true)}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold cursor-pointer"
                 title="Cài đặt"
               >
                 <Settings className="w-3 h-3 text-amber-400" />
@@ -853,7 +858,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setIsDevDrawerOpen(true)}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold cursor-pointer"
                   title="Bảng Kiểm thử & QA (Super Admin)"
                 >
                   <Wrench className="w-3 h-3 text-amber-400" />
@@ -904,23 +909,16 @@ export default function App() {
 
               {/* In MENU state: Overlay allowing immediate match start */}
               {gameState?.matchState === 'MENU' && (
-                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-4 px-4 pb-3 text-center z-20 rounded-sm overflow-y-auto">
-                  <img
-                    src="/logo-bantank.png"
-                    alt="Chiến trường huyền thoại"
-                    className="w-20 h-20 object-contain mb-2 drop-shadow-lg p-0 m-0"
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
-                    }}
-                  />
-                  <p className="text-xs text-amber-300 font-mono font-bold mb-3">
+                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-sm overflow-y-auto">
+                  <GameLogo className="mb-1.5" />
+                  <p className="text-xs text-amber-300 font-mono font-bold mb-2">
                     STAGE {gameState?.currentStageId ?? 1}
                   </p>
                   <button
                     type="button"
                     onClick={isMatchAllowed ? handleRestart : undefined}
                     disabled={!isMatchAllowed}
-                    className={`py-2 px-5 rounded-xl font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 ${
+                    className={`py-2 px-5 rounded-xl font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 shrink-0 ${
                       isMatchAllowed
                         ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/30 cursor-pointer'
                         : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
@@ -953,9 +951,9 @@ export default function App() {
         /* =========================================================================
             MOBILE / TABLET PORTRAIT MODE (Dedicated 100dvh Top-to-Bottom Stack)
            ========================================================================= */
-        <div className="flex-1 flex flex-col justify-start min-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] bg-neutral-950">
-          {/* Slim Portrait Top HUD */}
-          <header className="h-9 bg-neutral-950/95 border-b border-neutral-800 px-3 flex items-center justify-between text-xs shrink-0 z-30">
+        <div className="flex-1 flex flex-col justify-start h-[100dvh] max-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] bg-neutral-950">
+          {/* Slim Portrait Top HUD — Sticky Top Menu */}
+          <header className="sticky top-0 z-40 h-9 bg-neutral-950/95 backdrop-blur-md border-b border-neutral-800 px-2.5 sm:px-3 flex items-center justify-between text-xs shrink-0 shadow">
             {/* Left: Stage Status */}
             <div className="flex items-center gap-2">
               <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
@@ -1006,11 +1004,14 @@ export default function App() {
             </div>
 
             {/* Right: Quick Action Buttons */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
+              <QuickAudioToggleButton compact />
+
               <button
                 type="button"
                 onClick={() => setIsSettingsOpen(true)}
-                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300"
+                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 cursor-pointer"
                 title="Cài đặt"
               >
                 <Settings className="w-3.5 h-3.5 text-amber-400" />
@@ -1019,7 +1020,7 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsSupportOpen(true)}
-                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-sky-500 text-neutral-300"
+                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-sky-500 text-neutral-300 cursor-pointer"
                 title="Hướng dẫn điều khiển"
               >
                 <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
@@ -1029,7 +1030,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setIsDevDrawerOpen(true)}
-                  className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-[10px] font-semibold"
+                  className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-[10px] font-semibold cursor-pointer"
                   title="Bảng Kiểm thử & QA (Super Admin)"
                 >
                   <Wrench className="w-3 h-3 text-amber-400" />
@@ -1061,23 +1062,16 @@ export default function App() {
 
               {/* In MENU state: Overlay allowing immediate match start */}
               {gameState?.matchState === 'MENU' && (
-                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-6 px-4 pb-4 text-center z-20 rounded-xl overflow-y-auto">
-                  <img
-                    src="/logo-bantank.png"
-                    alt="Chiến trường huyền thoại"
-                    className="w-20 h-20 object-contain mb-2 drop-shadow-lg p-0 m-0"
-                    onError={(e) => {
-                      e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
-                    }}
-                  />
-                  <p className="text-xs text-amber-300 font-mono font-bold mb-3">
+                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-xl overflow-y-auto">
+                  <GameLogo className="mb-1.5" />
+                  <p className="text-xs text-amber-300 font-mono font-bold mb-2">
                     STAGE {gameState?.currentStageId ?? 1}
                   </p>
                   <button
                     type="button"
                     onClick={isMatchAllowed ? handleRestart : undefined}
                     disabled={!isMatchAllowed}
-                    className={`py-2 px-5 rounded-xl font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 ${
+                    className={`py-2 px-5 rounded-xl font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 shrink-0 ${
                       isMatchAllowed
                         ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/30 cursor-pointer'
                         : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
@@ -1120,8 +1114,8 @@ export default function App() {
             ENLARGED DESKTOP PC MODE (8/4 Grid Layout with Top Alignment)
            ========================================================================= */
         <div className="flex-1 flex flex-col justify-start w-full">
-          {/* Header (M7.3.2: Removed mini logo on top menu; M7.3.4 V.4: Removed Fullscreen button) */}
-          <header className="border-b border-neutral-800 bg-neutral-900/90 backdrop-blur px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 sticky top-0 z-30 shadow-md">
+          {/* Header (M7.3.10: Sticky Top Menu with Safe Area & Quick Audio Mute/Unmute) */}
+          <header className="border-b border-neutral-800 bg-neutral-900/95 backdrop-blur-md px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 sticky top-0 z-40 shadow-md">
             <div className="max-w-[1560px] mx-auto flex items-center justify-between gap-2">
               {/* Stage Indicator */}
               <div className="flex items-center gap-2">
@@ -1132,6 +1126,9 @@ export default function App() {
 
               {/* Header Right Actions */}
               <div className="flex items-center gap-1.5 text-xs">
+                {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
+                <QuickAudioToggleButton showLabelOnDesktop />
+
                 {!isTrialMode && (
                   <button
                     type="button"
@@ -1261,23 +1258,16 @@ export default function App() {
 
                   {/* In MENU state: Overlay allowing immediate match start */}
                   {gameState?.matchState === 'MENU' && (
-                    <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-8 px-6 pb-6 text-center z-20 rounded-xl overflow-y-auto">
-                      <img
-                        src="/logo-bantank.png"
-                        alt="Chiến trường huyền thoại"
-                        className="w-24 h-24 object-contain mb-3 drop-shadow-xl p-0 m-0"
-                        onError={(e) => {
-                          e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
-                        }}
-                      />
-                      <p className="text-sm sm:text-base text-amber-400 font-mono font-bold mb-5">
+                    <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-4 px-6 pb-4 text-center z-20 rounded-xl overflow-y-auto">
+                      <GameLogo className="mb-2" />
+                      <p className="text-sm sm:text-base text-amber-400 font-mono font-bold mb-3">
                         STAGE {gameState?.currentStageId ?? 1}
                       </p>
                       <button
                         type="button"
                         onClick={isMatchAllowed ? handleRestart : undefined}
                         disabled={!isMatchAllowed}
-                        className={`py-3 px-8 rounded-xl font-extrabold text-sm shadow-xl transition-transform active:scale-95 flex items-center gap-2.5 ${
+                        className={`py-3 px-8 rounded-xl font-extrabold text-sm shadow-xl transition-transform active:scale-95 flex items-center gap-2.5 shrink-0 ${
                           isMatchAllowed
                             ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/30 cursor-pointer'
                             : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'

@@ -157,17 +157,17 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-4 bg-black/80 backdrop-blur-sm animate-fade-in select-none">
       <div className="relative w-full max-w-md bg-neutral-900 border border-neutral-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)]">
         {/* Modal Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-neutral-800 bg-neutral-950/70">
+        <div className="sticky top-0 z-20 flex items-center justify-between px-5 py-4 border-b border-neutral-800 bg-neutral-950/95 backdrop-blur-md">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
               <Camera className="w-5 h-5" />
             </div>
             <div>
               <h2 className="text-base font-bold text-white tracking-wide">
-                Cập Nhật Hồ Sơ
+                Cập Nhật Hồ Sơ &amp; Avatar
               </h2>
               <span className="text-[11px] text-neutral-400 font-mono">
-                Thông tin người chơi
+                Thông tin người chơi đồng bộ toàn hệ thống
               </span>
             </div>
           </div>
@@ -184,8 +184,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         {/* Modal Body / Form */}
         <form onSubmit={handleSave} className="p-5 flex-1 overflow-y-auto space-y-4">
           {/* Avatar Preview Section */}
-          <div className="flex flex-col items-center justify-center pt-1 pb-3 gap-2">
-            <div className="relative w-20 h-20 rounded-full border-2 border-amber-500/50 p-1 bg-neutral-950 overflow-hidden shadow-lg flex items-center justify-center">
+          <div className="flex flex-col items-center justify-center p-4 rounded-2xl bg-neutral-950/70 border border-amber-500/30 gap-2.5 shadow-inner">
+            <div className="relative w-24 h-24 rounded-full border-2 border-amber-400 p-1 bg-neutral-950 overflow-hidden shadow-xl ring-4 ring-amber-500/15 flex items-center justify-center">
               {photoURL.trim() && !avatarLoadError ? (
                 <img
                   src={photoURL.trim()}
@@ -197,12 +197,18 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 />
               ) : (
                 <div className="w-full h-full rounded-full bg-neutral-800 flex items-center justify-center text-amber-400">
-                  <User className="w-10 h-10" />
+                  <User className="w-11 h-11" />
                 </div>
               )}
+              <span
+                className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-neutral-950 flex items-center justify-center text-black shadow"
+                title="Live Preview"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              </span>
             </div>
-            <span className="text-[11px] text-neutral-400 font-medium">
-              Ảnh xem trước (Live Preview)
+            <span className="text-[11px] text-amber-300 font-mono font-bold">
+              Ảnh đại diện xem trước (Live Preview)
             </span>
 
             {isSuperAdmin && (
@@ -218,7 +224,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   type="button"
                   disabled={isUploadingFile || isSaving}
                   onClick={() => fileInputRef.current?.click()}
-                  className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/50 text-amber-300 font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer disabled:opacity-50"
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-amber-500/20 cursor-pointer disabled:opacity-50 active:scale-95"
                 >
                   <Upload className="w-3.5 h-3.5" />
                   <span>

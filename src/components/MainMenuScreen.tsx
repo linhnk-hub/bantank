@@ -22,6 +22,8 @@ import {
   AlertCircle,
   HelpCircle,
 } from 'lucide-react';
+import { GameLogo } from './GameLogo.tsx';
+import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
 
 export interface MainMenuScreenProps {
   user: {
@@ -114,15 +116,15 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   }, [isSessionActive, isProcessing, onPlay]);
 
   return (
-    <div className="relative min-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {/* Background Ambience */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.18),rgba(255,255,255,0))] pointer-events-none" />
 
-      {/* Top Header Bar — M7.3.4: Simplified without mini logo, Fullscreen or duplicate Profile button */}
-      <header className="relative z-10 w-full border-b border-neutral-800 bg-neutral-900/80 backdrop-blur px-3 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 shrink-0">
-        <div className="max-w-6xl mx-auto flex items-center justify-end gap-2">
-          <div className="flex items-center gap-2">
-            <div className={`flex items-center gap-2 px-2.5 py-1 rounded-lg bg-neutral-800/80 text-xs ${roleFrameClasses}`}>
+      {/* Top Header Bar — M7.3.10: Sticky Top Menu with Safe Area, Quick Audio Mute/Unmute, and mobile overflow protection */}
+      <header className="sticky top-0 z-40 w-full border-b border-neutral-800 bg-neutral-900/95 backdrop-blur-md px-2.5 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 shrink-0 shadow-md">
+        <div className="max-w-6xl mx-auto flex items-center justify-end gap-1.5 sm:gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+            <div className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1 rounded-lg bg-neutral-800/80 text-xs min-w-0 ${roleFrameClasses}`}>
               {resolvedAvatarUrl && !avatarError ? (
                 <img
                   src={resolvedAvatarUrl}
@@ -133,18 +135,21 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               ) : (
                 <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               )}
-              <span className="font-bold text-amber-300 truncate max-w-[130px] sm:max-w-[190px]">
+              <span className="font-bold text-amber-300 truncate max-w-[100px] xs:max-w-[130px] sm:max-w-[190px]">
                 {displayLabel}
               </span>
               {badgeInfo.label && (
-                <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
+                <span className={`hidden xs:inline-block text-[10px] px-1.5 py-0.2 rounded border font-medium shrink-0 ${badgeInfo.badgeStyle}`}>
                   {badgeInfo.label}
                 </span>
               )}
             </div>
 
             {/* Quick Actions */}
-            <div className="flex items-center gap-1 sm:gap-1.5">
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
+              <QuickAudioToggleButton />
+
               <button
                 type="button"
                 onClick={onOpenSettings}
@@ -183,19 +188,12 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       </header>
 
       {/* Main Container - Top Aligned */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-4 pt-4 sm:pt-8 pb-6 max-w-4xl mx-auto w-full">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-2 sm:px-4 pt-2 sm:pt-5 pb-5 max-w-4xl mx-auto w-full">
         <div className="w-full max-w-md flex flex-col items-center text-center">
-          {/* Emblem Banner */}
-          <div className="mb-5">
-            <div className="flex justify-center p-0 m-0">
-              <img
-                src="/logo-bantank.png"
-                alt="Chiến trường huyền thoại"
-                className="w-32 h-32 sm:w-40 sm:h-40 object-contain drop-shadow-xl p-0 m-0"
-                onError={(e) => {
-                  e.currentTarget.src = 'https://i.ibb.co/Rkf42RD9/bantank.png';
-                }}
-              />
+          {/* Emblem Banner — M7.3.10 Unified 200% Standard (320x320) */}
+          <div className="mb-3">
+            <div className="flex justify-center items-center p-0 m-0">
+              <GameLogo />
             </div>
           </div>
 

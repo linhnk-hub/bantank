@@ -273,7 +273,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [isOpen, activeTab, isVerifiedSuperAdmin]);
 
   useEffect(() => {
-    const unsub = avatarManager.subscribe(() => {
+    const unsubAvatar = avatarManager.subscribe(() => {
       const uid = authManager.getCurrentUser()?.uid || currentUid;
       setUserMeta(avatarManager.getUserMetadata(uid));
       setActiveCatalog(avatarManager.getCatalogItems(false));
@@ -285,8 +285,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setUploadUiStatusLabel(avatarManager.getUploadUiStatusLabelVi());
       setRenderTick((t) => t + 1);
     });
-    return unsub;
-  }, [avatarManager, authManager, currentUid]);
+    const unsubSound = soundManager.subscribe(() => {
+      setAudioSettings(soundManager.getSettings());
+    });
+    return () => {
+      unsubAvatar();
+      unsubSound();
+    };
+  }, [avatarManager, authManager, currentUid, soundManager]);
 
   if (!isOpen) return null;
 
@@ -700,12 +706,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Khu vực ẢNH ĐẠI DIỆN NGƯỜI CHƠI (Chọn Ảnh Google hoặc Danh mục Avatar chung + Tải ảnh trực tiếp cho Super Admin) */}
-              <div className="p-3.5 rounded-xl bg-neutral-900/80 border border-neutral-800 space-y-3.5">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-1.5 font-bold text-amber-300">
+              {/* Khu vực ẢNH ĐẠI DIỆN NGƯỜI CHƠI — M7.3.10: Giao diện Avatar nâng cấp đồng bộ trên PC, Điện thoại, Tablet */}
+              <div className="p-4 rounded-2xl bg-neutral-900/90 border border-neutral-800 space-y-4 shadow-inner">
+                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-neutral-800/80 pb-2.5">
+                  <div className="flex items-center gap-2 font-extrabold text-amber-300 text-xs sm:text-sm uppercase tracking-wider">
                     <Camera className="w-4 h-4 text-amber-400" />
-                    <span>CHỌN ẢNH ĐẠI DIỆN</span>
+                    <span>GIAO DIỆN &amp; QUẢN LÝ ẢNH ĐẠI DIỆN (AVATAR)</span>
                   </div>
                   {isVerifiedSuperAdmin ? (
                     <>
@@ -720,10 +726,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         type="button"
                         disabled={isBusy}
                         onClick={() => quickProfileAvatarInputRef.current?.click()}
-                        className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-[11px] flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
+                        className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 cursor-pointer disabled:opacity-50 transition-all active:scale-95"
                       >
                         <Upload className="w-3.5 h-3.5" />
-                        <span>{isBusy ? 'ĐANG XỬ LÝ...' : 'TẢI ẢNH TỪ THIẾT BỊ'}</span>
+                        <span>{isBusy ? 'ĐANG TẢI ẢNH...' : 'TẢI ẢNH ĐẠI DIỆN TỪ THIẾT BỊ'}</span>
                       </button>
                     </>
                   ) : (
@@ -733,9 +739,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                 </div>
 
-                {/* Current Active Avatar Preview */}
-                <div className="flex items-center gap-3.5 p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800">
-                  <div className="relative w-14 h-14 rounded-full border-2 border-amber-500/70 p-0.5 bg-neutral-900 overflow-hidden shadow flex items-center justify-center shrink-0">
+                {/* Current Active Avatar Hero Card */}
+                <div className="flex flex-col sm:flex-row items-center gap-4 p-3.5 rounded-2xl bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-950 border border-amber-500/30 shadow-lg">
+                  <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-amber-400 p-1 bg-neutral-950 overflow-hidden shadow-xl ring-4 ring-amber-500/15 flex items-center justify-center shrink-0">
                     {effectiveAvatarUrl && !avatarLoadError ? (
                       <img
                         src={effectiveAvatarUrl}
@@ -745,12 +751,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       />
                     ) : (
                       <div className="w-full h-full rounded-full bg-neutral-800 flex items-center justify-center text-amber-400">
-                        <User className="w-7 h-7" />
+                        <User className="w-9 h-9" />
                       </div>
                     )}
+                    <span
+                      className="absolute bottom-0.5 right-0.5 w-5 h-5 rounded-full bg-emerald-500 border-2 border-neutral-950 flex items-center justify-center text-black shadow"
+                      title="Đang sử dụng"
+                    >
+                      <Check className="w-3 h-3 stroke-[3]" />
+                    </span>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs font-bold text-white truncate">
+                  <div className="flex-1 min-w-0 text-center sm:text-left space-y-1">
+                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-[10px] font-mono font-bold">
+                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                      <span>AVATAR ĐANG HIỂN THỊ TRÊN TOÀN HỆ THỐNG</span>
+                    </div>
+                    <div className="text-sm sm:text-base font-extrabold text-white truncate">
                       {selectedAvatarType === 'catalog' && isSelectedCatalogActive
                         ? `Danh mục: ${
                             activeCatalog.find((i) => i.avatarId === selectedCatalogId)?.name ||
@@ -758,8 +774,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           }`
                         : 'Ảnh tài khoản Google'}
                     </div>
+                    <p className="text-[11px] text-neutral-400 leading-relaxed">
+                      Hiển thị đồng bộ trên Top Menu, Hồ sơ người chơi, Phòng chờ Co-op Online và Bảng xếp hạng.
+                    </p>
                     {selectedAvatarType === 'catalog' && !isSelectedCatalogActive && (
-                      <p className="text-[11px] text-neutral-400 mt-0.5 leading-relaxed">
+                      <p className="text-[11px] text-amber-300 mt-0.5 leading-relaxed">
                         Avatar danh mục đã chọn hiện đang tạm ẩn, hệ thống tự động hiển thị Ảnh Google dự phòng.
                       </p>
                     )}
@@ -767,19 +786,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Avatar Selection Grid: Option 1 (Google Avatar) + Active Catalog Items */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
                   {/* Option 1: Ảnh Google */}
                   <button
                     type="button"
                     disabled={isBusy}
                     onClick={handleSelectGoogleAvatar}
-                    className={`p-2.5 rounded-xl border text-left transition-all flex flex-col items-center gap-2 cursor-pointer ${
+                    className={`relative p-3 rounded-2xl border-2 text-left transition-all flex flex-col items-center gap-2.5 cursor-pointer group ${
                       selectedAvatarType === 'google' || !isSelectedCatalogActive
-                        ? 'bg-amber-950/40 border-amber-500 ring-1 ring-amber-500/40'
-                        : 'bg-neutral-950/60 border-neutral-800 hover:border-neutral-700'
+                        ? 'bg-amber-950/40 border-amber-500 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10'
+                        : 'bg-neutral-950/70 border-neutral-800 hover:border-amber-500/50 hover:bg-neutral-900'
                     }`}
                   >
-                    <div className="w-12 h-12 rounded-full overflow-hidden border border-neutral-700 bg-neutral-900 flex items-center justify-center">
+                    {(selectedAvatarType === 'google' || !isSelectedCatalogActive) && (
+                      <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-amber-500 text-black flex items-center justify-center shadow">
+                        <Check className="w-3 h-3 stroke-[3]" />
+                      </span>
+                    )}
+                    <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-neutral-700 group-hover:border-amber-400 bg-neutral-900 flex items-center justify-center shadow-md transition-transform group-hover:scale-105">
                       {currentUser.photoURL ? (
                         <img
                           src={currentUser.photoURL}
@@ -790,13 +814,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           }}
                         />
                       ) : (
-                        <User className="w-6 h-6 text-amber-400" />
+                        <User className="w-7 h-7 text-amber-400" />
                       )}
                     </div>
-                    <div className="text-center w-full">
-                      <div className="text-[11px] font-bold text-white truncate">Ảnh Google</div>
-                      <div className="text-[10px] text-amber-300 font-mono">
-                        {selectedAvatarType === 'google' ? 'Đang chọn' : 'Mặc định'}
+                    <div className="text-center w-full space-y-0.5">
+                      <div className="text-xs font-extrabold text-white truncate">Ảnh Google</div>
+                      <div
+                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full inline-block ${
+                          selectedAvatarType === 'google' || !isSelectedCatalogActive
+                            ? 'bg-amber-500 text-black'
+                            : 'bg-neutral-800 text-neutral-400'
+                        }`}
+                      >
+                        {selectedAvatarType === 'google' || !isSelectedCatalogActive
+                          ? 'ĐANG DÙNG'
+                          : 'CHỌN'}
                       </div>
                     </div>
                   </button>
@@ -817,13 +849,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         type="button"
                         disabled={isBusy || hasError}
                         onClick={() => handleSelectCatalogAvatar(item)}
-                        className={`p-2.5 rounded-xl border text-left transition-all flex flex-col items-center gap-2 cursor-pointer disabled:opacity-50 ${
+                        className={`relative p-3 rounded-2xl border-2 text-left transition-all flex flex-col items-center gap-2.5 cursor-pointer disabled:opacity-50 group ${
                           isSelected
-                            ? 'bg-emerald-950/40 border-emerald-500 ring-1 ring-emerald-500/40'
-                            : 'bg-neutral-950/60 border-neutral-800 hover:border-neutral-700'
+                            ? 'bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-500/10'
+                            : 'bg-neutral-950/70 border-neutral-800 hover:border-emerald-500/50 hover:bg-neutral-900'
                         }`}
                       >
-                        <div className="w-12 h-12 rounded-full overflow-hidden border border-neutral-700 bg-neutral-900 flex items-center justify-center">
+                        {isSelected && (
+                          <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-emerald-500 text-black flex items-center justify-center shadow">
+                            <Check className="w-3 h-3 stroke-[3]" />
+                          </span>
+                        )}
+                        <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-neutral-700 group-hover:border-emerald-400 bg-neutral-900 flex items-center justify-center shadow-md transition-transform group-hover:scale-105">
                           {itemUrl && !hasError ? (
                             <img
                               src={itemUrl}
@@ -837,17 +874,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               }
                             />
                           ) : isLoadingUrl ? (
-                            <RefreshCw className="w-4 h-4 text-amber-400 animate-spin" />
+                            <RefreshCw className="w-5 h-5 text-amber-400 animate-spin" />
                           ) : (
-                            <ImageIcon className="w-5 h-5 text-neutral-500" />
+                            <ImageIcon className="w-6 h-6 text-neutral-500" />
                           )}
                         </div>
-                        <div className="text-center w-full">
-                          <div className="text-[11px] font-bold text-white truncate">
+                        <div className="text-center w-full space-y-0.5">
+                          <div className="text-xs font-extrabold text-white truncate">
                             {item.name}
                           </div>
-                          <div className="text-[10px] font-mono text-emerald-300">
-                            {isSelected ? 'Đang chọn' : hasError ? 'Lỗi tải ảnh' : `v${item.version}`}
+                          <div
+                            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full inline-block ${
+                              isSelected
+                                ? 'bg-emerald-500 text-black'
+                                : hasError
+                                  ? 'bg-rose-950 text-rose-300'
+                                  : 'bg-neutral-800 text-emerald-300'
+                            }`}
+                          >
+                            {isSelected ? 'ĐANG DÙNG' : hasError ? 'LỖI ẢNH' : `CHỌN • v${item.version}`}
                           </div>
                         </div>
                       </button>
