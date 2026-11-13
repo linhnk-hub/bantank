@@ -6,16 +6,37 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { AuthManager, SUPER_ADMIN_EMAIL, isSuperAdminUser } from '../core/authManager.ts';
 import { AvatarManager } from '../core/avatarManager.ts';
-import { X, User, Image, Lock, CheckCircle2, AlertCircle, Save, Camera, ShieldCheck, Upload } from 'lucide-react';
+import {
+  X,
+  User,
+  Image,
+  Lock,
+  CheckCircle2,
+  AlertCircle,
+  Save,
+  Camera,
+  ShieldCheck,
+  Upload,
+} from 'lucide-react';
 
 export interface UserProfileModalProps {
   isOpen: boolean;
   onClose: () => void;
-  user: { uid?: string; email: string | null; displayName?: string | null; photoURL?: string | null; } | null;
+  user: {
+    uid?: string;
+    email: string | null;
+    displayName?: string | null;
+    photoURL?: string | null;
+  } | null;
   onProfileUpdated?: () => void;
 }
 
-export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onClose, user, onProfileUpdated }) => {
+export const UserProfileModal: React.FC<UserProfileModalProps> = ({
+  isOpen,
+  onClose,
+  user,
+  onProfileUpdated,
+}) => {
   const avatarManager = AvatarManager.getInstance();
   const authManager = AuthManager.getInstance();
   const [displayName, setDisplayName] = useState<string>('');
@@ -28,99 +49,290 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({ isOpen, onCl
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const currentUser = authManager.getCurrentUser();
-  const isSuperAdmin = isSuperAdminUser(currentUser) || Boolean(user?.email && user.email.trim().toLowerCase() === SUPER_ADMIN_EMAIL);
+  const isSuperAdmin =
+    isSuperAdminUser(currentUser) ||
+    Boolean(user?.email && user.email.trim().toLowerCase() === SUPER_ADMIN_EMAIL);
 
   useEffect(() => {
     if (user && isOpen) {
       setDisplayName(user.displayName || '');
-      const effectiveUrl = avatarManager.getEffectivePlayerAvatarUrl({ uid: user.uid || currentUser?.uid, photoURL: user.photoURL });
-      setPhotoURL(effectiveUrl || user.photoURL || ''); setAvatarLoadError(false); setErrorMessage(null); setSuccessMessage(null);
+      const effectiveUrl = avatarManager.getEffectivePlayerAvatarUrl({
+        uid: user.uid || currentUser?.uid,
+        photoURL: user.photoURL,
+      });
+      setPhotoURL(effectiveUrl || user.photoURL || '');
+      setAvatarLoadError(false);
+      setErrorMessage(null);
+      setSuccessMessage(null);
     }
   }, [user, isOpen]);
 
-  useEffect(() => { setAvatarLoadError(false); }, [photoURL]);
+  useEffect(() => {
+    setAvatarLoadError(false);
+  }, [photoURL]);
+
   if (!isOpen || !user) return null;
 
   const handleSuperAdminFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]; e.target.value = ''; if (!file) return;
-    setErrorMessage(null); setSuccessMessage(null); setIsUploadingFile(true);
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setIsUploadingFile(true);
+
     try {
       const res = await avatarManager.uploadAndApplySuperAdminAvatar(file, displayName);
-      if (!res.success) setErrorMessage(res.message || 'Không thể tải ảnh đại diện lên.');
-      else {
-        const nextUrl = res.avatarUrl || avatarManager.getEffectivePlayerAvatarUrl({ uid: user.uid || currentUser?.uid, photoURL: user.photoURL });
-        if (nextUrl) { setPhotoURL(nextUrl); setAvatarLoadError(false); }
-        setSuccessMessage(res.message || 'Cập nhật thành công!'); onProfileUpdated?.();
+      if (!res.success) {
+        setErrorMessage(res.message || 'Không thể tải ảnh đại diện lên. Ảnh cũ vẫn được giữ nguyên.');
+      } else {
+        const nextUrl =
+          res.avatarUrl ||
+          avatarManager.getEffectivePlayerAvatarUrl({
+            uid: user.uid || currentUser?.uid,
+            photoURL: user.photoURL,
+          });
+        if (nextUrl) {
+          setPhotoURL(nextUrl);
+          setAvatarLoadError(false);
+        }
+        setSuccessMessage(res.message || 'Đã tải lên và cập nhật ảnh đại diện thành công!');
+        onProfileUpdated?.();
       }
-    } catch (err: any) { setErrorMessage(err?.message || 'Lỗi hệ thống.'); } finally { setIsUploadingFile(false); }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Lỗi khi tải ảnh đại diện lên hệ thống.');
+    } finally {
+      setIsUploadingFile(false);
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault(); setIsSaving(true); setErrorMessage(null); setSuccessMessage(null);
+    e.preventDefault();
+    setIsSaving(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+
+    // Basic URL validation if photoURL provided (allow blob: or https:// or http://)
     const trimmedPhoto = photoURL.trim();
-    if (trimmedPhoto && !trimmedPhoto.startsWith('http://') && !trimmedPhoto.startsWith('https://') && !trimmedPhoto.startsWith('blob:')) { setIsSaving(false); setErrorMessage('Đường dẫn ảnh đại diện phải bắt đầu bằng http:// hoặc https://'); return; }
+    if (
+      trimmedPhoto &&
+      !trimmedPhoto.startsWith('http://') &&
+      !trimmedPhoto.startsWith('https://') &&
+      !trimmedPhoto.startsWith('blob:')
+    ) {
+      setIsSaving(false);
+      setErrorMessage('Đường dẫn ảnh đại diện phải bắt đầu bằng http:// hoặc https://');
+      return;
+    }
+
     try {
-      if (displayName.trim()) await avatarManager.updateDisplayName(displayName.trim()).catch(() => {});
-      const res = await authManager.updateUserProfile({ displayName: displayName.trim(), photoURL: trimmedPhoto.startsWith('blob:') ? (user.photoURL || '') : trimmedPhoto });
-      if (!res.success) setErrorMessage(res.error || 'Cập nhật thất bại.');
-      else { setSuccessMessage('Cập nhật hồ sơ tài khoản thành công!'); if (onProfileUpdated) onProfileUpdated(); setTimeout(() => onClose(), 1200); }
-    } catch (err: any) { setErrorMessage(err?.message || 'Lỗi khi cập nhật hồ sơ.'); } finally { setIsSaving(false); }
+      if (displayName.trim()) {
+        await avatarManager.updateDisplayName(displayName.trim()).catch(() => {});
+      }
+      const res = await authManager.updateUserProfile({
+        displayName: displayName.trim(),
+        photoURL: trimmedPhoto.startsWith('blob:') ? (user.photoURL || '') : trimmedPhoto,
+      });
+
+      if (!res.success) {
+        setErrorMessage(res.error || 'Cập nhật thất bại. Vui lòng thử lại.');
+      } else {
+        setSuccessMessage('Cập nhật hồ sơ tài khoản thành công!');
+        if (onProfileUpdated) {
+          onProfileUpdated();
+        }
+        setTimeout(() => {
+          onClose();
+        }, 1200);
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Lỗi khi cập nhật hồ sơ.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/85 backdrop-blur-md pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-10 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-4 font-display">
-      <div className="bg-black border-4 border-neo-amber pixel-corners w-full max-w-md shadow-[0_0_30px_rgba(255,184,0,0.3)] flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)]">
-        <div className="flex items-center justify-between border-b-2 border-neo-amber bg-black px-6 py-4 shrink-0">
-          <h2 className="font-pixel text-3xl text-neo-amber uppercase">PROFILE UPLINK</h2>
-          <button onClick={onClose} className="p-2 border-2 border-gray-700 hover:border-neo-amber text-gray-400 hover:text-neo-amber transition-colors pixel-corners"><X className="w-5 h-5" /></button>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-4 bg-black/80 backdrop-blur-sm animate-fade-in select-none">
+      <div className="relative w-full max-w-md bg-neutral-900 border border-neutral-700/80 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)]">
+        {/* Modal Header */}
+        <div className="sticky top-0 z-20 flex items-center justify-between px-5 py-4 border-b border-neutral-800 bg-neutral-950/95 backdrop-blur-md">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
+              <Camera className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold text-white tracking-wide">
+                Cập Nhật Hồ Sơ &amp; Avatar
+              </h2>
+              <span className="text-[11px] text-neutral-400 font-mono">
+                Thông tin người chơi đồng bộ toàn hệ thống
+              </span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+            title="Đóng"
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
-        <form onSubmit={handleSave} className="p-6 flex-1 overflow-y-auto space-y-6">
-          <div className="flex flex-col items-center justify-center p-6 border-2 border-gray-800 bg-gray-900/50 pixel-corners gap-4">
-            <div className="relative w-28 h-28 border-4 border-neo-cyan bg-black pixel-corners flex items-center justify-center shadow-[0_0_15px_rgba(0,240,255,0.4)]">
+        {/* Modal Body / Form */}
+        <form onSubmit={handleSave} className="p-5 flex-1 overflow-y-auto space-y-4">
+          {/* Avatar Preview Section */}
+          <div className="flex flex-col items-center justify-center p-4 rounded-2xl bg-neutral-950/70 border border-amber-500/30 gap-2.5 shadow-inner">
+            <div className="relative w-24 h-24 rounded-full border-2 border-amber-400 p-1 bg-neutral-950 overflow-hidden shadow-xl ring-4 ring-amber-500/15 flex items-center justify-center">
               {photoURL.trim() && !avatarLoadError ? (
-                <img src={photoURL.trim()} alt="Avatar" className="w-full h-full object-cover pixel-corners" onError={() => setAvatarLoadError(true)} />
+                <img
+                  src={photoURL.trim()}
+                  alt="Avatar Preview"
+                  className="w-full h-full rounded-full object-cover"
+                  onError={() => {
+                    setAvatarLoadError(true);
+                  }}
+                />
               ) : (
-                <User className="w-12 h-12 text-neo-cyan" />
+                <div className="w-full h-full rounded-full bg-neutral-800 flex items-center justify-center text-amber-400">
+                  <User className="w-11 h-11" />
+                </div>
               )}
+              <span
+                className="absolute bottom-1 right-1 w-5 h-5 rounded-full bg-emerald-500 border-2 border-neutral-950 flex items-center justify-center text-black shadow"
+                title="Live Preview"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+              </span>
             </div>
+            <span className="text-[11px] text-amber-300 font-mono font-bold">
+              Ảnh đại diện xem trước (Live Preview)
+            </span>
+
             {isSuperAdmin && (
               <>
-                <input ref={fileInputRef} type="file" accept="image/*" onChange={handleSuperAdminFileUpload} className="hidden" />
-                <button type="button" disabled={isUploadingFile || isSaving} onClick={() => fileInputRef.current?.click()} className="btn-arcade-outline px-4 py-2 text-sm !border-neo-cyan !text-neo-cyan">
-                  <Upload className="w-4 h-4 inline-block mr-2" />{isUploadingFile ? 'UPLOADING...' : 'UPLOAD LOCAL'}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
+                  onChange={handleSuperAdminFileUpload}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  disabled={isUploadingFile || isSaving}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-amber-500/20 cursor-pointer disabled:opacity-50 active:scale-95"
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>
+                    {isUploadingFile ? 'ĐANG TẢI ẢNH LÊN...' : 'TẢI ẢNH ĐẠI DIỆN TỪ THIẾT BỊ'}
+                  </span>
                 </button>
               </>
             )}
           </div>
 
-          {successMessage && <div className="p-3 bg-green-900/40 border-2 border-green-500 text-green-400 font-pixel text-xl pixel-corners flex items-center gap-2"><CheckCircle2 className="w-5 h-5" /> {successMessage}</div>}
-          {errorMessage && <div className="p-3 bg-neo-rose/20 border-2 border-neo-rose text-neo-rose font-pixel text-xl pixel-corners flex items-center gap-2"><AlertCircle className="w-5 h-5" /> {errorMessage}</div>}
-
-          <div className="space-y-4">
-            <div>
-              <label className="block font-pixel text-xl text-neo-amber mb-2">GOOGLE EMAIL (LOCKED)</label>
-              <div className="relative">
-                <input type="text" readOnly value={user.email || ''} className="w-full px-4 py-3 bg-gray-900 border-2 border-gray-700 text-gray-500 font-pixel text-2xl pixel-corners cursor-not-allowed pr-10" />
-                <Lock className="w-5 h-5 text-gray-600 absolute right-4 top-1/2 -translate-y-1/2" />
-              </div>
+          {/* Feedback messages */}
+          {successMessage && (
+            <div className="p-3 rounded-xl bg-emerald-950/90 border border-emerald-800 text-emerald-200 text-xs flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              <span>{successMessage}</span>
             </div>
+          )}
 
-            <div>
-              <label className="block font-pixel text-xl text-neo-cyan mb-2">CALLSIGN (DISPLAY NAME)</label>
-              <input type="text" maxLength={32} value={displayName} onChange={(e) => setDisplayName(e.target.value)} placeholder="ENTER CALLSIGN..." className="w-full px-4 py-3 bg-black border-2 border-gray-700 focus:border-neo-cyan focus:outline-none text-white font-pixel text-2xl pixel-corners uppercase" />
+          {errorMessage && (
+            <div className="p-3 rounded-xl bg-rose-950/90 border border-rose-800 text-rose-200 text-xs flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+              <span>{errorMessage}</span>
             </div>
+          )}
 
-            <div>
-              <label className="block font-pixel text-xl text-neo-cyan mb-2">AVATAR DATA LINK (URL)</label>
-              <input type="url" value={photoURL} onChange={(e) => setPhotoURL(e.target.value)} placeholder="HTTPS://..." className="w-full px-4 py-3 bg-black border-2 border-gray-700 focus:border-neo-cyan focus:outline-none text-white font-pixel text-xl pixel-corners" />
+          {/* Read-only Google Email */}
+          <div>
+            <label className="block text-xs font-semibold text-neutral-300 mb-1.5 flex items-center justify-between">
+              <span>Email tài khoản Google</span>
+              <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-mono">
+                <ShieldCheck className="w-3 h-3" /> Đã xác thực
+              </span>
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                readOnly
+                value={user.email || ''}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950/90 border border-neutral-800 text-neutral-400 text-xs font-mono cursor-not-allowed select-all pr-8"
+              />
+              <Lock className="w-3.5 h-3.5 text-neutral-500 absolute right-3 top-1/2 -translate-y-1/2" />
             </div>
+            <span className="text-[10px] text-neutral-500 mt-1 block">
+              Email Google là định danh chính thức của tài khoản, không thể thay đổi.
+            </span>
           </div>
 
-          <div className="flex gap-4 pt-4 border-t-2 border-gray-800">
-            <button type="button" onClick={onClose} disabled={isSaving || isUploadingFile} className="btn-arcade-outline flex-1 py-4 text-xl !border-gray-500 !text-gray-400">CANCEL</button>
-            <button type="submit" disabled={isSaving || isUploadingFile} className="btn-arcade flex-[2] py-4 text-2xl flex items-center justify-center gap-2">
-              {isSaving ? 'TRANSMITTING...' : <><Save className="w-5 h-5" /> SAVE PROFILE</>}
+          {/* Display Name Input */}
+          <div>
+            <label className="block text-xs font-semibold text-neutral-300 mb-1.5">
+              Tên hiển thị người chơi (Display Name)
+            </label>
+            <div className="relative">
+              <input
+                type="text"
+                maxLength={32}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+                placeholder="Nhập biệt danh của bạn (VD: Chiến Tướng Tank)"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-800/80 border border-neutral-700 text-white text-xs focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-neutral-500"
+              />
+            </div>
+            <span className="text-[10px] text-neutral-500 mt-1 block">
+              Tối đa 32 ký tự. Tên này sẽ xuất hiện trên bảng thành tích và giao diện.
+            </span>
+          </div>
+
+          {/* Photo URL Input */}
+          <div>
+            <label className="block text-xs font-semibold text-neutral-300 mb-1.5 flex items-center gap-1.5">
+              <Image className="w-3.5 h-3.5 text-amber-400" />
+              <span>Đường dẫn ảnh đại diện (Avatar URL)</span>
+            </label>
+            <input
+              type="url"
+              value={photoURL}
+              onChange={(e) => setPhotoURL(e.target.value)}
+              placeholder="https://i.ibb.co/... hoặc URL ảnh HTTPS trực tiếp"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-800/80 border border-neutral-700 text-white text-xs font-mono focus:outline-none focus:border-amber-500 focus:ring-1 focus:ring-amber-500 transition-all placeholder:text-neutral-500"
+            />
+            <span className="text-[10px] text-neutral-500 mt-1 block">
+              Hỗ trợ ảnh định dạng PNG, JPG, WebP (tối đa 5 MB).
+            </span>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2 pt-3 border-t border-neutral-800">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isSaving || isUploadingFile}
+              className="w-1/3 py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-semibold text-xs border border-neutral-700 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+            >
+              HỦY
+            </button>
+            <button
+              type="submit"
+              disabled={isSaving || isUploadingFile}
+              className="w-2/3 py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-lg shadow-amber-500/20 transition-all active:scale-95 flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50"
+            >
+              {isSaving ? (
+                <div className="w-4 h-4 border-2 border-black border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>
+                  <Save className="w-3.5 h-3.5" />
+                  <span>LƯU HỒ SƠ</span>
+                </>
+              )}
             </button>
           </div>
         </form>

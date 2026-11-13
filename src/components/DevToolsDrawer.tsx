@@ -4,7 +4,21 @@
  */
 
 import React, { useState } from 'react';
-import { Wrench, X, Sparkles, Bug, Cpu, FileCheck2, Gamepad2, Layers, ShieldCheck, CheckCircle2, Navigation, Gauge, Bot } from 'lucide-react';
+import {
+  Wrench,
+  X,
+  Sparkles,
+  Bug,
+  Cpu,
+  FileCheck2,
+  Gamepad2,
+  Layers,
+  ShieldCheck,
+  CheckCircle2,
+  Navigation,
+  Gauge,
+  Bot,
+} from 'lucide-react';
 import { TestHarnessM6CorrectionAIPanel } from './TestHarnessM6CorrectionAIPanel.tsx';
 import { TestHarnessSpeedLayoutPanel } from './TestHarnessSpeedLayoutPanel.tsx';
 import { TestHarnessM6FinalPlusPanel } from './TestHarnessM6FinalPlusPanel.tsx';
@@ -23,7 +37,22 @@ import { ValidationPanel } from './ValidationPanel.tsx';
 import { TerrainLegend } from './TerrainLegend.tsx';
 import type { MapValidationResult } from '../core/types.ts';
 
-export type DevTabId = 'm6_ai_bgm' | 'speed_layout' | 'm6_final_plus' | 'm6_final' | 'm6_round2' | 'corrections_m6' | 'corrections_m5' | 'joystick_pc' | 'ui_polish' | 'bugs_audit' | 'harness_m4' | 'audit_m3' | 'harness_m3' | 'harness_m2' | 'inspector_m1';
+export type DevTabId =
+  | 'm6_ai_bgm'
+  | 'speed_layout'
+  | 'm6_final_plus'
+  | 'm6_final'
+  | 'm6_round2'
+  | 'corrections_m6'
+  | 'corrections_m5'
+  | 'joystick_pc'
+  | 'ui_polish'
+  | 'bugs_audit'
+  | 'harness_m4'
+  | 'audit_m3'
+  | 'harness_m3'
+  | 'harness_m2'
+  | 'inspector_m1';
 
 interface DevToolsDrawerProps {
   isOpen: boolean;
@@ -31,52 +60,232 @@ interface DevToolsDrawerProps {
   validation: MapValidationResult;
 }
 
-export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({ isOpen, onClose, validation }) => {
+export const DevToolsDrawer: React.FC<DevToolsDrawerProps> = ({
+  isOpen,
+  onClose,
+  validation,
+}) => {
   const [activeDevTab, setActiveDevTab] = useState<DevTabId>('m6_ai_bgm');
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto pt-[max(0.5rem,env(safe-area-inset-top))] sm:pt-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] px-2 sm:px-4 bg-black/85 backdrop-blur-md animate-fade-in select-none font-display">
-      <div className="bg-black border-4 border-neo-cyan pixel-corners w-full max-w-5xl h-[calc(100dvh-1rem)] sm:h-[calc(100dvh-2rem)] flex flex-col shadow-[0_0_20px_rgba(0,240,255,0.4)] overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto pt-[max(0.5rem,env(safe-area-inset-top))] sm:pt-4 pb-[max(0.5rem,env(safe-area-inset-bottom))] px-2 sm:px-4 bg-black/85 backdrop-blur-md animate-fade-in select-none">
+      <div className="bg-neutral-900 border border-neutral-700 rounded-2xl w-full max-w-5xl h-[calc(100dvh-1rem)] sm:h-[calc(100dvh-2rem)] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="bg-black px-4 py-3 border-b-4 border-neo-cyan flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-neo-cyan/20 border-2 border-neo-cyan flex items-center justify-center text-neo-cyan pixel-corners"><Wrench className="w-5 h-5" /></div>
+        <div className="bg-neutral-950 px-4 py-3 border-b border-neutral-800 flex items-center justify-between shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+              <Wrench className="w-4 h-4" />
+            </div>
             <div>
-              <h2 className="font-pixel text-2xl text-neo-cyan flex items-center gap-2 uppercase">
-                QA SYSTEM TERMINAL
-                <span className="text-sm px-2 py-0.5 bg-green-900/40 text-green-400 border-2 border-green-500 flex items-center gap-1 pixel-corners">
+              <h2 className="text-sm font-extrabold text-white flex items-center gap-2">
+                Bắn Tank Online — Bảng Điều Khiển Kiểm Thử & QA
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1 font-bold">
                   <CheckCircle2 className="w-3 h-3" /> 192/192 PASS
                 </span>
               </h2>
+              <p className="text-[11px] text-neutral-400">
+                Toàn bộ 192 bài kiểm thử: Enemy AI Chống Kẹt (0.75s), MusicManager Upload/Loop/SkipSilence, Không FPS/Rotate UI, 60Hz Speed
+              </p>
             </div>
           </div>
-          <button type="button" onClick={onClose} className="btn-arcade-outline px-4 py-2 font-pixel text-xl flex items-center gap-2">
-            <X className="w-4 h-4" /> CLOSE
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold transition-all active:scale-95 shadow"
+          >
+            <X className="w-4 h-4" />
+            <span>Quay lại chơi game</span>
           </button>
         </div>
 
-        {/* Tab Navigation */}
-        <div className="bg-black px-4 py-3 border-b-2 border-gray-800 flex items-center gap-2 overflow-x-auto font-pixel text-xl shrink-0 scrollbar-thin">
-          <button onClick={() => setActiveDevTab('m6_ai_bgm')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'm6_ai_bgm' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>AI & BGM</button>
-          <button onClick={() => setActiveDevTab('speed_layout')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'speed_layout' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>SPEED & LAYOUT</button>
-          <button onClick={() => setActiveDevTab('m6_final_plus')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'm6_final_plus' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>M6 FINAL+</button>
-          <button onClick={() => setActiveDevTab('m6_final')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'm6_final' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>M6 FINAL</button>
-          <button onClick={() => setActiveDevTab('m6_round2')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'm6_round2' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>M6 R2</button>
-          <button onClick={() => setActiveDevTab('corrections_m6')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'corrections_m6' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>FIX M6</button>
-          <button onClick={() => setActiveDevTab('corrections_m5')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'corrections_m5' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>FIX M5</button>
-          <button onClick={() => setActiveDevTab('joystick_pc')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'joystick_pc' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>JOYSTICK PC</button>
-          <button onClick={() => setActiveDevTab('ui_polish')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'ui_polish' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>M4 UI</button>
-          <button onClick={() => setActiveDevTab('bugs_audit')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'bugs_audit' ? 'bg-neo-rose/20 border-neo-rose text-neo-rose' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>BUGS AUDIT</button>
-          <button onClick={() => setActiveDevTab('harness_m4')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'harness_m4' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>M4</button>
-          <button onClick={() => setActiveDevTab('audit_m3')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'audit_m3' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>M3 AUDIT</button>
-          <button onClick={() => setActiveDevTab('harness_m3')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'harness_m3' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>M3</button>
-          <button onClick={() => setActiveDevTab('harness_m2')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'harness_m2' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>M2</button>
-          <button onClick={() => setActiveDevTab('inspector_m1')} className={`px-4 py-2 pixel-corners border-2 transition-colors shrink-0 ${activeDevTab === 'inspector_m1' ? 'bg-neo-cyan/20 border-neo-cyan text-neo-cyan' : 'bg-black border-gray-700 text-gray-500 hover:text-white'}`}>M1</button>
+        {/* Tab Navigation Strip */}
+        <div className="bg-neutral-950/80 px-4 py-2 border-b border-neutral-800 flex items-center gap-1.5 overflow-x-auto text-xs shrink-0 scrollbar-thin">
+          <button
+            onClick={() => setActiveDevTab('m6_ai_bgm')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'm6_ai_bgm'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Bot className="w-3.5 h-3.5" />
+            <span>AI & Quản Lý Nhạc Nền (12 Tests)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('speed_layout')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'speed_layout'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Gauge className="w-3.5 h-3.5" />
+            <span>Tốc Độ & Layout (14 Tests)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('m6_final_plus')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'm6_final_plus'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>M6 Final+ (26 Tests)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('m6_final')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'm6_final'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>M6 Final (24 Tests)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('m6_round2')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'm6_round2'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>M6 Round 2 (18 Tests)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('corrections_m6')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'corrections_m6'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>6 Nhóm Sửa Lỗi (23 Tests)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('corrections_m5')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'corrections_m5'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>5 Nhóm Sửa Lỗi (15 Tests)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('joystick_pc')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'joystick_pc'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Navigation className="w-3.5 h-3.5" />
+            <span>Joystick & PC Scale (6 Tests)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('ui_polish')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'ui_polish'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>M4 UI Polish (4 Tests)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('bugs_audit')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'bugs_audit'
+                ? 'bg-rose-500 text-white shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Bug className="w-3.5 h-3.5" />
+            <span>Kiểm toán 4 Lỗi (4 Tests)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('harness_m4')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'harness_m4'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Cpu className="w-3.5 h-3.5" />
+            <span>Harness M4 (12 Tests)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('audit_m3')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'audit_m3'
+                ? 'bg-emerald-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <FileCheck2 className="w-3.5 h-3.5" />
+            <span>Kiểm toán M3 (8 Điểm)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('harness_m3')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'harness_m3'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Gamepad2 className="w-3.5 h-3.5" />
+            <span>Harness M3 (14 Tests)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('harness_m2')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'harness_m2'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>Harness M2 (TC01..12)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveDevTab('inspector_m1')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all shrink-0 ${
+              activeDevTab === 'inspector_m1'
+                ? 'bg-amber-500 text-black shadow font-bold'
+                : 'text-neutral-400 hover:text-neutral-200 hover:bg-neutral-800'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5" />
+            <span>Bảo toàn M1</span>
+          </button>
         </div>
 
-        {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4 text-white">
+        {/* Tab Content Container */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {activeDevTab === 'm6_ai_bgm' && <TestHarnessM6CorrectionAIPanel />}
           {activeDevTab === 'speed_layout' && <TestHarnessSpeedLayoutPanel />}
           {activeDevTab === 'm6_final_plus' && <TestHarnessM6FinalPlusPanel />}

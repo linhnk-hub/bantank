@@ -106,7 +106,7 @@ export const MusicAdminPanel: React.FC = () => {
     };
   }, [musicManager, soundManager]);
 
-  const isSuperAdmin = role === 'ADMIN';
+  const isSuperAdmin = role === 'SUPER_ADMIN';
 
   if (!isSuperAdmin) {
     return null;
@@ -336,7 +336,7 @@ export const MusicAdminPanel: React.FC = () => {
           <ShieldCheck className="w-3.5 h-3.5 text-amber-400" />
           <span className="text-neutral-300">Vai trò:</span>
           <span className={isSuperAdmin ? 'text-amber-400 font-extrabold' : 'text-sky-400'}>
-            {isSuperAdmin ? 'Admin (linhnk2013@gmail.com)' : 'Người chơi'}
+            {isSuperAdmin ? 'Super Admin (linhnk.online@gmail.com)' : 'Người chơi'}
           </span>
         </div>
       </div>

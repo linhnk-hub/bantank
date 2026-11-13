@@ -16,51 +16,106 @@ interface PauseModalProps {
 }
 
 export const PauseModal: React.FC<PauseModalProps> = ({
-  isOpen, onResume, onRestart, onQuitToMenu, onOpenSettings, isTrialMode = false,
+  isOpen,
+  onResume,
+  onRestart,
+  onQuitToMenu,
+  onOpenSettings,
+  isTrialMode = false,
 }) => {
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
+
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 backdrop-blur-sm pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-16 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-4 select-none font-display">
-      <div className="bg-black border-4 border-neo-cyan pixel-corners max-w-sm w-full p-8 shadow-[0_0_30px_rgba(0,240,255,0.4)] text-center">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 backdrop-blur-sm pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 select-none animate-in fade-in duration-150">
+      <div className="bg-neutral-900 border border-neutral-700 rounded-2xl max-w-sm w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl text-center space-y-4 sm:space-y-5 scrollbar-thin">
         {!showQuitConfirm ? (
           <>
-            <div className="mb-8 border-b-2 border-neo-cyan pb-4">
-              <h3 className="font-pixel text-5xl text-white uppercase glitch-text">PAUSED</h3>
-              <p className="text-neo-cyan mt-2">SYSTEM STANDBY</p>
+            <div>
+              <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 mb-2">
+                <span className="font-mono font-black text-lg sm:text-xl">||</span>
+              </div>
+              <h3 className="text-base sm:text-lg font-black tracking-wide text-white uppercase">
+                Tạm Dừng Trận Đấu
+              </h3>
+              <p className="text-[11px] sm:text-xs text-neutral-400 mt-1">
+                Toàn bộ vật lý, đạn và AI đã được đóng băng an toàn.
+              </p>
             </div>
 
-            <div className="space-y-4">
-              <button onClick={onResume} className="btn-arcade w-full py-4 text-2xl flex items-center justify-center gap-2 !bg-neo-cyan">
-                <Play className="w-5 h-5 fill-black" /> RESUME
+            <div className="space-y-2 sm:space-y-2.5">
+              <button
+                type="button"
+                onClick={onResume}
+                className="w-full flex items-center justify-center gap-2 py-2.5 sm:py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs sm:text-sm transition-all shadow-lg shadow-amber-500/20 active:scale-95"
+              >
+                <Play className="w-4 h-4 fill-black" />
+                <span>TIẾP TỤC</span>
               </button>
 
               {onOpenSettings && !isTrialMode && (
-                <button onClick={onOpenSettings} className="btn-arcade-outline w-full py-3 text-xl flex items-center justify-center gap-2">
-                  <Settings className="w-5 h-5" /> SETTINGS
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  className="w-full flex items-center justify-center gap-2 py-2 sm:py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs transition-colors border border-neutral-700 active:scale-95"
+                >
+                  <Settings className="w-4 h-4 text-amber-400" />
+                  <span>CÀI ĐẶT & ÂM THANH</span>
                 </button>
               )}
 
               {!isTrialMode && (
-                <button onClick={onRestart} className="btn-arcade-outline w-full py-3 text-xl flex items-center justify-center gap-2">
-                  <RotateCcw className="w-5 h-5" /> RESTART
+                <button
+                  type="button"
+                  onClick={onRestart}
+                  className="w-full flex items-center justify-center gap-2 py-2 sm:py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs transition-colors border border-neutral-700 active:scale-95"
+                >
+                  <RotateCcw className="w-4 h-4" />
+                  <span>CHƠI LẠI MÀN NÀY</span>
                 </button>
               )}
 
-              <button onClick={() => (isTrialMode ? onQuitToMenu() : setShowQuitConfirm(true))} className="btn-arcade-outline w-full py-3 text-xl flex items-center justify-center gap-2 !border-neo-rose !text-neo-rose">
-                <LogOut className="w-5 h-5" /> {isTrialMode ? 'LOGIN MENU' : 'ABORT MISSION'}
+              <button
+                type="button"
+                onClick={() => (isTrialMode ? onQuitToMenu() : setShowQuitConfirm(true))}
+                className="w-full flex items-center justify-center gap-2 py-2 sm:py-2.5 px-4 rounded-xl bg-red-950/40 hover:bg-red-900/50 text-red-300 font-semibold text-xs transition-colors border border-red-800/40 active:scale-95"
+              >
+                <LogOut className="w-4 h-4" />
+                <span>{isTrialMode ? 'Quay về màn hình đăng nhập' : 'THOÁT VỀ MENU'}</span>
               </button>
             </div>
           </>
         ) : (
-          <div className="space-y-6">
-            <AlertTriangle className="w-12 h-12 text-neo-rose mx-auto" />
-            <h4 className="font-pixel text-3xl text-white">CONFIRM ABORT?</h4>
-            <p className="text-sm text-gray-400">All current progress will be lost.</p>
-            <div className="flex flex-col gap-4">
-              <button onClick={() => { setShowQuitConfirm(false); onQuitToMenu(); }} className="btn-arcade py-4 text-2xl !bg-neo-rose !text-white">ABORT</button>
-              <button onClick={() => setShowQuitConfirm(false)} className="btn-arcade-outline py-3 text-xl !border-gray-500 !text-gray-400">CANCEL</button>
+          <div className="space-y-4">
+            <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-red-500/10 text-red-400 border border-red-500/30">
+              <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-white">Xác nhận thoát</h4>
+              <p className="text-xs text-neutral-300 mt-1">
+                Bạn có chắc chắn muốn thoát trận đấu? Tiến trình hiện tại sẽ bị mất.
+              </p>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setShowQuitConfirm(false)}
+                className="flex-1 py-2 sm:py-2.5 px-3 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 font-bold text-xs transition-colors active:scale-95"
+              >
+                TIẾP TỤC CHƠI
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowQuitConfirm(false);
+                  onQuitToMenu();
+                }}
+                className="flex-1 py-2 sm:py-2.5 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs transition-colors shadow-lg shadow-red-600/30 active:scale-95"
+              >
+                {isTrialMode ? 'Quay về màn hình đăng nhập' : 'THOÁT VỀ MENU'}
+              </button>
             </div>
           </div>
         )}
