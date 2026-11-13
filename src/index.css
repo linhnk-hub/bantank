@@ -1,0 +1,48 @@
+@import "tailwindcss";
+
+@theme {
+  --color-neo-bg: #050508;
+  --color-neo-amber: #FFB800;
+  --color-neo-cyan: #00F0FF;
+  --color-neo-rose: #FF0055;
+  
+  --font-pixel: 'VT323', monospace;
+  --font-display: 'Space Grotesk', sans-serif;
+}
+
+@layer utilities {
+  .bg-tactical-grid {
+    background-image: 
+      linear-gradient(to right, rgba(255, 184, 0, 0.1) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(255, 184, 0, 0.1) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+
+  .crt-overlay {
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    background-size: 100% 4px, 6px 100%;
+    pointer-events: none;
+  }
+
+  .btn-arcade {
+    @apply bg-neo-amber text-black font-pixel uppercase transition-transform active:translate-x-0.5 active:translate-y-0.5 rounded-sm;
+    box-shadow: 4px 4px 0px #b45309, 0 0 15px rgba(255, 184, 0, 0.4);
+  }
+  .btn-arcade:active {
+    box-shadow: 2px 2px 0px #b45309, 0 0 5px rgba(255, 184, 0, 0.4);
+  }
+
+  .pixel-corners {
+    clip-path: polygon(0 4px, 4px 4px, 4px 0, calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px));
+  }
+}
+
+/* Ẩn thanh cuộn nhưng vẫn cho scroll */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
