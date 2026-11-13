@@ -4,7 +4,7 @@ rules_version = '2';
 // BẮN TANK ONLINE – FIREBASE STORAGE SECURITY RULES (M7.3.11.5)
 // Project ID: bantank-bd525
 // Storage Bucket: bantank-bd525.firebasestorage.app
-// Admin duy nhất: linhnk2013@gmail.com (Thay thế hoàn toàn linhnk.online@gmail.com)
+// Admin duy nhất: linhnk2013@gmail.com 
 // ============================================================================
 service firebase.storage {
   match /b/{bucket}/o {
