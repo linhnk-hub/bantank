@@ -6,6 +6,7 @@
 import React from 'react';
 import { Trophy, Award, RotateCcw, Home, Clock, Heart } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
+import { formatCountdownMMSS } from '../core/constants.ts';
 
 interface StageClearModalProps {
   isOpen: boolean;
@@ -16,143 +17,53 @@ interface StageClearModalProps {
 }
 
 export const StageClearModal: React.FC<StageClearModalProps> = ({
-  isOpen,
-  state,
-  onNextStageOrReplay,
-  onQuitToMenu,
-  isTrialMode = false,
+  isOpen, state, onNextStageOrReplay, onQuitToMenu, isTrialMode = false,
 }) => {
   if (!isOpen || !state) return null;
 
-  const counts = state.defeatedCounts || { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 };
-  const totalDefeated = counts.BASIC + counts.FAST + counts.POWER + counts.ARMOR;
-  const isNewRecord = state.score >= state.highScore && state.score > 0;
-  const elapsedMinutes = Math.floor(state.stageElapsedSeconds / 60);
-  const elapsedSeconds = Math.floor(state.stageElapsedSeconds % 60);
-  const timeFormatted = `${elapsedMinutes}m ${elapsedSeconds.toString().padStart(2, '0')}s`;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/85 backdrop-blur-md pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-2 sm:px-4 select-none animate-in fade-in duration-200">
-      <div className="bg-neutral-900 border border-amber-500/50 rounded-2xl max-w-md w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-2xl overflow-hidden">
-        {/* Scrollable Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 sm:space-y-4 scrollbar-thin">
-          {/* Header */}
-          <div className="text-center space-y-1">
-            <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 mb-0.5">
-              <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <h2 className="text-xl sm:text-2xl font-black tracking-wider text-amber-400 uppercase">
-              CHIẾN THẮNG MÀN CHƠI!
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/85 backdrop-blur-md pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-10 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-4 select-none font-display">
+      <div className="bg-black border-4 border-green-500 pixel-corners max-w-lg w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-[0_0_30px_rgba(34,197,94,0.5)] overflow-hidden">
+        
+        <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6 scrollbar-thin">
+          <div className="text-center space-y-4 border-b-2 border-green-500 pb-6">
+            <h2 className="text-5xl sm:text-7xl font-pixel tracking-widest text-green-400 uppercase drop-shadow-[0_0_10px_rgba(34,197,94,0.8)]">
+              STAGE CLEAR
             </h2>
-            <p className="text-[11px] sm:text-xs text-amber-300 font-bold font-mono tracking-wide">
-              STAGE 1
-            </p>
+            <div className="inline-flex items-center gap-2 px-4 py-1 border-2 border-green-500 bg-green-900/20 text-sm font-pixel font-bold text-white uppercase pixel-corners">
+              <span>MISSION ACCOMPLISHED</span>
+            </div>
           </div>
 
-          {/* Score & Record Display */}
-          <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-center space-y-1">
-            <div className="text-[11px] text-neutral-400 font-medium">TỔNG XP TÍCH LŨY</div>
-            <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400 tracking-tight">
+          <div className="bg-black border-2 border-neo-amber pixel-corners p-6 text-center space-y-2">
+            <div className="text-sm text-neo-amber font-pixel text-2xl uppercase">TOTAL XP EARNED</div>
+            <div className="text-4xl sm:text-5xl font-black font-pixel text-white tracking-wider drop-shadow-[0_0_10px_rgba(255,184,0,0.8)]">
               {state.score.toLocaleString()} XP
             </div>
-            <div className="flex items-center justify-center gap-1.5 pt-0.5 text-[11px] sm:text-xs">
-              <Award className="w-3.5 h-3.5 text-amber-500" />
-              <span className="text-neutral-400">High XP:</span>
-              <span className="font-mono font-bold text-neutral-200">{state.highScore.toLocaleString()} XP</span>
-              {isNewRecord && (
-                <span className="px-1.5 py-0.2 rounded bg-amber-500 text-black font-extrabold text-[10px] animate-pulse">
-                  KỶ LỤC MỚI!
-                </span>
-              )}
-            </div>
           </div>
 
-          {/* Breakdown by Enemy Tier */}
-          <div className="bg-neutral-950/70 border border-neutral-800/80 rounded-xl p-3 space-y-2 text-xs">
-            <div className="font-bold text-neutral-300 pb-1 border-b border-neutral-800 flex justify-between items-center">
-              <span>BẢNG TỔNG KẾT CHIẾN DỊCH</span>
-              <div className="flex items-center gap-1 text-[11px] text-neutral-400 font-mono">
-                <Clock className="w-3 h-3 text-neutral-400" />
-                <span>{timeFormatted}</span>
-              </div>
+          <div className="bg-black border-2 border-gray-800 pixel-corners p-6 space-y-4">
+            <div className="font-pixel text-2xl text-white pb-2 border-b-2 border-gray-800 flex justify-between">
+              <span>COMBAT STATS</span>
+              <span className="text-neo-cyan">STAGE {state.currentStageId ?? 1}</span>
             </div>
-
-            <div className="space-y-1.5 font-mono text-[11px] sm:text-xs">
-              <div className="flex items-center justify-between text-neutral-300">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-neutral-400" />
-                  Basic Tank (1 XP):
-                </span>
-                <span>{counts.BASIC} xe = {counts.BASIC * 1} XP</span>
-              </div>
-
-              <div className="flex items-center justify-between text-neutral-300">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-sky-400" />
-                  Fast Tank (2 XP):
-                </span>
-                <span>{counts.FAST} xe = {counts.FAST * 2} XP</span>
-              </div>
-
-              <div className="flex items-center justify-between text-neutral-300">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-red-400" />
-                  Power Tank (3 XP):
-                </span>
-                <span>{counts.POWER} xe = {counts.POWER * 3} XP</span>
-              </div>
-
-              <div className="flex items-center justify-between text-neutral-300">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  Armor Tank (5 XP):
-                </span>
-                <span>{counts.ARMOR} xe = {counts.ARMOR * 5} XP</span>
-              </div>
-
-              <div className="pt-1.5 border-t border-neutral-800/80 flex items-center justify-between font-bold text-emerald-400">
-                <span>Đã tiêu diệt:</span>
-                <span>{totalDefeated} / 30 xe (Toàn bộ)</span>
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-neutral-300 pt-0.5">
-                <span className="flex items-center gap-1 text-red-400">
-                  <Heart className="w-3 h-3 fill-red-500" />
-                  Số mạng còn lại:
-                </span>
-                <span className="font-bold text-white">{state.p1State.lives} mạng</span>
-              </div>
+            <div className="flex justify-between items-center pt-2 text-green-400 font-pixel text-2xl">
+              <span>TOTAL KILLS:</span><span>30 / 30</span>
             </div>
           </div>
         </div>
 
-        {/* Sticky Action Footer: ALWAYS accessible */}
-        <div className="p-3 sm:p-4 bg-neutral-950/95 border-t border-neutral-800 flex gap-2.5 shrink-0 safe-area-inset">
+        <div className="p-6 bg-black border-t-4 border-green-500 flex flex-col sm:flex-row gap-4 shrink-0 safe-area-inset">
           {!isTrialMode && (
-            <button
-              type="button"
-              onClick={onNextStageOrReplay}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs transition-all shadow-lg shadow-amber-500/20 active:scale-95"
-            >
-              <RotateCcw className="w-4 h-4" />
-              <span>CHƠI LẠI / TIẾP TỤC</span>
+            <button type="button" onClick={onNextStageOrReplay} className="btn-arcade !bg-green-500 flex-1 py-4 text-2xl flex items-center justify-center gap-2">
+              <RotateCcw className="w-5 h-5 fill-black" /> CONTINUE
             </button>
           )}
-
-          <button
-            type="button"
-            data-testid={isTrialMode ? 'trial-return-login-btn' : 'stageclear-quit-menu-btn'}
-            onClick={onQuitToMenu}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 ${
-              isTrialMode
-                ? 'bg-amber-500 hover:bg-amber-400 text-black font-extrabold shadow-lg shadow-amber-500/20'
-                : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700'
-            }`}
-          >
-            <Home className="w-4 h-4" />
-            <span>{isTrialMode ? 'Quay về màn hình đăng nhập' : 'VỀ MENU'}</span>
+          <button type="button" data-testid={isTrialMode ? 'trial-return-login-btn' : 'stageclear-quit-menu-btn'} onClick={onQuitToMenu} className="btn-arcade-outline flex-1 py-4 text-2xl flex items-center justify-center gap-2 !border-gray-500 !text-gray-400 hover:!bg-gray-800 hover:!text-white">
+            <Home className="w-5 h-5" /> {isTrialMode ? 'LOGIN MENU' : 'MAIN MENU'}
           </button>
         </div>
+
       </div>
     </div>
   );
