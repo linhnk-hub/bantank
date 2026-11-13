@@ -9214,13 +9214,46 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authEmail: 'player@gmail.com',
     });
 
+    // 4. Kiểm tra vòng đời Upload -> Chưa kích hoạt -> Kích hoạt -> Tạm tắt của Action SFX
+    tempSoundMgr.setActionSoundAdminRole('ADMIN');
+    const sfxUploadInactive = tempSoundMgr.uploadActionSoundSync(
+      'P1_SHOOT',
+      { name: 'cannon_pending.wav', type: 'audio/wav', size: 24000 },
+      { autoActivate: false }
+    );
+    tempSoundMgr.clearLastPlayedCustomActionId();
+    tempSoundMgr.playP1Shoot();
+    const skippedWhenInactive =
+      sfxUploadInactive.ok === true &&
+      tempSoundMgr.isActionSoundActive('P1_SHOOT') === false &&
+      tempSoundMgr.getLastPlayedCustomActionId() === null;
+
+    const activateRes = tempSoundMgr.activateActionSound('P1_SHOOT');
+    tempSoundMgr.clearLastPlayedCustomActionId();
+    tempSoundMgr.playP1Shoot();
+    const playedAfterActivate =
+      activateRes.ok === true &&
+      tempSoundMgr.isActionSoundActive('P1_SHOOT') === true &&
+      tempSoundMgr.getLastPlayedCustomActionId() === 'P1_SHOOT';
+
+    const deactivateRes = tempSoundMgr.deactivateActionSound('P1_SHOOT');
+    const deactivatedOk =
+      deactivateRes.ok === true &&
+      tempSoundMgr.isActionSoundActive('P1_SHOOT') === false;
+
+    tempSoundMgr.deleteActionSound('P1_SHOOT');
+    tempSoundMgr.setActionSoundAdminRole(null);
+    const actionSfxActivationLifecycleOk =
+      skippedWhenInactive && playedAfterActivate && deactivatedOk;
+
     const section6AdminAudioSyncOk =
       storagePathCheck.valid === true &&
       storagePathCheck.isStorageCatalogPath === true &&
       invalidTraversalCheck.valid === false &&
       adminWriteAudioAllowed === true &&
       modWriteAudioDenied === false &&
-      playerReadAudioAllowed === true;
+      playerReadAudioAllowed === true &&
+      actionSfxActivationLifecycleOk;
 
     const passed =
       section2DiagOk &&
@@ -9232,7 +9265,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       id: 'M7_3_T64',
       name: 'T64: M7.3.11.6 – Chẩn đoán quyền Tài khoản, Đồng nhất khung Cài đặt (max-w-4xl), Khôi phục âm thanh mặc định & Đồng bộ âm thanh Admin thời gian thực',
       passed,
-      details: `diagOk=${section2DiagOk}, unifiedModal=${section3UnifiedLayoutOk} (${UNIFIED_SETTINGS_MODAL_WIDTH_CLASS}), audioReset=${section4AudioResetOk}, adminAudioRealtimeSync=${section6AdminAudioSyncOk}`,
+      details: `diagOk=${section2DiagOk}, unifiedModal=${section3UnifiedLayoutOk} (${UNIFIED_SETTINGS_MODAL_WIDTH_CLASS}), audioReset=${section4AudioResetOk}, adminAudioRealtimeSync=${section6AdminAudioSyncOk}, actionSfxActivate=${actionSfxActivationLifecycleOk}`,
     });
   }
 

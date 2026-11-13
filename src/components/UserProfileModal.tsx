@@ -98,7 +98,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       const res = await avatarManager.selectGoogleAvatar();
       if (res.success) {
         setAvatarLoadError(false);
-        setSuccessMessage('Đã cập nhật ảnh đại diện!');
         onProfileUpdated?.();
       } else {
         setErrorMessage(res.message || 'Không thể chọn ảnh đại diện.');
@@ -116,7 +115,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       const res = await avatarManager.selectCatalogAvatar(item.avatarId);
       if (res.success) {
         setAvatarLoadError(false);
-        setSuccessMessage('Đã cập nhật ảnh đại diện!');
         onProfileUpdated?.();
       } else {
         setErrorMessage(res.message || 'Không thể chọn ảnh đại diện.');

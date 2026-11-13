@@ -1401,10 +1401,6 @@ export default function App() {
         onResume={handleResume}
         onRestart={handleRestart}
         onQuitToMenu={handleQuitToMenu}
-        onOpenSettings={() => {
-          setSettingsInitialTab('AUDIO_SETTINGS');
-          setIsSettingsOpen(true);
-        }}
         isTrialMode={isTrialMode}
       />
 

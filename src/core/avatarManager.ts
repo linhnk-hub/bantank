@@ -4742,7 +4742,6 @@ export class AvatarManager {
         avatarType: 'google',
         avatarId: null,
         avatarUrl: googlePhotoUrl,
-        message: 'Đã chuyển về sử dụng Ảnh đại diện Google.',
       };
     } catch (err: any) {
       const classified = classifyUserProfileFirestoreError(err);
@@ -4873,7 +4872,6 @@ export class AvatarManager {
         avatarType: 'catalog',
         avatarId: cleanId,
         avatarUrl: resolvedUrl,
-        message: `Đã chọn ảnh đại diện "${targetItem.name}".`,
       };
     } catch (err: any) {
       const classified = classifyUserProfileFirestoreError(err);

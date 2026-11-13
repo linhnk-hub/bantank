@@ -128,12 +128,12 @@ export const MusicAdminPanel: React.FC = () => {
 
     setIsUploadingActionSfx(true);
     try {
-      const res = await soundManager.uploadActionSound(actionId, file);
+      const res = await soundManager.uploadActionSound(actionId, file, { autoActivate: false });
       if (res.ok && res.track) {
         setActionSfxTracks(soundManager.getAllActionSoundTracks());
         setStatusMsg({
-          type: 'success',
-          text: `Đã cập nhật âm thanh hành động [${actionId}] bằng file "${res.track.fileName}" (${res.track.durationSec}s) và đồng bộ cho toàn bộ người chơi.`,
+          type: 'info',
+          text: `Đã tải lên file "${res.track.fileName}" (${res.track.durationSec}s) cho [${actionId}]. Hãy bấm nút "Kích hoạt" để áp dụng cho toàn bộ người chơi.`,
         });
       } else {
         setStatusMsg({
@@ -143,6 +143,39 @@ export const MusicAdminPanel: React.FC = () => {
       }
     } finally {
       setIsUploadingActionSfx(false);
+    }
+  };
+
+  const handleActivateActionSfx = (actionId: GameActionSoundId, label: string) => {
+    soundManager.unlock();
+    const res = soundManager.activateActionSound(actionId);
+    if (res.ok && res.track) {
+      setActionSfxTracks(soundManager.getAllActionSoundTracks());
+      setStatusMsg({
+        type: 'success',
+        text: `Đã kích hoạt âm thanh "${res.track.fileName}" cho "${label}" và đồng bộ cho toàn bộ người chơi.`,
+      });
+    } else {
+      setStatusMsg({
+        type: 'error',
+        text: res.error || 'Không thể kích hoạt âm thanh hành động.',
+      });
+    }
+  };
+
+  const handleDeactivateActionSfx = (actionId: GameActionSoundId, label: string) => {
+    const res = soundManager.deactivateActionSound(actionId);
+    if (res.ok) {
+      setActionSfxTracks(soundManager.getAllActionSoundTracks());
+      setStatusMsg({
+        type: 'info',
+        text: `Đã tạm tắt file tùy chỉnh cho "${label}" (giữ lại file đã tải lên, phát lại 8-Bit mặc định).`,
+      });
+    } else {
+      setStatusMsg({
+        type: 'error',
+        text: res.error || 'Không thể tạm tắt âm thanh hành động.',
+      });
     }
   };
 
@@ -1162,14 +1195,17 @@ export const MusicAdminPanel: React.FC = () => {
         <div className="space-y-2">
           {GAME_ACTION_SOUND_SLOTS.map((slot) => {
             const customTrack = actionSfxTracks[slot.id];
+            const isCustomActive = Boolean(customTrack && customTrack.isActive !== false);
             return (
               <div
                 key={slot.id}
                 data-testid={`admin-action-sfx-row-${slot.id}`}
                 className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
-                  customTrack
-                    ? 'bg-amber-950/20 border-amber-500/50'
-                    : 'bg-neutral-900/90 border-neutral-800'
+                  isCustomActive
+                    ? 'bg-emerald-950/20 border-emerald-500/50'
+                    : customTrack
+                      ? 'bg-amber-950/20 border-amber-500/50'
+                      : 'bg-neutral-900/90 border-neutral-800'
                 }`}
               >
                 <div className="space-y-1 min-w-0">
@@ -1177,12 +1213,18 @@ export const MusicAdminPanel: React.FC = () => {
                     <span className="font-bold text-neutral-100 text-xs">{slot.label}</span>
                     <span
                       className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold border ${
-                        customTrack
+                        isCustomActive
                           ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/40'
-                          : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                          : customTrack
+                            ? 'bg-amber-950/90 text-amber-300 border-amber-500/40'
+                            : 'bg-neutral-800 text-neutral-400 border-neutral-700'
                       }`}
                     >
-                      {customTrack ? 'FILE TÙY CHỈNH' : '8-BIT MẶC ĐỊNH'}
+                      {isCustomActive
+                        ? 'ĐANG KÍCH HOẠT'
+                        : customTrack
+                          ? 'CHƯA KÍCH HOẠT'
+                          : '8-BIT MẶC ĐỊNH'}
                     </span>
                   </div>
                   <p className="text-[10px] text-neutral-400">{slot.description}</p>
@@ -1199,7 +1241,7 @@ export const MusicAdminPanel: React.FC = () => {
                     type="button"
                     onClick={() => {
                       soundManager.unlock();
-                      soundManager.previewActionSound(slot.id);
+                      soundManager.previewActionSound(slot.id, true);
                     }}
                     className="px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-emerald-300 border border-neutral-700 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
                     title={`Nghe thử âm thanh ${slot.label}`}
@@ -1207,6 +1249,32 @@ export const MusicAdminPanel: React.FC = () => {
                     <Play className="w-3 h-3 fill-current" />
                     <span>Nghe thử</span>
                   </button>
+
+                  {customTrack && !isCustomActive && (
+                    <button
+                      type="button"
+                      data-testid={`admin-action-sfx-activate-${slot.id}`}
+                      onClick={() => handleActivateActionSfx(slot.id, slot.label)}
+                      className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/50 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                      title={`Kích hoạt âm thanh tùy chỉnh cho ${slot.label}`}
+                    >
+                      <CheckCircle2 className="w-3 h-3" />
+                      <span>Kích hoạt</span>
+                    </button>
+                  )}
+
+                  {customTrack && isCustomActive && (
+                    <button
+                      type="button"
+                      data-testid={`admin-action-sfx-deactivate-${slot.id}`}
+                      onClick={() => handleDeactivateActionSfx(slot.id, slot.label)}
+                      className="px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                      title="Tạm tắt file tùy chỉnh (quay về 8-Bit mặc định)"
+                    >
+                      <Square className="w-3 h-3" />
+                      <span>Tạm tắt</span>
+                    </button>
+                  )}
 
                   <button
                     type="button"

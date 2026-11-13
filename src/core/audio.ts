@@ -100,6 +100,7 @@ export interface CustomActionSoundTrack {
   durationSec: number;
   updatedAtMs: number;
   updatedByEmail: string;
+  isActive?: boolean;
   dataUrl?: string;
 }
 
@@ -148,8 +149,10 @@ export class SoundManager {
   private customActionBuffers: Map<GameActionSoundId, AudioBuffer> = new Map();
   private activeActionSources: Set<AudioBufferSourceNode> = new Set();
   private lastPlayedCustomActionId: GameActionSoundId | null = null;
+  private previewingInactiveActionSfx: boolean = false;
   private adminRoleOverride: 'ADMIN' | 'MOD' | 'PLAYER' | null = null;
   private unsubCloudActionSfx: (() => void) | null = null;
+  private lastCloudActionSfxVersion: number = 0;
 
   private constructor() {
     this.loadSettings();
@@ -468,6 +471,9 @@ export class SoundManager {
     const track = this.customActionTracks.get(actionId);
     const buffer = this.customActionBuffers.get(actionId);
     if (!track && !buffer) return false;
+    if (track && track.isActive === false && !this.previewingInactiveActionSfx) {
+      return false;
+    }
 
     this.lastPlayedCustomActionId = actionId;
     if (!this.ctx || !this.sfxGain) {
@@ -1005,6 +1011,11 @@ export class SoundManager {
     return this.customActionTracks.get(actionId) ?? null;
   }
 
+  public isActionSoundActive(actionId: GameActionSoundId): boolean {
+    const track = this.customActionTracks.get(actionId);
+    return Boolean(track && track.isActive !== false);
+  }
+
   public getAllActionSoundTracks(): Record<GameActionSoundId, CustomActionSoundTrack | null> {
     return {
       P1_SHOOT: this.customActionTracks.get('P1_SHOOT') ?? null,
@@ -1064,7 +1075,8 @@ export class SoundManager {
 
   public uploadActionSoundSync(
     actionId: GameActionSoundId,
-    file: { name: string; type: string; size: number; dataUrl?: string }
+    file: { name: string; type: string; size: number; dataUrl?: string },
+    options?: { autoActivate?: boolean }
   ): { ok: boolean; error?: string; track?: CustomActionSoundTrack } {
     const check = this.validateActionSoundFile(actionId, file);
     if (!check.ok) {
@@ -1081,6 +1093,7 @@ export class SoundManager {
       durationSec,
       updatedAtMs: Date.now(),
       updatedByEmail: currentUser?.email || ADMIN_EMAIL,
+      isActive: options?.autoActivate ?? true,
       dataUrl: file.dataUrl,
     };
 
@@ -1092,14 +1105,16 @@ export class SoundManager {
 
   public replaceActionSoundSync(
     actionId: GameActionSoundId,
-    file: { name: string; type: string; size: number; dataUrl?: string }
+    file: { name: string; type: string; size: number; dataUrl?: string },
+    options?: { autoActivate?: boolean }
   ): { ok: boolean; error?: string; track?: CustomActionSoundTrack } {
-    return this.uploadActionSoundSync(actionId, file);
+    return this.uploadActionSoundSync(actionId, file, options);
   }
 
   public async uploadActionSound(
     actionId: GameActionSoundId,
-    file: File
+    file: File,
+    options?: { autoActivate?: boolean }
   ): Promise<{ ok: boolean; error?: string; track?: CustomActionSoundTrack }> {
     const check = this.validateActionSoundFile(actionId, file);
     if (!check.ok) {
@@ -1138,6 +1153,7 @@ export class SoundManager {
         durationSec,
         updatedAtMs: Date.now(),
         updatedByEmail: currentUser?.email || ADMIN_EMAIL,
+        isActive: options?.autoActivate ?? false,
         dataUrl,
       };
 
@@ -1157,9 +1173,79 @@ export class SoundManager {
 
   public async replaceActionSound(
     actionId: GameActionSoundId,
-    file: File
+    file: File,
+    options?: { autoActivate?: boolean }
   ): Promise<{ ok: boolean; error?: string; track?: CustomActionSoundTrack }> {
-    return this.uploadActionSound(actionId, file);
+    return this.uploadActionSound(actionId, file, options);
+  }
+
+  public activateActionSound(
+    actionId: GameActionSoundId
+  ): { ok: boolean; error?: string; track?: CustomActionSoundTrack } {
+    if (!this.canManageActionSounds()) {
+      return {
+        ok: false,
+        error:
+          'Từ chối truy cập: Chỉ Admin (linhnk2013@gmail.com) mới có quyền kích hoạt âm thanh hành động.',
+      };
+    }
+
+    const existing = this.customActionTracks.get(actionId);
+    if (!existing) {
+      return {
+        ok: false,
+        error: 'Chưa có file âm thanh hành động để kích hoạt.',
+      };
+    }
+
+    const currentUser = AuthManager.getInstance().getCurrentUser();
+    const updatedTrack: CustomActionSoundTrack = {
+      ...existing,
+      isActive: true,
+      updatedAtMs: Date.now(),
+      updatedByEmail: currentUser?.email || ADMIN_EMAIL,
+    };
+
+    this.customActionTracks.set(actionId, updatedTrack);
+    this.saveCustomActionTracksToStorage();
+    void this.syncCustomActionTracksToCloud();
+    this.notifyListeners();
+    return { ok: true, track: updatedTrack };
+  }
+
+  public deactivateActionSound(
+    actionId: GameActionSoundId
+  ): { ok: boolean; error?: string; track?: CustomActionSoundTrack } {
+    if (!this.canManageActionSounds()) {
+      return {
+        ok: false,
+        error:
+          'Từ chối truy cập: Chỉ Admin (linhnk2013@gmail.com) mới có quyền tạm tắt âm thanh hành động.',
+      };
+    }
+
+    const existing = this.customActionTracks.get(actionId);
+    if (!existing) {
+      return {
+        ok: false,
+        error: 'Chưa có file âm thanh hành động.',
+      };
+    }
+
+    const currentUser = AuthManager.getInstance().getCurrentUser();
+    const updatedTrack: CustomActionSoundTrack = {
+      ...existing,
+      isActive: false,
+      updatedAtMs: Date.now(),
+      updatedByEmail: currentUser?.email || ADMIN_EMAIL,
+    };
+
+    this.customActionTracks.set(actionId, updatedTrack);
+    this.stopAllActiveActionSources();
+    this.saveCustomActionTracksToStorage();
+    void this.syncCustomActionTracksToCloud();
+    this.notifyListeners();
+    return { ok: true, track: updatedTrack };
   }
 
   public deleteActionSound(actionId: GameActionSoundId): { ok: boolean; error?: string } {
@@ -1180,29 +1266,35 @@ export class SoundManager {
     return { ok: true };
   }
 
-  public previewActionSound(actionId: GameActionSoundId): void {
-    switch (actionId) {
-      case 'P1_SHOOT':
-        this.playP1Shoot();
-        break;
-      case 'ENEMY_SHOOT':
-        this.playEnemyShoot();
-        break;
-      case 'P1_EXPLOSION':
-        this.playP1Explosion();
-        break;
-      case 'ENEMY_EXPLOSION':
-        this.playEnemyExplosion();
-        break;
-      case 'BASE_EXPLOSION':
-        this.playBaseExplosion();
-        break;
-      case 'STAGE_CLEAR':
-        this.playStageClear();
-        break;
-      case 'GAME_OVER':
-        this.playGameOver();
-        break;
+  public previewActionSound(actionId: GameActionSoundId, allowInactive: boolean = false): void {
+    const prevFlag = this.previewingInactiveActionSfx;
+    this.previewingInactiveActionSfx = allowInactive;
+    try {
+      switch (actionId) {
+        case 'P1_SHOOT':
+          this.playP1Shoot();
+          break;
+        case 'ENEMY_SHOOT':
+          this.playEnemyShoot();
+          break;
+        case 'P1_EXPLOSION':
+          this.playP1Explosion();
+          break;
+        case 'ENEMY_EXPLOSION':
+          this.playEnemyExplosion();
+          break;
+        case 'BASE_EXPLOSION':
+          this.playBaseExplosion();
+          break;
+        case 'STAGE_CLEAR':
+          this.playStageClear();
+          break;
+        case 'GAME_OVER':
+          this.playGameOver();
+          break;
+      }
+    } finally {
+      this.previewingInactiveActionSfx = prevFlag;
     }
   }
 
@@ -1257,16 +1349,30 @@ export class SoundManager {
             if (!snap.exists()) return;
             const data = snap.data() as {
               tracks?: Record<string, CustomActionSoundTrack>;
+              version?: number;
+              updatedAt?: number;
             };
+            if (typeof data.version === 'number' && data.version > this.lastCloudActionSfxVersion) {
+              this.lastCloudActionSfxVersion = data.version;
+            }
             if (!data.tracks || typeof data.tracks !== 'object') return;
+            const cloudUpdatedAt = typeof data.updatedAt === 'number' ? data.updatedAt : 0;
             for (const slot of GAME_ACTION_SOUND_SLOTS) {
               const incoming = data.tracks[slot.id];
+              const existing = this.customActionTracks.get(slot.id);
               if (incoming && incoming.actionId === slot.id && incoming.fileName) {
-                const existing = this.customActionTracks.get(slot.id);
-                if (!existing || incoming.updatedAtMs > existing.updatedAtMs) {
+                if (
+                  !existing ||
+                  incoming.updatedAtMs > existing.updatedAtMs ||
+                  (incoming.updatedAtMs === existing.updatedAtMs &&
+                    incoming.isActive !== existing.isActive)
+                ) {
                   this.customActionTracks.set(slot.id, incoming);
                   this.customActionBuffers.delete(slot.id);
                 }
+              } else if (!incoming && existing && cloudUpdatedAt > existing.updatedAtMs) {
+                this.customActionTracks.delete(slot.id);
+                this.customActionBuffers.delete(slot.id);
               }
             }
             this.saveCustomActionTracksToStorage();
@@ -1292,9 +1398,11 @@ export class SoundManager {
         tracksObj[id] = track;
       }
       const nowMs = Date.now();
+      const nextVersion = Math.max(nowMs, this.lastCloudActionSfxVersion + 1);
+      this.lastCloudActionSfxVersion = nextVersion;
       await setDoc(doc(db, 'system_config', 'action_sfx'), {
         tracks: tracksObj,
-        version: nowMs,
+        version: nextVersion,
         updatedAt: nowMs,
         updatedBy: ADMIN_EMAIL,
       });

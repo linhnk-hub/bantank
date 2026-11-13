@@ -4,14 +4,13 @@
  */
 
 import React, { useState } from 'react';
-import { Play, RotateCcw, LogOut, AlertTriangle, Settings } from 'lucide-react';
+import { Play, RotateCcw, LogOut, AlertTriangle } from 'lucide-react';
 
 interface PauseModalProps {
   isOpen: boolean;
   onResume: () => void;
   onRestart: () => void;
   onQuitToMenu: () => void;
-  onOpenSettings?: () => void;
   isTrialMode?: boolean;
 }
 
@@ -20,7 +19,6 @@ export const PauseModal: React.FC<PauseModalProps> = ({
   onResume,
   onRestart,
   onQuitToMenu,
-  onOpenSettings,
   isTrialMode = false,
 }) => {
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
@@ -53,18 +51,6 @@ export const PauseModal: React.FC<PauseModalProps> = ({
                 <Play className="w-4 h-4 fill-black" />
                 <span>TIẾP TỤC</span>
               </button>
-
-              {onOpenSettings && !isTrialMode && (
-                <button
-                  type="button"
-                  data-testid="pause-open-audio-settings-btn"
-                  onClick={onOpenSettings}
-                  className="w-full flex items-center justify-center gap-2 py-2 sm:py-2.5 px-4 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs transition-colors border border-neutral-700 active:scale-95 cursor-pointer"
-                >
-                  <Settings className="w-4 h-4 text-amber-400" />
-                  <span>CÀI ĐẶT &amp; ÂM THANH</span>
-                </button>
-              )}
 
               {!isTrialMode && (
                 <button

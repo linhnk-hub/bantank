@@ -181,7 +181,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     Boolean(currentUser?.email && currentUser.email.toLowerCase() === SUPER_ADMIN_EMAIL);
 
   const userRole = resolveUserRole(currentUser);
-  const roleInfo = getRoleDisplayInfo(userRole);
   const roleFrameClasses = getRoleNameFrameClasses(userRole);
 
   const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab || 'ACCOUNT');
@@ -446,13 +445,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsBusy(true);
     try {
       const res = await avatarManager.selectGoogleAvatar();
-      setFeedback({
-        type: res.success ? 'success' : 'error',
-        text: res.message || (res.success ? 'Đã cập nhật ảnh đại diện!' : 'Không thể chọn ảnh đại diện.'),
-      });
       if (res.success) {
         setAvatarLoadError(false);
         onProfileUpdated?.();
+      } else {
+        setFeedback({
+          type: 'error',
+          text: res.message || 'Không thể chọn ảnh đại diện.',
+        });
       }
     } finally {
       setIsBusy(false);
@@ -464,15 +464,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setIsBusy(true);
     try {
       const res = await avatarManager.selectCatalogAvatar(item.avatarId);
-      setFeedback({
-        type: res.success ? 'success' : 'error',
-        text:
-          res.message ||
-          (res.success ? 'Đã cập nhật ảnh đại diện!' : 'Không thể chọn ảnh đại diện này.'),
-      });
       if (res.success) {
         setAvatarLoadError(false);
         onProfileUpdated?.();
+      } else {
+        setFeedback({
+          type: 'error',
+          text: res.message || 'Không thể chọn ảnh đại diện này.',
+        });
       }
     } finally {
       setIsBusy(false);
@@ -775,13 +774,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span className="text-xs font-extrabold text-white truncate max-w-[150px]">
                       {userMeta?.displayName || currentUser.displayName || 'Commander'}
                     </span>
-                    <span className="text-[10px] font-mono font-bold text-amber-300">
-                      [{roleInfo.label}]
-                    </span>
                   </div>
-                  <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-mono">
-                    <ShieldCheck className="w-3.5 h-3.5" /> Đã xác thực Google
-                  </span>
                 </div>
               </div>
 
@@ -1549,7 +1542,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span>MA TRẬN PHÂN QUYỀN HỆ THỐNG 3 VAI TRÒ (ADMIN / MOD / NGƯỜI CHƠI)</span>
                 </div>
                 <span className="text-[10px] font-mono text-emerald-200/80">
-                  Admin duy nhất: {SUPER_ADMIN_EMAIL}
+                  Admin: {SUPER_ADMIN_EMAIL}
                 </span>
               </div>
 
@@ -1773,8 +1766,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     tài khoản{' '}
                     <strong className="text-white">
                       {pendingRoleChangeConfirm.account.displayName}
-                    </strong>{' '}
-                    ({pendingRoleChangeConfirm.account.email || pendingRoleChangeConfirm.account.uid})?
+                    </strong>
+                    {pendingRoleChangeConfirm.account.email
+                      ? ` (${pendingRoleChangeConfirm.account.email})`
+                      : ''}
+                    ?
                     Thao tác này sẽ được ghi nhận vào Nhật ký Audit.
                   </p>
                   <div className="flex items-center gap-2">
@@ -1820,7 +1816,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <thead>
                       <tr className="bg-neutral-950 text-neutral-400 border-b border-neutral-800">
                         <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">STT</th>
-                        <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">Avatar</th>
                         <th className="py-2.5 px-2.5 font-bold">Nickname</th>
                         <th className="py-2.5 px-2.5 font-bold">Email</th>
                         <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">Vai trò</th>
@@ -1849,14 +1844,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               #{rowNumber}
                             </td>
 
-                            {/* 2. Avatar (Image Only — No Technical Catalog ID) */}
-                            <td className="py-2.5 px-2.5 whitespace-nowrap">
-                              <div className="w-8 h-8 rounded-full bg-neutral-800 border border-neutral-600 flex items-center justify-center text-[11px] font-extrabold text-amber-400 uppercase shrink-0 overflow-hidden">
-                                {(acc.displayName || 'U').charAt(0)}
-                              </div>
-                            </td>
-
-                            {/* 3. Nickname (Never blank; shows note if not configured) */}
+                            {/* 2. Nickname (Never blank; shows note if not configured) */}
                             <td className="py-2.5 px-2.5">
                               <div className="flex flex-col gap-0.5">
                                 <span
@@ -1872,13 +1860,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               </div>
                             </td>
 
-                            {/* 4. Email */}
+                            {/* 3. Email */}
                             <td className="py-2.5 px-2.5 font-mono text-[11px] text-neutral-300">
                               <div>{acc.email || 'Chưa đồng bộ email'}</div>
-                              <div className="text-[9px] text-neutral-500">UID: {acc.uid}</div>
                             </td>
 
-                            {/* 5. Vai trò */}
+                            {/* 4. Vai trò */}
                             <td className="py-2.5 px-2.5 whitespace-nowrap">
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
@@ -1889,18 +1876,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                       : 'bg-neutral-800 text-neutral-300 border border-neutral-700'
                                 }`}
                               >
-                                {acc.role === 'PLAYER' ? 'Người chơi' : accRoleInfo.label}
+                                {acc.role === 'PLAYER' ? 'User' : accRoleInfo.label}
                               </span>
                             </td>
 
-                            {/* 6. Ngày đăng nhập gần nhất */}
+                            {/* 5. Ngày đăng nhập gần nhất */}
                             <td className="py-2.5 px-2.5 font-mono text-[11px] text-neutral-300 whitespace-nowrap">
                               {acc.lastLoginAtMs > 0
                                 ? new Date(acc.lastLoginAtMs).toLocaleString('vi-VN')
                                 : 'Mới tham gia'}
                             </td>
 
-                            {/* 7. Trạng thái tài khoản */}
+                            {/* 6. Trạng thái tài khoản */}
                             <td className="py-2.5 px-2.5 whitespace-nowrap">
                               <span
                                 className={`text-[10px] px-2 py-0.5 rounded font-bold ${
@@ -1913,7 +1900,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               </span>
                             </td>
 
-                            {/* 8. Thao tác (Admin duy nhất cấp/thu hồi quyền MOD) */}
+                            {/* 7. Thao tác (Admin cấp/thu hồi quyền MOD) */}
                             <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
                               {!isVerifiedSuperAdmin ? (
                                 <span className="text-[10px] text-neutral-500 font-mono">
@@ -1922,7 +1909,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               ) : isTargetSoleAdmin || isSelfAccount ? (
                                 <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 text-[10px] font-bold">
                                   <Lock className="w-3 h-3" />
-                                  Admin Duy nhất
+                                  Admin
                                 </span>
                               ) : (
                                 <div className="inline-flex items-center gap-1">
@@ -1933,12 +1920,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                       setPendingRoleChangeConfirm({
                                         account: acc,
                                         newRole: 'MOD',
-                                        label: 'Cấp Mod',
+                                        label: 'Là Mod',
                                       })
                                     }
                                     className="px-2 py-1 rounded bg-sky-900/70 hover:bg-sky-800 disabled:opacity-35 border border-sky-600/70 text-sky-200 text-[10px] font-bold transition-colors cursor-pointer"
                                   >
-                                    Cấp Mod
+                                    Là Mod
                                   </button>
                                   <button
                                     type="button"
@@ -1947,12 +1934,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                       setPendingRoleChangeConfirm({
                                         account: acc,
                                         newRole: 'PLAYER',
-                                        label: 'Thu hồi về Người chơi',
+                                        label: 'Là User',
                                       })
                                     }
                                     className="px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 disabled:opacity-35 border border-neutral-600 text-neutral-200 text-[10px] font-bold transition-colors cursor-pointer"
                                   >
-                                    Thu hồi về Người chơi
+                                    Là User
                                   </button>
                                 </div>
                               )}
