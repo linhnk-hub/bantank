@@ -55,13 +55,64 @@ service cloud.firestore {
       return isVerifiedPersonalGmail() && request.auth.uid == uid;
     }
 
-    // M7.3: Chỉ định Super Admin chính thức và duy nhất của hệ thống
-    function isSuperAdmin() {
+    // M7.3.11.4: Chỉ định ADMIN chính thức và duy nhất của hệ thống (linhnk2013@gmail.com).
+    // Thay thế hoàn toàn cấp SUPER_ADMIN và mô hình ADMIN cũ; thu hồi vĩnh viễn linhnk.online@gmail.com.
+    // Xác thực phía máy chủ kết hợp:
+    // 1. Token Google cá nhân đã xác minh (email_verified == true, sign_in_provider == 'google.com')
+    // 2. UID hợp lệ (isValidId(request.auth.uid))
+    // 3. Email khớp chính xác 'linhnk2013@gmail.com' và khác 'linhnk.online@gmail.com'
+    // 4. Nếu tài liệu /admins/$(request.auth.uid) đã được liên kết, bắt buộc role == 'ADMIN', isActive == true và uid khớp request.auth.uid.
+    function isAdmin() {
       return isVerifiedPersonalGmail()
+        && isValidId(request.auth.uid)
         && (
-          request.auth.token.email == 'linhnk.online@gmail.com'
-          || request.auth.token.email.lower() == 'linhnk.online@gmail.com'
+          request.auth.token.email == 'linhnk2013@gmail.com'
+          || request.auth.token.email.lower() == 'linhnk2013@gmail.com'
+        )
+        && request.auth.token.email.lower() != 'linhnk.online@gmail.com'
+        && (
+          !exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+          || (
+            ('role' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+            && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'ADMIN'
+            && ('isActive' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+            && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive is bool
+            && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive == true
+            && (
+              !('uid' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+              || get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.uid == request.auth.uid
+            )
+          )
         );
+    }
+
+    // M7.3.11.4: Nguồn dữ liệu vai trò điều hành viên (MOD) chính thức duy nhất là /admins/{uid}.
+    // Tuyệt đối KHÔNG đọc trường 'role' từ /users/{uid} để xét quyền.
+    // Chính sách Fail-Closed nghiêm ngặt:
+    // - Bắt buộc tài liệu /admins/$(request.auth.uid) phải tồn tại.
+    // - Bắt buộc có trường 'role' == 'MOD' (các bản ghi 'ADMIN' cũ của tài khoản khác không bao giờ được nhận quyền ADMIN hay MOD tự động khi chưa chuẩn hóa).
+    // - Bắt buộc có trường 'isActive' kiểu bool và giá trị bằng true.
+    function isActiveStaffModRecord() {
+      return isVerifiedPersonalGmail()
+        && isValidId(request.auth.uid)
+        && request.auth.token.email.lower() != 'linhnk2013@gmail.com'
+        && request.auth.token.email.lower() != 'linhnk.online@gmail.com'
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        && ('role' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'MOD'
+        && ('isActive' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive is bool
+        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive == true
+        && (
+          !('uid' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+          || get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.uid == request.auth.uid
+        );
+    }
+
+    // M7.3.11.4: Quyền đọc danh sách tài khoản & nhật ký phân quyền cho ADMIN duy nhất hoặc MOD hợp lệ.
+    // MOD chỉ đi qua hàm này (chỉ dùng tại allow get/list), tuyệt đối không được thừa hưởng quyền ghi của isAdmin().
+    function isStaffModOrAdmin() {
+      return isAdmin() || isActiveStaffModRecord();
     }
 
     // Kiểm tra phiên hiện tại có còn hiệu lực trong vòng 900 giây (15 phút) theo giờ máy chủ hay không
@@ -191,12 +242,39 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 4. Collection Rules: /admins/{uid} (M7.3: Chỉ Super Admin linhnk.online@gmail.com)
+    // 4. Collection Rules: /admins/{uid} (M7.3.11.4: Nguồn dữ liệu vai trò chính thức cho ADMIN duy nhất và MOD)
+    //    - Chỉ duy nhất ADMIN (linhnk2013@gmail.com) được quyền tạo, cập nhật, xóa.
+    //    - Khi uid == request.auth.uid (tài khoản ADMIN duy nhất liên kết UID của chính mình):
+    //      bắt buộc role == 'ADMIN' && isActive == true && email khớp 'linhnk2013@gmail.com'.
+    //    - Khi uid != request.auth.uid (cấp/cập nhật quyền điều hành viên cho tài khoản khác):
+    //      CHỈ cho phép role == 'MOD' (tuyệt đối CẤM cấp 'ADMIN' hoặc 'SUPER_ADMIN' cho bất kỳ tài khoản nào khác).
+    //    - Cho phép ADMIN xóa bản ghi /admins/{uid} của tài khoản khác (thu hồi quyền MOD hoặc thu hồi bản ghi ADMIN cũ).
     // =========================================================================
     match /admins/{uid} {
-      allow get: if (isValidId(uid) && isOwner(uid)) || isSuperAdmin();
-      allow list: if isSuperAdmin();
-      allow create, update, delete: if isSuperAdmin();
+      allow get: if (isValidId(uid) && isOwner(uid)) || isStaffModOrAdmin();
+      allow list: if isStaffModOrAdmin();
+      allow create, update: if isAdmin()
+        && isValidId(uid)
+        && (!('uid' in incoming()) || incoming().uid == uid)
+        && (!('isActive' in incoming()) || incoming().isActive is bool)
+        && (
+          (
+            uid == request.auth.uid
+            && ('role' in incoming())
+            && incoming().role == 'ADMIN'
+            && ('isActive' in incoming())
+            && incoming().isActive == true
+            && (!('email' in incoming()) || incoming().email.lower() == 'linhnk2013@gmail.com')
+          )
+          ||
+          (
+            uid != request.auth.uid
+            && ('role' in incoming())
+            && incoming().role == 'MOD'
+            && (!('email' in incoming()) || (incoming().email.lower() != 'linhnk2013@gmail.com' && incoming().email.lower() != 'linhnk.online@gmail.com'))
+          )
+        );
+      allow delete: if isAdmin() && isValidId(uid) && uid != request.auth.uid;
     }
 
     // =========================================================================
@@ -204,13 +282,13 @@ service cloud.firestore {
     //    (M7.3.5: Danh mục Avatar dùng chung trên Firebase Storage + Firestore)
     //    - /avatar_catalog/{avatarId}:
     //      + Đọc (get, list): người chơi Gmail cá nhân đã xác minh (isVerifiedPersonalGmail()).
-    //      + Tạo, sửa, xóa: chỉ Super Admin duy nhất (linhnk.online@gmail.com).
+    //      + Tạo, sửa, xóa: chỉ Admin duy nhất (linhnk2013@gmail.com).
     //      + Dùng Firestore Timestamp nhất quán (createdAt, updatedAt).
     //    - /users/{uid}:
     //      + Người chơi chỉ được cập nhật lựa chọn avatar của chính mình (isOwner(uid)).
     //      + Chỉ cho phép các trường: avatarType ('google' | 'catalog'), avatarId (string | null),
     //        avatarUpdatedAt (Timestamp == request.time), và tùy chọn uid, displayName.
-    //      + Chặn tuyệt đối sửa role, isSuperAdmin, email, xp, xu, rank.
+    //      + Chặn tuyệt đối sửa role, isAdmin, isSuperAdmin, email, xp, xu, rank.
     //      + Khi avatarType == 'catalog', bắt buộc tài liệu /avatar_catalog/{avatarId} tồn tại
     //        và có isActive == true.
     // =========================================================================
@@ -270,7 +348,7 @@ service cloud.firestore {
         && data.isActive is bool
         && data.createdAt is timestamp
         && data.updatedAt is timestamp
-        && data.updatedBy == 'linhnk.online@gmail.com';
+        && data.updatedBy == 'linhnk2013@gmail.com';
     }
 
     function isActiveCatalogAvatar(avatarId) {
@@ -282,19 +360,19 @@ service cloud.firestore {
     match /avatar_catalog/{avatarId} {
       allow get, list: if isVerifiedPersonalGmail();
 
-      allow create: if isSuperAdmin()
+      allow create: if isAdmin()
         && isValidAvatarCatalogDoc(incoming(), avatarId)
         && incoming().createdAt == request.time
         && incoming().updatedAt == request.time;
 
-      allow update: if isSuperAdmin()
+      allow update: if isAdmin()
         && isValidAvatarCatalogDoc(incoming(), avatarId)
         && incoming().avatarId == existing().avatarId
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && incoming().version >= existing().version;
 
-      allow delete: if isSuperAdmin()
+      allow delete: if isAdmin()
         && isValidCatalogAvatarId(avatarId);
     }
 
@@ -323,9 +401,41 @@ service cloud.firestore {
 
     // Khởi tạo tài liệu /users/{uid} lần đầu:
     // - Trường 'uid' là tùy chọn nhưng nếu có mặt thì bắt buộc incoming().uid == uid && incoming().uid == request.auth.uid.
-    // - Tách biệt rõ 2 nhánh quyền:
+    // - Tách biệt rõ 3 nhánh quyền:
     //   (1) Khởi tạo khi chọn avatar: chỉ chứa ['avatarType', 'avatarId', 'avatarUpdatedAt'] (và tùy chọn 'uid')
     //   (2) Khởi tạo khi đặt tên hiển thị: chỉ chứa ['displayName'] (và tùy chọn 'uid')
+    //   (3) M7.3.11.2: Khởi tạo hồ sơ khi đăng nhập Google thành công (recordUserLoginTimestamp)
+    //       chỉ chứa ['uid', 'email', 'displayName', 'avatarType', 'avatarId', 'avatarUpdatedAt', 'lastLoginAt'],
+    //       tuyệt đối CẤM các trường 'role', 'isSuperAdmin', 'xp', 'xu', 'rank'.
+    function isUserLoginProfileCreate(data, uid) {
+      return ('uid' in data)
+        && data.uid == uid
+        && data.uid == request.auth.uid
+        && ('email' in data)
+        && data.email is string
+        && data.email.lower() == request.auth.token.email.lower()
+        && ('lastLoginAt' in data)
+        && data.lastLoginAt is timestamp
+        && data.lastLoginAt == request.time
+        && isValidUserAvatarFields(data, uid)
+        && (!('displayName' in data) || isValidUserDisplayNameField(data))
+        && !('role' in data)
+        && !('isAdmin' in data)
+        && !('isSuperAdmin' in data)
+        && !('xp' in data)
+        && !('xu' in data)
+        && !('rank' in data)
+        && data.keys().hasOnly([
+          'uid',
+          'email',
+          'displayName',
+          'avatarType',
+          'avatarId',
+          'avatarUpdatedAt',
+          'lastLoginAt'
+        ]);
+    }
+
     function isValidUserProfileCreate(data, uid) {
       return (!('uid' in data) || (data.uid == uid && data.uid == request.auth.uid))
         && (
@@ -346,6 +456,8 @@ service cloud.firestore {
               'displayName'
             ])
           )
+          ||
+          isUserLoginProfileCreate(data, uid)
         );
     }
 
@@ -375,6 +487,29 @@ service cloud.firestore {
         ]);
     }
 
+    // Nhánh cập nhật 3 (M7.3.11.2): Đồng bộ mốc đăng nhập gần nhất (lastLoginAt và bổ sung email xác thực nếu hồ sơ cũ chưa có email)
+    // - Tách biệt hoàn toàn khỏi avatar và displayName (không cho phép gộp chung).
+    // - Tuyệt đối không cho phép sửa email nếu đã tồn tại, và không cho phép sửa role, isSuperAdmin, xp, xu, rank, createdAt.
+    function isUserLoginMetadataUpdate(uid) {
+      return isOwner(uid)
+        && uid == request.auth.uid
+        && ('lastLoginAt' in incoming())
+        && incoming().lastLoginAt is timestamp
+        && incoming().lastLoginAt == request.time
+        && (
+          !('email' in incoming().diff(existing()).affectedKeys())
+          || (
+            !('email' in existing())
+            && incoming().email is string
+            && incoming().email.lower() == request.auth.token.email.lower()
+          )
+        )
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'email',
+          'lastLoginAt'
+        ]);
+    }
+
     // Khi cập nhật tài liệu /users/{uid} đã tồn tại (kể cả hồ sơ cũ có hoặc không có trường 'uid', có xp, xu, rank, createdAt...):
     // 1. Điều kiện sở hữu hồ sơ bắt buộc cho MỌI trường hợp (kể cả hồ sơ cũ chưa có trường 'uid'):
     //    uid == request.auth.uid && isOwner(uid).
@@ -385,7 +520,8 @@ service cloud.firestore {
     //    - Không cho phép 'uid' xuất hiện trong incoming().diff(existing()).affectedKeys().
     // 3. Ngăn xóa trường cũ: incoming().keys().hasAll(existing().keys()).
     // 4. Ngăn sửa giá trị trường ngoài phạm vi cho phép: kết hợp !affectedKeys().hasAny([...])
-    //    và affectedKeys().hasOnly(['avatarType', 'avatarId', 'avatarUpdatedAt']) hoặc affectedKeys().hasOnly(['displayName']).
+    //    và affectedKeys().hasOnly(['avatarType', 'avatarId', 'avatarUpdatedAt']) hoặc affectedKeys().hasOnly(['displayName'])
+    //    hoặc isUserLoginMetadataUpdate(uid).
     function isValidExistingUserUpdate(uid) {
       return isOwner(uid)
         && uid == request.auth.uid
@@ -408,8 +544,8 @@ service cloud.firestore {
         && !incoming().diff(existing()).affectedKeys().hasAny([
           'uid',
           'role',
+          'isAdmin',
           'isSuperAdmin',
-          'email',
           'xp',
           'xu',
           'rank',
@@ -418,12 +554,13 @@ service cloud.firestore {
         && (
           isUserAvatarSelectionUpdate(uid)
           || isUserDisplayNameUpdate(uid)
+          || isUserLoginMetadataUpdate(uid)
         );
     }
 
     match /users/{uid} {
       allow get: if isValidId(uid) && isVerifiedPersonalGmail();
-      allow list: if isSuperAdmin();
+      allow list: if isStaffModOrAdmin();
       allow create: if isValidId(uid)
         && isOwner(uid)
         && uid == request.auth.uid
@@ -820,7 +957,7 @@ service cloud.firestore {
         && roomCode.matches('^[A-Z0-9]{6}$')
         && (
           resource == null
-          || isSuperAdmin()
+          || isAdmin()
           || request.auth.uid == resource.data.hostUid
           || (resource.data.guestUid != null && request.auth.uid == resource.data.guestUid)
           || (
@@ -830,7 +967,7 @@ service cloud.firestore {
           )
         );
 
-      allow list: if isSuperAdmin();
+      allow list: if isAdmin();
 
       // Tạo phòng: Người tạo bắt buộc là Chủ phòng (hostUid == request.auth.uid), trạng thái WAITING, guestUid == null
       // Kiểm tra chặt createdAt, hostLastActiveAt và expiresAt (<= request.time + 900,000 ms)
@@ -857,7 +994,7 @@ service cloud.firestore {
           || isCoopGuestLeaveAction()
         );
 
-      allow delete: if isSuperAdmin();
+      allow delete: if isAdmin();
 
       // Tài liệu phụ riêng tư: /coop_rooms/{roomCode}/private/signaling
       // Chứa WebRTC Offer, Answer, ICE candidates và kết quả trận đấu (finalScore, matchOutcome).
@@ -897,7 +1034,7 @@ service cloud.firestore {
         allow get: if isVerifiedPersonalGmail()
           && roomCode.matches('^[A-Z0-9]{6}$')
           && docId == 'signaling'
-          && (isSuperAdmin() || isRoomHost() || isJoinedRoomGuest());
+          && (isAdmin() || isRoomHost() || isJoinedRoomGuest());
 
         allow list: if false;
 
@@ -997,17 +1134,16 @@ service cloud.firestore {
             )
           );
 
-        allow delete: if isSuperAdmin();
+        allow delete: if isAdmin();
       }
     }
 
     // =========================================================================
-    // 8. Collection Rules: /system_config/{docId} (M7.3.3: Cấu hình nhạc nền chung qua GitHub Pages)
+    // 8. Collection Rules: /system_config/{docId} (M7.3.3 & M7.3.11.4: Cấu hình nhạc nền và Stage chung)
     //    - Không dùng Firebase Storage, không lưu downloadURL hay capability token, không lưu Base64.
     //    - Chỉ lưu đường dẫn tương đối an toàn trong thư mục `audio/` (assetPath == 'audio/' + fileName).
-    //    - Người dùng Gmail cá nhân đã xác minh được phép đọc /system_config/audio
-    //      để tải nhạc trực tiếp từ GitHub Pages kèm cache-busting theo version.
-    //    - Chỉ duy nhất Super Admin (linhnk.online@gmail.com) được quyền tạo/cập nhật/xóa.
+    //    - Người dùng Gmail cá nhân đã xác minh được phép đọc /system_config/audio và /system_config/stages_catalog.
+    //    - Chỉ duy nhất Admin (linhnk2013@gmail.com) được quyền tạo/cập nhật/xóa.
     // =========================================================================
     function isValidSystemAudioConfig(data) {
       return data.keys().hasAll([
@@ -1053,7 +1189,7 @@ service cloud.firestore {
         && data.fileSize > 0
         && data.fileSize <= 26214400
         && isValidClientMillisTimestamp(data.updatedAt)
-        && data.updatedBy == 'linhnk.online@gmail.com'
+        && data.updatedBy == 'linhnk2013@gmail.com'
         && data.version is int
         && data.version >= 1
         && data.isEnabled is bool
@@ -1065,17 +1201,113 @@ service cloud.firestore {
         && (!('fadeOutMs' in data) || (data.fadeOutMs is int && data.fadeOutMs >= 0 && data.fadeOutMs <= 10000));
     }
 
+    // M7.3.11.4: Kiểm tra schema cho cấu hình danh mục Stage (/system_config/stages_catalog)
+    // - Chế độ Chơi thử (Trial Mode) luôn đọc trực tiếp STAGE_1_MAP tích hợp sẵn trong mã nguồn,
+    //   do đó /system_config/stages_catalog KHÔNG mở unauthenticated read và KHÔNG mở allow list.
+    // - Chỉ Admin duy nhất (linhnk2013@gmail.com) được phép tạo hoặc cập nhật.
+    function isValidSystemStagesCatalogConfig(data) {
+      return data.keys().hasAll([
+          'stages',
+          'updatedAtMs',
+          'updatedBy',
+          'version'
+        ])
+        && data.keys().hasOnly([
+          'stages',
+          'updatedAtMs',
+          'updatedBy',
+          'version'
+        ])
+        && data.stages is list
+        && data.stages.size() <= 50
+        && data.updatedAtMs is int
+        && data.updatedAtMs > 0
+        && data.updatedBy == 'linhnk2013@gmail.com'
+        && data.version is int
+        && data.version >= 1;
+    }
+
     match /system_config/{docId} {
-      allow get: if isVerifiedPersonalGmail() && docId == 'audio';
+      allow get: if isVerifiedPersonalGmail() && (docId == 'audio' || docId == 'stages_catalog');
       allow list: if false;
-      allow create: if isSuperAdmin()
-        && docId == 'audio'
-        && isValidSystemAudioConfig(incoming());
-      allow update: if isSuperAdmin()
-        && docId == 'audio'
-        && isValidSystemAudioConfig(incoming())
-        && incoming().version > existing().version;
-      allow delete: if isSuperAdmin() && docId == 'audio';
+      allow create: if isAdmin()
+        && (
+          (docId == 'audio' && isValidSystemAudioConfig(incoming()))
+          || (docId == 'stages_catalog' && isValidSystemStagesCatalogConfig(incoming()))
+        );
+      allow update: if isAdmin()
+        && incoming().version > existing().version
+        && (
+          (docId == 'audio' && isValidSystemAudioConfig(incoming()))
+          || (docId == 'stages_catalog' && isValidSystemStagesCatalogConfig(incoming()))
+        );
+      allow delete: if isAdmin() && docId == 'audio';
+    }
+
+    // =========================================================================
+    // 9. Collection Rules: /role_audit_logs/{logId} (M7.3.11.4: Nhật ký cấp/thu hồi quyền nguyên tử & bất biến)
+    //    - Chỉ Admin duy nhất (linhnk2013@gmail.com) được tạo bản ghi nhật ký khi thay đổi quyền.
+    //    - Kiểm tra chặt chẽ:
+    //      + auditId khớp tuyệt đối với document ID (logId)
+    //      + actorUid khớp request.auth.uid và actorEmail khớp 'linhnk2013@gmail.com'
+    //      + targetUid hợp lệ và khác actorUid; targetEmail khác 'linhnk2013@gmail.com'
+    //      + previousRole thuộc ['ADMIN', 'MOD', 'PLAYER'] (cho phép ghi nhật ký hạ cấp/thu hồi bản ghi ADMIN cũ về MOD/PLAYER)
+    //      + newRole chỉ thuộc ['MOD', 'PLAYER'] (tuyệt đối CẤM cấp thêm quyền ADMIN cho bất kỳ tài khoản nào khác)
+    //    - Admin duy nhất và Mod hợp lệ được đọc để đối soát minh bạch.
+    //    - Cấm tuyệt đối sửa hoặc xóa bản ghi nhật ký đã ghi (allow update, delete: if false).
+    // =========================================================================
+    function isValidRoleAuditLogDoc(data, logId) {
+      return isValidId(logId)
+        && data.keys().hasAll([
+          'auditId',
+          'actorUid',
+          'actorEmail',
+          'targetUid',
+          'targetEmail',
+          'targetDisplayName',
+          'previousRole',
+          'newRole',
+          'timestampMs',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'auditId',
+          'actorUid',
+          'actorEmail',
+          'targetUid',
+          'targetEmail',
+          'targetDisplayName',
+          'previousRole',
+          'newRole',
+          'timestampMs',
+          'createdAt'
+        ])
+        && data.auditId == logId
+        && data.actorUid == request.auth.uid
+        && data.actorEmail is string
+        && data.actorEmail.lower() == request.auth.token.email.lower()
+        && data.actorEmail.lower() == 'linhnk2013@gmail.com'
+        && isValidId(data.targetUid)
+        && data.targetUid != request.auth.uid
+        && data.targetEmail is string
+        && data.targetEmail.size() >= 6
+        && data.targetEmail.size() <= 254
+        && data.targetEmail.lower() != 'linhnk2013@gmail.com'
+        && data.targetDisplayName is string
+        && data.targetDisplayName.size() >= 1
+        && data.targetDisplayName.size() <= 60
+        && data.previousRole in ['ADMIN', 'MOD', 'PLAYER']
+        && data.newRole in ['MOD', 'PLAYER']
+        && data.previousRole != data.newRole
+        && isValidClientMillisTimestamp(data.timestampMs)
+        && data.createdAt is timestamp
+        && data.createdAt == request.time;
+    }
+
+    match /role_audit_logs/{logId} {
+      allow get, list: if isStaffModOrAdmin();
+      allow create: if isAdmin() && isValidRoleAuditLogDoc(incoming(), logId);
+      allow update, delete: if false;
     }
   }
 }

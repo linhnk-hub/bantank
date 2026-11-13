@@ -17,7 +17,7 @@ export interface AudioSettings {
 }
 
 import { ScoreManager } from './scoreManager.ts';
-import { AuthManager, isSuperAdminUser } from './authManager.ts';
+import { ADMIN_EMAIL, AuthManager, isAdminUser } from './authManager.ts';
 
 /**
  * M7.3.10 Section 4: Game Action Sound Slots managed by Super Admin
@@ -144,7 +144,7 @@ export class SoundManager {
   private customActionBuffers: Map<GameActionSoundId, AudioBuffer> = new Map();
   private activeActionSources: Set<AudioBufferSourceNode> = new Set();
   private lastPlayedCustomActionId: GameActionSoundId | null = null;
-  private adminRoleOverride: 'SUPER_ADMIN' | 'PLAYER' | null = null;
+  private adminRoleOverride: 'ADMIN' | 'MOD' | 'PLAYER' | null = null;
 
   private constructor() {
     this.loadSettings();
@@ -957,17 +957,17 @@ export class SoundManager {
   /**
    * Programmatic role setter for unit tests (never persisted to localStorage).
    */
-  public setActionSoundAdminRole(role: 'SUPER_ADMIN' | 'PLAYER' | null): void {
+  public setActionSoundAdminRole(role: 'ADMIN' | 'MOD' | 'PLAYER' | null): void {
     this.adminRoleOverride = role;
     this.notifyListeners();
   }
 
   public canManageActionSounds(): boolean {
     if (this.adminRoleOverride !== null) {
-      return this.adminRoleOverride === 'SUPER_ADMIN';
+      return this.adminRoleOverride === 'ADMIN';
     }
     const currentUser = AuthManager.getInstance().getCurrentUser();
-    return isSuperAdminUser(currentUser);
+    return isAdminUser(currentUser);
   }
 
   public getLastPlayedCustomActionId(): GameActionSoundId | null {
@@ -1002,7 +1002,7 @@ export class SoundManager {
       return {
         ok: false,
         error:
-          'Từ chối truy cập: Chỉ Super Admin (linhnk.online@gmail.com) mới có quyền tải lên hoặc thay thế âm thanh hành động.',
+          'Từ chối truy cập: Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền tải lên hoặc thay thế âm thanh hành động.',
       };
     }
 
@@ -1057,7 +1057,7 @@ export class SoundManager {
       fileSizeBytes: file.size,
       durationSec,
       updatedAtMs: Date.now(),
-      updatedByEmail: currentUser?.email || 'linhnk.online@gmail.com',
+      updatedByEmail: currentUser?.email || ADMIN_EMAIL,
       dataUrl: file.dataUrl,
     };
 
@@ -1114,7 +1114,7 @@ export class SoundManager {
         fileSizeBytes: file.size,
         durationSec,
         updatedAtMs: Date.now(),
-        updatedByEmail: currentUser?.email || 'linhnk.online@gmail.com',
+        updatedByEmail: currentUser?.email || ADMIN_EMAIL,
         dataUrl,
       };
 
@@ -1143,7 +1143,7 @@ export class SoundManager {
       return {
         ok: false,
         error:
-          'Từ chối truy cập: Chỉ Super Admin (linhnk.online@gmail.com) mới có quyền xóa âm thanh hành động.',
+          'Từ chối truy cập: Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền xóa âm thanh hành động.',
       };
     }
 

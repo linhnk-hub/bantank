@@ -4,12 +4,15 @@
  */
 
 import {
+  ADMIN_EMAIL,
+  REVOKED_OLD_ADMIN_EMAIL,
   SUPER_ADMIN_EMAIL,
   USER_ACCOUNTS_PAGE_SIZE,
   AuthManager,
   InMemoryUserAccountsPaginationAdapter,
   mergeUpsertUserAccountRecord,
   sanitizeUserAccountSummary,
+  isAdminUser,
   isSuperAdminUser,
   getUserDisplayLabel,
   resolveUserRole,
@@ -20,6 +23,9 @@ import {
   RBAC_PERMISSION_MATRIX,
   hasRolePermission,
   validateRoleAssignmentChange,
+  evaluateCanonicalStaffRoleFromDocs,
+  validateRoleAuditLogPayload,
+  runSimplifiedRoleMigrationForRecords,
   getRoleChangeAuditLogs,
   clearRoleChangeAuditLogsForTesting,
   type ValidatedUserAccount,
@@ -142,20 +148,28 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   const results: M7_3TestResult[] = [];
 
   // =========================================================================
-  // M7_3_T01: Super Admin Identification (linhnk.online@gmail.com only)
+  // M7_3_T01: Sole Admin Identification (linhnk2013@gmail.com only, old linhnk.online@gmail.com revoked)
   // =========================================================================
   {
-    const superAdminAccount: ValidatedUserAccount = {
-      uid: 'uid_super_admin',
-      email: 'linhnk.online@gmail.com',
+    const adminAccount: ValidatedUserAccount = {
+      uid: 'uid_sole_admin',
+      email: 'linhnk2013@gmail.com',
       emailVerified: true,
       displayName: 'Linh NK',
       photoURL: null,
       providerIds: ['google.com'],
     };
-    const superAdminUpper: ValidatedUserAccount = {
-      ...superAdminAccount,
-      email: '  LINHNK.ONLINE@GMAIL.COM ',
+    const adminUpper: ValidatedUserAccount = {
+      ...adminAccount,
+      email: '  LINHNK2013@GMAIL.COM ',
+    };
+    const revokedOldAdmin: ValidatedUserAccount = {
+      uid: 'uid_old_admin_revoked',
+      email: 'linhnk.online@gmail.com',
+      emailVerified: true,
+      displayName: 'Old Revoked Admin',
+      photoURL: null,
+      providerIds: ['google.com'],
     };
     const regularGmail: ValidatedUserAccount = {
       uid: 'uid_player_1',
@@ -166,25 +180,29 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       providerIds: ['google.com'],
     };
     const unverifiedAdminEmail: ValidatedUserAccount = {
-      ...superAdminAccount,
+      ...adminAccount,
       emailVerified: false,
     };
     const nonGoogleProvider: ValidatedUserAccount = {
-      ...superAdminAccount,
+      ...adminAccount,
       providerIds: ['password'],
     };
 
-    const isExactAdmin = isSuperAdminUser(superAdminAccount);
-    const isCaseInsensitiveAdmin = isSuperAdminUser(superAdminUpper);
-    const isRegularAdmin = isSuperAdminUser(regularGmail);
-    const isUnverifiedAdmin = isSuperAdminUser(unverifiedAdminEmail);
-    const isNonGoogleAdmin = isSuperAdminUser(nonGoogleProvider);
-    const isNullAdmin = isSuperAdminUser(null);
+    const isExactAdmin = isAdminUser(adminAccount) && isSuperAdminUser(adminAccount);
+    const isCaseInsensitiveAdmin = isAdminUser(adminUpper);
+    const isRevokedOldAdmin = isAdminUser(revokedOldAdmin) || isSuperAdminUser(revokedOldAdmin);
+    const isRegularAdmin = isAdminUser(regularGmail);
+    const isUnverifiedAdmin = isAdminUser(unverifiedAdminEmail);
+    const isNonGoogleAdmin = isAdminUser(nonGoogleProvider);
+    const isNullAdmin = isAdminUser(null);
 
     const passed =
-      SUPER_ADMIN_EMAIL === 'linhnk.online@gmail.com' &&
+      ADMIN_EMAIL === 'linhnk2013@gmail.com' &&
+      SUPER_ADMIN_EMAIL === 'linhnk2013@gmail.com' &&
+      REVOKED_OLD_ADMIN_EMAIL === 'linhnk.online@gmail.com' &&
       isExactAdmin === true &&
       isCaseInsensitiveAdmin === true &&
+      isRevokedOldAdmin === false &&
       isRegularAdmin === false &&
       isUnverifiedAdmin === false &&
       isNonGoogleAdmin === false &&
@@ -192,19 +210,19 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
 
     results.push({
       id: 'M7_3_T01',
-      name: 'Phân quyền Super Admin duy nhất cho linhnk.online@gmail.com (Google Verified)',
+      name: 'Phân quyền Admin duy nhất cho linhnk2013@gmail.com (Google Verified) & thu hồi hoàn toàn linhnk.online@gmail.com',
       passed,
-      details: `superAdmin=${isExactAdmin}, upperTrim=${isCaseInsensitiveAdmin}, regular=${isRegularAdmin}, unverified=${isUnverifiedAdmin}, nonGoogle=${isNonGoogleAdmin}, null=${isNullAdmin}`,
+      details: `admin=${isExactAdmin}, upperTrim=${isCaseInsensitiveAdmin}, oldRevoked=${isRevokedOldAdmin}, regular=${isRegularAdmin}, unverified=${isUnverifiedAdmin}, nonGoogle=${isNonGoogleAdmin}, null=${isNullAdmin}`,
     });
   }
 
   // =========================================================================
-  // M7_3_T02: Chống giả mạo quyền Super Admin qua localStorage & đồng bộ MusicManager
+  // M7_3_T02: Chống giả mạo quyền Admin qua localStorage & đồng bộ MusicManager
   // =========================================================================
   {
     const mm = MusicManager.getInstance();
     if (typeof window !== 'undefined' && window.localStorage) {
-      window.localStorage.setItem('bantank_user_role_v1', 'SUPER_ADMIN');
+      window.localStorage.setItem('bantank_user_role_v1', 'ADMIN');
     }
 
     // Sync with regular player -> must enforce PLAYER and strip any localStorage tampering
@@ -219,17 +237,29 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const roleForNormal = mm.getUserRole();
     const canManageNormal = mm.canManageMusic();
 
-    // Sync with verified Super Admin -> must grant SUPER_ADMIN
+    // Sync with revoked old email linhnk.online@gmail.com -> must enforce PLAYER
     mm.syncRoleFromAuthUser({
-      uid: 'u_super',
+      uid: 'u_old_revoked',
       email: 'linhnk.online@gmail.com',
       emailVerified: true,
-      displayName: 'Super Admin',
+      displayName: 'Old Admin',
       photoURL: null,
       providerIds: ['google.com'],
     });
-    const roleForSuper = mm.getUserRole();
-    const canManageSuper = mm.canManageMusic();
+    const roleForOldRevoked = mm.getUserRole();
+    const canManageOldRevoked = mm.canManageMusic();
+
+    // Sync with verified sole Admin linhnk2013@gmail.com -> must grant ADMIN
+    mm.syncRoleFromAuthUser({
+      uid: 'u_admin',
+      email: 'linhnk2013@gmail.com',
+      emailVerified: true,
+      displayName: 'Sole Admin',
+      photoURL: null,
+      providerIds: ['google.com'],
+    });
+    const roleForAdmin = mm.getUserRole();
+    const canManageAdmin = mm.canManageMusic();
 
     // Sync with null (sign out) -> must immediately revoke back to PLAYER
     mm.syncRoleFromAuthUser(null);
@@ -239,16 +269,18 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const passed =
       roleForNormal === 'PLAYER' &&
       canManageNormal === false &&
-      roleForSuper === 'SUPER_ADMIN' &&
-      canManageSuper === true &&
+      roleForOldRevoked === 'PLAYER' &&
+      canManageOldRevoked === false &&
+      roleForAdmin === 'ADMIN' &&
+      canManageAdmin === true &&
       roleAfterLogout === 'PLAYER' &&
       canManageAfterLogout === false;
 
     results.push({
       id: 'M7_3_T02',
-      name: 'Chặn nâng quyền qua localStorage và đồng bộ quyền MusicManager theo Auth thực tế',
+      name: 'Chặn nâng quyền qua localStorage và đồng bộ quyền MusicManager theo Auth thực tế (linhnk2013@gmail.com)',
       passed,
-      details: `normal=(${roleForNormal}, canManage=${canManageNormal}), super=(${roleForSuper}, canManage=${canManageSuper}), logout=(${roleAfterLogout}, canManage=${canManageAfterLogout})`,
+      details: `normal=(${roleForNormal}, canManage=${canManageNormal}), oldRevoked=(${roleForOldRevoked}, canManage=${canManageOldRevoked}), admin=(${roleForAdmin}, canManage=${canManageAdmin}), logout=(${roleAfterLogout}, canManage=${canManageAfterLogout})`,
     });
   }
 
@@ -3935,7 +3967,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       }
       return synthBufferV1;
     });
-    mm.setUserRole('SUPER_ADMIN');
+    mm.setUserRole('ADMIN');
 
     // Khởi tạo trạng thái đồng bộ thông qua kiểm tra đồng bộ hóa cấu hình trực tiếp:
     const v1Config: SystemAudioConfigDocument = {
@@ -5285,11 +5317,11 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       vBadOpId.verified === false &&
       vUndecodable.verified === false;
 
-    // 2. Hạng mục 2: Kiểm tra phân quyền và màu khung tên theo quyền (SUPER_ADMIN/ADMIN/MOD/PLAYER) & chống giả mạo từ client
+    // 2. Hạng mục 2: Kiểm tra phân quyền 3 vai trò (ADMIN/MOD/PLAYER) và màu khung tên theo quyền & chống giả mạo từ client
     clearVerifiedServerRoles();
-    const superAdminRole = resolveUserRole({
+    const soleAdminRole = resolveUserRole({
       uid: 'uid_sa',
-      email: SUPER_ADMIN_EMAIL,
+      email: ADMIN_EMAIL,
       emailVerified: true,
       providerIds: ['google.com'],
     });
@@ -5299,16 +5331,16 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       email: 'normal.user@gmail.com',
       emailVerified: true,
       providerIds: ['google.com'],
-      role: 'SUPER_ADMIN',
+      role: 'ADMIN',
+      isAdmin: true,
       isSuperAdmin: true,
     };
     const roleBeforeServerSync = resolveUserRole(spoofedClientObj);
-    setVerifiedServerRoleForUid('uid_admin_1', 'ADMIN');
+    // Cố tình gán ADMIN cho tài khoản không phải linhnk2013@gmail.com -> phải bị từ chối và chỉ trả về PLAYER
+    setVerifiedServerRoleForUid('uid_other_admin_1', 'ADMIN');
     setVerifiedServerRoleForUid('uid_mod_1', 'MOD');
-    // Cố tình gán SUPER_ADMIN qua setVerifiedServerRoleForUid cho tài khoản thường -> phải bị bỏ qua (chỉ linhnk.online@gmail.com mới là SUPER_ADMIN)
-    setVerifiedServerRoleForUid('uid_spoof', 'SUPER_ADMIN');
-    const adminRole = resolveUserRole({
-      uid: 'uid_admin_1',
+    const otherAdminBlocked = resolveUserRole({
+      uid: 'uid_other_admin_1',
       email: 'admin1@gmail.com',
       emailVerified: true,
       providerIds: ['google.com'],
@@ -5319,18 +5351,17 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       emailVerified: true,
       providerIds: ['google.com'],
     });
-    const spoofedSuperAdminBlocked = resolveUserRole(spoofedClientObj);
+    const spoofedAdminBlocked = resolveUserRole(spoofedClientObj);
     const frameColorsOk =
-      superAdminRole === 'SUPER_ADMIN' &&
+      soleAdminRole === 'ADMIN' &&
       roleBeforeServerSync === 'PLAYER' &&
-      adminRole === 'ADMIN' &&
+      otherAdminBlocked === 'PLAYER' &&
       modRole === 'MOD' &&
-      spoofedSuperAdminBlocked === 'PLAYER' &&
-      getRoleNameFrameClasses('SUPER_ADMIN').includes('border-red-500') &&
+      spoofedAdminBlocked === 'PLAYER' &&
       getRoleNameFrameClasses('ADMIN').includes('border-emerald-500') &&
       getRoleNameFrameClasses('MOD').includes('border-sky-500') &&
       getRoleNameFrameClasses('PLAYER').includes('border-neutral-700/80') &&
-      getRoleDisplayInfo('SUPER_ADMIN').label === 'Super Admin';
+      getRoleDisplayInfo('ADMIN').label === 'Admin';
     clearVerifiedServerRoles();
 
     // 3. Hạng mục 3: Kiểm tra đồng bộ Single-BGM giữa MusicManager và SoundManager
@@ -5350,7 +5381,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
 
     results.push({
       id: 'M7_3_T37',
-      name: 'T37: M7.3.7 (Hạng mục 1, 2, 3) – Xác minh 5 bước Storage Object, phân biệt màu khung tên theo quyền (SUPER_ADMIN/ADMIN/MOD/PLAYER) & chặn phát chồng nhạc nền',
+      name: 'T37: M7.3.7 (Hạng mục 1, 2, 3) – Xác minh 5 bước Storage Object, phân biệt màu khung tên theo 3 vai trò (ADMIN/MOD/PLAYER) & chặn phát chồng nhạc nền',
       passed,
       details: `storage5StepOk=${storage5StepVerificationOk}, roleFramesOk=${frameColorsOk}, singleBgmGuardOk=${proceduralBlockedWhenCustomActive}`,
     });
@@ -6972,7 +7003,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
         uid: `uid_user_${String(n).padStart(2, '0')}`,
         displayName: `Chiến Binh ${n}`,
         email: `player${n}@gmail.com`,
-        role: n === 1 ? 'SUPER_ADMIN' : n <= 3 ? 'ADMIN' : 'PLAYER',
+        role: n === 1 ? 'ADMIN' : n <= 3 ? 'MOD' : 'PLAYER',
         createdAtMs: 1_700_000_000_000 + n * 10_000,
         lastLoginAtMs: 1_710_000_000_000 - n * 60_000,
         // Cố tình truyền dữ liệu nhạy cảm để kiểm tra sanitizeUserAccountSummary loại bỏ sạch
@@ -7032,6 +7063,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   // =========================================================================
   {
     const authMgr = AuthManager.getInstance();
+    (authMgr as any).currentUser = null;
     authMgr.exitTrialMode();
 
     // 1. Bắt đầu Chơi thử từ màn hình đăng nhập
@@ -7095,6 +7127,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       LANDING_PAGE_MODES.some((m) => m.id === 'TRIAL_MODE' && m.actionType === 'PLAY_TRIAL');
 
     const authMgr = AuthManager.getInstance();
+    (authMgr as any).currentUser = null;
     authMgr.exitTrialMode();
     const unauthenticatedPublicAccessOk =
       authMgr.getCurrentUser() === null && authMgr.isTrialMode() === false;
@@ -7176,8 +7209,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       playerDeleteRes.ok === false &&
       sm.getActionSoundTrack('P1_SHOOT') === null;
 
-    // Super Admin được phép upload, thay thế, phát âm thanh tùy chỉnh và xóa về mặc định
-    sm.setActionSoundAdminRole('SUPER_ADMIN');
+    // Admin duy nhất (linhnk2013@gmail.com) được phép upload, thay thế, phát âm thanh tùy chỉnh và xóa về mặc định
+    sm.setActionSoundAdminRole('ADMIN');
     const adminShootFileV1 = {
       name: 'tank_cannon_v1.mp3',
       type: 'audio/mpeg',
@@ -7326,57 +7359,55 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       page2.hasNextPage === false &&
       combinedUids.size === 15;
 
-    // Test A5: Cấp quyền Admin, Mod và Thu hồi về Người chơi bởi Super Admin -> cập nhật vai trò & ghi Audit Log
+    // Test A5: Cấp quyền Mod và Thu hồi về Người chơi bởi Admin duy nhất (linhnk2013@gmail.com) -> cập nhật vai trò & ghi Audit Log; chặn cấp thêm ADMIN
     const authMgr = AuthManager.getInstance();
     authMgr.setCustomPaginationAdapterForTesting(adapter);
-    const superAdminCaller = {
-      uid: 'uid_super_admin',
-      email: SUPER_ADMIN_EMAIL,
+    const soleAdminCaller = {
+      uid: 'uid_sole_admin',
+      email: ADMIN_EMAIL,
       emailVerified: true,
       providerData: [{ providerId: 'google.com' }],
     };
-    const grantAdminRes = authMgr.changeUserRoleSync({
+    const grantAdminBlockedRes = authMgr.changeUserRoleSync({
       targetUid: 'uid_new_player_1',
       targetEmail: 'newplayer1@gmail.com',
       currentTargetRole: 'PLAYER',
-      newRole: 'ADMIN',
-      overrideCallerForTesting: superAdminCaller,
+      newRole: 'ADMIN' as any,
+      overrideCallerForTesting: soleAdminCaller,
     });
     const grantModRes = authMgr.changeUserRoleSync({
       targetUid: 'uid_new_player_1',
       targetEmail: 'newplayer1@gmail.com',
-      currentTargetRole: 'ADMIN',
+      currentTargetRole: 'PLAYER',
       newRole: 'MOD',
-      overrideCallerForTesting: superAdminCaller,
+      overrideCallerForTesting: soleAdminCaller,
     });
     const revokeToPlayerRes = authMgr.changeUserRoleSync({
       targetUid: 'uid_new_player_1',
       targetEmail: 'newplayer1@gmail.com',
       currentTargetRole: 'MOD',
       newRole: 'PLAYER',
-      overrideCallerForTesting: superAdminCaller,
+      overrideCallerForTesting: soleAdminCaller,
     });
     const auditLogs = getRoleChangeAuditLogs();
     const a5Passed =
-      grantAdminRes.success === true &&
+      grantAdminBlockedRes.success === false &&
       grantModRes.success === true &&
       revokeToPlayerRes.success === true &&
-      auditLogs.length === 3 &&
+      auditLogs.length === 2 &&
       auditLogs[0].newRole === 'PLAYER' &&
-      auditLogs[1].newRole === 'MOD' &&
-      auditLogs[2].newRole === 'ADMIN';
+      auditLogs[1].newRole === 'MOD';
 
-    // Test A6: Chặn cấp quyền trái phép (Admin, Mod, Player bị từ chối; chặn tự hạ quyền Super Admin duy nhất; chặn cấp thêm Super Admin)
-    setVerifiedServerRoleForUid('uid_admin_2', 'ADMIN');
+    // Test A6: Chặn cấp quyền trái phép (Email cũ linhnk.online@gmail.com, Mod, Player bị từ chối; chặn tự hạ quyền Admin duy nhất; chặn cấp thêm Admin/Super Admin)
     setVerifiedServerRoleForUid('uid_mod_1', 'MOD');
-    const adminAttempt = authMgr.changeUserRoleSync({
+    const oldAdminAttempt = authMgr.changeUserRoleSync({
       targetUid: 'uid_bulk_4',
       targetEmail: 'player4@gmail.com',
       currentTargetRole: 'PLAYER',
       newRole: 'MOD',
       overrideCallerForTesting: {
-        uid: 'uid_admin_2',
-        email: 'admin2@gmail.com',
+        uid: 'uid_old_admin_revoked',
+        email: REVOKED_OLD_ADMIN_EMAIL,
         emailVerified: true,
         providerData: [{ providerId: 'google.com' }],
       },
@@ -7397,7 +7428,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       targetUid: 'uid_bulk_4',
       targetEmail: 'player4@gmail.com',
       currentTargetRole: 'PLAYER',
-      newRole: 'ADMIN',
+      newRole: 'MOD',
       overrideCallerForTesting: {
         uid: 'uid_player_5',
         email: 'player5@gmail.com',
@@ -7405,41 +7436,41 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
         providerData: [{ providerId: 'google.com' }],
       },
     });
-    const selfDemoteSuperAdmin = validateRoleAssignmentChange({
-      actorUid: 'uid_super_admin',
-      actorEmail: SUPER_ADMIN_EMAIL,
-      actorRole: 'SUPER_ADMIN',
-      targetUid: 'uid_super_admin',
-      targetEmail: SUPER_ADMIN_EMAIL,
-      currentTargetRole: 'SUPER_ADMIN',
-      newRole: 'ADMIN',
-      superAdminEmail: SUPER_ADMIN_EMAIL,
+    const selfDemoteSoleAdmin = validateRoleAssignmentChange({
+      actorUid: 'uid_sole_admin',
+      actorEmail: ADMIN_EMAIL,
+      actorRole: 'ADMIN',
+      targetUid: 'uid_sole_admin',
+      targetEmail: ADMIN_EMAIL,
+      currentTargetRole: 'ADMIN',
+      newRole: 'MOD',
+      adminEmail: ADMIN_EMAIL,
     });
-    const grantSecondSuperAdmin = validateRoleAssignmentChange({
-      actorUid: 'uid_super_admin',
-      actorEmail: SUPER_ADMIN_EMAIL,
-      actorRole: 'SUPER_ADMIN',
+    const grantSecondAdmin = validateRoleAssignmentChange({
+      actorUid: 'uid_sole_admin',
+      actorEmail: ADMIN_EMAIL,
+      actorRole: 'ADMIN',
       targetUid: 'uid_bulk_4',
       targetEmail: 'player4@gmail.com',
-      currentTargetRole: 'ADMIN',
-      newRole: 'SUPER_ADMIN',
-      superAdminEmail: SUPER_ADMIN_EMAIL,
+      currentTargetRole: 'MOD',
+      newRole: 'ADMIN',
+      adminEmail: ADMIN_EMAIL,
     });
     authMgr.setCustomPaginationAdapterForTesting(null);
     clearVerifiedServerRoles();
 
     const a6Passed =
-      adminAttempt.success === false &&
+      oldAdminAttempt.success === false &&
       modAttempt.success === false &&
       playerAttempt.success === false &&
-      selfDemoteSuperAdmin.allowed === false &&
-      grantSecondSuperAdmin.allowed === false;
+      selfDemoteSoleAdmin.allowed === false &&
+      grantSecondAdmin.allowed === false;
 
     const passed = a1Passed && a2Passed && a3Passed && a4Passed && a5Passed && a6Passed;
 
     results.push({
       id: 'M7_3_T57',
-      name: 'T57: M7.3.11 Nhóm A (Test A1–A6) – Quản lý tài khoản: Upsert an toàn theo UID, Nickname fallback kèm ghi chú, Phân trang 15 tài khoản (10/trang) & Cấp/Thu hồi quyền Admin/Mod có Audit Log',
+      name: 'T57: M7.3.11 Nhóm A (Test A1–A6) – Quản lý tài khoản: Upsert an toàn theo UID, Nickname fallback kèm ghi chú, Phân trang 15 tài khoản (10/trang) & Cấp/Thu hồi quyền Mod có Audit Log',
       passed,
       details: `A1(NewUid)=${a1Passed}, A2(ReturningPreserved)=${a2Passed}, A3(NicknameFallback)=${a3Passed}, A4(Pagination15)=${a4Passed}, A5(RoleGrantRevokeAudit)=${a5Passed}, A6(UnauthorizedBlocked)=${a6Passed}`,
     });
@@ -7575,13 +7606,13 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'Stage 1 Bị Sửa',
       orderIndex: 1,
       map: customMap,
-      actorRole: 'SUPER_ADMIN',
-      actorEmail: SUPER_ADMIN_EMAIL,
+      actorRole: 'ADMIN',
+      actorEmail: ADMIN_EMAIL,
     });
     const deactivateStage1Attempt = stageMgr.deactivateStage({
       id: 1,
-      actorRole: 'SUPER_ADMIN',
-      actorEmail: SUPER_ADMIN_EMAIL,
+      actorRole: 'ADMIN',
+      actorEmail: ADMIN_EMAIL,
     });
     const b5Passed =
       overwriteStage1Attempt.success === false &&
@@ -7655,39 +7686,49 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   }
 
   // =========================================================================
-  // T59: M7.3.11 Nhóm C (Test C1–C5) – Bảng Ma trận Phân quyền Tập trung (Super Admin / Admin / Mod / Người chơi) & Đánh dấu Chưa triển khai
+  // T59: M7.3.11.4 Nhóm C (Test C1–C5) – Bảng Ma trận Phân quyền Tập trung 3 Vai trò (ADMIN / MOD / PLAYER), loại bỏ SUPER_ADMIN & Đánh dấu Chưa triển khai
   // =========================================================================
   {
-    // Test C1: Super Admin có đầy đủ toàn bộ quyền quản trị và cấp quyền
-    const c1SuperAdminAll =
-      hasRolePermission('SUPER_ADMIN', 'GRANT_REVOKE_ADMIN') &&
-      hasRolePermission('SUPER_ADMIN', 'GRANT_REVOKE_MOD') &&
-      hasRolePermission('SUPER_ADMIN', 'MANAGE_STAGES') &&
-      hasRolePermission('SUPER_ADMIN', 'MANAGE_AVATAR_CATALOG') &&
-      hasRolePermission('SUPER_ADMIN', 'MANAGE_AUDIO_SYSTEM');
+    // Test C1: SUPER_ADMIN đã bị xóa hoàn toàn -> luôn trả về false cho mọi quyền
+    const c1SuperAdminRemoved =
+      !hasRolePermission('SUPER_ADMIN', 'GRANT_REVOKE_MOD') &&
+      !hasRolePermission('SUPER_ADMIN', 'MANAGE_STAGES') &&
+      !hasRolePermission('SUPER_ADMIN', 'MANAGE_AVATAR_CATALOG') &&
+      !hasRolePermission('SUPER_ADMIN', 'MANAGE_AUDIO_SYSTEM') &&
+      !hasRolePermission('SUPER_ADMIN', 'VIEW_ACCOUNT_LIST');
 
-    // Test C2: Admin quản lý được Stage, Cài đặt hệ thống nhưng KHÔNG cấp được quyền Admin/Mod
+    // Test C2: ADMIN duy nhất (linhnk2013@gmail.com) kế thừa toàn bộ quyền quản trị (Stage, Media, Cài đặt, Cấp/Thu hồi MOD) nhưng KHÔNG cấp thêm ADMIN cho tài khoản khác
     const c2AdminScope =
+      hasRolePermission('ADMIN', 'VIEW_ACCOUNT_LIST') &&
+      hasRolePermission('ADMIN', 'VIEW_ACCOUNT_DETAILS') &&
+      hasRolePermission('ADMIN', 'GRANT_REVOKE_MOD') &&
       hasRolePermission('ADMIN', 'MANAGE_STAGES') &&
       hasRolePermission('ADMIN', 'ADD_STAGE') &&
+      hasRolePermission('ADMIN', 'EDIT_STAGE') &&
+      hasRolePermission('ADMIN', 'SAVE_STAGE_DRAFT') &&
       hasRolePermission('ADMIN', 'ACTIVATE_STAGE') &&
+      hasRolePermission('ADMIN', 'DEACTIVATE_STAGE') &&
+      hasRolePermission('ADMIN', 'MANAGE_AVATAR_CATALOG') &&
+      hasRolePermission('ADMIN', 'MANAGE_AUDIO_SYSTEM') &&
       hasRolePermission('ADMIN', 'MANAGE_SYSTEM_SETTINGS') &&
-      !hasRolePermission('ADMIN', 'GRANT_REVOKE_ADMIN') &&
-      !hasRolePermission('ADMIN', 'GRANT_REVOKE_MOD');
+      hasRolePermission('ADMIN', 'VIEW_AUDIT_AND_MONITORING') &&
+      !hasRolePermission('ADMIN', 'GRANT_REVOKE_ADMIN');
 
-    // Test C3: Mod truy cập được công cụ kiểm duyệt tài khoản nhưng KHÔNG sửa được Stage, không sửa được Media, không cấp được quyền
+    // Test C3: MOD giữ nguyên phạm vi quyền hiện tại (chỉ xem danh sách tài khoản, chi tiết hồ sơ và nhật ký kiểm toán; KHÔNG sửa Stage, Media, Cài đặt, hay cấp quyền)
     const c3ModScope =
       hasRolePermission('MOD', 'VIEW_ACCOUNT_LIST') &&
       hasRolePermission('MOD', 'VIEW_ACCOUNT_DETAILS') &&
-      hasRolePermission('MOD', 'MANAGE_PLAYER_ACCOUNT') &&
       hasRolePermission('MOD', 'VIEW_AUDIT_AND_MONITORING') &&
+      !hasRolePermission('MOD', 'GRANT_REVOKE_MOD') &&
+      !hasRolePermission('MOD', 'GRANT_REVOKE_ADMIN') &&
+      !hasRolePermission('MOD', 'MANAGE_PLAYER_ACCOUNT') &&
       !hasRolePermission('MOD', 'MANAGE_STAGES') &&
       !hasRolePermission('MOD', 'ADD_STAGE') &&
       !hasRolePermission('MOD', 'EDIT_STAGE') &&
       !hasRolePermission('MOD', 'ACTIVATE_STAGE') &&
       !hasRolePermission('MOD', 'MANAGE_AVATAR_CATALOG') &&
       !hasRolePermission('MOD', 'MANAGE_AUDIO_SYSTEM') &&
-      !hasRolePermission('MOD', 'GRANT_REVOKE_ADMIN');
+      !hasRolePermission('MOD', 'MANAGE_SYSTEM_SETTINGS');
 
     // Test C4: Người chơi thường (PLAYER) không truy cập được bất kỳ quyền quản trị nào
     const playerTabs = getAvailableSettingsTabsForRole('PLAYER');
@@ -7698,24 +7739,27 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       playerTabs.length === 2 &&
       playerTabs.every((t) => !t.adminOnly);
 
-    // Test C5: Các chức năng Rank & XP/Xu, Clan, Friends được đánh dấu rõ "Chưa triển khai"
+    // Test C5: Các chức năng Khóa/Mở khóa tài khoản, Rank & XP/Xu, Clan, Friends được đánh dấu rõ "Chưa triển khai"
     const undeployedPerms = RBAC_PERMISSION_MATRIX.filter(
       (p) =>
+        p.id === 'MANAGE_PLAYER_ACCOUNT' ||
         p.id === 'MANAGE_RANK_XP_XU' ||
         p.id === 'MANAGE_CLAN_ADMIN' ||
         p.id === 'MANAGE_FRIENDS_ADMIN'
     );
     const c5NotDeployedMarked =
-      undeployedPerms.length === 3 &&
+      undeployedPerms.length === 4 &&
       undeployedPerms.every(
         (p) =>
           p.status === 'NOT_DEPLOYED' &&
           p.statusLabelVi === 'Chưa triển khai' &&
-          !hasRolePermission('SUPER_ADMIN', p.id)
+          !hasRolePermission('ADMIN', p.id) &&
+          !hasRolePermission('MOD', p.id) &&
+          !hasRolePermission('PLAYER', p.id)
       );
 
     const passed =
-      c1SuperAdminAll &&
+      c1SuperAdminRemoved &&
       c2AdminScope &&
       c3ModScope &&
       c4PlayerRestricted &&
@@ -7723,14 +7767,14 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
 
     results.push({
       id: 'M7_3_T59',
-      name: 'T59: M7.3.11 Nhóm C (Test C1–C5) – Ma trận Phân quyền Tập trung (Super Admin / Admin / Mod / Người chơi) & Đánh dấu "Chưa triển khai" cho Rank/Clan/Friends',
+      name: 'T59: M7.3.11.4 Nhóm C (Test C1–C5) – Ma trận Phân quyền Tập trung 3 Vai trò (ADMIN / MOD / PLAYER), loại bỏ SUPER_ADMIN & Đánh dấu "Chưa triển khai"',
       passed,
-      details: `C1(SuperAdmin)=${c1SuperAdminAll}, C2(Admin)=${c2AdminScope}, C3(Mod)=${c3ModScope}, C4(Player)=${c4PlayerRestricted}, C5(NotDeployed)=${c5NotDeployedMarked}`,
+      details: `C1(SuperAdminRemoved)=${c1SuperAdminRemoved}, C2(SoleAdminFullScope)=${c2AdminScope}, C3(ModPreserved)=${c3ModScope}, C4(PlayerRestricted)=${c4PlayerRestricted}, C5(NotDeployed4)=${c5NotDeployedMarked}`,
     });
   }
 
   // =========================================================================
-  // T60: M7.3.11 Nhóm D (Test D1–D9) – Bảo vệ phiên đăng nhập: Khắc phục đăng xuất 5 phút khi chuyển tab, Cảnh báo phút 14 + Tiếp tục phiên, Timeout 15 phút & Đồng bộ đa tab không lộ token
+  // T60: M7.3.11.1 Nhóm D (Test D1–D9) – Bảo vệ phiên đăng nhập: Khắc phục đăng xuất 5 phút khi chuyển tab, Cảnh báo phút 14 + Tiếp tục phiên, Timeout 15 phút & First-Active-Session Wins (D8.1–D8.5)
   // =========================================================================
   {
     const sessionMgr = SessionManager.getInstance();
@@ -7819,25 +7863,118 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       snapNetworkDisconnect.status === 'CONNECTION_LOST_UNVERIFIED' &&
       snapNetworkDisconnect.sessionId === 'sess_active_001';
 
-    // Khôi phục lại ACTIVE để test D4 (> 15 phút) và D8 (Thiết bị khác chiếm phiên)
-    sessionMgr.initMockActiveSessionForTesting({
-      uid: 'uid_session_test',
-      sessionId: 'sess_active_001',
-      serverActiveMs: Date.now(),
-    });
-
-    // Test D8: Một thiết bị hoạt động -> khi phát hiện thiết bị khác trên server, chuyển sang DISPLACED
-    const snapDisplaced = sessionMgr.simulateTabSwitchReturnForTesting({
-      backgroundDurationMs: 180000,
-      serverDocState: {
-        exists: true,
+    // Test D8 (M7.3.11.1 Mục I): Khóa lại quy tắc một thiết bị đăng nhập (First-Active-Session Wins)
+    // - D8.1: A đăng nhập thành công, B đăng nhập cùng Gmail -> B bị từ chối, A vẫn ACTIVE (KHÔNG bị chuyển sang DISPLACED).
+    const d8_1 = sessionMgr.evaluateFirstActiveSessionLeaseForTesting({
+      serverNowMs: baseTimeMs,
+      existingServerLease: {
+        uid: 'uid_session_test',
+        deviceId: 'device_A_1111111111111111',
+        sessionId: 'sess_A_001',
         isActive: true,
-        deviceId: 'other_device_99999999',
-        sessionId: 'sess_other_device',
-        lastActiveAtMs: Date.now(),
+        lastActiveAtMs: baseTimeMs - 30_000,
+      },
+      incomingAttempt: {
+        uid: 'uid_session_test',
+        deviceId: 'device_B_2222222222222222',
+        newSessionId: 'sess_B_attempt_01',
       },
     });
-    const d8SingleDeviceDisplacedOk = snapDisplaced.status === 'DISPLACED';
+    const d8_1_Ok =
+      d8_1.bAcquisitionAllowed === false &&
+      d8_1.aStatusOnServer === 'ACTIVE' &&
+      d8_1.bStatusAfterAttempt === 'DISPLACED' &&
+      d8_1.resultingServerLease.deviceId === 'device_A_1111111111111111';
+
+    // - D8.2: A chuyển tab 5 phút (300,000ms), B đăng nhập -> B bị từ chối, A vẫn ACTIVE.
+    const d8_2 = sessionMgr.evaluateFirstActiveSessionLeaseForTesting({
+      serverNowMs: baseTimeMs,
+      existingServerLease: {
+        uid: 'uid_session_test',
+        deviceId: 'device_A_1111111111111111',
+        sessionId: 'sess_A_001',
+        isActive: true,
+        lastActiveAtMs: baseTimeMs - 300_000, // 5 phút
+      },
+      incomingAttempt: {
+        uid: 'uid_session_test',
+        deviceId: 'device_B_2222222222222222',
+        newSessionId: 'sess_B_attempt_02',
+      },
+    });
+    const d8_2_Ok =
+      d8_2.bAcquisitionAllowed === false &&
+      d8_2.aStatusOnServer === 'ACTIVE' &&
+      d8_2.bStatusAfterAttempt === 'DISPLACED' &&
+      d8_2.resultingServerLease.deviceId === 'device_A_1111111111111111';
+
+    // - D8.3: A mất mạng tạm thời (lỡ nhịp heartbeat 4 phút = 240,000ms), B thử đăng nhập -> KHÔNG được chiếm phiên A chỉ vì mất heartbeat khi lease 15 phút còn hiệu lực.
+    const d8_3 = sessionMgr.evaluateFirstActiveSessionLeaseForTesting({
+      serverNowMs: baseTimeMs,
+      existingServerLease: {
+        uid: 'uid_session_test',
+        deviceId: 'device_A_1111111111111111',
+        sessionId: 'sess_A_001',
+        isActive: true,
+        lastActiveAtMs: baseTimeMs - 240_000, // Mất heartbeat 4 phút nhưng vẫn < 900,000ms
+      },
+      incomingAttempt: {
+        uid: 'uid_session_test',
+        deviceId: 'device_B_2222222222222222',
+        newSessionId: 'sess_B_attempt_03',
+      },
+    });
+    const d8_3_Ok =
+      d8_3.bAcquisitionAllowed === false &&
+      d8_3.aStatusOnServer === 'ACTIVE' &&
+      d8_3.bStatusAfterAttempt === 'DISPLACED' &&
+      d8_3.resultingServerLease.deviceId === 'device_A_1111111111111111';
+
+    // - D8.4: A chủ động đăng xuất (isActive = false), B đăng nhập -> B được phép đăng nhập.
+    const d8_4 = sessionMgr.evaluateFirstActiveSessionLeaseForTesting({
+      serverNowMs: baseTimeMs,
+      existingServerLease: {
+        uid: 'uid_session_test',
+        deviceId: 'device_A_1111111111111111',
+        sessionId: 'sess_A_001',
+        isActive: false,
+        lastActiveAtMs: baseTimeMs - 10_000,
+      },
+      incomingAttempt: {
+        uid: 'uid_session_test',
+        deviceId: 'device_B_2222222222222222',
+        newSessionId: 'sess_B_attempt_04',
+      },
+    });
+    const d8_4_Ok =
+      d8_4.bAcquisitionAllowed === true &&
+      d8_4.bStatusAfterAttempt === 'ACTIVE' &&
+      d8_4.resultingServerLease.deviceId === 'device_B_2222222222222222';
+
+    // - D8.5: Phiên A hết hạn thực sự sau > 15 phút (905,000ms) không hoạt động -> lease giải phóng hợp lệ, B mới được đăng nhập.
+    const d8_5 = sessionMgr.evaluateFirstActiveSessionLeaseForTesting({
+      serverNowMs: baseTimeMs,
+      existingServerLease: {
+        uid: 'uid_session_test',
+        deviceId: 'device_A_1111111111111111',
+        sessionId: 'sess_A_001',
+        isActive: true,
+        lastActiveAtMs: baseTimeMs - 905_000, // > 900,000ms
+      },
+      incomingAttempt: {
+        uid: 'uid_session_test',
+        deviceId: 'device_B_2222222222222222',
+        newSessionId: 'sess_B_attempt_05',
+      },
+    });
+    const d8_5_Ok =
+      d8_5.bAcquisitionAllowed === true &&
+      d8_5.aStatusOnServer === 'RELEASED_OR_EXPIRED' &&
+      d8_5.bStatusAfterAttempt === 'ACTIVE' &&
+      d8_5.resultingServerLease.deviceId === 'device_B_2222222222222222';
+
+    const d8FirstActiveSessionWinsOk =
+      d8_1_Ok && d8_2_Ok && d8_3_Ok && d8_4_Ok && d8_5_Ok;
 
     // Test D4: Không hoạt động quá 15 phút (905,000ms) -> kết thúc phiên PAUSED_IDLE
     sessionMgr.initMockActiveSessionForTesting({
@@ -7856,13 +7993,753 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       d4FifteenMinTimeoutOk &&
       d6NetworkResilienceOk &&
       d7MultiTabSyncOk &&
-      d8SingleDeviceDisplacedOk;
+      d8FirstActiveSessionWinsOk;
 
     results.push({
       id: 'M7_3_T60',
-      name: 'T60: M7.3.11 Nhóm D (Test D1–D9) – Bảo vệ phiên đăng nhập: Chuyển tab 5 phút & 10 phút giữ nguyên ACTIVE, Cảnh báo phút 14 + Tiếp tục phiên, Timeout 15 phút & Đồng bộ đa tab không lộ token',
+      name: 'T60: M7.3.11.1 Nhóm D (Test D1–D9) – Bảo vệ phiên đăng nhập: Chuyển tab 5m/10m giữ ACTIVE, Cảnh báo phút 14, Timeout 15m & First-Active-Session Wins (D8.1–D8.5)',
       passed,
-      details: `D1(5mTab)=${d1FiveMinTabSwitchOk}, D2(10mTab)=${d2TenMinTabSwitchOk}, D3(14mWarnContinue)=${d3WarningAndContinueOk}, D4(15mTimeout)=${d4FifteenMinTimeoutOk}, D6(NetResilience)=${d6NetworkResilienceOk}, D7(MultiTabNoToken)=${d7MultiTabSyncOk}, D8(SingleDevice)=${d8SingleDeviceDisplacedOk}`,
+      details: `D1(5mTab)=${d1FiveMinTabSwitchOk}, D2(10mTab)=${d2TenMinTabSwitchOk}, D3(14mWarnContinue)=${d3WarningAndContinueOk}, D4(15mTimeout)=${d4FifteenMinTimeoutOk}, D6(NetResilience)=${d6NetworkResilienceOk}, D7(MultiTabNoToken)=${d7MultiTabSyncOk}, D8(FirstActiveWins_5Cases)=${d8FirstActiveSessionWinsOk}`,
+    });
+  }
+
+  // =========================================================================
+  // T61: M7.3.11.2 / M7.3.11.4 – CRITICAL RBAC RULES & AUDIT ATOMICITY PATCH (11 Kịch bản kiểm chứng Fail-Closed & Nguyên tử)
+  // =========================================================================
+  {
+    const authMgr = AuthManager.getInstance();
+    const stageMgr = StageManager.getInstance();
+    stageMgr.resetForTesting();
+    clearVerifiedServerRoles();
+    clearRoleChangeAuditLogsForTesting();
+
+    // Kịch bản 1: Sole ADMIN (linhnk2013@gmail.com) đã xác minh Google -> ĐƯỢC PHÉP (isAdmin === true, resolvedRole === 'ADMIN')
+    const r1SoleAdminActive = evaluateCanonicalStaffRoleFromDocs({
+      uid: 'uid_sole_admin_active',
+      email: ADMIN_EMAIL,
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: { exists: true, role: 'ADMIN', isActive: true },
+      userDoc: { role: 'PLAYER', isSuperAdmin: false },
+    });
+    const case1Ok =
+      r1SoleAdminActive.isAdmin === true &&
+      r1SoleAdminActive.isStaffAdmin === true &&
+      r1SoleAdminActive.isStaffModOrAdmin === true &&
+      r1SoleAdminActive.resolvedRole === 'ADMIN';
+
+    // Kịch bản 2: Hồ sơ role='ADMIN' của email khác hoặc isActive: false -> BỊ TỪ CHỐI (Fail-Closed: chỉ linhnk2013@gmail.com mới là ADMIN)
+    const r2OtherAdminDocDenied = evaluateCanonicalStaffRoleFromDocs({
+      uid: 'uid_admin_other_email',
+      email: 'admin.other@bantank.online',
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: { exists: true, role: 'ADMIN', isActive: true },
+    });
+    const r2ModInactiveDenied = evaluateCanonicalStaffRoleFromDocs({
+      uid: 'uid_mod_inactive',
+      email: 'mod.inactive@bantank.online',
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: { exists: true, role: 'MOD', isActive: false },
+    });
+    const case2Ok =
+      r2OtherAdminDocDenied.isStaffAdmin === false &&
+      r2OtherAdminDocDenied.isStaffModOrAdmin === false &&
+      r2OtherAdminDocDenied.resolvedRole === 'PLAYER' &&
+      r2ModInactiveDenied.isStaffAdmin === false &&
+      r2ModInactiveDenied.isStaffModOrAdmin === false &&
+      r2ModInactiveDenied.resolvedRole === 'PLAYER';
+
+    // Kịch bản 3: MOD + isActive: true -> BỊ TỪ CHỐI quyền ADMIN (isStaffAdmin === false, chỉ có isStaffModOrAdmin === true)
+    const r3ModActive = evaluateCanonicalStaffRoleFromDocs({
+      uid: 'uid_mod_active',
+      email: 'mod.active@bantank.online',
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: { exists: true, role: 'MOD', isActive: true },
+    });
+    const case3Ok =
+      r3ModActive.isStaffAdmin === false &&
+      r3ModActive.isStaffModOrAdmin === true &&
+      r3ModActive.resolvedRole === 'MOD' &&
+      !hasRolePermission(r3ModActive.resolvedRole, 'MANAGE_STAGES') &&
+      !hasRolePermission(r3ModActive.resolvedRole, 'MANAGE_SYSTEM_SETTINGS') &&
+      hasRolePermission(r3ModActive.resolvedRole, 'VIEW_ACCOUNT_LIST');
+
+    // Kịch bản 4: PLAYER + isActive: true -> BỊ TỪ CHỐI quyền ADMIN/MOD (không dùng isActive == true thay thế cho kiểm tra role)
+    const r4PlayerWithActiveTrue = evaluateCanonicalStaffRoleFromDocs({
+      uid: 'uid_player_active_flag',
+      email: 'player.activeflag@bantank.online',
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: { exists: true, role: 'PLAYER', isActive: true },
+    });
+    const case4Ok =
+      r4PlayerWithActiveTrue.isStaffAdmin === false &&
+      r4PlayerWithActiveTrue.isStaffModOrAdmin === false &&
+      r4PlayerWithActiveTrue.resolvedRole === 'PLAYER';
+
+    // Kịch bản 5: Hồ sơ MOD thiếu isActive (isActive: undefined / null) -> BỊ TỪ CHỐI theo cơ chế Fail-Closed
+    const r5ModMissingIsActive = evaluateCanonicalStaffRoleFromDocs({
+      uid: 'uid_mod_legacy_missing_flag',
+      email: 'mod.legacy@bantank.online',
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: { exists: true, role: 'MOD' },
+    });
+    const case5Ok =
+      r5ModMissingIsActive.isStaffAdmin === false &&
+      r5ModMissingIsActive.isStaffModOrAdmin === false &&
+      r5ModMissingIsActive.resolvedRole === 'PLAYER' &&
+      r5ModMissingIsActive.denyReasonVi !== null;
+
+    // Kịch bản 6: Tài khoản không có hồ sơ /admins/{uid} hợp lệ -> BỊ TỪ CHỐI (kể cả khi /users/{uid} bị giả mạo role='ADMIN' hoặc isSuperAdmin=true)
+    const r6NoAdminDocConflict = evaluateCanonicalStaffRoleFromDocs({
+      uid: 'uid_no_admin_doc',
+      email: 'spoofed.user@bantank.online',
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: { exists: false },
+      userDoc: { role: 'ADMIN', isSuperAdmin: true },
+    });
+    const case6Ok =
+      r6NoAdminDocConflict.isStaffAdmin === false &&
+      r6NoAdminDocConflict.isStaffModOrAdmin === false &&
+      r6NoAdminDocConflict.resolvedRole === 'PLAYER' &&
+      r6NoAdminDocConflict.denyReasonVi !== null;
+
+    // Kịch bản 7: Tài khoản không phải linhnk2013@gmail.com (kể cả linhnk.online@gmail.com cũ) cố cấp hoặc thu hồi quyền -> BỊ TỪ CHỐI
+    const nonSoleAdminGrantAttempt = authMgr.changeUserRoleSync({
+      targetUid: 'uid_target_player_7',
+      targetEmail: 'target7@bantank.online',
+      currentTargetRole: 'PLAYER',
+      newRole: 'MOD',
+      overrideCallerForTesting: {
+        uid: 'uid_old_admin_7',
+        email: REVOKED_OLD_ADMIN_EMAIL,
+        emailVerified: true,
+        providerData: [{ providerId: 'google.com' }],
+      },
+    });
+    const nonSoleAdminRevokeAttempt = authMgr.changeUserRoleSync({
+      targetUid: 'uid_target_mod_7',
+      targetEmail: 'targetmod7@bantank.online',
+      currentTargetRole: 'MOD',
+      newRole: 'PLAYER',
+      overrideCallerForTesting: {
+        uid: 'uid_old_admin_7',
+        email: REVOKED_OLD_ADMIN_EMAIL,
+        emailVerified: true,
+        providerData: [{ providerId: 'google.com' }],
+      },
+    });
+    const case7Ok =
+      nonSoleAdminGrantAttempt.success === false &&
+      nonSoleAdminRevokeAttempt.success === false;
+
+    // Kịch bản 8: MOD cố chỉnh sửa/tạo/kích hoạt Stage -> BỊ TỪ CHỐI
+    const modCreateStage = stageMgr.createStageDraft({
+      name: 'Stage Mod Trái Phép',
+      orderIndex: 3,
+      actorRole: 'MOD',
+      actorEmail: 'mod.active@bantank.online',
+    });
+    const modEditStage = stageMgr.saveStageDraft({
+      id: 1,
+      name: 'Stage 1 Bị Mod Sửa',
+      orderIndex: 1,
+      map: createBlankDraftMap(),
+      actorRole: 'MOD',
+      actorEmail: 'mod.active@bantank.online',
+    });
+    const modActivateStage = stageMgr.activateStage({
+      id: 1,
+      actorRole: 'MOD',
+      actorEmail: 'mod.active@bantank.online',
+    });
+    const case8Ok =
+      modCreateStage.success === false &&
+      modEditStage.success === false &&
+      modActivateStage.success === false;
+
+    // Kịch bản 9: ADMIN (linhnk2013@gmail.com) cấp quyền MOD nhưng Audit Log lỗi -> TOÀN BỘ THAO TÁC THẤT BẠI NGUYÊN TỬ (Role mục tiêu giữ nguyên PLAYER)
+    const adapter9 = new InMemoryUserAccountsPaginationAdapter([]);
+    adapter9.upsertRecord({
+      uid: 'uid_atomic_target_9',
+      email: 'atomic9@bantank.online',
+      displayName: 'Atomic Target 9',
+      role: 'PLAYER',
+      lastLoginAtMs: 1700000500000,
+    });
+    authMgr.setCustomPaginationAdapterForTesting(adapter9);
+    clearRoleChangeAuditLogsForTesting();
+
+    const atomicFailSimRes = authMgr.changeUserRoleSync({
+      targetUid: 'uid_atomic_target_9',
+      targetEmail: 'atomic9@bantank.online',
+      currentTargetRole: 'PLAYER',
+      newRole: 'MOD',
+      overrideCallerForTesting: {
+        uid: 'uid_sole_admin',
+        email: ADMIN_EMAIL,
+        emailVerified: true,
+        providerData: [{ providerId: 'google.com' }],
+      },
+      simulateAuditLogFailureForTesting: true,
+    });
+    const atomicMismatchDocIdRes = authMgr.changeUserRoleSync({
+      targetUid: 'uid_atomic_target_9',
+      targetEmail: 'atomic9@bantank.online',
+      currentTargetRole: 'PLAYER',
+      newRole: 'MOD',
+      overrideCallerForTesting: {
+        uid: 'uid_sole_admin',
+        email: ADMIN_EMAIL,
+        emailVerified: true,
+        providerData: [{ providerId: 'google.com' }],
+      },
+      customAuditDocIdForTesting: 'mismatched_doc_id_999',
+    });
+    const targetRecordAfterFailedAudit = adapter9
+      .getAllRecords()
+      .find((a) => a.uid === 'uid_atomic_target_9');
+    const case9Ok =
+      atomicFailSimRes.success === false &&
+      atomicMismatchDocIdRes.success === false &&
+      getRoleChangeAuditLogs().length === 0 &&
+      targetRecordAfterFailedAudit?.role === 'PLAYER';
+
+    authMgr.setCustomPaginationAdapterForTesting(null);
+    clearVerifiedServerRoles();
+
+    // Kịch bản 10: Người chơi cố tự sửa role hoặc isAdmin/isSuperAdmin trong hồ sơ của mình -> BỊ TỪ CHỐI
+    const playerSelfEscalateValidation = validateRoleAssignmentChange({
+      actorUid: 'uid_normal_player_10',
+      actorEmail: 'player10@bantank.online',
+      actorRole: 'PLAYER',
+      targetUid: 'uid_normal_player_10',
+      targetEmail: 'player10@bantank.online',
+      currentTargetRole: 'PLAYER',
+      newRole: 'MOD',
+      adminEmail: ADMIN_EMAIL,
+    });
+    const playerSpoofUserDocEval = evaluateCanonicalStaffRoleFromDocs({
+      uid: 'uid_normal_player_10',
+      email: 'player10@bantank.online',
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: null,
+      userDoc: { role: 'ADMIN', isSuperAdmin: true },
+    });
+    const case10Ok =
+      playerSelfEscalateValidation.allowed === false &&
+      playerSpoofUserDocEval.resolvedRole === 'PLAYER' &&
+      playerSpoofUserDocEval.isStaffAdmin === false &&
+      playerSpoofUserDocEval.denyReasonVi !== null;
+
+    // Kịch bản 11: Kiểm tra Schema Audit Log nghiêm ngặt (chỉ cho phép actorEmail=linhnk2013@gmail.com và newRole in ['MOD', 'PLAYER'])
+    const invalidActorAudit = validateRoleAuditLogPayload(
+      {
+        auditId: 'audit_test_1',
+        actorUid: 'uid_old_admin_7',
+        actorEmail: REVOKED_OLD_ADMIN_EMAIL,
+        targetUid: 'uid_target_1',
+        targetEmail: 'target1@bantank.online',
+        targetDisplayName: 'Target Player 1',
+        previousRole: 'PLAYER',
+        newRole: 'MOD',
+        timestampMs: Date.now(),
+      },
+      'audit_test_1',
+      ADMIN_EMAIL
+    );
+    const sameRoleAudit = validateRoleAuditLogPayload(
+      {
+        auditId: 'audit_test_2',
+        actorUid: 'uid_sole_admin',
+        actorEmail: ADMIN_EMAIL,
+        targetUid: 'uid_target_1',
+        targetEmail: 'target1@bantank.online',
+        targetDisplayName: 'Target Player 1',
+        previousRole: 'MOD',
+        newRole: 'MOD',
+        timestampMs: Date.now(),
+      },
+      'audit_test_2',
+      ADMIN_EMAIL
+    );
+    const grantAdminAuditBlocked = validateRoleAuditLogPayload(
+      {
+        auditId: 'audit_test_3_block_admin',
+        actorUid: 'uid_sole_admin',
+        actorEmail: ADMIN_EMAIL,
+        targetUid: 'uid_target_1',
+        targetEmail: 'target1@bantank.online',
+        targetDisplayName: 'Target Player 1',
+        previousRole: 'PLAYER',
+        newRole: 'ADMIN',
+        timestampMs: Date.now(),
+      },
+      'audit_test_3_block_admin',
+      ADMIN_EMAIL
+    );
+    const validSoleAdminModAudit = validateRoleAuditLogPayload(
+      {
+        auditId: 'audit_test_4_valid_mod',
+        actorUid: 'uid_sole_admin',
+        actorEmail: ADMIN_EMAIL,
+        targetUid: 'uid_target_1',
+        targetEmail: 'target1@bantank.online',
+        targetDisplayName: 'Target Player 1',
+        previousRole: 'PLAYER',
+        newRole: 'MOD',
+        timestampMs: Date.now(),
+      },
+      'audit_test_4_valid_mod',
+      ADMIN_EMAIL
+    );
+    const case11Ok =
+      invalidActorAudit.valid === false &&
+      sameRoleAudit.valid === false &&
+      grantAdminAuditBlocked.valid === false &&
+      validSoleAdminModAudit.valid === true;
+
+    const passed =
+      case1Ok &&
+      case2Ok &&
+      case3Ok &&
+      case4Ok &&
+      case5Ok &&
+      case6Ok &&
+      case7Ok &&
+      case8Ok &&
+      case9Ok &&
+      case10Ok &&
+      case11Ok;
+
+    results.push({
+      id: 'M7_3_T61',
+      name: 'T61: M7.3.11.2 / M7.3.11.4 Critical RBAC Rules & Audit Atomicity Patch – Kiểm chứng 11 kịch bản bắt buộc: Fail-Closed isAdmin/isStaffModOrAdmin, Nguồn chuẩn /admins/{uid}, Chặn tự nâng quyền & Nguyên tử Role + Audit Log',
+      passed,
+      details: `C1(SoleAdminActive)=${case1Ok}, C2(OtherOrInactiveDenied)=${case2Ok}, C3(ModNoAdmin)=${case3Ok}, C4(PlayerActiveFlagDenied)=${case4Ok}, C5(MissingIsActiveFailClosed)=${case5Ok}, C6(NoAdminDocDenied)=${case6Ok}, C7(OldAdminGrantDenied)=${case7Ok}, C8(ModStageDenied)=${case8Ok}, C9(AuditAtomicityRollback)=${case9Ok}, C10(SelfEscalateDenied)=${case10Ok}, C11(AuditSchemaStrict)=${case11Ok}`,
+    });
+  }
+
+  // =========================================================================
+  // T62: M7.3.11.4 – SIMPLIFIED ADMIN & MOD ROLE MIGRATION (15 Kịch bản bắt buộc Mục 7 & Di chuyển dữ liệu an toàn Mục 3, 5)
+  // =========================================================================
+  {
+    const authMgr = AuthManager.getInstance();
+    const stageMgr = StageManager.getInstance();
+    const mm = MusicManager.getInstance();
+    const sm = SoundManager.getInstance();
+    stageMgr.resetForTesting();
+    clearVerifiedServerRoles();
+    clearRoleChangeAuditLogsForTesting();
+
+    const soleAdminAuthUser: ValidatedUserAccount = {
+      uid: 'uid_linhnk2013_verified',
+      email: 'linhnk2013@gmail.com',
+      emailVerified: true,
+      displayName: 'Linh NK 2013',
+      photoURL: null,
+      providerIds: ['google.com'],
+    };
+
+    // TC1: linhnk2013@gmail.com đăng nhập đã xác minh -> Nhận quyền ADMIN
+    const tc1Role = resolveUserRole(soleAdminAuthUser);
+    const tc1ServerEval = evaluateCanonicalStaffRoleFromDocs({
+      uid: soleAdminAuthUser.uid,
+      email: soleAdminAuthUser.email,
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: { exists: true, role: 'ADMIN', isActive: true },
+    });
+    const tc1Pass =
+      tc1Role === 'ADMIN' &&
+      isAdminUser(soleAdminAuthUser) === true &&
+      tc1ServerEval.isAdmin === true &&
+      tc1ServerEval.resolvedRole === 'ADMIN';
+
+    // TC2: linhnk2013@gmail.com sử dụng đầy đủ quyền quản trị -> Được phép
+    mm.syncRoleFromAuthUser(soleAdminAuthUser);
+    sm.setActionSoundAdminRole('ADMIN');
+    const adminTabs = getAvailableSettingsTabsForRole('ADMIN');
+    const tc2Pass =
+      mm.canManageMusic() === true &&
+      sm.canManageActionSounds() === true &&
+      adminTabs.length === 6 &&
+      hasRolePermission('ADMIN', 'MANAGE_STAGES') &&
+      hasRolePermission('ADMIN', 'MANAGE_AUDIO_SYSTEM') &&
+      hasRolePermission('ADMIN', 'MANAGE_AVATAR_CATALOG') &&
+      hasRolePermission('ADMIN', 'MANAGE_SYSTEM_SETTINGS') &&
+      hasRolePermission('ADMIN', 'GRANT_REVOKE_MOD');
+
+    // TC3: linhnk.online@gmail.com đăng nhập -> Không còn quyền ADMIN hoặc SUPER_ADMIN (chỉ là PLAYER)
+    const oldAdminAuthUser: ValidatedUserAccount = {
+      uid: 'uid_linhnk_online_old',
+      email: 'linhnk.online@gmail.com',
+      emailVerified: true,
+      displayName: 'Linh NK Old',
+      photoURL: null,
+      providerIds: ['google.com'],
+    };
+    setVerifiedServerRoleForUid(oldAdminAuthUser.uid, 'ADMIN');
+    const tc3ClientRole = resolveUserRole(oldAdminAuthUser);
+    const tc3ServerEval = evaluateCanonicalStaffRoleFromDocs({
+      uid: oldAdminAuthUser.uid,
+      email: oldAdminAuthUser.email,
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: { exists: true, role: 'SUPER_ADMIN', isActive: true },
+      userDoc: { role: 'SUPER_ADMIN', isSuperAdmin: true },
+    });
+    const tc3Pass =
+      isAdminUser(oldAdminAuthUser) === false &&
+      tc3ClientRole === 'PLAYER' &&
+      tc3ServerEval.isAdmin === false &&
+      tc3ServerEval.isStaffAdmin === false &&
+      tc3ServerEval.isStaffModOrAdmin === false &&
+      tc3ServerEval.resolvedRole === 'PLAYER';
+
+    // TC4: Tài khoản linhnk2013@gmail.com chưa xác minh email -> Bị từ chối quyền ADMIN
+    const unverifiedNewAdmin: ValidatedUserAccount = {
+      ...soleAdminAuthUser,
+      emailVerified: false,
+    };
+    const tc4ServerEval = evaluateCanonicalStaffRoleFromDocs({
+      uid: unverifiedNewAdmin.uid,
+      email: unverifiedNewAdmin.email,
+      isVerifiedPersonalGmail: false,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: { exists: true, role: 'ADMIN', isActive: true },
+    });
+    const tc4Pass =
+      isAdminUser(unverifiedNewAdmin) === false &&
+      resolveUserRole(unverifiedNewAdmin) === 'PLAYER' &&
+      tc4ServerEval.isAdmin === false &&
+      tc4ServerEval.resolvedRole === 'PLAYER';
+
+    // TC5: Tài khoản khác giả mạo hoặc có UID khác UID đã liên kết / email khác -> Bị từ chối quyền ADMIN
+    const differentUidOrEmailEval = evaluateCanonicalStaffRoleFromDocs({
+      uid: 'uid_impersonator_999',
+      email: 'impersonator@gmail.com',
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: { exists: true, role: 'ADMIN', isActive: true },
+      userDoc: { role: 'ADMIN', isAdmin: true, isSuperAdmin: true },
+    });
+    const migrationMismatchUidCheck = runSimplifiedRoleMigrationForRecords({
+      verifiedNewAdminAuth: {
+        uid: 'uid_linhnk2013_verified',
+        email: 'linhnk2013@gmail.com',
+        emailVerified: true,
+        providerId: 'google.com',
+      },
+      existingAdminRecords: [
+        {
+          uid: 'uid_wrong_linked_for_new_admin',
+          email: 'linhnk2013@gmail.com',
+          role: 'ADMIN',
+          isActive: true,
+        },
+      ],
+    });
+    const upsertedDocsTc5 = migrationMismatchUidCheck.actions
+      .map((a) => a.upsertedAdminDoc)
+      .filter((d): d is NonNullable<typeof d> => d !== null);
+    const tc5Pass =
+      differentUidOrEmailEval.isAdmin === false &&
+      differentUidOrEmailEval.resolvedRole === 'PLAYER' &&
+      // Bản ghi có UID lệch với UID thực tế của linhnk2013@gmail.com bị thu hồi và chỉ đúng UID đã xác minh mới được ghi /admins/{uid}
+      migrationMismatchUidCheck.success === true &&
+      upsertedDocsTc5.length === 1 &&
+      upsertedDocsTc5[0].uid === 'uid_linhnk2013_verified' &&
+      migrationMismatchUidCheck.actions.some(
+        (a) => a.uid === 'uid_wrong_linked_for_new_admin' && a.deleteAdminDoc === true
+      );
+
+    // TC6 & TC7: ADMIN cấp quyền MOD -> Thành công, có Audit Log; ADMIN thu hồi quyền MOD -> Chuyển về PLAYER, có Audit Log
+    const adapter62 = new InMemoryUserAccountsPaginationAdapter([
+      {
+        uid: 'uid_mod_candidate_62',
+        email: 'candidate62@gmail.com',
+        displayName: 'Candidate 62',
+        role: 'PLAYER',
+        lastLoginAtMs: 1700000100000,
+      },
+    ]);
+    authMgr.setCustomPaginationAdapterForTesting(adapter62);
+    clearRoleChangeAuditLogsForTesting();
+
+    const tc6GrantMod = authMgr.changeUserRoleSync({
+      targetUid: 'uid_mod_candidate_62',
+      targetEmail: 'candidate62@gmail.com',
+      currentTargetRole: 'PLAYER',
+      newRole: 'MOD',
+      overrideCallerForTesting: {
+        uid: soleAdminAuthUser.uid,
+        email: soleAdminAuthUser.email,
+        emailVerified: true,
+        providerData: [{ providerId: 'google.com' }],
+      },
+    });
+    const tc7RevokeMod = authMgr.changeUserRoleSync({
+      targetUid: 'uid_mod_candidate_62',
+      targetEmail: 'candidate62@gmail.com',
+      currentTargetRole: 'MOD',
+      newRole: 'PLAYER',
+      overrideCallerForTesting: {
+        uid: soleAdminAuthUser.uid,
+        email: soleAdminAuthUser.email,
+        emailVerified: true,
+        providerData: [{ providerId: 'google.com' }],
+      },
+    });
+    const logsAfter6And7 = getRoleChangeAuditLogs();
+    const tc6Pass =
+      tc6GrantMod.success === true &&
+      tc6GrantMod.updatedAccount?.role === 'MOD' &&
+      logsAfter6And7.some(
+        (l) =>
+          l.targetUid === 'uid_mod_candidate_62' &&
+          l.previousRole === 'PLAYER' &&
+          l.newRole === 'MOD' &&
+          l.actorEmail === 'linhnk2013@gmail.com'
+      );
+    const tc7Pass =
+      tc7RevokeMod.success === true &&
+      tc7RevokeMod.updatedAccount?.role === 'PLAYER' &&
+      logsAfter6And7.some(
+        (l) =>
+          l.targetUid === 'uid_mod_candidate_62' &&
+          l.previousRole === 'MOD' &&
+          l.newRole === 'PLAYER' &&
+          l.actorEmail === 'linhnk2013@gmail.com'
+      );
+
+    // TC8: Cố cấp quyền ADMIN cho tài khoản khác -> Bị từ chối
+    const tc8Attempt = authMgr.changeUserRoleSync({
+      targetUid: 'uid_mod_candidate_62',
+      targetEmail: 'candidate62@gmail.com',
+      currentTargetRole: 'PLAYER',
+      newRole: 'ADMIN' as any,
+      overrideCallerForTesting: {
+        uid: soleAdminAuthUser.uid,
+        email: soleAdminAuthUser.email,
+        emailVerified: true,
+        providerData: [{ providerId: 'google.com' }],
+      },
+    });
+    const tc8Pass =
+      tc8Attempt.success === false &&
+      !hasRolePermission('ADMIN', 'GRANT_REVOKE_ADMIN');
+
+    // TC9 & TC10: MOD sử dụng quyền hiện tại -> Hoạt động đúng; MOD cố cấp quyền MOD, sửa Stage, âm thanh, avatar hoặc cấu hình hệ thống -> Bị từ chối
+    setVerifiedServerRoleForUid('uid_mod_active_62', 'MOD');
+    const modTabs = getAvailableSettingsTabsForRole('MOD');
+    const tc9Pass =
+      hasRolePermission('MOD', 'VIEW_ACCOUNT_LIST') &&
+      hasRolePermission('MOD', 'VIEW_ACCOUNT_DETAILS') &&
+      hasRolePermission('MOD', 'VIEW_AUDIT_AND_MONITORING') &&
+      modTabs.some((t) => t.id === 'USER_ACCOUNTS') &&
+      modTabs.some((t) => t.id === 'ADMIN_OTHER');
+
+    mm.setUserRole('MOD');
+    sm.setActionSoundAdminRole('MOD');
+    const modGrantModAttempt = authMgr.changeUserRoleSync({
+      targetUid: 'uid_mod_candidate_62',
+      targetEmail: 'candidate62@gmail.com',
+      currentTargetRole: 'PLAYER',
+      newRole: 'MOD',
+      overrideCallerForTesting: {
+        uid: 'uid_mod_active_62',
+        email: 'mod62@gmail.com',
+        emailVerified: true,
+        providerData: [{ providerId: 'google.com' }],
+      },
+    });
+    const modStageAttempt = stageMgr.createStageDraft({
+      name: 'Mod Stage Blocked',
+      orderIndex: 4,
+      actorRole: 'MOD',
+      actorEmail: 'mod62@gmail.com',
+    });
+    const tc10Pass =
+      modGrantModAttempt.success === false &&
+      modStageAttempt.success === false &&
+      mm.canManageMusic() === false &&
+      sm.canManageActionSounds() === false &&
+      !hasRolePermission('MOD', 'MANAGE_AVATAR_CATALOG') &&
+      !hasRolePermission('MOD', 'MANAGE_SYSTEM_SETTINGS') &&
+      !modTabs.some((t) => t.id === 'IMAGE_SETTINGS') &&
+      !modTabs.some((t) => t.id === 'GAME_MODE_SETTINGS');
+
+    // TC11 & TC12: PLAYER cố truy cập chức năng quản trị -> Bị từ chối; PLAYER cố tự sửa role, isAdmin, isSuperAdmin -> Bị từ chối
+    mm.setUserRole('PLAYER');
+    sm.setActionSoundAdminRole('PLAYER');
+    const playerTabs = getAvailableSettingsTabsForRole('PLAYER');
+    const tc11Pass =
+      playerTabs.length === 2 &&
+      playerTabs.every((t) => !t.adminOnly) &&
+      mm.canManageMusic() === false &&
+      sm.canManageActionSounds() === false &&
+      !hasRolePermission('PLAYER', 'VIEW_ACCOUNT_LIST') &&
+      !hasRolePermission('PLAYER', 'MANAGE_STAGES');
+
+    const tc12ProfileRuleSpoofRole = evaluateUserProfileMetadataRule({
+      auth: {
+        uid: 'uid_player_62',
+        email: 'player62@gmail.com',
+        emailVerified: true,
+        providerId: 'google.com',
+      },
+      targetUid: 'uid_player_62',
+      operation: 'update',
+      existingData: {
+        uid: 'uid_player_62',
+        displayName: 'Player 62',
+        avatarType: 'google',
+        avatarId: null,
+      },
+      incomingData: {
+        uid: 'uid_player_62',
+        displayName: 'Player 62',
+        avatarType: 'google',
+        avatarId: null,
+        role: 'ADMIN',
+        isAdmin: true,
+        isSuperAdmin: true,
+      } as any,
+      catalogStore: new Map(),
+    });
+    const tc12Pass = tc12ProfileRuleSpoofRole.allowed === false;
+
+    // TC13: Stage 1 và các Stage hợp lệ -> Hoạt động bình thường
+    const stage1 = stageMgr.getStage(1);
+    const tc13Pass =
+      stage1 !== null &&
+      stage1.status === 'ACTIVE' &&
+      validateStageMap(stage1.map).isValid === true &&
+      JSON.stringify(stage1.map) === JSON.stringify(STAGE_1_MAP);
+
+    // TC14: Thay đổi quyền nhưng ghi Audit Log lỗi -> Toàn bộ thao tác thất bại nguyên tử
+    clearRoleChangeAuditLogsForTesting();
+    const tc14AtomicFail = authMgr.changeUserRoleSync({
+      targetUid: 'uid_mod_candidate_62',
+      targetEmail: 'candidate62@gmail.com',
+      currentTargetRole: 'PLAYER',
+      newRole: 'MOD',
+      overrideCallerForTesting: {
+        uid: soleAdminAuthUser.uid,
+        email: soleAdminAuthUser.email,
+        emailVerified: true,
+        providerData: [{ providerId: 'google.com' }],
+      },
+      simulateAuditLogFailureForTesting: true,
+    });
+    const candidateAfterTc14 = adapter62
+      .getAllRecords()
+      .find((a) => a.uid === 'uid_mod_candidate_62');
+    const tc14Pass =
+      tc14AtomicFail.success === false &&
+      candidateAfterTc14?.role === 'PLAYER' &&
+      getRoleChangeAuditLogs().length === 0;
+
+    // TC15: Kiểm chứng Safe Role Migration (Mục 3 & Mục 5):
+    // - Khi linhnk2013@gmail.com chưa xác minh/chưa có UID -> DỪNG bước chuyển quyền, không tự đoán UID
+    // - Khi linhnk2013@gmail.com đã xác minh Google + UID hợp lệ -> thu hồi linhnk.online@gmail.com về PLAYER, hạ ADMIN cũ khác về MOD, giữ nguyên MOD, cấp ADMIN duy nhất cho linhnk2013@gmail.com
+    const migrationHaltedWhenMissingNewAdmin = runSimplifiedRoleMigrationForRecords({
+      verifiedNewAdminAuth: null,
+      existingAdminRecords: [
+        {
+          uid: 'uid_old_super',
+          email: 'linhnk.online@gmail.com',
+          role: 'SUPER_ADMIN',
+          isActive: true,
+        },
+      ],
+    });
+    const migrationSuccessWhenVerified = runSimplifiedRoleMigrationForRecords({
+      verifiedNewAdminAuth: {
+        uid: 'uid_linhnk2013_verified',
+        email: 'linhnk2013@gmail.com',
+        emailVerified: true,
+        providerId: 'google.com',
+      },
+      existingAdminRecords: [
+        {
+          uid: 'uid_old_super',
+          email: 'linhnk.online@gmail.com',
+          role: 'SUPER_ADMIN',
+          isActive: true,
+        },
+        {
+          uid: 'uid_legacy_admin_2',
+          email: 'staff2@gmail.com',
+          role: 'ADMIN',
+          isActive: true,
+        },
+        {
+          uid: 'uid_existing_mod_3',
+          email: 'mod3@gmail.com',
+          role: 'MOD',
+          isActive: true,
+        },
+      ],
+    });
+    const upsertedDocsTc15 = migrationSuccessWhenVerified.actions
+      .map((a) => a.upsertedAdminDoc)
+      .filter((d): d is NonNullable<typeof d> => d !== null);
+    const tc15Pass =
+      migrationHaltedWhenMissingNewAdmin.success === false &&
+      migrationHaltedWhenMissingNewAdmin.haltedReasonVi !== null &&
+      migrationSuccessWhenVerified.success === true &&
+      migrationSuccessWhenVerified.actions.some(
+        (a) => a.uid === 'uid_old_super' && a.deleteAdminDoc === true && a.newRole === 'PLAYER'
+      ) &&
+      upsertedDocsTc15.some(
+        (d) =>
+          d.uid === 'uid_linhnk2013_verified' &&
+          d.email === 'linhnk2013@gmail.com' &&
+          d.role === 'ADMIN' &&
+          d.isActive === true
+      ) &&
+      upsertedDocsTc15.some(
+        (d) => d.uid === 'uid_legacy_admin_2' && d.role === 'MOD' && d.isActive === true
+      ) &&
+      upsertedDocsTc15.some(
+        (d) => d.uid === 'uid_existing_mod_3' && d.role === 'MOD' && d.isActive === true
+      );
+
+    authMgr.setCustomPaginationAdapterForTesting(null);
+    clearVerifiedServerRoles();
+    mm.syncRoleFromAuthUser(null);
+    sm.setActionSoundAdminRole(null);
+
+    const passed =
+      tc1Pass &&
+      tc2Pass &&
+      tc3Pass &&
+      tc4Pass &&
+      tc5Pass &&
+      tc6Pass &&
+      tc7Pass &&
+      tc8Pass &&
+      tc9Pass &&
+      tc10Pass &&
+      tc11Pass &&
+      tc12Pass &&
+      tc13Pass &&
+      tc14Pass &&
+      tc15Pass;
+
+    results.push({
+      id: 'M7_3_T62',
+      name: 'T62: M7.3.11.4 Simplified Admin & Mod Role Migration – Kiểm chứng 15 kịch bản bắt buộc (Mục 7): Admin duy nhất linhnk2013@gmail.com, Thu hồi linhnk.online@gmail.com, Cấp/Thu hồi MOD, Chặn cấp ADMIN, Bảo toàn MOD/PLAYER/Stage 1 & Di chuyển dữ liệu an toàn',
+      passed,
+      details: `TC1=${tc1Pass}, TC2=${tc2Pass}, TC3(OldRevoked)=${tc3Pass}, TC4(UnverifiedDenied)=${tc4Pass}, TC5(WrongUidDenied)=${tc5Pass}, TC6(GrantMod)=${tc6Pass}, TC7(RevokeMod)=${tc7Pass}, TC8(BlockGrantAdmin)=${tc8Pass}, TC9(ModRead)=${tc9Pass}, TC10(ModWriteDenied)=${tc10Pass}, TC11(PlayerDenied)=${tc11Pass}, TC12(SelfEscalateDenied)=${tc12Pass}, TC13(Stage1Ok)=${tc13Pass}, TC14(AtomicRollback)=${tc14Pass}, TC15(SafeMigration)=${tc15Pass}`,
     });
   }
 

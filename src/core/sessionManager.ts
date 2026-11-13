@@ -543,7 +543,29 @@ export class SessionManager {
         const snap = await tx.get(sessionDocRef);
 
         if (snap.exists()) {
-          // Firestore Security Rules (isNewSessionAcquisitionAction) will enforce:
+          const existing = snap.data() as SessionDocument;
+          const existingLastActiveMs =
+            typeof existing.lastActiveAt?.toMillis === 'function'
+              ? existing.lastActiveAt.toMillis()
+              : typeof existing.lastActiveAt === 'number'
+                ? existing.lastActiveAt
+                : 0;
+          const isHeldByAnotherActiveDevice =
+            existing.isActive === true &&
+            existing.deviceId !== this.deviceId &&
+            (existingLastActiveMs === 0 ||
+              Date.now() - existingLastActiveMs <= SESSION_TIMINGS.IDLE_TIMEOUT_MS);
+
+          // M7.3.11.1 Section I (First-Active-Session Wins):
+          // If Device A holds an active session lease (<= 900s), Device B MUST be rejected immediately
+          // and MUST NOT overwrite Device A's session document or displace Device A!
+          if (isHeldByAnotherActiveDevice) {
+            const err: any = new Error('SESSION_HELD_BY_ACTIVE_DEVICE');
+            err.code = 'permission-denied';
+            throw err;
+          }
+
+          // Firestore Security Rules (isNewSessionAcquisitionAction) also enforces at DB level:
           // (!isExistingSessionStillActive() || incoming().deviceId == existing().deviceId)
           // based on server request.time <= existing().lastActiveAt + 900s.
           tx.update(sessionDocRef, {
@@ -610,6 +632,7 @@ export class SessionManager {
       }
 
       const isPermissionDenied =
+        msg.includes('SESSION_HELD_BY_ACTIVE_DEVICE') ||
         msg.includes('permission-denied') ||
         msg.includes('PERMISSION_DENIED') ||
         err?.code === 'permission-denied';
@@ -620,11 +643,13 @@ export class SessionManager {
           const verifySnap = await getDocFromServer(sessionDocRef);
           if (verifySnap.exists()) {
             const data = verifySnap.data() as SessionDocument;
-            // ONLY assign DISPLACED when we have definitive server proof that another device holds an active session
+            // ONLY reject with active-device conflict when server proves another device holds an active session.
+            // Device B is rejected; Device A's document on the server remains 100% untouched!
             if (data.deviceId !== this.deviceId && data.isActive === true) {
+              this.currentSessionId = null;
               this.status = 'DISPLACED';
               this.statusMessage =
-                'Tài khoản đang có phiên hoạt động trên thiết bị khác (First-Active-Session Wins). Vui lòng đăng xuất trên thiết bị cũ hoặc đợi phiên cũ hết hạn (15 phút không hoạt động).';
+                'Từ chối đăng nhập: Tài khoản này đang có phiên hoạt động hợp lệ trên thiết bị khác (Quy tắc 1 thiết bị - First-Active-Session Wins). Thiết bị mới không thể chiếm quyền khi phiên trên thiết bị đầu tiên chưa đăng xuất hoặc chưa hết hạn 15 phút.';
               this.notify();
               return { success: false, message: this.statusMessage };
             }
@@ -1088,7 +1113,8 @@ export class SessionManager {
   }
 
   /**
-   * Bộ hàm mô phỏng tất định (Deterministic Test Helpers) phục vụ kiểm thử tự động M7.3.11 Mục VI (Nhóm D).
+   * Bộ hàm mô phỏng tất định (Deterministic Test Helpers) phục vụ kiểm thử tự động M7.3.11 & M7.3.11.1.
+   * Không phụ thuộc vào localStorage làm nguồn quyết định quyền chiếm giữ phiên.
    */
   public initMockActiveSessionForTesting(params: {
     uid: string;
@@ -1112,6 +1138,99 @@ export class SessionManager {
     this.idleRemainingSeconds = null;
     this.notify();
     return this.getSnapshot();
+  }
+
+  /**
+   * M7.3.11.1 Mục I: Bộ trọng tài phiên máy chủ chuẩn First-Active-Session Wins (khớp 100% Firestore Rules `isNewSessionAcquisitionAction`).
+   * - Nếu Thiết bị A đang có phiên hợp lệ (`isActive === true` và `serverNowMs <= lastActiveAtMs + 900,000ms`),
+   *   Thiết bị B (`incomingDeviceId !== existing.deviceId`) đăng nhập cùng Gmail PHẢI BỊ TỪ CHỐI (`allowed: false`).
+   * - Thiết bị B không được chiếm quyền và KHÔNG làm Thiết bị A chuyển sang `DISPLACED`.
+   * - Thiết bị A tiếp tục `ACTIVE` bình thường (kể cả khi A đang chuyển tab 5 phút hoặc mất mạng tạm thời chưa quá 15 phút).
+   * - Chỉ khi A chủ động đăng xuất (`isActive === false`) hoặc phiên của A thực sự quá 15 phút không hoạt động (`> 900,000ms`),
+   *   session lease mới được giải phóng để Thiết bị B đăng nhập hợp lệ (`allowed: true`).
+   */
+  public evaluateFirstActiveSessionLeaseForTesting(params: {
+    serverNowMs: number;
+    existingServerLease: {
+      uid: string;
+      deviceId: string;
+      sessionId: string;
+      isActive: boolean;
+      lastActiveAtMs: number;
+    } | null;
+    incomingAttempt: {
+      uid: string;
+      deviceId: string;
+      newSessionId: string;
+    };
+  }): {
+    bAcquisitionAllowed: boolean;
+    bStatusAfterAttempt: SessionStateStatus;
+    aStatusOnServer: 'ACTIVE' | 'RELEASED_OR_EXPIRED';
+    resultingServerLease: {
+      uid: string;
+      deviceId: string;
+      sessionId: string;
+      isActive: boolean;
+      lastActiveAtMs: number;
+    };
+    reasonVi: string;
+  } {
+    const { serverNowMs, existingServerLease, incomingAttempt } = params;
+
+    // 1. Chưa có phiên nào trên server -> Thiết bị đầu tiên được cấp lease
+    if (!existingServerLease) {
+      return {
+        bAcquisitionAllowed: true,
+        bStatusAfterAttempt: 'ACTIVE',
+        aStatusOnServer: 'RELEASED_OR_EXPIRED',
+        resultingServerLease: {
+          uid: incomingAttempt.uid,
+          deviceId: incomingAttempt.deviceId,
+          sessionId: incomingAttempt.newSessionId,
+          isActive: true,
+          lastActiveAtMs: serverNowMs,
+        },
+        reasonVi: 'Cấp mới session lease cho thiết bị đầu tiên.',
+      };
+    }
+
+    const isExistingStillActive =
+      existingServerLease.isActive === true &&
+      serverNowMs <= existingServerLease.lastActiveAtMs + SESSION_TIMINGS.IDLE_TIMEOUT_MS;
+
+    const isSameDevice = incomingAttempt.deviceId === existingServerLease.deviceId;
+
+    // 2. Nếu Thiết bị A đang có phiên hợp lệ và Thiết bị B khác deviceId thử đăng nhập:
+    //    BỊ TỪ CHỐI! Thiết bị A vẫn giữ nguyên lease và trạng thái ACTIVE.
+    if (isExistingStillActive && !isSameDevice) {
+      return {
+        bAcquisitionAllowed: false,
+        bStatusAfterAttempt: 'DISPLACED',
+        aStatusOnServer: 'ACTIVE',
+        resultingServerLease: { ...existingServerLease },
+        reasonVi:
+          'Từ chối Thiết bị B: Thiết bị A đang giữ phiên hoạt động hợp lệ (First-Active-Session Wins). Thiết bị A tiếp tục ACTIVE.',
+      };
+    }
+
+    // 3. Nếu phiên của A đã đăng xuất chủ động (isActive == false) hoặc đã quá 15 phút (> 900,000ms),
+    //    hoặc chính thiết bị đó khởi tạo lại -> cho phép cấp lease mới.
+    return {
+      bAcquisitionAllowed: true,
+      bStatusAfterAttempt: 'ACTIVE',
+      aStatusOnServer: isSameDevice ? 'ACTIVE' : 'RELEASED_OR_EXPIRED',
+      resultingServerLease: {
+        uid: incomingAttempt.uid,
+        deviceId: incomingAttempt.deviceId,
+        sessionId: incomingAttempt.newSessionId,
+        isActive: true,
+        lastActiveAtMs: serverNowMs,
+      },
+      reasonVi: !existingServerLease.isActive
+        ? 'Thiết bị A đã chủ động đăng xuất; Thiết bị B được phép nhận session lease.'
+        : 'Phiên của Thiết bị A đã hết hạn sau hơn 15 phút không hoạt động; Thiết bị B được phép nhận session lease.',
+    };
   }
 
   public simulateTabSwitchReturnForTesting(params: {

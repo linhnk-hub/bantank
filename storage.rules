@@ -54,9 +54,10 @@ service firebase.storage {
         && hasNoHostedDomainClaim();
     }
 
-    function isSuperAdmin() {
+    function isAdmin() {
       return isVerifiedPersonalGmail()
-        && request.auth.token.email.lower() == 'linhnk.online@gmail.com';
+        && request.auth.token.email.lower() == 'linhnk2013@gmail.com'
+        && request.auth.token.email.lower() != 'linhnk.online@gmail.com';
     }
 
     function isValidCatalogPath(avatarId, versionSegment, fileName) {
@@ -104,15 +105,15 @@ service firebase.storage {
       // 2. Liệt kê: cấm tuyệt đối (danh mục lấy từ Firestore /avatar_catalog)
       allow list: if false;
 
-      // 3. Upload nội dung file mới: chỉ Super Admin, yêu cầu resource == null
-      allow create: if isSuperAdmin()
+      // 3. Upload nội dung file mới: chỉ Admin duy nhất, yêu cầu resource == null
+      allow create: if isAdmin()
                     && isValidCatalogCreate(avatarId, versionSegment, fileName);
 
       // 4. Cập nhật metadata của file hiện có: cấm tuyệt đối
       allow update: if false;
 
-      // 5. Xóa: chỉ Super Admin khi resource != null && request.resource == null
-      allow delete: if isSuperAdmin()
+      // 5. Xóa: chỉ Admin duy nhất khi resource != null && request.resource == null
+      allow delete: if isAdmin()
                     && isValidCatalogDelete(avatarId, versionSegment, fileName);
     }
 

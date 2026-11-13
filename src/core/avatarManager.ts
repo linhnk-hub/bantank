@@ -6,7 +6,7 @@
  *
  * Kiến trúc bắt buộc:
  * - Loại bỏ hoàn toàn Cloudflare R2 / Cloudflare Worker và tính năng người chơi tự upload ảnh cá nhân.
- * - Chỉ Super Admin duy nhất (`linhnk.online@gmail.com`) được upload, thay thế (qua version mới `v{version + 1}`),
+ * - Chỉ Admin duy nhất (`linhnk2013@gmail.com`) được upload, thay thế (qua version mới `v{version + 1}`),
  *   bật/tắt (`isActive`) và xóa avatar trong danh mục dùng chung trên Firebase Storage
  *   (`avatar_catalog/{avatarId}/v{version}/{fileName}`) kèm metadata trong Cloud Firestore (`/avatar_catalog/{avatarId}`).
  * - Firebase Storage Security Rules (`storage.rules`, `rules_version = '2'`) sử dụng phân quyền chi tiết:
@@ -1670,6 +1670,7 @@ export function evaluateUserProfileMetadataRule(params: {
   const displayNameUpdateAllowedAffectedKeys = ['displayName'];
   const forbiddenKeys = [
     'role',
+    'isAdmin',
     'isSuperAdmin',
     'email',
     'xp',
@@ -4993,7 +4994,7 @@ export class AvatarManager {
     file: File
   ): Promise<AvatarOperationResult & { staged?: StagedCatalogAvatarFile; error?: string }> {
     if (!isSuperAdminUser(AuthManager.getInstance().getCurrentUser())) {
-      const msg = `Chỉ Super Admin (${SUPER_ADMIN_EMAIL}) mới có quyền quản trị danh mục avatar.`;
+      const msg = `Chỉ Admin duy nhất (${SUPER_ADMIN_EMAIL}) mới có quyền quản trị danh mục avatar.`;
       return {
         success: false,
         errorCode: 'NOT_SUPER_ADMIN',
@@ -5164,7 +5165,7 @@ export class AvatarManager {
       return {
         success: false,
         errorCode: 'NOT_SUPER_ADMIN',
-        message: `Chỉ Super Admin (${SUPER_ADMIN_EMAIL}) mới có quyền tải ảnh đại diện lên hệ thống.`,
+        message: `Chỉ Admin duy nhất (${SUPER_ADMIN_EMAIL}) mới có quyền tải ảnh đại diện lên hệ thống.`,
       };
     }
 
@@ -5231,7 +5232,7 @@ export class AvatarManager {
       return {
         success: false,
         errorCode: 'NOT_SUPER_ADMIN',
-        message: `Chỉ Super Admin (${SUPER_ADMIN_EMAIL}) được phép upload danh mục avatar.`,
+        message: `Chỉ Admin duy nhất (${SUPER_ADMIN_EMAIL}) được phép upload danh mục avatar.`,
       };
     }
 

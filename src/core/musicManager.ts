@@ -29,7 +29,9 @@ import {
 } from 'firebase/firestore';
 import { SoundManager } from './audio.ts';
 import {
+  ADMIN_EMAIL,
   SUPER_ADMIN_EMAIL,
+  isAdminUser,
   isSuperAdminUser,
   validatePersonalGmailUser,
   type ValidatedUserAccount,
@@ -38,7 +40,7 @@ import { getFirebaseDb } from './firebaseConfig.ts';
 import type { User } from 'firebase/auth';
 
 export type SupportedAudioFormat = 'audio/mpeg' | 'audio/ogg' | 'audio/wav' | 'audio/x-wav' | 'audio/mp3';
-export type UserRole = 'PLAYER' | 'SUPER_ADMIN';
+export type UserRole = 'PLAYER' | 'MOD' | 'ADMIN';
 export type GameModeScope = 'SOLO' | 'TWO_PLAYER';
 
 export interface LoopPlaybackConfig {
@@ -342,11 +344,11 @@ export function evaluateSystemAudioConfigRule(params: {
   if (docId !== 'audio') return false;
   if (action === 'get') return true;
 
-  const isSuperAdmin =
+  const isAdmin =
     isVerifiedPersonalGmail &&
     typeof authEmail === 'string' &&
-    authEmail.trim().toLowerCase() === SUPER_ADMIN_EMAIL;
-  if (!isSuperAdmin) return false;
+    authEmail.trim().toLowerCase() === ADMIN_EMAIL;
+  if (!isAdmin) return false;
   if (action === 'delete') return true;
   if (!incoming || typeof incoming !== 'object') return false;
 
@@ -908,7 +910,7 @@ export class MusicManager {
   /**
    * Synchronizes the user role strictly from the authenticated Firebase Google user,
    * and attaches/detaches the real-time listener on `/system_config/audio`.
-   * Only `linhnk.online@gmail.com` with verified Google provider receives `SUPER_ADMIN`.
+   * Only `linhnk2013@gmail.com` with verified Google provider receives `ADMIN`.
    */
   public syncRoleFromAuthUser(user: User | ValidatedUserAccount | null | undefined): UserRole {
     if (typeof window !== 'undefined' && window.localStorage) {
@@ -918,7 +920,7 @@ export class MusicManager {
         // ignore
       }
     }
-    const nextRole: UserRole = isSuperAdminUser(user) ? 'SUPER_ADMIN' : 'PLAYER';
+    const nextRole: UserRole = isAdminUser(user) ? 'ADMIN' : 'PLAYER';
     const roleChanged = this.currentRole !== nextRole;
     this.currentRole = nextRole;
 
@@ -1201,7 +1203,7 @@ export class MusicManager {
    * NEVER persists role to localStorage to prevent privilege escalation via browser storage tampering.
    */
   public setUserRole(role: UserRole): void {
-    this.currentRole = role;
+    this.currentRole = role === 'ADMIN' ? 'ADMIN' : role === 'MOD' ? 'MOD' : 'PLAYER';
     if (typeof window !== 'undefined' && window.localStorage) {
       try {
         if (window.localStorage.getItem(MUSIC_STORAGE_KEYS.USER_ROLE) !== null) {
@@ -1215,7 +1217,7 @@ export class MusicManager {
   }
 
   public canManageMusic(): boolean {
-    return this.currentRole === 'SUPER_ADMIN';
+    return this.currentRole === 'ADMIN';
   }
 
   // =========================================================================
@@ -1359,7 +1361,7 @@ export class MusicManager {
     if (!this.canManageMusic()) {
       return {
         success: false,
-        error: 'Chỉ Super Admin (linhnk.online@gmail.com) mới có quyền quản lý nhạc nền.',
+        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền quản lý nhạc nền.',
       };
     }
 
@@ -1436,7 +1438,7 @@ export class MusicManager {
     if (!this.canManageMusic()) {
       return {
         success: false,
-        error: 'Chỉ Super Admin (linhnk.online@gmail.com) mới có quyền chuẩn bị gói nhạc nền.',
+        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền chuẩn bị gói nhạc nền.',
       };
     }
 
@@ -1543,7 +1545,7 @@ export class MusicManager {
     if (!this.canManageMusic()) {
       return {
         success: false,
-        error: 'Chỉ Super Admin (linhnk.online@gmail.com) mới có quyền kích hoạt nhạc nền chung.',
+        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền kích hoạt nhạc nền chung.',
       };
     }
 
@@ -1585,7 +1587,7 @@ export class MusicManager {
     if (!this.canManageMusic()) {
       return {
         success: false,
-        error: 'Chỉ Super Admin (linhnk.online@gmail.com) mới có quyền kích hoạt nhạc nền chung.',
+        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền kích hoạt nhạc nền chung.',
       };
     }
 
@@ -1880,7 +1882,7 @@ export class MusicManager {
     if (!this.canManageMusic()) {
       return {
         success: false,
-        error: 'Chỉ Super Admin (linhnk.online@gmail.com) mới có quyền cập nhật nhạc nền chung toàn hệ thống.',
+        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền cập nhật nhạc nền chung toàn hệ thống.',
       };
     }
 

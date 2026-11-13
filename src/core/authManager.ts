@@ -27,34 +27,57 @@ import {
   setDoc,
   startAfter,
   updateDoc,
+  writeBatch,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { getFirebaseAuth, getFirebaseDb } from './firebaseConfig.ts';
 import { ScoreManager } from './scoreManager.ts';
 import {
   RBAC_PERMISSION_MATRIX,
+  SOLE_ADMIN_EMAIL,
+  REVOKED_LEGACY_ADMIN_EMAIL,
   hasRolePermission,
   getPermissionsForRole,
   validateRoleAssignmentChange,
+  evaluateCanonicalStaffRoleFromDocs,
+  buildRoleChangeAuditEntry,
+  validateRoleAuditLogPayload,
+  runSimplifiedRoleMigrationForRecords,
+  commitRoleChangeAuditEntry,
   recordRoleChangeAudit,
   getRoleChangeAuditLogs,
   clearRoleChangeAuditLogsForTesting,
   type PermissionId,
   type PermissionMatrixRow,
   type RoleChangeAuditEntry,
+  type CanonicalStaffRoleEvaluationResult,
+  type LegacyStaffRecordInput,
+  type MigratedStaffRecordAction,
+  type SimplifiedRoleMigrationReport,
 } from './rbacMatrix.ts';
 
 export {
   RBAC_PERMISSION_MATRIX,
+  SOLE_ADMIN_EMAIL,
+  REVOKED_LEGACY_ADMIN_EMAIL,
   hasRolePermission,
   getPermissionsForRole,
   validateRoleAssignmentChange,
+  evaluateCanonicalStaffRoleFromDocs,
+  buildRoleChangeAuditEntry,
+  validateRoleAuditLogPayload,
+  runSimplifiedRoleMigrationForRecords,
+  commitRoleChangeAuditEntry,
   recordRoleChangeAudit,
   getRoleChangeAuditLogs,
   clearRoleChangeAuditLogsForTesting,
   type PermissionId,
   type PermissionMatrixRow,
   type RoleChangeAuditEntry,
+  type CanonicalStaffRoleEvaluationResult,
+  type LegacyStaffRecordInput,
+  type MigratedStaffRecordAction,
+  type SimplifiedRoleMigrationReport,
 };
 
 export interface AuthValidationResult {
@@ -66,9 +89,16 @@ export interface AuthValidationResult {
 export type AuthStateListener = (user: User | null) => void;
 
 /**
- * Địa chỉ email Super Admin chính thức và duy nhất của hệ thống Bắn Tank Online.
+ * M7.3.11.4 Mục 1: Địa chỉ email ADMIN chính thức và duy nhất của hệ thống Bắn Tank Online.
+ * Thay thế hoàn toàn email quản trị cũ `linhnk.online@gmail.com`.
  */
-export const SUPER_ADMIN_EMAIL = 'linhnk.online@gmail.com';
+export const ADMIN_EMAIL = 'linhnk2013@gmail.com';
+export const REVOKED_OLD_ADMIN_EMAIL = 'linhnk.online@gmail.com';
+
+/**
+ * Alias tương thích cho các module hiện hữu tham chiếu hằng số email Admin duy nhất.
+ */
+export const SUPER_ADMIN_EMAIL = ADMIN_EMAIL;
 
 export const USER_ACCOUNTS_PAGE_SIZE = 10;
 
@@ -159,7 +189,7 @@ export function mergeUpsertUserAccountRecord(
       ? existing.avatarId
       : null;
 
-  // Giữ nguyên quyền Admin/Mod đã được cấp
+  // Giữ nguyên quyền Admin/Mod hợp lệ theo mô hình 3 vai trò
   const preservedRole = resolveUserRole({
     uid,
     email,
@@ -190,7 +220,7 @@ export function mergeUpsertUserAccountRecord(
 }
 
 /**
- * Bộ điều hợp phân trang trên bộ nhớ (dùng cho kiểm thử tự động M7.3.9 & M7.3.11)
+ * Bộ điều hợp phân trang trên bộ nhớ (dùng cho kiểm thử tự động M7.3.9, M7.3.11 & M7.3.11.4)
  * Bảo đảm:
  * - Không tạo trùng theo UID hoặc Email.
  * - Không loại bỏ các hồ sơ thiếu trường `lastLoginAtMs`, `createdAtMs` hoặc `displayName`.
@@ -381,30 +411,50 @@ export interface ValidatedUserAccount {
 }
 
 /**
- * Kiểm tra xem người dùng Firebase hiện tại có phải là Super Admin hợp lệ hay không.
+ * M7.3.11.4 Mục 1 & 2: Kiểm tra xem người dùng Firebase hiện tại có phải là tài khoản ADMIN duy nhất hợp lệ hay không.
  * Bắt buộc:
- * 1. Đã xác thực Google hợp lệ (validatePersonalGmailUser(user).isValid === true)
- * 2. Email khớp chính xác với SUPER_ADMIN_EMAIL ('linhnk.online@gmail.com')
+ * 1. Có UID hợp lệ
+ * 2. Đã xác thực Google hợp lệ (`validatePersonalGmailUser(user).isValid === true`)
+ * 3. Email khớp chính xác với `ADMIN_EMAIL` (`linhnk2013@gmail.com`) và KHÔNG phải email cũ `linhnk.online@gmail.com`.
  */
-export function isSuperAdminUser(user: User | ValidatedUserAccount | null | undefined): boolean {
-  if (!user) return false;
+export function isAdminUser(user: User | ValidatedUserAccount | null | undefined): boolean {
+  if (!user || typeof user.uid !== 'string' || user.uid.trim().length === 0) return false;
   const validation = validatePersonalGmailUser(user as User);
   if (!validation.isValid) return false;
-  return (user.email || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL;
+  const normalizedEmail = (user.email || '').trim().toLowerCase();
+  if (normalizedEmail === REVOKED_OLD_ADMIN_EMAIL) return false;
+  if (normalizedEmail !== ADMIN_EMAIL) return false;
+  if (verifiedServerRolesByUid.has(user.uid) && verifiedServerRolesByUid.get(user.uid) !== 'ADMIN') {
+    return false;
+  }
+  return true;
 }
 
-export type UserRoleType = 'SUPER_ADMIN' | 'ADMIN' | 'MOD' | 'PLAYER';
+/**
+ * Alias tương thích cho các module hiện tại gọi `isSuperAdminUser`.
+ * Trong mô hình 3 vai trò (M7.3.11.4), `ADMIN` (`linhnk2013@gmail.com`) kế thừa toàn bộ quyền quản trị cao nhất.
+ */
+export const isSuperAdminUser = isAdminUser;
+
+/**
+ * M7.3.11.4 Mục 1: Hệ thống chỉ duy trì đúng 3 vai trò: `ADMIN`, `MOD`, `PLAYER`.
+ * Cấp `SUPER_ADMIN` đã bị xóa hoàn toàn.
+ */
+export type UserRoleType = 'ADMIN' | 'MOD' | 'PLAYER';
 export type UserRole = UserRoleType;
 
-// Bộ nhớ đệm vai trò xác thực từ tài liệu máy chủ (Firestore /users/{uid} hoặc /admins/{uid}),
-// tuyệt đối KHÔNG đọc từ localStorage để chống giả mạo quyền phía client.
+// Bộ nhớ đệm vai trò xác thực từ tài liệu máy chủ (Firestore /admins/{uid}),
+// tuyệt đối KHÔNG đọc từ localStorage hoặc /users/{uid} để chống giả mạo quyền phía client.
 const verifiedServerRolesByUid: Map<string, UserRoleType> = new Map();
 
 export function setVerifiedServerRoleForUid(uid: string, role: unknown): void {
   if (!uid || typeof uid !== 'string') return;
   const upper = typeof role === 'string' ? role.trim().toUpperCase() : '';
-  if (upper === 'SUPER_ADMIN' || upper === 'ADMIN' || upper === 'MOD' || upper === 'PLAYER') {
+  if (upper === 'ADMIN' || upper === 'MOD' || upper === 'PLAYER') {
     verifiedServerRolesByUid.set(uid, upper as UserRoleType);
+  } else if (upper === 'SUPER_ADMIN') {
+    // Không bao giờ lưu trữ vai trò SUPER_ADMIN đã bị xóa
+    verifiedServerRolesByUid.set(uid, 'PLAYER');
   }
 }
 
@@ -413,11 +463,12 @@ export function clearVerifiedServerRoles(): void {
 }
 
 /**
- * Xác định vai trò hợp lệ của người chơi từ dữ liệu xác thực đáng tin cậy:
- * - Nếu là Super Admin duy nhất (`linhnk.online@gmail.com` đã xác minh Google): luôn là `SUPER_ADMIN`.
- * - Nếu có vai trò đã được máy chủ xác nhận (`ADMIN`, `MOD`) hoặc truyền từ metadata phòng/hồ sơ hợp lệ: trả về vai trò tương ứng.
+ * M7.3.11.4 Mục 1, 2 & 3: Xác định vai trò hợp lệ của người chơi từ dữ liệu xác thực đáng tin cậy:
+ * - Email quản trị cũ `linhnk.online@gmail.com` bị thu hồi toàn bộ đặc quyền -> LUÔN trả về `PLAYER`.
+ * - Nếu là Admin duy nhất (`linhnk2013@gmail.com` đã xác minh Google & UID hợp lệ): trả về `ADMIN`.
+ * - Mọi tài khoản khác KHÔNG BAO GIỜ nhận được `ADMIN` (dù `serverRole` là `'ADMIN'` hay `'SUPER_ADMIN'`).
+ * - Nếu tài khoản khác có vai trò `MOD` đã được máy chủ xác nhận từ `/admins/{uid}`: trả về `MOD`.
  * - Mặc định: `PLAYER` (Người chơi thường).
- * Tuyệt đối không đọc từ `localStorage` hoặc biến trạng thái giả lập phía client.
  */
 export function resolveUserRole(
   user?: {
@@ -432,49 +483,58 @@ export function resolveUserRole(
   if (!user) return 'PLAYER';
 
   const normalizedEmail = (user.email || '').trim().toLowerCase();
-  if (normalizedEmail === SUPER_ADMIN_EMAIL) {
-    // Nếu đối tượng có đầy đủ thông tin provider, kiểm tra chặt bằng isSuperAdminUser
+
+  // 1. Thu hồi tuyệt đối đặc quyền của tài khoản quản trị cũ linhnk.online@gmail.com
+  if (normalizedEmail === REVOKED_OLD_ADMIN_EMAIL) {
+    return 'PLAYER';
+  }
+
+  // 2. Tài khoản ADMIN duy nhất: linhnk2013@gmail.com
+  if (normalizedEmail === ADMIN_EMAIL) {
+    if (!user.uid || typeof user.uid !== 'string' || user.uid.trim().length === 0) {
+      return 'PLAYER';
+    }
     if (user.providerData || user.providerIds || user.emailVerified !== undefined) {
-      if (isSuperAdminUser(user as ValidatedUserAccount)) {
-        return 'SUPER_ADMIN';
+      if (isAdminUser(user as ValidatedUserAccount)) {
+        return 'ADMIN';
       }
       return 'PLAYER';
     }
-    return 'SUPER_ADMIN';
+    if (verifiedServerRolesByUid.has(user.uid) && verifiedServerRolesByUid.get(user.uid) !== 'ADMIN') {
+      return 'PLAYER';
+    }
+    return 'ADMIN';
   }
 
+  // 3. Đối với mọi tài khoản khác: chỉ cho phép MOD hoặc PLAYER (không bao giờ cấp ADMIN hay SUPER_ADMIN)
   const explicitServerRole =
     typeof user.serverRole === 'string' ? user.serverRole.trim().toUpperCase() : '';
-  if (explicitServerRole === 'SUPER_ADMIN') {
-    // Chỉ linhnk.online@gmail.com mới được nhận SUPER_ADMIN
-    return normalizedEmail === SUPER_ADMIN_EMAIL ? 'SUPER_ADMIN' : 'PLAYER';
+  if (explicitServerRole === 'MOD') {
+    return 'MOD';
   }
-  if (explicitServerRole === 'ADMIN' || explicitServerRole === 'MOD') {
-    return explicitServerRole;
+  if (explicitServerRole === 'ADMIN' || explicitServerRole === 'SUPER_ADMIN') {
+    return 'PLAYER';
   }
 
   if (user.uid && verifiedServerRolesByUid.has(user.uid)) {
     const cachedRole = verifiedServerRolesByUid.get(user.uid)!;
-    if (cachedRole === 'SUPER_ADMIN') {
-      return normalizedEmail === SUPER_ADMIN_EMAIL ? 'SUPER_ADMIN' : 'PLAYER';
+    if (cachedRole === 'MOD') {
+      return 'MOD';
     }
-    return cachedRole;
+    return 'PLAYER';
   }
 
   return 'PLAYER';
 }
 
 /**
- * Chuẩn hóa màu viền/khung tên người chơi tại tất cả vị trí hiển thị tên (M7.3.7 Mục III.2.2):
- * - Super Admin: khung tên màu đỏ (`border-red-500`)
- * - Admin: khung tên màu xanh lá (`border-emerald-500`)
- * - Mod: khung tên màu xanh dương (`border-sky-500`)
- * - Người chơi thường: giữ nguyên như hiện tại (`border-neutral-700/80`)
+ * Chuẩn hóa màu viền/khung tên người chơi theo mô hình 3 vai trò (`ADMIN`, `MOD`, `PLAYER`):
+ * - Admin (`ADMIN`): khung tên nổi bật (`border-emerald-500`)
+ * - Mod (`MOD`): khung tên màu xanh dương (`border-sky-500`)
+ * - Người chơi thường (`PLAYER`): khung tên mặc định (`border-neutral-700/80`)
  */
-export function getRoleNameFrameClasses(role: UserRoleType): string {
+export function getRoleNameFrameClasses(role: UserRoleType | string): string {
   switch (role) {
-    case 'SUPER_ADMIN':
-      return 'border-2 border-red-500 ring-1 ring-red-500/40 shadow-sm shadow-red-500/20';
     case 'ADMIN':
       return 'border-2 border-emerald-500 ring-1 ring-emerald-500/40 shadow-sm shadow-emerald-500/20';
     case 'MOD':
@@ -485,30 +545,23 @@ export function getRoleNameFrameClasses(role: UserRoleType): string {
   }
 }
 
-export function getRoleDisplayInfo(role: UserRoleType): {
+export function getRoleDisplayInfo(role: UserRoleType | string): {
   role: UserRoleType;
   label: string;
   frameClass: string;
   colorNameVi: string;
 } {
   switch (role) {
-    case 'SUPER_ADMIN':
-      return {
-        role,
-        label: 'Super Admin',
-        frameClass: getRoleNameFrameClasses('SUPER_ADMIN'),
-        colorNameVi: 'Đỏ',
-      };
     case 'ADMIN':
       return {
-        role,
+        role: 'ADMIN',
         label: 'Admin',
         frameClass: getRoleNameFrameClasses('ADMIN'),
         colorNameVi: 'Xanh lá',
       };
     case 'MOD':
       return {
-        role,
+        role: 'MOD',
         label: 'Mod',
         frameClass: getRoleNameFrameClasses('MOD'),
         colorNameVi: 'Xanh dương',
@@ -637,6 +690,7 @@ export class AuthManager {
   private authReady: boolean = false;
   private trialModeActive: boolean = false;
   private customPaginationAdapter: UserAccountsPaginationAdapter | null = null;
+  private lastMigrationReport: SimplifiedRoleMigrationReport | null = null;
 
   private constructor() {
     onAuthStateChanged(this.auth, (user) => {
@@ -709,8 +763,16 @@ export class AuthManager {
     return this.customPaginationAdapter;
   }
 
+  public isAdmin(): boolean {
+    return isAdminUser(this.getCurrentUser());
+  }
+
   public isSuperAdmin(): boolean {
-    return isSuperAdminUser(this.getCurrentUser());
+    return this.isAdmin();
+  }
+
+  public getLastMigrationReport(): SimplifiedRoleMigrationReport | null {
+    return this.lastMigrationReport;
   }
 
   private getProfileStorageKey(user: { uid?: string; email?: string | null }): string {
@@ -767,12 +829,108 @@ export class AuthManager {
   }
 
   /**
-   * M7.3.11 Mục II.1 & II.4: Upsert hồ sơ người dùng `/users/{uid}` an toàn khi đăng nhập Google thành công
+   * M7.3.11.4 Mục 3 & Mục 5: Thực thi Migration vai trò sang mô hình 3 vai trò (`ADMIN`, `MOD`, `PLAYER`)
+   * trên Firestore `/admins` và ghi Audit Log nguyên tử khi tài khoản Admin duy nhất (`linhnk2013@gmail.com`)
+   * đã được xác minh Google Authentication & UID thực tế.
+   */
+  public async executeSimplifiedRoleMigration(
+    overrideAdminUser?: User | ValidatedUserAccount | null
+  ): Promise<SimplifiedRoleMigrationReport> {
+    const candidateUser =
+      overrideAdminUser !== undefined ? overrideAdminUser : this.getCurrentUser();
+    const isValidSoleAdmin = isAdminUser(candidateUser);
+
+    if (!candidateUser || !isValidSoleAdmin) {
+      const halted = runSimplifiedRoleMigrationForRecords({
+        verifiedNewAdminAuth: null,
+        existingAdminRecords: [],
+      });
+      this.lastMigrationReport = halted;
+      return halted;
+    }
+
+    try {
+      const db = getFirebaseDb();
+      const adminsSnap = await getDocs(collection(db, 'admins'));
+      const existingRecords: LegacyStaffRecordInput[] = adminsSnap.docs.map((d) => {
+        const data = (d.data() || {}) as Record<string, unknown>;
+        return {
+          uid: typeof data.uid === 'string' && data.uid.trim() ? data.uid.trim() : d.id,
+          email: typeof data.email === 'string' ? data.email : null,
+          displayName: typeof data.displayName === 'string' ? data.displayName : null,
+          role: typeof data.role === 'string' ? data.role : null,
+          isActive: typeof data.isActive === 'boolean' ? data.isActive : null,
+        };
+      });
+
+      const report = runSimplifiedRoleMigrationForRecords({
+        verifiedNewAdminAuth: {
+          uid: candidateUser.uid,
+          email: candidateUser.email,
+          emailVerified: candidateUser.emailVerified,
+          providerId: 'google.com',
+          displayName: candidateUser.displayName,
+        },
+        existingAdminRecords: existingRecords,
+        convertOtherLegacyAdminsToMod: true,
+      });
+
+      if (!report.success) {
+        this.lastMigrationReport = report;
+        return report;
+      }
+
+      const batch = writeBatch(db);
+      for (const act of report.actions) {
+        const ref = doc(db, 'admins', act.uid);
+        if (act.upsertedAdminDoc) {
+          batch.set(ref, {
+            ...act.upsertedAdminDoc,
+            updatedAt: serverTimestamp(),
+          });
+          setVerifiedServerRoleForUid(act.uid, act.upsertedAdminDoc.role);
+        } else if (act.deleteAdminDoc) {
+          batch.delete(ref);
+          setVerifiedServerRoleForUid(act.uid, 'PLAYER');
+        }
+        if (act.auditEntry) {
+          const auditRef = doc(db, 'role_audit_logs', act.auditEntry.auditId);
+          batch.set(auditRef, {
+            ...act.auditEntry,
+            createdAt: serverTimestamp(),
+          });
+        }
+      }
+
+      await batch.commit();
+      for (const audit of report.auditLogs) {
+        commitRoleChangeAuditEntry(audit);
+      }
+      this.lastMigrationReport = report;
+      return report;
+    } catch {
+      const fallbackReport = runSimplifiedRoleMigrationForRecords({
+        verifiedNewAdminAuth: {
+          uid: candidateUser.uid,
+          email: candidateUser.email,
+          emailVerified: candidateUser.emailVerified,
+          providerId: 'google.com',
+          displayName: candidateUser.displayName,
+        },
+        existingAdminRecords: [],
+      });
+      this.lastMigrationReport = fallbackReport;
+      return fallbackReport;
+    }
+  }
+
+  /**
+   * M7.3.11 Mục II.1 & II.4 + M7.3.11.4 Mục 3: Upsert hồ sơ người dùng `/users/{uid}` an toàn khi đăng nhập Google thành công
    * hoặc khi tài khoản cũ đăng nhập lại:
    * - Định danh theo `uid`, không tạo trùng theo `email`.
    * - Cập nhật `lastLoginAt` nhưng KHÔNG GHI ĐÈ Nickname (`displayName`), `avatarType`/`avatarId`, `role` hoặc `status` đã có.
-   * - Tương thích 100% với cả Production Firestore Rules hiện tại (tách bước khởi tạo `avatarType` và cập nhật `displayName`)
-   *   lẫn Rules mở rộng có `email` và `lastLoginAt`.
+   * - Nếu người đăng nhập là Admin duy nhất (`linhnk2013@gmail.com` đã xác minh Google & UID), tự động liên kết `/admins/{uid}` với `role: 'ADMIN'`
+   *   và thực thi migration thu hồi `linhnk.online@gmail.com`.
    */
   public async recordUserLoginTimestamp(user?: User | null): Promise<void> {
     if (this.trialModeActive) return;
@@ -797,14 +955,32 @@ export class AuthManager {
       const snap = await getDoc(userRef);
       const existing = snap.exists() ? (snap.data() as Record<string, unknown>) : null;
 
-      // Đồng bộ role đã xác minh từ /admins/{uid} nếu có
+      // M7.3.11.4 Mục 1, 2 & 3: Nguồn vai trò chính thức duy nhất cho ADMIN/MOD là /admins/{uid} (Fail-Closed: bắt buộc isActive === true).
+      // Email cũ linhnk.online@gmail.com bị thu hồi toàn bộ quyền; chỉ linhnk2013@gmail.com mới được nhận ADMIN.
       try {
-        const adminSnap = await getDoc(doc(db, 'admins', targetUser.uid));
-        if (adminSnap.exists()) {
-          const aData = adminSnap.data() as Record<string, unknown>;
-          setVerifiedServerRoleForUid(targetUser.uid, aData.role || 'ADMIN');
-        } else if (typeof existing?.role === 'string') {
-          setVerifiedServerRoleForUid(targetUser.uid, existing.role);
+        if (isAdminUser(targetUser)) {
+          setVerifiedServerRoleForUid(targetUser.uid, 'ADMIN');
+          void this.executeSimplifiedRoleMigration(targetUser);
+        } else {
+          const adminSnap = await getDoc(doc(db, 'admins', targetUser.uid));
+          const aData = adminSnap.exists() ? (adminSnap.data() as Record<string, unknown>) : null;
+          const evalRole = evaluateCanonicalStaffRoleFromDocs({
+            uid: targetUser.uid,
+            email: targetUser.email,
+            isVerifiedPersonalGmail: true,
+            adminDoc: adminSnap.exists()
+              ? {
+                  exists: true,
+                  uid: aData?.uid,
+                  email: aData?.email,
+                  role: aData?.role,
+                  isActive: aData?.isActive,
+                }
+              : { exists: false },
+            userDoc: existing,
+            adminEmail: ADMIN_EMAIL,
+          });
+          setVerifiedServerRoleForUid(targetUser.uid, evalRole.resolvedRole);
         }
       } catch {
         // ignore
@@ -838,11 +1014,7 @@ export class AuthManager {
 
       await setDoc(userRef, fullPayload, { merge: true }).catch(async () => {
         // Bước 2 (Tương thích 100% với Production Firestore Rules hiện tại):
-        // Production Rules yêu cầu:
-        // - Khi create: chỉ chứa ['uid', 'avatarType', 'avatarId', 'avatarUpdatedAt'] HOẶC ['uid', 'displayName']
-        // - Khi update: chỉ sửa ['avatarType', 'avatarId', 'avatarUpdatedAt'] HOẶC chỉ sửa ['displayName']
         if (!existing) {
-          // Tài khoản chưa có hồ sơ /users/{uid} -> Khởi tạo bằng nhánh Avatar chuẩn
           await setDoc(userRef, {
             uid: targetUser.uid,
             avatarType: 'google',
@@ -850,15 +1022,12 @@ export class AuthManager {
             avatarUpdatedAt: serverTimestamp(),
           }).catch(() => {});
 
-          // Sau khi tạo hồ sơ, nếu có tên hiển thị Google thì cập nhật tiếp nhánh displayName (1..40 ký tự)
           if (targetDisplayName) {
             await updateDoc(userRef, {
               displayName: targetDisplayName.slice(0, 40),
             }).catch(() => {});
           }
         } else {
-          // Tài khoản đã có hồ sơ /users/{uid}:
-          // - Nếu hồ sơ cũ thiếu trường avatarUpdatedAt (khiến orderBy('avatarUpdatedAt') loại bỏ), bổ sung ngay!
           if (!('avatarUpdatedAt' in existing)) {
             await updateDoc(userRef, {
               avatarType,
@@ -866,7 +1035,6 @@ export class AuthManager {
               avatarUpdatedAt: serverTimestamp(),
             }).catch(() => {});
           }
-          // - Nếu hồ sơ cũ chưa có displayName nhưng Google Auth có displayName -> bổ sung mà không ghi đè Nickname cũ
           if (!existingCustomDisplayName && googleDisplayName) {
             await updateDoc(userRef, {
               displayName: googleDisplayName.slice(0, 40),
@@ -880,10 +1048,9 @@ export class AuthManager {
   }
 
   /**
-   * M7.3.11 Mục II.1 & II.2: Truy vấn và phân trang danh sách tài khoản (10 tài khoản / trang).
-   * - Kiểm tra quyền theo ma trận RBAC tập trung (`VIEW_ACCOUNT_LIST` / `isSuperAdminUser`).
-   * - Khắc phục triệt để lỗi thiếu tài khoản do `orderBy('avatarUpdatedAt')` loại bỏ các bản ghi thiếu trường `avatarUpdatedAt`:
-   *   Hợp nhất theo `uid` từ `/users` và `/admins`, chuẩn hóa các trường còn thiếu (`lastLoginAtMs`, `displayName`,
+   * M7.3.11 Mục II.1 & II.2 + M7.3.11.4: Truy vấn và phân trang danh sách tài khoản (10 tài khoản / trang).
+   * - Kiểm tra quyền theo ma trận RBAC tập trung (`VIEW_ACCOUNT_LIST` / `isAdminUser`).
+   * - Hợp nhất theo `uid` từ `/users` và `/admins`, chuẩn hóa các trường còn thiếu (`lastLoginAtMs`, `displayName`,
    *   `hasCustomNickname`, `nicknameNote`, `role`, `status`), sắp xếp tất định (`lastLoginAtMs DESC, uid ASC`)
    *   và phân trang chính xác 10 tài khoản/trang bằng con trỏ `uid`.
    */
@@ -899,7 +1066,7 @@ export class AuthManager {
 
     const callerRole = resolveUserRole(caller as any);
     const canViewAccounts =
-      isSuperAdminUser(caller) || hasRolePermission(callerRole, 'VIEW_ACCOUNT_LIST');
+      isAdminUser(caller) || hasRolePermission(callerRole, 'VIEW_ACCOUNT_LIST');
 
     if (!canViewAccounts) {
       return {
@@ -937,28 +1104,44 @@ export class AuthManager {
       const db = getFirebaseDb();
       const usersCol = collection(db, 'users');
 
-      // 1. Tải toàn bộ danh sách /admins/{uid} (nếu người gọi có quyền đọc) để biết vai trò Admin/Mod chính xác
-      const adminRolesByUid = new Map<string, { role: string; email?: string; displayName?: string; updatedAtMs?: number }>();
+      // 1. Tải toàn bộ danh sách /admins/{uid} (nguồn chính thức duy nhất cho vai trò ADMIN / MOD theo chính sách Fail-Closed)
+      const adminRolesByUid = new Map<
+        string,
+        { role: UserRoleType; email?: string; displayName?: string; updatedAtMs?: number }
+      >();
       try {
         const adminsSnap = await getDocs(collection(db, 'admins'));
         for (const aDoc of adminsSnap.docs) {
           const aData = (aDoc.data() || {}) as Record<string, unknown>;
           const aUid = typeof aData.uid === 'string' && aData.uid.trim() ? aData.uid.trim() : aDoc.id;
-          const aRole = typeof aData.role === 'string' ? aData.role.trim().toUpperCase() : 'ADMIN';
-          setVerifiedServerRoleForUid(aUid, aRole);
-          adminRolesByUid.set(aUid, {
-            role: aRole,
-            email: typeof aData.email === 'string' ? aData.email.trim().toLowerCase() : undefined,
-            displayName: typeof aData.displayName === 'string' ? aData.displayName.trim() : undefined,
-            updatedAtMs: parseFirestoreTimestampMs(aData.updatedAt || aData.createdAt),
+          const evalRole = evaluateCanonicalStaffRoleFromDocs({
+            uid: aUid,
+            email: typeof aData.email === 'string' ? aData.email : null,
+            isVerifiedPersonalGmail: true,
+            adminDoc: {
+              exists: true,
+              uid: aData.uid,
+              email: aData.email,
+              role: aData.role,
+              isActive: aData.isActive,
+            },
+            adminEmail: ADMIN_EMAIL,
           });
+          setVerifiedServerRoleForUid(aUid, evalRole.resolvedRole);
+          if (evalRole.resolvedRole === 'ADMIN' || evalRole.resolvedRole === 'MOD') {
+            adminRolesByUid.set(aUid, {
+              role: evalRole.resolvedRole,
+              email: typeof aData.email === 'string' ? aData.email.trim().toLowerCase() : undefined,
+              displayName: typeof aData.displayName === 'string' ? aData.displayName.trim() : undefined,
+              updatedAtMs: parseFirestoreTimestampMs(aData.updatedAt || aData.createdAt),
+            });
+          }
         }
       } catch {
         // Bỏ qua nếu không đọc được collection /admins
       }
 
       // 2. Truy vấn collection(db, 'users') KHÔNG dùng orderBy('avatarUpdatedAt') làm điều kiện lọc cứng
-      //    để các tài khoản thiếu trường `avatarUpdatedAt` hoặc `lastLoginAt` KHÔNG BAO GIỜ bị Firestore loại bỏ!
       const snap = await getDocs(usersCol);
       const rawDocsByUid = new Map<string, Record<string, unknown>>();
 
@@ -981,13 +1164,13 @@ export class AuthManager {
         }
       }
 
-      // Luôn bảo đảm tài khoản Super Admin / người gọi hiện tại có mặt trong danh sách nếu đã đăng nhập hợp lệ
+      // Luôn bảo đảm tài khoản Admin / người gọi hiện tại có mặt trong danh sách nếu đã đăng nhập hợp lệ
       if (caller && caller.uid && !rawDocsByUid.has(caller.uid)) {
         rawDocsByUid.set(caller.uid, {
           uid: caller.uid,
-          email: (caller.email || SUPER_ADMIN_EMAIL).trim().toLowerCase(),
+          email: (caller.email || ADMIN_EMAIL).trim().toLowerCase(),
           displayName: caller.displayName || '',
-          role: isSuperAdminUser(caller) ? 'SUPER_ADMIN' : callerRole,
+          role: isAdminUser(caller) ? 'ADMIN' : callerRole,
           avatarType: 'google',
           avatarId: null,
           lastLoginAt: Date.now(),
@@ -1015,7 +1198,7 @@ export class AuthManager {
         return a.uid.localeCompare(b.uid);
       });
 
-      // 4. Xác định vị trí bắt đầu theo cursor (hỗ trợ cả cursor uid string và QueryDocumentSnapshot)
+      // 4. Xác định vị trí bắt đầu theo cursor
       let startIndex = 0;
       const rawCursor = options?.cursor;
       const cursorUid =
@@ -1076,14 +1259,27 @@ export class AuthManager {
             // Bỏ qua nếu không đọc được phiên của user
           }
 
-          let serverRole: string | null =
-            typeof data.role === 'string' ? data.role : adminEntry?.role ?? null;
+          let serverRole: UserRoleType | null = adminEntry?.role ?? null;
           if (!serverRole) {
             try {
               const adminSnap = await getDoc(doc(db, 'admins', uid));
               if (adminSnap.exists()) {
                 const aData = adminSnap.data() as Record<string, unknown>;
-                serverRole = typeof aData.role === 'string' ? aData.role : 'ADMIN';
+                const evalRole = evaluateCanonicalStaffRoleFromDocs({
+                  uid,
+                  email,
+                  isVerifiedPersonalGmail: true,
+                  adminDoc: {
+                    exists: true,
+                    uid: aData.uid,
+                    email: aData.email,
+                    role: aData.role,
+                    isActive: aData.isActive,
+                  },
+                  userDoc: data,
+                  adminEmail: ADMIN_EMAIL,
+                });
+                serverRole = evalRole.resolvedRole;
               }
             } catch {
               // ignore
@@ -1142,7 +1338,11 @@ export class AuthManager {
   }
 
   /**
-   * M7.3.11 Mục II.3 & IV.3: Cấp hoặc thu hồi quyền Admin / Mod đồng bộ (dùng cho kiểm thử & cập nhật tức thì)
+   * M7.3.11.4 Mục 2, 4 & 6: Cấp hoặc thu hồi quyền Mod (`MOD` <-> `PLAYER`) kèm tạo & kiểm tra Audit Log nguyên tử.
+   * - Chỉ duy nhất `ADMIN` (`linhnk2013@gmail.com`) mới được phép thực hiện.
+   * - Không cho phép cấp thêm quyền `ADMIN` hoặc `SUPER_ADMIN` cho bất kỳ tài khoản nào khác.
+   * - Nếu tạo/kiểm tra Audit Log thất bại (hoặc `simulateAuditLogFailureForTesting === true`),
+   *   TOÀN BỘ thao tác cấp/thu hồi quyền PHẢI THẤT BẠI.
    */
   public changeUserRoleSync(params: {
     targetUid: string;
@@ -1151,6 +1351,9 @@ export class AuthManager {
     currentTargetRole?: UserRoleType;
     newRole: UserRoleType;
     overrideCallerForTesting?: ValidatedUserAccount | User | null;
+    simulateAuditLogFailureForTesting?: boolean;
+    customAuditIdForTesting?: string;
+    customAuditDocIdForTesting?: string;
   }): {
     success: boolean;
     previousRole: UserRoleType;
@@ -1163,7 +1366,7 @@ export class AuthManager {
         ? params.overrideCallerForTesting
         : this.getCurrentUser();
 
-    const actorRole = isSuperAdminUser(caller) ? 'SUPER_ADMIN' : resolveUserRole(caller as any);
+    const actorRole: UserRoleType = isAdminUser(caller) ? 'ADMIN' : resolveUserRole(caller as any);
     const actorUid = caller?.uid || '';
     const actorEmail = (caller?.email || '').trim().toLowerCase();
     const previousRole =
@@ -1181,7 +1384,7 @@ export class AuthManager {
       targetEmail: params.targetEmail,
       currentTargetRole: previousRole,
       newRole: params.newRole,
-      superAdminEmail: SUPER_ADMIN_EMAIL,
+      adminEmail: ADMIN_EMAIL,
     });
 
     if (!validation.allowed) {
@@ -1193,27 +1396,46 @@ export class AuthManager {
       };
     }
 
-    // Cập nhật bộ nhớ đệm role đã xác minh từ máy chủ
-    setVerifiedServerRoleForUid(params.targetUid, params.newRole);
-
-    // Cập nhật adapter phân trang trong bộ nhớ (nếu đang bật)
-    if (this.customPaginationAdapter?.updateRole) {
-      this.customPaginationAdapter.updateRole(params.targetUid, params.newRole);
-    }
-
-    // Ghi nhật ký kiểm toán thay đổi quyền
-    const auditEntry = recordRoleChangeAudit({
+    // Chuẩn bị bản ghi Audit Log và kiểm tra tính hợp lệ trước khi commit nguyên tử
+    const candidateAudit = buildRoleChangeAuditEntry({
       actorUid,
       actorEmail,
       targetUid: params.targetUid,
       targetEmail: (params.targetEmail || '').trim().toLowerCase(),
-      targetDisplayName:
+      targetDisplayName: (
         params.targetDisplayName ||
-        getUserDisplayLabel({ displayName: null, email: params.targetEmail }),
+        getUserDisplayLabel({ displayName: null, email: params.targetEmail })
+      ).slice(0, 60),
       previousRole,
       newRole: params.newRole,
       timestampMs: Date.now(),
+      customAuditId: params.customAuditIdForTesting,
     });
+
+    const expectedDocId = params.customAuditDocIdForTesting ?? candidateAudit.auditId;
+    const auditValidation = validateRoleAuditLogPayload(
+      candidateAudit,
+      expectedDocId,
+      ADMIN_EMAIL
+    );
+
+    if (!auditValidation.valid || params.simulateAuditLogFailureForTesting === true) {
+      return {
+        success: false,
+        previousRole,
+        newRole: previousRole,
+        errorMessage:
+          auditValidation.reasonVi ||
+          'Thao tác cấp/thu hồi quyền đã bị hủy nguyên tử do ghi nhật ký Audit Log thất bại.',
+      };
+    }
+
+    // Commit nguyên tử: Cập nhật vai trò + Ghi Audit Log cùng lúc
+    setVerifiedServerRoleForUid(params.targetUid, params.newRole);
+    if (this.customPaginationAdapter?.updateRole) {
+      this.customPaginationAdapter.updateRole(params.targetUid, params.newRole);
+    }
+    const auditEntry = commitRoleChangeAuditEntry(candidateAudit);
 
     return {
       success: true,
@@ -1224,8 +1446,10 @@ export class AuthManager {
   }
 
   /**
-   * M7.3.11 Mục II.3 & IV.3: Cấp quyền Admin, Cấp quyền Mod hoặc Thu hồi về Người chơi (`PLAYER`)
-   * và đồng bộ trực tiếp lên Firestore `/admins/{targetUid}` (được bảo vệ bởi `allow write: if isSuperAdmin()`).
+   * M7.3.11.4 Mục 2, 4 & 6: Cấp quyền Mod (`MOD`) hoặc Thu hồi về Người chơi (`PLAYER`)
+   * và ghi Audit Log theo cơ chế NGUYÊN TỬ (`writeBatch`) trên Firestore (`/admins/{targetUid}` + `/role_audit_logs/{auditId}`).
+   * - Chỉ duy nhất `ADMIN` (`linhnk2013@gmail.com`) được phép thực hiện.
+   * - Không cho phép cấp thêm quyền `ADMIN` cho tài khoản khác.
    */
   public async changeUserRole(params: {
     targetUid: string;
@@ -1234,6 +1458,7 @@ export class AuthManager {
     currentTargetRole?: UserRoleType;
     newRole: UserRoleType;
     overrideCallerForTesting?: ValidatedUserAccount | User | null;
+    simulateAuditLogFailureForTesting?: boolean;
   }): Promise<{
     success: boolean;
     previousRole: UserRoleType;
@@ -1241,46 +1466,142 @@ export class AuthManager {
     auditEntry?: RoleChangeAuditEntry;
     errorMessage?: string;
   }> {
-    const syncRes = this.changeUserRoleSync(params);
-    if (!syncRes.success) {
-      return syncRes;
+    if (this.customPaginationAdapter) {
+      return this.changeUserRoleSync(params);
     }
 
-    if (!this.customPaginationAdapter) {
-      try {
-        const db = getFirebaseDb();
-        const adminRef = doc(db, 'admins', params.targetUid);
-        if (params.newRole === 'ADMIN' || params.newRole === 'MOD') {
-          await setDoc(
-            adminRef,
-            {
-              uid: params.targetUid,
-              email: (params.targetEmail || '').trim().toLowerCase(),
-              displayName:
-                params.targetDisplayName ||
-                getUserDisplayLabel({ displayName: null, email: params.targetEmail }),
-              role: params.newRole,
-              updatedBy: SUPER_ADMIN_EMAIL,
-              updatedAt: serverTimestamp(),
-            },
-            { merge: true }
-          );
-        } else {
-          // Đưa tài khoản trở lại vai trò Người chơi -> xóa bản ghi trong /admins/{targetUid}
-          await deleteDoc(adminRef).catch(() => {});
-        }
-      } catch (err: any) {
-        return {
-          success: false,
-          previousRole: syncRes.previousRole,
-          newRole: syncRes.previousRole,
-          errorMessage:
-            err?.message || 'Không thể lưu thay đổi phân quyền lên Firestore. Vui lòng thử lại.',
-        };
+    const caller =
+      'overrideCallerForTesting' in params
+        ? params.overrideCallerForTesting
+        : this.getCurrentUser();
+
+    const actorRole: UserRoleType = isAdminUser(caller) ? 'ADMIN' : resolveUserRole(caller as any);
+    const actorUid = caller?.uid || '';
+    const actorEmail = (caller?.email || '').trim().toLowerCase();
+    const previousRole =
+      params.currentTargetRole ??
+      resolveUserRole({
+        uid: params.targetUid,
+        email: params.targetEmail,
+      });
+
+    const validation = validateRoleAssignmentChange({
+      actorRole,
+      actorUid,
+      actorEmail,
+      targetUid: params.targetUid,
+      targetEmail: params.targetEmail,
+      currentTargetRole: previousRole,
+      newRole: params.newRole,
+      adminEmail: ADMIN_EMAIL,
+    });
+
+    if (!validation.allowed) {
+      return {
+        success: false,
+        previousRole,
+        newRole: previousRole,
+        errorMessage: validation.reasonVi || 'Không thể thay đổi quyền cho tài khoản này.',
+      };
+    }
+
+    const safeDisplayName = (
+      params.targetDisplayName ||
+      getUserDisplayLabel({ displayName: null, email: params.targetEmail })
+    ).slice(0, 60);
+    const normalizedTargetEmail = (params.targetEmail || '').trim().toLowerCase();
+
+    const candidateAudit = buildRoleChangeAuditEntry({
+      actorUid,
+      actorEmail,
+      targetUid: params.targetUid,
+      targetEmail: normalizedTargetEmail,
+      targetDisplayName: safeDisplayName,
+      previousRole,
+      newRole: params.newRole,
+      timestampMs: Date.now(),
+    });
+
+    const auditValidation = validateRoleAuditLogPayload(
+      candidateAudit,
+      candidateAudit.auditId,
+      ADMIN_EMAIL
+    );
+
+    if (!auditValidation.valid || params.simulateAuditLogFailureForTesting === true) {
+      return {
+        success: false,
+        previousRole,
+        newRole: previousRole,
+        errorMessage:
+          auditValidation.reasonVi ||
+          'Thao tác cấp/thu hồi quyền đã bị hủy nguyên tử do ghi nhật ký Audit Log thất bại.',
+      };
+    }
+
+    try {
+      const db = getFirebaseDb();
+      const batch = writeBatch(db);
+      const adminRef = doc(db, 'admins', params.targetUid);
+      const auditRef = doc(db, 'role_audit_logs', candidateAudit.auditId);
+
+      if (params.newRole === 'MOD') {
+        batch.set(adminRef, {
+          uid: params.targetUid,
+          email: normalizedTargetEmail,
+          displayName: safeDisplayName,
+          role: 'MOD',
+          isActive: true,
+          updatedBy: ADMIN_EMAIL,
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        batch.delete(adminRef);
       }
-    }
 
-    return syncRes;
+      batch.set(auditRef, {
+        auditId: candidateAudit.auditId,
+        actorUid: candidateAudit.actorUid,
+        actorEmail: candidateAudit.actorEmail,
+        targetUid: candidateAudit.targetUid,
+        targetEmail: candidateAudit.targetEmail,
+        targetDisplayName: candidateAudit.targetDisplayName,
+        previousRole: candidateAudit.previousRole,
+        newRole: candidateAudit.newRole,
+        timestampMs: candidateAudit.timestampMs,
+        createdAt: serverTimestamp(),
+      });
+
+      // Thực thi nguyên tử cả thay đổi role (/admins/{targetUid}) và nhật ký (/role_audit_logs/{auditId})
+      await batch.commit();
+
+      setVerifiedServerRoleForUid(params.targetUid, params.newRole);
+      const auditEntry = commitRoleChangeAuditEntry(candidateAudit);
+
+      return {
+        success: true,
+        previousRole,
+        newRole: params.newRole,
+        auditEntry,
+      };
+    } catch (err: any) {
+      const rawCode = String(err?.code || '').toLowerCase();
+      const rawMsg = String(err?.message || '');
+      const isPermissionDenied =
+        rawCode.includes('permission-denied') ||
+        rawCode.includes('permission_denied') ||
+        rawMsg.toLowerCase().includes('missing or insufficient permissions') ||
+        rawMsg.toLowerCase().includes('permission-denied');
+
+      return {
+        success: false,
+        previousRole,
+        newRole: previousRole,
+        errorMessage: isPermissionDenied
+          ? 'Thao tác cấp/thu hồi quyền Mod và ghi Audit Log nguyên tử bị từ chối (permission-denied): Firestore Production Rules hiện chưa đáp ứng phiên bản chức năng M7.3.11.4 (/admins/{uid} và /role_audit_logs/{logId} cho Admin linhnk2013@gmail.com). Vui lòng Publish Firestore Rules mới.'
+          : rawMsg || 'Không thể lưu thay đổi phân quyền và Audit Log nguyên tử lên Firestore.',
+      };
+    }
   }
 
   /**

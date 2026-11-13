@@ -213,7 +213,7 @@ async function main(): Promise<void> {
       firebase: { sign_in_provider: 'google.com' },
     });
     const superAdminCtx = testEnv.authenticatedContext('uid_super_admin', {
-      email: 'linhnk.online@gmail.com',
+      email: 'linhnk2013@gmail.com',
       email_verified: true,
       firebase: { sign_in_provider: 'google.com' },
     });
@@ -807,12 +807,17 @@ async function main(): Promise<void> {
       'R17_ALLOW_SUPER_ADMIN_WRITE_ADMINS',
       17,
       'ALLOW',
-      'Super Admin duy nhất (linhnk.online@gmail.com) có quyền ghi /admins/{uid}',
-      'firestore.rules: match /admins/{uid} allow create, update, delete: if isSuperAdmin()',
+      'Admin duy nhất (linhnk2013@gmail.com) có quyền ghi /admins/{uid} để cấp quyền MOD',
+      'firestore.rules: match /admins/{uid} allow create, update, delete: if isAdmin()',
       () =>
         setDoc(doc(superAdminDb, 'admins', 'uid_host_1'), {
+          uid: 'uid_host_1',
           email: 'host1@gmail.com',
+          role: 'MOD',
+          isActive: true,
+          grantedBy: 'linhnk2013@gmail.com',
           grantedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
         })
     );
 
@@ -835,7 +840,7 @@ async function main(): Promise<void> {
       contentType: 'audio/mpeg',
       fileSize: 4_500_000,
       updatedAt: Date.now(),
-      updatedBy: 'linhnk.online@gmail.com',
+      updatedBy: 'linhnk2013@gmail.com',
       version: 1,
       isEnabled: true,
       displayName: 'Bắn Tank 8-Bit Theme',
@@ -850,8 +855,8 @@ async function main(): Promise<void> {
       'R18_ALLOW_SUPER_ADMIN_WRITE_SYSTEM_AUDIO',
       18,
       'ALLOW',
-      'Super Admin (linhnk.online@gmail.com) tạo/cập nhật cấu hình nhạc nền chung /system_config/audio hợp lệ',
-      'firestore.rules: match /system_config/{docId} allow create, update: if isSuperAdmin() && docId == "audio" && isValidSystemAudioConfig(incoming())',
+      'Admin (linhnk2013@gmail.com) tạo/cập nhật cấu hình nhạc nền chung /system_config/audio hợp lệ',
+      'firestore.rules: match /system_config/{docId} allow create, update: if isAdmin() && docId == "audio" && isValidSystemAudioConfig(incoming())',
       () => setDoc(doc(superAdminDb, 'system_config', 'audio'), validSystemAudioPayload)
     );
 
@@ -900,7 +905,7 @@ async function main(): Promise<void> {
       isActive: true,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      updatedBy: 'linhnk.online@gmail.com',
+      updatedBy: 'linhnk2013@gmail.com',
     };
 
     const inactiveCatalogAvatarDoc = {
@@ -914,15 +919,15 @@ async function main(): Promise<void> {
       isActive: false,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-      updatedBy: 'linhnk.online@gmail.com',
+      updatedBy: 'linhnk2013@gmail.com',
     };
 
     await checkRule(
       'R19_ALLOW_SUPER_ADMIN_CREATE_CATALOG_AVATAR',
       19,
       'ALLOW',
-      'Super Admin (linhnk.online@gmail.com) tạo avatar đang hoạt động trong /avatar_catalog/tank_01',
-      'firestore.rules: match /avatar_catalog/{avatarId} allow create: if isSuperAdmin() && isValidAvatarCatalogDoc(incoming(), avatarId)',
+      'Admin (linhnk2013@gmail.com) tạo avatar đang hoạt động trong /avatar_catalog/tank_01',
+      'firestore.rules: match /avatar_catalog/{avatarId} allow create: if isAdmin() && isValidAvatarCatalogDoc(incoming(), avatarId)',
       async () => {
         await setDoc(doc(superAdminDb, 'avatar_catalog', 'tank_01'), validCatalogAvatarDoc);
         await setDoc(doc(superAdminDb, 'avatar_catalog', 'tank_hidden'), inactiveCatalogAvatarDoc);

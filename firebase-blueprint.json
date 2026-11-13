@@ -71,7 +71,7 @@
     },
     "AvatarCatalogItem": {
       "title": "AvatarCatalogItem",
-      "description": "Metadata danh mục avatar dùng chung lưu trên Firebase Storage (M7.3.5), chỉ Super Admin linhnk.online@gmail.com quản lý.",
+      "description": "Metadata danh mục avatar dùng chung lưu trên Firebase Storage (M7.3.5), chỉ Admin duy nhất linhnk2013@gmail.com quản lý.",
       "type": "object",
       "properties": {
         "avatarId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_-]+$" },
@@ -102,13 +102,15 @@
     },
     "AdminRecord": {
       "title": "AdminRecord",
-      "description": "Danh sách Super Admin (chỉ dành cho linhnk.online@gmail.com).",
+      "description": "Hồ sơ vai trò quản trị / điều hành viên trong mô hình 3 vai trò (ADMIN duy nhất cho linhnk2013@gmail.com và MOD).",
       "type": "object",
       "properties": {
         "uid": { "type": "string" },
-        "role": { "type": "string", "enum": ["SUPER_ADMIN"] }
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["ADMIN", "MOD"] },
+        "isActive": { "type": "boolean" }
       },
-      "required": ["uid", "role"]
+      "required": ["uid", "role", "isActive"]
     },
     "CoopRoomLobby": {
       "title": "CoopRoomLobby",
@@ -215,7 +217,7 @@
     },
     "/admins/{uid}": {
       "schema": { "$ref": "#/entities/AdminRecord" },
-      "description": "Bảng quyền Super Admin chỉ dành cho linhnk.online@gmail.com."
+      "description": "Bảng phân quyền ADMIN duy nhất (linhnk2013@gmail.com) và MOD."
     },
     "/coop_rooms/{roomCode}": {
       "schema": { "$ref": "#/entities/CoopRoomLobby" },

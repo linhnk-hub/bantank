@@ -119,7 +119,7 @@ async function verifyM733AsyncWorkflow() {
     }
     return synthBuffer;
   });
-  mm.setUserRole('SUPER_ADMIN');
+  mm.setUserRole('ADMIN');
 
   // 1. Chọn file MP3 > 4 MB (4.5 MB = 4,718,592 bytes) -> Bước 1 tạo gói chuẩn bị (StagedAudioPackage)
   const fakeMp3BinaryV1 = new Uint8Array(64);
@@ -183,8 +183,8 @@ async function verifyM733AsyncWorkflow() {
     throw new Error('M7.3.3 F5 reload persistence failed');
   }
 
-  // 5. Mô phỏng người chơi khác ở trình duyệt khác -> Nhận đúng phiên bản v1, và khi Super Admin phát hành v2 (?v=2) thì tự động cập nhật không bị cache bản cũ
-  mm.setUserRole('SUPER_ADMIN');
+  // 5. Mô phỏng người chơi khác ở trình duyệt khác -> Nhận đúng phiên bản v1, và khi Admin phát hành v2 (?v=2) thì tự động cập nhật không bị cache bản cũ
+  mm.setUserRole('ADMIN');
   const stageV2 = await mm.stageAudioBufferForGitHubPages({
     fileName: 'Gaming Music 614619 (8-bit).mp3',
     displayName: 'Gaming Music 8-Bit v2',

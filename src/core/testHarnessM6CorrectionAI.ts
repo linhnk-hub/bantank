@@ -433,7 +433,7 @@ export function runAllM6CorrectionAITests(): {
   // =========================================================================
   {
     const mm = MusicManager.getInstance();
-    mm.setUserRole('SUPER_ADMIN');
+    mm.setUserRole('ADMIN');
     mm.resetAllAssignmentsToDefault();
 
     const bufGlobal = createSyntheticAudioBuffer({ durationSec: 140, leadingSilenceSec: 0.2, trailingSilenceSec: 0.3 });
@@ -498,8 +498,8 @@ export function runAllM6CorrectionAITests(): {
     mm.setUserRole('PLAYER');
     const blockedDeleteAsPlayer = !mm.deleteTrack('test_track_stage1');
 
-    // Switch back to SUPER_ADMIN & clean up test tracks
-    mm.setUserRole('SUPER_ADMIN');
+    // Switch back to ADMIN & clean up test tracks
+    mm.setUserRole('ADMIN');
     const deletedStage1 = mm.deleteTrack('test_track_stage1');
     mm.deleteTrack('test_track_solo');
     mm.deleteTrack('test_track_global');
