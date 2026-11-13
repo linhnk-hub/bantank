@@ -61,14 +61,13 @@ import {
   AlertTriangle,
   Clock,
 } from 'lucide-react';
-// NHÚNG NEO-RETRO UI COMPONENT
-import MobileController from './components/HUD/MobileController.tsx';
 
 export default function App() {
   const authManager = useMemo(() => AuthManager.getInstance(), []);
   const sessionManager = useMemo(() => SessionManager.getInstance(), []);
   const coopManager = useMemo(() => CoopOnlineManager.getInstance(), []);
 
+  // Screen View Routing: 'WELCOME' | 'MAIN_MENU' | 'MODE_SELECTION' | 'BATTLE'
   const [currentUser, setCurrentUser] = useState(() => authManager.getCurrentUser());
   const [isAuthReady, setIsAuthReady] = useState<boolean>(() => authManager.isAuthReady());
   const [sessionSnapshot, setSessionSnapshot] = useState(() => sessionManager.getSnapshot());
@@ -83,6 +82,7 @@ export default function App() {
 
   const isSuperAdmin = useMemo(() => isSuperAdminUser(currentUser), [currentUser]);
 
+  // Milestone 4 Game State & Lifecycle
   const [gameEngine] = useState<GameEngine>(() => new GameEngine());
   const [gameState, setGameState] = useState<GameCoreState | null>(null);
   const [isPaused, setIsPaused] = useState<boolean>(false);
@@ -95,6 +95,7 @@ export default function App() {
   const [isMatchAllowed, setIsMatchAllowed] = useState<boolean>(false);
   const [isTrialMode, setIsTrialMode] = useState<boolean>(() => authManager.isTrialMode());
 
+  // Desktop PC detection: screen width >= 1024px with fine pointer (mouse/trackpad)
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     return window.innerWidth >= 1024 && window.matchMedia('(pointer: fine)').matches;
@@ -108,6 +109,7 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  // Safe browser autoplay unlock for Web Audio API
   useEffect(() => {
     const unlockAudio = () => {
       SoundManager.getInstance().unlock();
@@ -122,22 +124,29 @@ export default function App() {
     };
   }, []);
 
+  // On desktop PC with fine mouse pointer, default touch controls to hidden to maximize canvas size
   const [showTouchControls, setShowTouchControls] = useState<boolean>(() => {
     if (typeof window === 'undefined') return true;
     const desktop = window.innerWidth >= 1024 && window.matchMedia('(pointer: fine)').matches;
     return !desktop;
   });
 
+  // Passive orientation detection hook (responds to physical OS rotation only)
   useOrientation();
 
+  // Collapsible Menu & Developer Tools state
   const [isMenuExpanded, setIsMenuExpanded] = useState<boolean>(false);
   const [isDevDrawerOpen, setIsDevDrawerOpen] = useState<boolean>(false);
 
+  // Virtual Controls state for Landscape 3-Column Layout
   const [landscapeDirection, setLandscapeDirection] = useState<ActiveDirection>(null);
   const [landscapeShooting, setLandscapeShooting] = useState<boolean>(false);
   const landscapeDirRef = useRef<ActiveDirection>(null);
 
+  // Screen layout metrics (landscape, phone, tablet, desktop scaling)
   const layout = useViewportLayout();
+
+  // Validate the official Stage 1 map using pure Game Core validator (M1)
   const validation = useMemo(() => validateStageMap(STAGE_1_MAP), []);
 
   const clearVirtualTouchInputs = useCallback(() => {
@@ -155,6 +164,7 @@ export default function App() {
     setGameState({ ...gameEngine.getState() });
   }, [gameEngine, clearVirtualTouchInputs]);
 
+  // Synchronize React isPaused state when GameEngine enters PAUSED internally (e.g. Forced Safety Pause)
   useEffect(() => {
     if (gameState?.matchState === 'PAUSED' && !isPaused) {
       clearVirtualTouchInputs();
@@ -163,6 +173,7 @@ export default function App() {
     }
   }, [gameState?.matchState, isPaused, clearVirtualTouchInputs]);
 
+  // Neutralize any held virtual touch controls when window loses focus or tab becomes hidden
   useEffect(() => {
     const onBlurOrVisibility = () => {
       if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
@@ -180,6 +191,7 @@ export default function App() {
     };
   }, [clearVirtualTouchInputs]);
 
+  // Global subscription to AuthManager & SessionManager
   useEffect(() => {
     MusicManager.getInstance().syncRoleFromAuthUser(authManager.getCurrentUser());
 
@@ -228,6 +240,7 @@ export default function App() {
     };
   }, [authManager, sessionManager, handlePause]);
 
+  // Monitor Co-op Online Room for peer disconnection / leave during BATTLE
   useEffect(() => {
     if (appScreen !== 'BATTLE') return;
     const unsubCoop = coopManager.subscribe((room) => {
@@ -242,6 +255,7 @@ export default function App() {
       }
       if (room.status === 'ABANDONED') {
         if (localRole === 'HOST') {
+          // Case E: Guest P2 left while Host P1 is playing -> P1 continues solo without pausing
           gameEngine.handlePeerPlayerLeft('P2');
           setGameState({ ...gameEngine.getState() });
           return;
@@ -338,6 +352,7 @@ export default function App() {
     setAppScreen('BATTLE');
   }, [authManager, gameEngine]);
 
+  // Support direct navigation from landing.html (?mode=trial)
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const params = new URLSearchParams(window.location.search);
@@ -463,6 +478,7 @@ export default function App() {
     [gameEngine]
   );
 
+  // Handle touch inputs from either Portrait or Landscape virtual controls
   const handleTouchInput = useCallback(
     (input: Partial<InputState>) => {
       SessionManager.getInstance().recordUserActivity();
@@ -480,6 +496,7 @@ export default function App() {
     [gameEngine, coopManager]
   );
 
+  // Landscape specific multi-touch handlers with independent release
   const handleLandscapeDirectionChange = useCallback(
     (dir: ActiveDirection) => {
       SessionManager.getInstance().recordUserActivity();
@@ -523,12 +540,14 @@ export default function App() {
     [gameEngine, coopManager]
   );
 
+  // Auto-collapse menu when match starts/resumes
   useEffect(() => {
     if (gameState?.matchState === 'PLAYING') {
       setIsMenuExpanded(false);
     }
   }, [gameState?.matchState]);
 
+  // When paused, clear landscape controls
   useEffect(() => {
     if (isPaused) {
       landscapeDirRef.current = null;
@@ -537,6 +556,7 @@ export default function App() {
     }
   }, [isPaused]);
 
+  // Listen for Space / Enter to start game when in MENU state during BATTLE
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (appScreen === 'BATTLE' && gameState?.matchState === 'MENU') {
@@ -562,36 +582,13 @@ export default function App() {
     setProfileRevision((r) => r + 1);
   }, [authManager]);
 
-
-  // ===================================================================================
-  // NHÚNG NEO-RETRO UI CALLBACKS CHO MOBILE CONTROLLER
-  // ===================================================================================
-  const handleNeoRetroFire = useCallback(() => {
-    handleTouchInput({ shoot: true });
-    // Reset ngay lập tức để mô phỏng "tap" nếu cần, hoặc quản lý touch state
-    setTimeout(() => handleTouchInput({ shoot: false }), 100);
-  }, [handleTouchInput]);
-
-  const handleNeoRetroMove = useCallback((dir: 'up' | 'down' | 'left' | 'right' | null) => {
-    if (!dir) {
-      handleTouchInput({ up: false, down: false, left: false, right: false });
-    } else {
-      handleTouchInput({
-        up: dir === 'up',
-        down: dir === 'down',
-        left: dir === 'left',
-        right: dir === 'right'
-      });
-    }
-  }, [handleTouchInput]);
-
-
+  // View 1: Welcome Screen (Unauthenticated user or initial landing - V.1: Clean screen without Top Menu)
   if ((!currentUser && (!isTrialMode || appScreen !== 'BATTLE')) || appScreen === 'WELCOME') {
     return (
-      <div className="min-h-[100dvh] bg-neo-bg text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-neo-amber selection:text-black">
+      <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         {!isAuthReady && (
-          <div className="w-full bg-black border-b border-neo-amber px-3 py-1 text-center text-[11px] font-pixel text-neo-amber">
-            [ CHECKING SYSTEM STATUS... ]
+          <div className="w-full bg-neutral-900/90 border-b border-neutral-800 px-3 py-1 text-center text-[11px] font-mono text-amber-300/90">
+            Đang kiểm tra trạng thái phiên đăng nhập...
           </div>
         )}
         <WelcomeScreen
@@ -609,9 +606,10 @@ export default function App() {
     );
   }
 
+  // View 2: Main Menu Screen (Authenticated user before entering battle)
   if (appScreen === 'MAIN_MENU' && currentUser) {
     return (
-      <div className="min-h-[100dvh] bg-neo-bg text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-neo-amber selection:text-black">
+      <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         {isSuperAdmin && (
           <DevToolsDrawer
             isOpen={isDevDrawerOpen}
@@ -653,6 +651,7 @@ export default function App() {
           isSuperAdmin={isSuperAdmin}
         />
 
+        {/* Protective Interruption Modal if displaced while on menu */}
         <SessionAlertModal
           session={sessionSnapshot}
           isProcessing={authProcessing}
@@ -664,9 +663,10 @@ export default function App() {
     );
   }
 
+  // View 2.5: Mode Selection Screen (Select SOLO vs CO-OP AI vs CO-OP ONLINE)
   if (appScreen === 'MODE_SELECTION' && currentUser) {
     return (
-      <div className="min-h-[100dvh] bg-neo-bg text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-neo-amber selection:text-black">
+      <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         {isSuperAdmin && (
           <DevToolsDrawer
             isOpen={isDevDrawerOpen}
@@ -715,6 +715,7 @@ export default function App() {
           isSuperAdmin={isSuperAdmin}
         />
 
+        {/* Protective Interruption Modal if displaced while on mode selection */}
         <SessionAlertModal
           session={sessionSnapshot}
           isProcessing={authProcessing}
@@ -726,8 +727,10 @@ export default function App() {
     );
   }
 
+  // View 3: Battle Arena with Canvas (Only mounted when player clicked "Chơi ngay")
   return (
-    <div className="min-h-[100dvh] bg-neo-bg text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-neo-amber selection:text-black">
+    <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+      {/* Developer & QA Test Suite Drawer (Super Admin Only) */}
       {isSuperAdmin && (
         <DevToolsDrawer
           isOpen={isDevDrawerOpen}
@@ -736,6 +739,7 @@ export default function App() {
         />
       )}
 
+      {/* Unified Settings Modal (Account + Sound) */}
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -746,14 +750,17 @@ export default function App() {
         onProfileUpdated={handleProfileUpdated}
       />
 
+      {/* Support Modal */}
       <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
 
+      {/* M7.1: Firebase Authentication & Single-Device Session Header Banner */}
       <AuthSessionBanner onStartMatchAllowedChange={setIsMatchAllowed} />
 
+      {/* Co-op Online Peer Disconnection Banner */}
       {onlineDisconnectMsg && (
-        <div className="bg-neo-rose/20 border-b-2 border-neo-rose px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-white z-40">
-          <div className="flex items-center gap-2 font-bold font-pixel text-lg">
-            <AlertTriangle className="w-4 h-4 text-neo-rose shrink-0" />
+        <div className="bg-red-950/95 border-b border-red-700 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-red-200 z-40">
+          <div className="flex items-center gap-2 font-bold">
+            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
             <span>{onlineDisconnectMsg}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -763,187 +770,637 @@ export default function App() {
                 setOnlineDisconnectMsg(null);
                 void coopManager.retryWebRTCConnection();
               }}
-              className="btn-arcade-outline px-3 py-1 text-xs"
+              className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs cursor-pointer"
             >
-              RECONNECT
+              Thử Kết Nối Lại P2P
             </button>
             <button
               type="button"
               onClick={handleQuitToMenu}
-              className="btn-arcade px-3 py-1 text-xs !bg-neo-rose !text-white"
+              className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs cursor-pointer"
             >
-              MENU
+              Về Menu Chính
             </button>
           </div>
         </div>
       )}
 
+      {/* =========================================================================
+          LANDSCAPE MODE (Mobile / Tablet 3-Column Ergonomic Layout - Top Aligned)
+         ========================================================================= */}
       {(!isDesktop && layout.isLandscape) ? (
         <div className="flex-1 flex flex-col justify-start h-[100dvh] max-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-          <header className="sticky top-0 z-40 h-8 bg-black/95 backdrop-blur-md border-b-2 border-neo-cyan px-2 flex items-center justify-between text-xs shrink-0 shadow-[0_0_10px_rgba(0,240,255,0.2)]">
+          {/* Slim Landscape Top HUD (32px) — Sticky Top Menu */}
+          <header className="sticky top-0 z-40 h-8 bg-neutral-950/95 backdrop-blur-md border-b border-neutral-800 px-2 sm:px-3 flex items-center justify-between text-xs shrink-0 shadow">
+            {/* Left: Stage Status */}
             <div className="flex items-center gap-1.5">
-              <span className="font-pixel text-neo-amber text-lg">STAGE {gameState?.currentStageId ?? 1}</span>
-              <span className={`w-2 h-2 rounded-sm pixel-corners ${isPaused ? 'bg-neo-amber' : 'bg-neo-cyan animate-pulse'}`} />
+              <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
+                STAGE {gameState?.currentStageId ?? 1}
+              </span>
+              <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
             </div>
 
+            {/* Center: Live Match Metrics (No remaining enemy count per M7.3 IV) */}
             <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono">
               {(() => {
-                const remSec = typeof gameState?.remainingSeconds === 'number' ? gameState.remainingSeconds : getMatchDurationSecondsForDifficulty(gameState?.difficulty ?? difficulty);
+                const remSec =
+                  typeof gameState?.remainingSeconds === 'number'
+                    ? gameState.remainingSeconds
+                    : getMatchDurationSecondsForDifficulty(gameState?.difficulty ?? difficulty);
                 const isCrit = remSec <= MATCH_TIMER_CONFIG.CRITICAL_THRESHOLD_S;
+                const isWarn = !isCrit && remSec <= MATCH_TIMER_CONFIG.WARNING_THRESHOLD_S;
                 return (
-                  <div className={`flex items-center gap-1 px-1.5 py-0.5 border-2 font-pixel text-lg ${isCrit ? 'bg-neo-rose/20 border-neo-rose text-neo-rose animate-pulse' : 'bg-black border-neo-cyan text-neo-cyan'}`}>
+                  <div
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold ${
+                      isCrit
+                        ? 'bg-red-950/90 border-red-500 text-red-300 animate-pulse'
+                        : isWarn
+                        ? 'bg-amber-950/80 border-amber-500/80 text-amber-300'
+                        : 'bg-neutral-900 border-neutral-700 text-emerald-300'
+                    }`}
+                    title="Thời gian còn lại của trận đấu"
+                  >
+                    <Clock className="w-3 h-3" />
                     <span>{formatCountdownMMSS(remSec)}</span>
                   </div>
                 );
               })()}
-              <div className="flex items-center gap-1 text-neo-amber font-pixel text-lg">
+              <div className="flex items-center gap-1 text-amber-400">
+                <Trophy className="w-3.5 h-3.5" />
                 <span className="font-bold">{gameState?.score ?? 0} XP</span>
               </div>
-              <div className="flex items-center gap-1 text-neo-rose font-pixel text-lg">
-                <Heart className="w-3 h-3 fill-neo-rose" />
+              <div className="flex items-center gap-1 text-rose-400 font-bold" title="Mạng P1">
+                <Heart className="w-3.5 h-3.5 fill-rose-500" />
                 <span>P1×{gameState?.p1State.lives ?? 3}</span>
               </div>
               {(gameState?.gameMode === 'TWO_PLAYERS_AI' || gameState?.gameMode === 'TWO_PLAYERS_ONLINE') && gameState?.p2State && (
-                <div className="flex items-center gap-1 text-neo-cyan font-pixel text-lg">
-                  <Heart className="w-3 h-3 fill-neo-cyan" />
+                <div className="flex items-center gap-1 text-emerald-400 font-bold" title="Mạng P2">
+                  <Heart className="w-3.5 h-3.5 fill-emerald-500" />
                   <span>P2×{gameState.p2State.lives}</span>
                 </div>
               )}
             </div>
 
+            {/* Right: Quick Action Buttons */}
             <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
               <QuickAudioToggleButton compact />
-              <button type="button" onClick={isPaused ? handleResume : handlePause} className="btn-arcade-outline px-2 py-0.5 text-xs">
-                {isPaused ? 'PLAY' : 'PAUSE'}
+
+              <button
+                type="button"
+                onClick={isPaused ? handleResume : handlePause}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold shadow cursor-pointer"
+              >
+                {isPaused ? <Play className="w-3 h-3 fill-white" /> : <Pause className="w-3 h-3 fill-white" />}
+                <span className="hidden xs:inline">{isPaused ? 'Tiếp tục' : 'Tạm dừng'}</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(true)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold cursor-pointer"
+                title="Cài đặt"
+              >
+                <Settings className="w-3 h-3 text-amber-400" />
+                <span className="hidden sm:inline">Cài đặt</span>
+              </button>
+
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setIsDevDrawerOpen(true)}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold cursor-pointer"
+                  title="Bảng Kiểm thử & QA (Super Admin)"
+                >
+                  <Wrench className="w-3 h-3 text-amber-400" />
+                  <span className="hidden sm:inline">QA</span>
+                </button>
+              )}
             </div>
           </header>
 
-          <main className="flex-1 flex flex-row items-start justify-center w-full min-h-[calc(100dvh-32px)] px-1 pt-1 pb-1 overflow-x-hidden overflow-y-auto bg-tactical-grid relative">
-            <div className="crt-overlay"></div>
-            <div style={{ width: `${layout.leftControlWidthPx}px`, minWidth: '90px' }} className="flex-1 self-stretch flex items-center justify-center relative z-10">
-              <VirtualJoystick activeDirection={landscapeDirection} onDirectionChange={handleLandscapeDirectionChange} size={layout.isTabletOrDesktop ? 130 : 100} knobSize={layout.isTabletOrDesktop ? 46 : 36} deadZone={12} disabled={isPaused} />
+          {/* Landscape Main 3-Column Combat View - Top Aligned */}
+          <main className="flex-1 flex flex-row items-start justify-center w-full min-h-[calc(100dvh-32px)] px-1 sm:px-2 pt-1 pb-1 overflow-x-hidden overflow-y-auto">
+            {/* Left Column: Virtual Joystick */}
+            <div
+              style={{
+                width: `${layout.leftControlWidthPx}px`,
+                minWidth: '90px',
+              }}
+              className="flex-1 self-stretch flex items-center justify-center"
+            >
+              <VirtualJoystick
+                activeDirection={landscapeDirection}
+                onDirectionChange={handleLandscapeDirectionChange}
+                size={layout.isTabletOrDesktop ? 130 : 100}
+                knobSize={layout.isTabletOrDesktop ? 46 : 36}
+                deadZone={12}
+                disabled={isPaused}
+              />
             </div>
 
-            <div style={{ width: `${layout.canvasSizePx}px`, height: `${layout.canvasSizePx}px`, maxWidth: `${layout.canvasSizePx}px`, maxHeight: `${layout.canvasSizePx}px` }} className="flex-none flex items-start justify-center overflow-hidden p-0 relative mx-auto z-10 border-4 border-neo-cyan shadow-[0_0_20px_rgba(0,240,255,0.4)] pixel-corners">
-              <PhaserGame mode="battle" engine={gameEngine} onStateUpdate={setGameState} onFpsUpdate={setFps} onPause={handlePause} canvasSizePx={layout.canvasSizePx} />
+            {/* Center Column: Game Canvas Maximized 1:1 Aspect Ratio (Top Aligned) */}
+            <div
+              style={{
+                width: `${layout.canvasSizePx}px`,
+                height: `${layout.canvasSizePx}px`,
+                maxWidth: `${layout.canvasSizePx}px`,
+                maxHeight: `${layout.canvasSizePx}px`,
+              }}
+              className="flex-none flex items-start justify-center overflow-hidden p-0 relative mx-auto"
+            >
+              <PhaserGame
+                mode="battle"
+                engine={gameEngine}
+                onStateUpdate={setGameState}
+                onFpsUpdate={setFps}
+                onPause={handlePause}
+                canvasSizePx={layout.canvasSizePx}
+              />
+
+              {/* In MENU state: Overlay allowing immediate match start */}
               {gameState?.matchState === 'MENU' && (
-                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 overflow-y-auto">
+                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-sm overflow-y-auto">
                   <GameLogo className="mb-1.5" />
-                  <button type="button" onClick={isMatchAllowed ? handleRestart : undefined} disabled={!isMatchAllowed} className={`btn-arcade py-2 px-5 text-lg mt-4 ${!isMatchAllowed && 'opacity-50'}`}>
-                    {isMatchAllowed ? 'START (SPACE)' : 'LOGIN REQUIRED'}
+                  <p className="text-xs text-amber-300 font-mono font-bold mb-2">
+                    STAGE {gameState?.currentStageId ?? 1}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={isMatchAllowed ? handleRestart : undefined}
+                    disabled={!isMatchAllowed}
+                    className={`py-2 px-5 rounded-xl font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                      isMatchAllowed
+                        ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/30 cursor-pointer'
+                        : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
+                    }`}
+                  >
+                    <Play className={`w-3.5 h-3.5 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
+                    <span>{isMatchAllowed ? 'BẮT ĐẦU TRẬN ĐẤU' : 'ĐĂNG NHẬP GMAIL ĐỂ BẮT ĐẦU'}</span>
                   </button>
                 </div>
               )}
             </div>
 
-            <div style={{ width: `${layout.rightControlWidthPx}px`, minWidth: '90px' }} className="flex-1 self-stretch flex items-center justify-center relative z-10">
-              <VirtualShootButton isShooting={landscapeShooting} onShootChange={handleLandscapeShootChange} size={layout.isTabletOrDesktop ? 76 : 64} />
+            {/* Right Column: Virtual Shoot Action Button */}
+            <div
+              style={{
+                width: `${layout.rightControlWidthPx}px`,
+                minWidth: '90px',
+              }}
+              className="flex-1 self-stretch flex items-center justify-center"
+            >
+              <VirtualShootButton
+                isShooting={landscapeShooting}
+                onShootChange={handleLandscapeShootChange}
+                size={layout.isTabletOrDesktop ? 76 : 64}
+              />
             </div>
           </main>
         </div>
       ) : !isDesktop ? (
-        <div className="flex-1 flex flex-col justify-start h-[100dvh] max-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] bg-neo-bg">
-          <header className="sticky top-0 z-40 h-10 bg-black/95 backdrop-blur-md border-b-2 border-neo-amber px-2 flex items-center justify-between text-xs shrink-0 shadow-[0_0_15px_rgba(255,184,0,0.3)]">
+        /* =========================================================================
+            MOBILE / TABLET PORTRAIT MODE (Dedicated 100dvh Top-to-Bottom Stack)
+           ========================================================================= */
+        <div className="flex-1 flex flex-col justify-start h-[100dvh] max-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] bg-neutral-950">
+          {/* Slim Portrait Top HUD — Sticky Top Menu */}
+          <header className="sticky top-0 z-40 h-9 bg-neutral-950/95 backdrop-blur-md border-b border-neutral-800 px-2.5 sm:px-3 flex items-center justify-between text-xs shrink-0 shadow">
+            {/* Left: Stage Status */}
             <div className="flex items-center gap-2">
-              <span className="font-pixel text-neo-amber text-xl">STAGE {gameState?.currentStageId ?? 1}</span>
+              <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
+                STAGE {gameState?.currentStageId ?? 1}
+              </span>
+              <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
             </div>
-            <div className="flex items-center gap-2 text-xs font-pixel text-lg">
+
+            {/* Center: Live Match Metrics (No remaining enemy count per M7.3 IV) */}
+            <div className="flex items-center gap-2 text-xs font-mono">
               {(() => {
-                const remSec = typeof gameState?.remainingSeconds === 'number' ? gameState.remainingSeconds : getMatchDurationSecondsForDifficulty(gameState?.difficulty ?? difficulty);
+                const remSec =
+                  typeof gameState?.remainingSeconds === 'number'
+                    ? gameState.remainingSeconds
+                    : getMatchDurationSecondsForDifficulty(gameState?.difficulty ?? difficulty);
                 const isCrit = remSec <= MATCH_TIMER_CONFIG.CRITICAL_THRESHOLD_S;
+                const isWarn = !isCrit && remSec <= MATCH_TIMER_CONFIG.WARNING_THRESHOLD_S;
                 return (
-                  <div className={`px-1.5 border-2 ${isCrit ? 'bg-neo-rose/20 border-neo-rose text-neo-rose animate-pulse' : 'bg-black border-neo-cyan text-neo-cyan'}`}>
-                    {formatCountdownMMSS(remSec)}
+                  <div
+                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold ${
+                      isCrit
+                        ? 'bg-red-950/90 border-red-500 text-red-300 animate-pulse'
+                        : isWarn
+                        ? 'bg-amber-950/80 border-amber-500/80 text-amber-300'
+                        : 'bg-neutral-900 border-neutral-700 text-emerald-300'
+                    }`}
+                    title="Thời gian còn lại của trận đấu"
+                  >
+                    <Clock className="w-3 h-3" />
+                    <span>{formatCountdownMMSS(remSec)}</span>
                   </div>
                 );
               })()}
-              <div className="text-neo-amber">{gameState?.score ?? 0}XP</div>
+              <div className="flex items-center gap-1 text-amber-400">
+                <Trophy className="w-3.5 h-3.5" />
+                <span className="font-bold">{gameState?.score ?? 0} XP</span>
+              </div>
+              <div className="flex items-center gap-1 text-rose-400 font-bold" title="Mạng P1">
+                <Heart className="w-3.5 h-3.5 fill-rose-500" />
+                <span>P1×{gameState?.p1State.lives ?? 3}</span>
+              </div>
+              {(gameState?.gameMode === 'TWO_PLAYERS_AI' || gameState?.gameMode === 'TWO_PLAYERS_ONLINE') && gameState?.p2State && (
+                <div className="flex items-center gap-1 text-emerald-400 font-bold" title="Mạng P2">
+                  <Heart className="w-3.5 h-3.5 fill-emerald-500" />
+                  <span>P2×{gameState.p2State.lives}</span>
+                </div>
+              )}
             </div>
-            <div className="flex items-center gap-1 shrink-0">
+
+            {/* Right: Quick Action Buttons */}
+            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
               <QuickAudioToggleButton compact />
-              <button type="button" onClick={() => setIsSettingsOpen(true)} className="p-1 border-2 border-neutral-700 text-neo-amber"><Settings className="w-4 h-4"/></button>
+
+              <button
+                type="button"
+                onClick={() => setIsSettingsOpen(true)}
+                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 cursor-pointer"
+                title="Cài đặt"
+              >
+                <Settings className="w-3.5 h-3.5 text-amber-400" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsSupportOpen(true)}
+                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-sky-500 text-neutral-300 cursor-pointer"
+                title="Hướng dẫn điều khiển"
+              >
+                <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+              </button>
+
+              {isSuperAdmin && (
+                <button
+                  type="button"
+                  onClick={() => setIsDevDrawerOpen(true)}
+                  className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-[10px] font-semibold cursor-pointer"
+                  title="Bảng Kiểm thử & QA (Super Admin)"
+                >
+                  <Wrench className="w-3 h-3 text-amber-400" />
+                  <span>QA</span>
+                </button>
+              )}
             </div>
           </header>
 
-          <div className="flex-1 flex flex-col items-center justify-start w-full overflow-x-hidden overflow-y-auto px-2 pt-2 pb-2 bg-tactical-grid relative">
-            <div className="crt-overlay"></div>
-            
-            <main style={{ width: `${layout.canvasSizePx}px`, height: `${layout.canvasSizePx}px` }} className="shrink-0 flex items-start justify-center overflow-hidden relative mx-auto pixel-corners border-4 border-neo-amber shadow-[0_0_20px_rgba(255,184,0,0.5)] bg-black z-10">
-              <PhaserGame mode="battle" engine={gameEngine} onStateUpdate={setGameState} onFpsUpdate={setFps} onPause={handlePause} canvasSizePx={layout.canvasSizePx} />
-              
-              {/* NHÚNG NEO-RETRO MOBILE CONTROLLER LÊN TRÊN CANVAS NẾU LÀ MOBILE PORTRAIT VÀ ĐANG PLAYING */}
-              {gameState?.matchState === 'PLAYING' && showTouchControls && (
-                <MobileController onFire={handleNeoRetroFire} onMove={handleNeoRetroMove} />
-              )}
+          {/* Main Content Stack: HUD -> Canvas -> Controls -> Safe Bottom Spacer */}
+          <div className="flex-1 flex flex-col items-center justify-start w-full overflow-x-hidden overflow-y-auto px-2 pt-1 pb-2">
+            <main
+              style={{
+                width: `${layout.canvasSizePx}px`,
+                height: `${layout.canvasSizePx}px`,
+                maxWidth: `${layout.canvasSizePx}px`,
+                maxHeight: `${layout.canvasSizePx}px`,
+              }}
+              className="shrink-0 flex items-start justify-center overflow-hidden relative mx-auto rounded-xl border border-neutral-800 bg-black shadow-2xl mt-0.5 sm:mt-1"
+            >
+              <PhaserGame
+                mode="battle"
+                engine={gameEngine}
+                onStateUpdate={setGameState}
+                onFpsUpdate={setFps}
+                onPause={handlePause}
+                canvasSizePx={layout.canvasSizePx}
+              />
 
+              {/* In MENU state: Overlay allowing immediate match start */}
               {gameState?.matchState === 'MENU' && (
-                <div className="absolute inset-0 bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center p-4 text-center z-20">
-                  <GameLogo className="mb-4 scale-75" />
-                  <button type="button" onClick={isMatchAllowed ? handleRestart : undefined} disabled={!isMatchAllowed} className={`btn-arcade py-3 px-6 text-xl ${!isMatchAllowed && 'opacity-50'}`}>
-                    {isMatchAllowed ? 'START MATCH' : 'LOGIN TO PLAY'}
+                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-xl overflow-y-auto">
+                  <GameLogo className="mb-1.5" />
+                  <p className="text-xs text-amber-300 font-mono font-bold mb-2">
+                    STAGE {gameState?.currentStageId ?? 1}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={isMatchAllowed ? handleRestart : undefined}
+                    disabled={!isMatchAllowed}
+                    className={`py-2 px-5 rounded-xl font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                      isMatchAllowed
+                        ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/30 cursor-pointer'
+                        : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
+                    }`}
+                  >
+                    <Play className={`w-3.5 h-3.5 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
+                    <span>{isMatchAllowed ? 'BẮT ĐẦU TRẬN ĐẤU' : 'ĐĂNG NHẬP GMAIL ĐỂ BẮT ĐẦU'}</span>
                   </button>
                 </div>
               )}
             </main>
 
-            <div style={{ minHeight: 'max(28px, env(safe-area-inset-bottom, 28px))' }} className="flex-1 w-full" />
+            {/* Controls Cluster */}
+            <div
+              style={{
+                width: `${layout.canvasSizePx}px`,
+                maxWidth: layout.isTabletOrDesktop ? `${Math.max(layout.canvasSizePx, 680)}px` : '440px',
+                marginTop: '28px',
+              }}
+              className="w-full shrink-0 mx-auto z-20 flex justify-center"
+            >
+              <TouchControls
+                onInputChange={handleTouchInput}
+                onPauseClick={isPaused ? handleResume : handlePause}
+                isPaused={isPaused}
+                controlType="joystick"
+              />
+            </div>
+
+            <div
+              style={{
+                minHeight: 'max(28px, env(safe-area-inset-bottom, 28px))',
+              }}
+              className="flex-1 w-full"
+            />
           </div>
         </div>
       ) : (
-        <div className="flex-1 flex flex-col justify-start w-full bg-tactical-grid relative">
-          <div className="crt-overlay"></div>
-          <header className="border-b-2 border-neo-amber bg-black/90 px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 sticky top-0 z-40">
+        /* =========================================================================
+            ENLARGED DESKTOP PC MODE (8/4 Grid Layout with Top Alignment)
+           ========================================================================= */
+        <div className="flex-1 flex flex-col justify-start w-full">
+          {/* Header (M7.3.10: Sticky Top Menu with Safe Area & Quick Audio Mute/Unmute) */}
+          <header className="border-b border-neutral-800 bg-neutral-900/95 backdrop-blur-md px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 sticky top-0 z-40 shadow-md">
             <div className="max-w-[1560px] mx-auto flex items-center justify-between gap-2">
+              {/* Stage Indicator */}
               <div className="flex items-center gap-2">
-                <span className="font-pixel text-2xl text-neo-amber">STAGE {gameState?.currentStageId ?? 1}</span>
+                <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono font-bold">
+                  STAGE {gameState?.currentStageId ?? 1}
+                </span>
               </div>
-              <div className="flex items-center gap-2 text-xs font-pixel text-lg">
+
+              {/* Header Right Actions */}
+              <div className="flex items-center gap-1.5 text-xs">
+                {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
                 <QuickAudioToggleButton showLabelOnDesktop />
+
                 {!isTrialMode && (
-                  <button type="button" onClick={() => setIsSettingsOpen(true)} className="btn-arcade-outline px-3 py-1">SETTINGS</button>
+                  <button
+                    type="button"
+                    onClick={() => setIsSettingsOpen(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
+                    title="Cài đặt Tài khoản & Âm thanh"
+                  >
+                    <Settings className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="hidden sm:inline">Cài đặt</span>
+                  </button>
                 )}
-                <button type="button" onClick={() => setIsSupportOpen(true)} className="btn-arcade-outline px-3 py-1 !border-neo-cyan !text-neo-cyan">MANUAL</button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsSupportOpen(true)}
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-sky-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
+                  title="Hướng dẫn điều khiển"
+                >
+                  <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+                  <span className="hidden sm:inline">Hướng dẫn</span>
+                </button>
+
+                {isSuperAdmin && (
+                  <button
+                    type="button"
+                    onClick={() => setIsDevDrawerOpen(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
+                  >
+                    <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                    <span className="hidden sm:inline">QA Suite</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setIsMenuExpanded((v) => !v)}
+                  className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-all sm:hidden"
+                  aria-label="Thu gọn/Mở rộng Menu"
+                >
+                  {isMenuExpanded ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+                </button>
               </div>
             </div>
+
+            {/* Mobile Expanded Menu Strip */}
+            {isMenuExpanded && (
+              <div className="mt-2.5 pt-2 border-t border-neutral-800 flex flex-wrap items-center justify-between gap-2 sm:hidden text-xs animate-fade-in">
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => {
+                      setIsDevDrawerOpen(true);
+                      setIsMenuExpanded(false);
+                    }}
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-200 font-semibold"
+                  >
+                    <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                    <span>QA Suite</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setShowTouchControls((v) => !v)}
+                  className="flex items-center gap-1 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-300 text-xs"
+                >
+                  <span>Cảm ứng: {showTouchControls ? 'Bật' : 'Tắt'}</span>
+                </button>
+              </div>
+            )}
           </header>
 
-          <main className="max-w-[1560px] mx-auto w-full px-4 pt-4 pb-6 grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10">
-            <section className="lg:col-span-8 flex flex-col gap-3">
-              <div className="bg-black border-4 border-neo-cyan pixel-corners shadow-[0_0_20px_rgba(0,240,255,0.3)] flex flex-col justify-start">
-                <div className="bg-neutral-950 px-4 py-2 border-b-2 border-neo-cyan flex items-center justify-between">
-                  <div className="font-pixel text-neo-cyan text-xl">SYSTEM STATUS: {isPaused ? 'PAUSED' : 'ACTIVE'}</div>
-                  <div className="flex gap-2">
-                    <button onClick={isPaused ? handleResume : handlePause} className="btn-arcade-outline px-2 py-1 text-sm">{isPaused ? 'RESUME' : 'PAUSE'}</button>
-                    <button onClick={handleResetGame} className="btn-arcade-outline px-2 py-1 text-sm !border-neo-rose !text-neo-rose">RESET</button>
+          {/* Main Content Area - Top Aligned */}
+          <main className="max-w-[1560px] mx-auto w-full px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 pb-6 grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-start">
+            {/* Left Column: Enlarged Phaser Game Canvas */}
+            <section className="lg:col-span-8 flex flex-col justify-start gap-3">
+              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col justify-start">
+                {/* Viewport Header */}
+                <div className="bg-neutral-950 px-4 py-2.5 border-b border-neutral-800 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2.5">
+                    <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
+                    <span className="font-semibold text-amber-400 font-mono">
+                      STAGE {gameState?.currentStageId ?? 1} {isPaused ? '(PAUSED)' : ''}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowTouchControls((v) => !v)}
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors ${
+                        showTouchControls
+                          ? 'bg-neutral-800 text-amber-400 border-amber-500/40'
+                          : 'text-neutral-400 border-neutral-800 hover:text-neutral-200'
+                      }`}
+                    >
+                      <Smartphone className="w-3 h-3" />
+                      <span>Joystick: {showTouchControls ? 'Bật' : 'Tắt'}</span>
+                    </button>
+
+                    <button
+                      onClick={isPaused ? handleResume : handlePause}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] font-semibold"
+                    >
+                      <Pause className="w-3 h-3" />
+                      <span>{isPaused ? 'Tiếp tục' : 'Tạm dừng (P)'}</span>
+                    </button>
+
+                    <button
+                      onClick={handleResetGame}
+                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[11px]"
+                    >
+                      <RotateCcw className="w-3 h-3" />
+                      <span>Đặt lại</span>
+                    </button>
                   </div>
                 </div>
-                <div className="p-4 bg-black flex items-start justify-center relative">
-                  <div className="w-full max-w-[832px] aspect-square flex items-start justify-center border-2 border-neutral-800">
-                    <PhaserGame mode="battle" engine={gameEngine} onStateUpdate={setGameState} onFpsUpdate={setFps} onPause={handlePause} canvasSizePx={layout.canvasSizePx} />
+
+                {/* Canvas Container - Top Aligned */}
+                <div className="p-3 sm:p-4 lg:p-5 bg-neutral-950/80 flex items-start justify-center relative">
+                  <div className="w-full max-w-[min(calc(100dvh-140px),832px)] aspect-square flex items-start justify-center">
+                    <PhaserGame
+                      mode="battle"
+                      engine={gameEngine}
+                      onStateUpdate={setGameState}
+                      onFpsUpdate={setFps}
+                      onPause={handlePause}
+                      canvasSizePx={layout.canvasSizePx}
+                    />
                   </div>
+
+                  {/* In MENU state: Overlay allowing immediate match start */}
                   {gameState?.matchState === 'MENU' && (
-                    <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center text-center z-20">
-                      <GameLogo className="mb-6" />
-                      <button type="button" onClick={isMatchAllowed ? handleRestart : undefined} disabled={!isMatchAllowed} className="btn-arcade py-4 px-8 text-2xl">
-                        {isMatchAllowed ? 'PRESS SPACE TO START' : 'LOGIN REQUIRED'}
+                    <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-4 px-6 pb-4 text-center z-20 rounded-xl overflow-y-auto">
+                      <GameLogo className="mb-2" />
+                      <p className="text-sm sm:text-base text-amber-400 font-mono font-bold mb-3">
+                        STAGE {gameState?.currentStageId ?? 1}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={isMatchAllowed ? handleRestart : undefined}
+                        disabled={!isMatchAllowed}
+                        className={`py-3 px-8 rounded-xl font-extrabold text-sm shadow-xl transition-transform active:scale-95 flex items-center gap-2.5 shrink-0 ${
+                          isMatchAllowed
+                            ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/30 cursor-pointer'
+                            : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
+                        }`}
+                      >
+                        <Play className={`w-4 h-4 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
+                        <span>{isMatchAllowed ? 'BẮT ĐẦU TRẬN ĐẤU (SPACE / ENTER)' : 'ĐĂNG NHẬP GMAIL ĐỂ BẮT ĐẦU'}</span>
                       </button>
                     </div>
                   )}
                 </div>
+
+                {/* Viewport Footer */}
+                <div className="bg-neutral-950 px-4 py-2 border-t border-neutral-800 flex flex-wrap items-center justify-between text-xs gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsSupportOpen(true)}
+                    className="flex items-center gap-1.5 text-neutral-400 hover:text-sky-400 text-[11px] transition-colors cursor-pointer"
+                  >
+                    <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+                    <span>Xem hướng dẫn điều khiển trong mục Hướng dẫn</span>
+                  </button>
+                  <div className="text-[11px] text-neutral-500 font-mono">
+                    60 FPS
+                  </div>
+                </div>
               </div>
+
+              {showTouchControls && (
+                <TouchControls
+                  onInputChange={handleTouchInput}
+                  onPauseClick={isPaused ? handleResume : handlePause}
+                  isPaused={isPaused}
+                  controlType="joystick"
+                />
+              )}
             </section>
 
+            {/* Right Column: Live Combat HUD & Quick Stats (4 Cols on PC) */}
             <section className="lg:col-span-4 flex flex-col gap-4">
-              <M3Hud state={gameState} onReset={handleResetGame} onSpawnEnemy={handleSpawnNextEnemy} onPause={handlePause} isSuperAdmin={isSuperAdmin} localOnlineRole={coopManager.getLocalRole()} />
+              <M3Hud
+                state={gameState}
+                onReset={handleResetGame}
+                onSpawnEnemy={handleSpawnNextEnemy}
+                onPause={handlePause}
+                isSuperAdmin={isSuperAdmin}
+                localOnlineRole={coopManager.getLocalRole()}
+              />
+
+              {/* Super Admin Only: Terrain Legend & QA Quick Access Card */}
+              {isSuperAdmin && (
+                <>
+                  <TerrainLegend tileCounts={validation.tileCounts} />
+
+                  <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-xs flex flex-col gap-2.5 shadow">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Wrench className="w-4 h-4 text-amber-400" />
+                        <span className="font-bold text-white">Bảng Kiểm Thử & QA (Super Admin)</span>
+                      </div>
+                      <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
+                        SUPER ADMIN
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setIsDevDrawerOpen(true)}
+                      className="w-full py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow cursor-pointer"
+                    >
+                      <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Mở Bảng Điều Khiển Kiểm Thử & QA</span>
+                    </button>
+                  </div>
+                </>
+              )}
             </section>
           </main>
+
+          {/* Footer */}
+      <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">
+        <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
+          <span>© 2026 Bắn Tank Online</span>
+          <span>•</span>
+          <a href="/landing.html" className="hover:text-amber-400 transition-colors">
+            Giới thiệu
+          </a>
+          <span>•</span>
+          <a href="/privacy.html" className="hover:text-amber-400 transition-colors">
+            Chính sách quyền riêng tư
+          </a>
+        </div>
+      </footer>
         </div>
       )}
 
-      <PauseModal isOpen={isPaused} onResume={handleResume} onRestart={handleRestart} onQuitToMenu={handleQuitToMenu} onOpenSettings={() => setIsSettingsOpen(true)} isTrialMode={isTrialMode} />
-      <GameOverModal isOpen={isGameOverModalOpen} state={gameState} onRestart={handleRestart} onQuitToMenu={handleQuitToMenu} isTrialMode={isTrialMode} />
-      <StageClearModal isOpen={isStageClearModalOpen} state={gameState} onNextStageOrReplay={handleNextStageOrReplay} onQuitToMenu={handleQuitToMenu} isTrialMode={isTrialMode} />
+      {/* =========================================================================
+          MATCH MODALS (Pause, GameOver, StageClear)
+         ========================================================================= */}
+      <PauseModal
+        isOpen={isPaused}
+        onResume={handleResume}
+        onRestart={handleRestart}
+        onQuitToMenu={handleQuitToMenu}
+        onOpenSettings={() => setIsSettingsOpen(true)}
+        isTrialMode={isTrialMode}
+      />
+
+      <GameOverModal
+        isOpen={isGameOverModalOpen}
+        state={gameState}
+        onRestart={handleRestart}
+        onQuitToMenu={handleQuitToMenu}
+        isTrialMode={isTrialMode}
+      />
+
+      <StageClearModal
+        isOpen={isStageClearModalOpen}
+        state={gameState}
+        onNextStageOrReplay={handleNextStageOrReplay}
+        onQuitToMenu={handleQuitToMenu}
+        isTrialMode={isTrialMode}
+      />
     </div>
   );
 }
