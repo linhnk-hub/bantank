@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="vi" class="scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="robots" content="index, follow" />
+    <title>Bắn Tank Online – Game xe tăng trực tuyến</title>
+    <link rel="canonical" href="https://bantank.online/" />
+    <link rel="icon" type="image/png" href="/logo-bantank.png" />
+    <link rel="apple-touch-icon" href="/logo-bantank.png" />
+    
+    <!-- Google Fonts cho phong cách Neo-Retro -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=VT323&display=swap" rel="stylesheet">
+    
+    <!-- Tailwind CSS qua CDN có cấu hình riêng cho Neo-Retro -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'neo-bg': '#050508',
+              'neo-amber': '#FFB800',
+              'neo-cyan': '#00F0FF',
+              'neo-rose': '#FF0055',
+            },
+            fontFamily: {
+              pixel: ['"VT323"', 'monospace'],
+              display: ['"Space Grotesk"', 'sans-serif'],
+            }
+          }
+        }
+      }
+    </script>
+    
+    <style>
+      :root { color-scheme: dark; }
+      body {
+        margin: 0; background-color: #050508; color: #f5f5f5;
+        font-family: 'Space Grotesk', system-ui, sans-serif;
+      }
+      /* Lưới chiến thuật (Tactical Grid) phong cách Neon */
+      .tactical-grid-bg {
+        background-image: 
+          linear-gradient(to right, rgba(255, 184, 0, 0.1) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(255, 184, 0, 0.1) 1px, transparent 1px);
+        background-size: 32px 32px;
+      }
+      /* Hiệu ứng màn hình CRT cũ */
+      .crt-overlay {
+        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                    linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+        background-size: 100% 4px, 6px 100%;
+        pointer-events: none; z-index: 50;
+      }
+      /* Các nút bấm Arcade góc cạnh */
+      .btn-arcade {
+        background-color: #FFB800; color: #000; text-transform: uppercase;
+        box-shadow: 4px 4px 0px #b45309, 0 0 15px rgba(255, 184, 0, 0.4);
+        transition: all 0.1s ease;
+        border-radius: 2px;
+      }
+      .btn-arcade:active {
+        transform: translate(2px, 2px);
+        box-shadow: 2px 2px 0px #b45309, 0 0 5px rgba(255, 184, 0, 0.4);
+      }
+      .btn-arcade-outline {
+        background-color: transparent; color: #FFB800; border: 2px solid #FFB800; text-transform: uppercase;
+        box-shadow: 4px 4px 0px rgba(255, 184, 0, 0.3);
+        transition: all 0.1s ease;
+        border-radius: 2px;
+      }
+      .btn-arcade-outline:active {
+        transform: translate(2px, 2px);
+        box-shadow: 2px 2px 0px rgba(255, 184, 0, 0.3);
+      }
+      .pixel-corners {
+        clip-path: polygon(0 4px, 4px 4px, 4px 0, calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px));
+      }
+      .glitch-text {
+        text-shadow: 2px 0 #FF0055, -2px 0 #00F0FF;
+      }
+    </style>
+  </head>
+  
+  <body class="min-h-[100dvh] w-full bg-neo-bg text-neutral-100 font-display selection:bg-neo-amber selection:text-black overflow-x-hidden flex flex-col justify-start">
+    <div class="crt-overlay"></div>
+    
+    <!-- =====================================================================
+         A. THANH ĐIỀU HƯỚNG (TOP NAVIGATION BAR)
+    ====================================================================== -->
+    <header class="sticky top-0 z-40 w-full bg-neo-bg/90 backdrop-blur-md border-b-2 border-neo-amber/50 pt-[env(safe-area-inset-top)]">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
+        
+        <!-- Logo -->
+        <a href="#top" class="flex items-center gap-3 group focus:outline-none" aria-label="Trang chủ Bắn Tank Online">
+          <img src="/logo-bantank.png" onerror="this.onerror=null;this.src='https://i.ibb.co/Rkf42RD9/bantank.png';" alt="Logo" class="w-10 h-10 sm:w-11 sm:h-11 object-contain pixel-corners border-2 border-neo-amber bg-black p-1 shadow-[0_0_10px_rgba(255,184,0,0.5)] group-hover:border-white transition-colors" />
+          <div class="flex flex-col">
+            <span class="text-base sm:text-2xl font-pixel uppercase tracking-wider text-white group-hover:text-neo-amber transition-colors glitch-text">Bắn Tank Online</span>
+            <span class="text-[10px] text-neo-cyan font-bold hidden sm:inline uppercase">Tactical Warfare 60Hz</span>
+          </div>
+        </a>
+        
+        <!-- Links Desktop -->
+        <nav class="hidden md:flex items-center gap-6 lg:gap-8 text-sm font-bold text-gray-400 uppercase tracking-widest" aria-label="Điều hướng chính">
+          <a href="#gioi-thieu" class="hover:text-neo-amber transition-colors py-1">Intel</a>
+          <a href="#tinh-nang" class="hover:text-neo-amber transition-colors py-1">Specs</a>
+          <a href="#che-do-choi" class="hover:text-neo-amber transition-colors py-1">Modes</a>
+          <a href="#huong-dan" class="hover:text-neo-amber transition-colors py-1">Manual</a>
+        </nav>
+        
+        <!-- Buttons Desktop -->
+        <div class="hidden sm:flex items-center gap-3">
+          <a href="/?mode=trial" class="px-4 py-2 bg-black border-2 border-neo-cyan text-neo-cyan font-pixel text-lg hover:bg-neo-cyan hover:text-black transition-colors">TRIAL</a>
+          <a href="/?mode=play" class="btn-arcade px-6 py-2 font-pixel text-lg flex items-center gap-2">
+            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+            START
+          </a>
+        </div>
+        
+        <!-- Mobile Toggle -->
+        <div class="flex items-center gap-2 sm:hidden">
+          <a href="/?mode=play" class="btn-arcade px-3 py-1 font-pixel text-lg">START</a>
+          <button id="mobile-menu-toggle" type="button" class="p-2 bg-black border-2 border-neo-amber text-neo-amber" aria-expanded="false">
+            <svg id="icon-menu-open" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
+            <svg id="icon-menu-close" class="w-5 h-5 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          </button>
+        </div>
+      </div>
+      
+      <!-- Mobile Menu -->
+      <nav id="mobile-menu-panel" class="hidden md:hidden bg-black/95 border-b-2 border-neo-amber px-4 pt-4 pb-6 space-y-4">
+        <div class="grid grid-cols-2 gap-3 text-center font-pixel text-xl text-neo-amber">
+          <a href="#gioi-thieu" class="mobile-nav-link p-2 border-2 border-neutral-800 hover:border-neo-amber">INTEL</a>
+          <a href="#tinh-nang" class="mobile-nav-link p-2 border-2 border-neutral-800 hover:border-neo-amber">SPECS</a>
+          <a href="#che-do-choi" class="mobile-nav-link p-2 border-2 border-neutral-800 hover:border-neo-amber">MODES</a>
+          <a href="#huong-dan" class="mobile-nav-link p-2 border-2 border-neutral-800 hover:border-neo-amber">MANUAL</a>
+        </div>
+        <div class="flex flex-col gap-3">
+          <a href="/?mode=trial" class="btn-arcade-outline text-center py-3 font-pixel text-xl">FREE TRIAL (NO LOGIN)</a>
+        </div>
+      </nav>
+    </header>
+
+    <main id="top" class="flex-1 relative">
+      
+      <!-- ===================================================================
+           B. KHU VỰC HERO
+      ==================================================================== -->
+      <section aria-labelledby="hero-heading" class="relative py-16 lg:py-28 overflow-hidden border-b-4 border-neo-amber">
+        <div class="tactical-grid-bg absolute inset-0"></div>
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10 text-center flex flex-col items-center">
+          
+          <div class="inline-flex items-center gap-2 px-4 py-1.5 mb-6 border-2 border-neo-cyan bg-neo-cyan/10 text-neo-cyan text-sm font-pixel uppercase tracking-widest animate-pulse">
+            <span>[ SYSTEM ONLINE - 60Hz TICKRATE ]</span>
+          </div>
+          
+          <h1 id="hero-heading" class="font-pixel text-6xl sm:text-8xl lg:text-[100px] uppercase text-white mb-6 glitch-text leading-none">
+            BẮN TANK <br class="sm:hidden" /><span class="text-neo-amber drop-shadow-[0_0_20px_rgba(255,184,0,0.8)]">ONLINE</span>
+          </h1>
+          
+          <p class="font-display text-base sm:text-xl text-gray-300 font-medium max-w-2xl mb-10 border-l-4 border-neo-rose pl-4 text-left sm:text-center sm:border-l-0 sm:pl-0 mx-auto">
+            Chiến trường 2D thời gian thực. Điều khiển chiến xa tiêu diệt 30 xe địch. Cứu căn cứ trước khi đồng hồ điểm 00:00. 
+          </p>
+          
+          <div class="flex flex-col sm:flex-row gap-6 w-full sm:w-auto">
+            <a href="/?mode=play" class="btn-arcade px-10 py-5 font-pixel text-2xl sm:text-3xl flex items-center justify-center gap-3 w-full sm:w-auto">
+              <svg class="w-6 h-6 fill-current" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+              INSERT COIN TO PLAY
+            </a>
+            <a href="/?mode=trial" class="btn-arcade-outline px-10 py-5 font-pixel text-2xl sm:text-3xl w-full sm:w-auto">
+              FREE TRIAL
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================================================
+           C. GIỚI THIỆU TRÒ CHƠI
+      ==================================================================== -->
+      <section id="gioi-thieu" class="py-16 lg:py-24 bg-neo-bg border-b-2 border-neutral-900 scroll-mt-20 relative">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div class="mb-12">
+            <h2 class="font-pixel text-4xl sm:text-5xl text-neo-amber mb-4">> INTEL_BRIEFING</h2>
+            <p class="text-gray-400 font-display">Chiến thuật 2D Top-Down cổ điển giao thoa với công nghệ WebRTC hiện đại.</p>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <article class="bg-black border-2 border-neutral-800 p-6 pixel-corners hover:border-neo-amber transition-colors group">
+              <div class="font-pixel text-5xl text-neutral-800 group-hover:text-neo-amber mb-4">01</div>
+              <h3 class="font-display font-bold text-xl text-white mb-2 uppercase">Mục tiêu & Luật chơi</h3>
+              <p class="text-sm text-gray-400 leading-relaxed">Tiêu diệt toàn bộ 30 xe địch. Bảo vệ Căn Cứ. Tránh hết thời gian.</p>
+            </article>
+            <article class="bg-black border-2 border-neutral-800 p-6 pixel-corners hover:border-neo-cyan transition-colors group">
+              <div class="font-pixel text-5xl text-neutral-800 group-hover:text-neo-cyan mb-4">02</div>
+              <h3 class="font-display font-bold text-xl text-white mb-2 uppercase">Địa hình 60Hz</h3>
+              <p class="text-sm text-gray-400 leading-relaxed">Tương tác vật lý 60fps mượt mà với Tường gạch, Tường thép, Rừng cây, Sông nước, Băng tuyết.</p>
+            </article>
+            <article class="bg-black border-2 border-neutral-800 p-6 pixel-corners hover:border-neo-rose transition-colors group">
+              <div class="font-pixel text-5xl text-neutral-800 group-hover:text-neo-rose mb-4">03</div>
+              <h3 class="font-display font-bold text-xl text-white mb-2 uppercase">Chế độ Đa dạng</h3>
+              <p class="text-sm text-gray-400 leading-relaxed">Solo, Phối hợp AI, hoặc Co-op Online 2 người qua mạng Internet.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================================================
+           D. TÍNH NĂNG & CHẾ ĐỘ CHƠI GỘP CHUNG CHO GỌN
+      ==================================================================== -->
+      <section id="che-do-choi" class="py-16 lg:py-24 bg-neo-bg border-b-2 border-neutral-900 scroll-mt-20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div class="mb-12">
+            <h2 class="font-pixel text-4xl sm:text-5xl text-neo-cyan mb-4">> SELECT_MODE</h2>
+          </div>
+          
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <!-- Mode 1 -->
+            <article class="bg-black border-l-4 border-neo-amber p-8 hover:bg-neutral-900/50 transition-colors">
+              <h3 class="font-pixel text-4xl text-white mb-2">SOLO CAMPAIGN</h3>
+              <p class="text-neo-amber font-bold text-sm uppercase mb-4 tracking-widest">Single Player / AI Assist</p>
+              <p class="text-gray-400 mb-6">Chiến đấu đơn độc hoặc gọi đồng minh AI hỗ trợ phòng thủ. Khởi đầu hoàn hảo để kiếm XP và nâng cấp huy hiệu.</p>
+              <a href="/?mode=play" class="btn-arcade-outline inline-block px-6 py-2 font-pixel text-xl">INITIALIZE</a>
+            </article>
+            
+            <!-- Mode 2 -->
+            <article class="bg-black border-l-4 border-neo-cyan p-8 hover:bg-neutral-900/50 transition-colors">
+              <h3 class="font-pixel text-4xl text-white mb-2">CO-OP ONLINE</h3>
+              <p class="text-neo-cyan font-bold text-sm uppercase mb-4 tracking-widest">P2P WEBRTC MULTIPLAYER</p>
+              <p class="text-gray-400 mb-6">Tạo phòng nhanh, mời bạn bè bằng mã Code 6 chữ số. Đồng bộ hóa 60 ticks/s mang lại cảm giác bắn mượt mà nhất.</p>
+              <a href="/?mode=play" class="btn-arcade-outline !border-neo-cyan !text-neo-cyan !shadow-neo-cyan inline-block px-6 py-2 font-pixel text-xl" style="box-shadow: 4px 4px 0px rgba(0, 240, 255, 0.3);">CONNECT</a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================================================================
+           E. HƯỚNG DẪN ĐIỀU KHIỂN
+      ==================================================================== -->
+      <section id="huong-dan" class="py-16 lg:py-24 bg-neo-bg border-b-4 border-neo-amber scroll-mt-20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+          <h2 class="font-pixel text-4xl sm:text-5xl text-white mb-12">> CONTROLS</h2>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-12">
+            <!-- PC -->
+            <div class="bg-black border-2 border-neutral-800 p-8 pixel-corners">
+              <h3 class="font-display font-bold text-neo-amber uppercase mb-6 tracking-widest">Desktop (PC)</h3>
+              <div class="flex justify-center items-center gap-8 font-pixel text-2xl text-white">
+                <div class="text-center">
+                  <div class="grid grid-cols-3 gap-2 mb-2 opacity-80">
+                    <div></div><div class="border-2 border-gray-500 p-2">W</div><div></div>
+                    <div class="border-2 border-gray-500 p-2">A</div><div class="border-2 border-gray-500 p-2">S</div><div class="border-2 border-gray-500 p-2">D</div>
+                  </div>
+                  <span class="text-sm text-gray-500">MOVE</span>
+                </div>
+                <div class="text-center">
+                  <div class="border-2 border-neo-rose p-2 px-12 mb-2 text-neo-rose">SPACE / J</div>
+                  <span class="text-sm text-gray-500">FIRE</span>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Mobile -->
+            <div class="bg-black border-2 border-neutral-800 p-8 pixel-corners">
+              <h3 class="font-display font-bold text-neo-cyan uppercase mb-6 tracking-widest">Mobile / Tablet</h3>
+              <div class="flex justify-center items-center gap-8 font-pixel text-2xl text-white">
+                <div class="text-center">
+                  <div class="w-20 h-20 border-2 border-gray-500 rounded-full flex items-center justify-center mb-2 mx-auto opacity-80">
+                    <span class="text-3xl">+</span>
+                  </div>
+                  <span class="text-sm text-gray-500">D-PAD (LEFT)</span>
+                </div>
+                <div class="text-center">
+                  <div class="w-20 h-20 bg-neo-rose/20 border-4 border-neo-rose rounded-full flex items-center justify-center mb-2 mx-auto shadow-[0_0_15px_rgba(255,0,85,0.4)]">
+                  </div>
+                  <span class="text-sm text-gray-500">TAP TO FIRE (RIGHT)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- =====================================================================
+         FOOTER
+    ====================================================================== -->
+    <footer class="bg-black text-gray-500 text-xs sm:text-sm py-8 border-t border-neutral-900">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div class="flex items-center gap-2 font-pixel text-xl text-white">
+          <img src="/logo-bantank.png" alt="Logo" class="w-6 h-6 pixel-corners" />
+          BẮN TANK ONLINE © 2026
+        </div>
+        <div class="flex gap-6 font-display font-bold">
+          <a href="/privacy.html" class="hover:text-neo-amber transition-colors">Privacy Policy</a>
+          <a href="mailto:admin@bantank.online" class="hover:text-neo-amber transition-colors">Contact</a>
+        </div>
+      </div>
+    </footer>
+
+    <!-- GIỮ NGUYÊN SCRIPT LOGIC MENU MOBILE -->
+    <script>
+      (function () {
+        var toggleBtn = document.getElementById('mobile-menu-toggle');
+        var panel = document.getElementById('mobile-menu-panel');
+        var iconOpen = document.getElementById('icon-menu-open');
+        var iconClose = document.getElementById('icon-menu-close');
+        if (!toggleBtn || !panel) return;
+        toggleBtn.addEventListener('click', function () {
+          var isHidden = panel.classList.contains('hidden');
+          if (isHidden) {
+            panel.classList.remove('hidden');
+            toggleBtn.setAttribute('aria-expanded', 'true');
+            if (iconOpen) iconOpen.classList.add('hidden');
+            if (iconClose) iconClose.classList.remove('hidden');
+          } else {
+            panel.classList.add('hidden');
+            toggleBtn.setAttribute('aria-expanded', 'false');
+            if (iconOpen) iconOpen.classList.remove('hidden');
+            if (iconClose) iconClose.classList.add('hidden');
+          }
+        });
+        var links = panel.querySelectorAll('.mobile-nav-link');
+        for (var i = 0; i < links.length; i++) {
+          links[i].addEventListener('click', function () {
+            panel.classList.add('hidden');
+            toggleBtn.setAttribute('aria-expanded', 'false');
+            if (iconOpen) iconOpen.classList.remove('hidden');
+            if (iconClose) iconClose.classList.add('hidden');
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>
