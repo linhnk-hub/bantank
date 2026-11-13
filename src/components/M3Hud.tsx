@@ -258,7 +258,7 @@ export const M3Hud: React.FC<M3HudProps> = ({
             <div className="flex items-center justify-between text-[11px]">
               <span className="font-semibold text-neutral-300 flex items-center gap-1.5">
                 <Skull className="w-3.5 h-3.5 text-neutral-400" />
-                <span>Tiến độ tiêu diệt địch (Super Admin)</span>
+                <span>Tiến độ tiêu diệt địch (Admin)</span>
               </span>
               <span className="font-mono text-neutral-400">
                 <strong className="text-amber-400">{state.totalDefeatedEnemies}</strong> / 30 xe đã hạ

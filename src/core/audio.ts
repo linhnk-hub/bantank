@@ -18,9 +18,18 @@ export interface AudioSettings {
 
 import { ScoreManager } from './scoreManager.ts';
 import { ADMIN_EMAIL, AuthManager, isAdminUser } from './authManager.ts';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore';
+import { getFirebaseDb } from './firebaseConfig.ts';
+
+export const DEFAULT_AUDIO_SETTINGS: Readonly<AudioSettings> = {
+  bgmEnabled: true,
+  sfxEnabled: true,
+  bgmVolume: 0.35,
+  sfxVolume: 0.5,
+};
 
 /**
- * M7.3.10 Section 4: Game Action Sound Slots managed by Super Admin
+ * M7.3.10 Section 4: Game Action Sound Slots managed by Admin
  */
 export type GameActionSoundId =
   | 'P1_SHOOT'
@@ -115,12 +124,7 @@ export class SoundManager {
   private bgmGain: GainNode | null = null;
   private sfxGain: GainNode | null = null;
 
-  private settings: AudioSettings = {
-    bgmEnabled: true,
-    sfxEnabled: true,
-    bgmVolume: 0.35,
-    sfxVolume: 0.5,
-  };
+  private settings: AudioSettings = { ...DEFAULT_AUDIO_SETTINGS };
 
   private masterMuted: boolean = false;
   private preMuteChannelState: { bgmEnabled: boolean; sfxEnabled: boolean } = {
@@ -139,16 +143,18 @@ export class SoundManager {
   // Subscribers for UI synchronization (Top Menu Quick Mute button & Settings Modal)
   private listeners: Set<() => void> = new Set();
 
-  // Super Admin Custom Action SFX Management (M7.3.10 Section 4)
+  // Admin Custom Action SFX Management (M7.3.10 Section 4 + M7.3.11.6 Realtime Sync)
   private customActionTracks: Map<GameActionSoundId, CustomActionSoundTrack> = new Map();
   private customActionBuffers: Map<GameActionSoundId, AudioBuffer> = new Map();
   private activeActionSources: Set<AudioBufferSourceNode> = new Set();
   private lastPlayedCustomActionId: GameActionSoundId | null = null;
   private adminRoleOverride: 'ADMIN' | 'MOD' | 'PLAYER' | null = null;
+  private unsubCloudActionSfx: (() => void) | null = null;
 
   private constructor() {
     this.loadSettings();
     this.loadCustomActionTracksFromStorage();
+    this.initCloudActionSfxSubscription();
   }
 
   public static getInstance(): SoundManager {
@@ -255,6 +261,23 @@ export class SoundManager {
   }
 
   public getSettings(): AudioSettings {
+    return { ...this.settings };
+  }
+
+  /**
+   * M7.3.11.6 Section 4.2: Khôi phục cài đặt âm thanh về mặc định chuẩn.
+   */
+  public resetSettingsToDefault(): AudioSettings {
+    this.masterMuted = false;
+    this.preMuteChannelState = {
+      bgmEnabled: DEFAULT_AUDIO_SETTINGS.bgmEnabled,
+      sfxEnabled: DEFAULT_AUDIO_SETTINGS.sfxEnabled,
+    };
+    this.settings = { ...DEFAULT_AUDIO_SETTINGS };
+    this.saveSettings();
+    this.applyVolume();
+    this.notifyListeners();
+    this.notifyMusicManager();
     return { ...this.settings };
   }
 
@@ -1120,6 +1143,7 @@ export class SoundManager {
 
       this.customActionTracks.set(actionId, track);
       this.saveCustomActionTracksToStorage();
+      void this.syncCustomActionTracksToCloud();
       this.notifyListeners();
 
       return { ok: true, track };
@@ -1151,6 +1175,7 @@ export class SoundManager {
     this.customActionBuffers.delete(actionId);
     this.stopAllActiveActionSources();
     this.saveCustomActionTracksToStorage();
+    void this.syncCustomActionTracksToCloud();
     this.notifyListeners();
     return { ok: true };
   }
@@ -1212,6 +1237,69 @@ export class SoundManager {
       return bytes.buffer;
     } catch {
       return null;
+    }
+  }
+
+  private initCloudActionSfxSubscription(): void {
+    if (typeof window === 'undefined') return;
+    AuthManager.getInstance().subscribe((user) => {
+      if (this.unsubCloudActionSfx) {
+        this.unsubCloudActionSfx();
+        this.unsubCloudActionSfx = null;
+      }
+      if (!user) return;
+      try {
+        const db = getFirebaseDb();
+        const ref = doc(db, 'system_config', 'action_sfx');
+        this.unsubCloudActionSfx = onSnapshot(
+          ref,
+          (snap) => {
+            if (!snap.exists()) return;
+            const data = snap.data() as {
+              tracks?: Record<string, CustomActionSoundTrack>;
+            };
+            if (!data.tracks || typeof data.tracks !== 'object') return;
+            for (const slot of GAME_ACTION_SOUND_SLOTS) {
+              const incoming = data.tracks[slot.id];
+              if (incoming && incoming.actionId === slot.id && incoming.fileName) {
+                const existing = this.customActionTracks.get(slot.id);
+                if (!existing || incoming.updatedAtMs > existing.updatedAtMs) {
+                  this.customActionTracks.set(slot.id, incoming);
+                  this.customActionBuffers.delete(slot.id);
+                }
+              }
+            }
+            this.saveCustomActionTracksToStorage();
+            void this.hydrateCustomActionBuffers();
+            this.notifyListeners();
+          },
+          () => {
+            // Ignore transient snapshot errors
+          }
+        );
+      } catch {
+        // Ignore if Firestore is not initialized in test env
+      }
+    });
+  }
+
+  private async syncCustomActionTracksToCloud(): Promise<void> {
+    if (typeof window === 'undefined' || !this.canManageActionSounds()) return;
+    try {
+      const db = getFirebaseDb();
+      const tracksObj: Record<string, CustomActionSoundTrack> = {};
+      for (const [id, track] of this.customActionTracks.entries()) {
+        tracksObj[id] = track;
+      }
+      const nowMs = Date.now();
+      await setDoc(doc(db, 'system_config', 'action_sfx'), {
+        tracks: tracksObj,
+        version: nowMs,
+        updatedAt: nowMs,
+        updatedBy: ADMIN_EMAIL,
+      });
+    } catch {
+      // Fallback to localStorage if cloud write fails
     }
   }
 

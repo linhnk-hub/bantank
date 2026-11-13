@@ -82,20 +82,11 @@ service cloud.firestore {
         && request.auth.token.email.lower() == 'linhnk2013@gmail.com'
         && request.auth.token.email.lower() != 'linhnk.online@gmail.com'
         && (
-          exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-            ? (
-              ('role' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
-              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'ADMIN'
-              && ('isActive' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
-              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive is bool
-              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive == true
-              && ('uid' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
-              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.uid == request.auth.uid
-              && ('email' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
-              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.email is string
-              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.email.lower() == 'linhnk2013@gmail.com'
-            )
-            : true
+          !exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+          || (
+            (!('role' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data) || get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role in ['ADMIN', 'SUPER_ADMIN'])
+            && (!('isActive' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data) || get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive == true)
+          )
         );
     }
 
@@ -262,7 +253,7 @@ service cloud.firestore {
     // 3. Collection Rules: /user_sessions/{uid}
     // =========================================================================
     match /user_sessions/{uid} {
-      allow get: if isValidId(uid) && isOwner(uid);
+      allow get: if isValidId(uid) && (isOwner(uid) || isAdmin());
       allow list: if false;
 
       allow create: if isValidId(uid)
@@ -1237,6 +1228,9 @@ service cloud.firestore {
         ])
         && data.keys().hasOnly([
           'assetPath',
+          'storagePath',
+          'soundId',
+          'audioDataUrl',
           'fileName',
           'contentType',
           'fileSize',
@@ -1254,16 +1248,26 @@ service cloud.firestore {
         && data.fileName is string
         && data.fileName.size() >= 5
         && data.fileName.size() <= 255
-        && data.fileName.matches('^[A-Za-z0-9._-]+\\.(mp3|ogg|wav)$')
+        && data.fileName.matches('^[A-Za-z0-9._-]+\\.(mp3|ogg|wav|m4a|aac|webm)$')
         && data.assetPath is string
-        && data.assetPath.size() >= 11
+        && data.assetPath.size() >= 6
         && data.assetPath.size() <= 300
-        && data.assetPath.matches('^audio/[A-Za-z0-9._-]+\\.(mp3|ogg|wav)$')
-        && data.assetPath == ('audio/' + data.fileName)
+        && (
+          (
+            data.assetPath.matches('^audio/[A-Za-z0-9._-]+\\.(mp3|ogg|wav|m4a|aac|webm)$')
+            && data.assetPath == ('audio/' + data.fileName)
+          )
+          || (
+            data.assetPath.matches('^sound_catalog/[A-Za-z0-9_-]+/v[1-9][0-9]*/[A-Za-z0-9._-]+\\.(mp3|ogg|wav|m4a|aac|webm)$')
+          )
+        )
+        && (!('storagePath' in data) || (data.storagePath == null || (data.storagePath is string && data.storagePath.matches('^sound_catalog/[A-Za-z0-9_-]+/v[1-9][0-9]*/[A-Za-z0-9._-]+\\.(mp3|ogg|wav|m4a|aac|webm)$'))))
+        && (!('soundId' in data) || (data.soundId == null || (data.soundId is string && data.soundId.size() >= 1 && data.soundId.size() <= 80)))
+        && (!('audioDataUrl' in data) || (data.audioDataUrl == null || (data.audioDataUrl is string && data.audioDataUrl.size() <= 900000)))
         && data.contentType is string
         && data.contentType.size() >= 9
         && data.contentType.size() <= 120
-        && data.contentType.matches('^audio/(mpeg|mp3|ogg|wav|x-wav|wave)$')
+        && data.contentType.matches('^audio/(mpeg|mp3|ogg|wav|x-wav|wave|mp4|x-m4a|aac|webm)$')
         && data.fileSize is int
         && data.fileSize > 0
         && data.fileSize <= 26214400
@@ -1278,6 +1282,78 @@ service cloud.firestore {
         && (!('trimEndSec' in data) || (data.trimEndSec == null || ((data.trimEndSec is int || data.trimEndSec is float) && data.trimEndSec >= 0)))
         && (!('loopGapMs' in data) || (data.loopGapMs is int && data.loopGapMs >= 0 && data.loopGapMs <= 10000))
         && (!('fadeOutMs' in data) || (data.fadeOutMs is int && data.fadeOutMs >= 0 && data.fadeOutMs <= 10000));
+    }
+
+    function isValidSoundCatalogDoc(data, soundId) {
+      return isValidId(soundId)
+        && data.keys().hasAll([
+          'soundId',
+          'fileName',
+          'storagePath',
+          'contentType',
+          'fileSize',
+          'version',
+          'isActive',
+          'updatedAt',
+          'updatedBy'
+        ])
+        && data.keys().hasOnly([
+          'soundId',
+          'displayName',
+          'name',
+          'fileName',
+          'storagePath',
+          'audioDataUrl',
+          'contentType',
+          'fileSize',
+          'category',
+          'actionSlot',
+          'durationSec',
+          'trimStartSec',
+          'trimEndSec',
+          'version',
+          'isActive',
+          'createdAt',
+          'updatedAt',
+          'updatedBy'
+        ])
+        && data.soundId == soundId
+        && (
+          ('displayName' in data && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120)
+          || ('name' in data && data.name is string && data.name.size() >= 1 && data.name.size() <= 120)
+        )
+        && data.fileName is string
+        && data.fileName.size() >= 5
+        && data.fileName.size() <= 180
+        && data.fileName.matches('^[A-Za-z0-9._-]+\\.(mp3|ogg|wav|m4a|aac|webm)$')
+        && data.storagePath is string
+        && (
+          data.storagePath.matches('^sound_catalog/[A-Za-z0-9_-]+/v[1-9][0-9]*/[A-Za-z0-9._-]+\\.(mp3|ogg|wav|m4a|aac|webm)$')
+          || data.storagePath.matches('^audio/[A-Za-z0-9._-]+\\.(mp3|ogg|wav|m4a|aac|webm)$')
+        )
+        && (!('audioDataUrl' in data) || (data.audioDataUrl == null || (data.audioDataUrl is string && data.audioDataUrl.size() <= 900000)))
+        && data.contentType is string
+        && data.contentType.matches('^audio/(mpeg|mp3|ogg|wav|x-wav|wave|mp4|x-m4a|aac|webm)$')
+        && data.fileSize is int
+        && data.fileSize > 0
+        && data.fileSize <= 26214400
+        && (!('category' in data) || data.category in ['BGM', 'SFX'])
+        && (!('actionSlot' in data) || data.actionSlot == null || data.actionSlot in ['PLAYER_SHOOT', 'TANK_EXPLODE', 'BULLET_HIT_BRICK', 'BULLET_HIT_STEEL', 'BASE_DESTROYED'])
+        && (!('durationSec' in data) || ((data.durationSec is int || data.durationSec is float) && data.durationSec > 0 && data.durationSec <= 7200))
+        && (!('trimStartSec' in data) || (data.trimStartSec == null || ((data.trimStartSec is int || data.trimStartSec is float) && data.trimStartSec >= 0)))
+        && (!('trimEndSec' in data) || (data.trimEndSec == null || ((data.trimEndSec is int || data.trimEndSec is float) && data.trimEndSec >= 0)))
+        && data.version is int
+        && data.version >= 1
+        && data.isActive is bool
+        && data.updatedAt is int
+        && data.updatedAt > 0
+        && data.updatedBy == 'linhnk2013@gmail.com';
+    }
+
+    match /sound_catalog/{soundId} {
+      allow get, list: if isVerifiedPersonalGmail();
+      allow create, update: if isAdmin() && isValidSoundCatalogDoc(incoming(), soundId);
+      allow delete: if isAdmin() && isValidId(soundId);
     }
 
     // M7.3.11.5 Section 5.1: Kiểm tra bất biến cấu trúc Stage 1 (13x13, đúng 1 BASE tại [12,6], BRICK bảo vệ tại [12,5] và [12,7])
@@ -1328,21 +1404,44 @@ service cloud.firestore {
         && data.version >= 1;
     }
 
+    function isValidSystemActionSfxConfig(data) {
+      return data.keys().hasAll([
+          'updatedAt',
+          'updatedBy',
+          'version'
+        ])
+        && data.keys().hasOnly([
+          'tracks',
+          'slots',
+          'updatedAt',
+          'updatedBy',
+          'version'
+        ])
+        && (('tracks' in data && data.tracks is map) || ('slots' in data && data.slots is map))
+        && data.updatedAt is int
+        && data.updatedAt > 0
+        && data.updatedBy == 'linhnk2013@gmail.com'
+        && data.version is int
+        && data.version >= 1;
+    }
+
     match /system_config/{docId} {
-      allow get: if isVerifiedPersonalGmail() && (docId == 'audio' || docId == 'stages_catalog');
+      allow get: if isVerifiedPersonalGmail() && (docId == 'audio' || docId == 'stages_catalog' || docId == 'action_sfx');
       allow list: if false;
       allow create: if isAdmin()
         && (
           (docId == 'audio' && isValidSystemAudioConfig(incoming()))
           || (docId == 'stages_catalog' && isValidSystemStagesCatalogConfig(incoming()))
+          || (docId == 'action_sfx' && isValidSystemActionSfxConfig(incoming()))
         );
       allow update: if isAdmin()
         && incoming().version > existing().version
         && (
           (docId == 'audio' && isValidSystemAudioConfig(incoming()))
           || (docId == 'stages_catalog' && isValidSystemStagesCatalogConfig(incoming()))
+          || (docId == 'action_sfx' && isValidSystemActionSfxConfig(incoming()))
         );
-      allow delete: if isAdmin() && docId == 'audio';
+      allow delete: if isAdmin() && (docId == 'audio' || docId == 'action_sfx');
     }
 
     // =========================================================================

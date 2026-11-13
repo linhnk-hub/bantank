@@ -165,7 +165,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                   type="button"
                   onClick={onOpenDevTools}
                   className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow cursor-pointer"
-                  title="Bảng Kiểm thử & QA (Super Admin)"
+                  title="Bảng Kiểm thử & QA (Admin)"
                 >
                   <Wrench className="w-3 h-3 text-amber-400" />
                   <span className="hidden sm:inline">QA</span>

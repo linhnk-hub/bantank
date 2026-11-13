@@ -91,6 +91,43 @@ service firebase.storage {
         && request.resource == null;
     }
 
+    function isValidSoundId(soundId) {
+      return soundId is string
+        && soundId.size() >= 1
+        && soundId.size() <= 80
+        && soundId.matches('^[A-Za-z0-9_-]+$');
+    }
+
+    function isValidSoundFileName(fileName) {
+      return fileName is string
+        && fileName.size() >= 5
+        && fileName.size() <= 180
+        && fileName.matches('^[A-Za-z0-9._-]+\\.(mp3|wav|ogg|m4a|aac|webm)$');
+    }
+
+    function isValidSoundCatalogPath(soundId, versionSegment, fileName) {
+      return isValidSoundId(soundId)
+        && versionSegment is string
+        && versionSegment.matches('^v[1-9][0-9]*$')
+        && isValidSoundFileName(fileName);
+    }
+
+    function isValidSoundCatalogCreate(soundId, versionSegment, fileName) {
+      return isValidSoundCatalogPath(soundId, versionSegment, fileName)
+        && resource == null
+        && request.resource != null
+        && request.resource.size >= 1
+        && request.resource.size <= 25 * 1024 * 1024
+        && request.resource.contentType is string
+        && request.resource.contentType.matches('^audio/(mpeg|mp3|wav|x-wav|wave|ogg|mp4|x-m4a|aac|webm)$');
+    }
+
+    function isValidSoundCatalogDelete(soundId, versionSegment, fileName) {
+      return isValidSoundCatalogPath(soundId, versionSegment, fileName)
+        && resource != null
+        && request.resource == null;
+    }
+
     // ------------------------------------------------------------------------
     // DANH MỤC AVATAR CHUNG: avatar_catalog/{avatarId}/{versionSegment}/{fileName}
     // ------------------------------------------------------------------------
@@ -112,6 +149,29 @@ service firebase.storage {
       // 5. Xóa: chỉ Admin duy nhất (linhnk2013@gmail.com) khi resource != null && request.resource == null
       allow delete: if isAdmin()
                     && isValidCatalogDelete(avatarId, versionSegment, fileName);
+    }
+
+    // ------------------------------------------------------------------------
+    // DANH MỤC ÂM THANH CHUNG: sound_catalog/{soundId}/{versionSegment}/{fileName}
+    // ------------------------------------------------------------------------
+    match /sound_catalog/{soundId}/{versionSegment}/{fileName} {
+      // 1. Đọc 1 file âm thanh: chỉ tài khoản Gmail cá nhân đã xác minh, đăng nhập bằng Google
+      allow get: if isVerifiedPersonalGmail()
+                 && isValidSoundCatalogPath(soundId, versionSegment, fileName);
+
+      // 2. Liệt kê: cấm tuyệt đối (danh mục lấy từ Firestore /sound_catalog)
+      allow list: if false;
+
+      // 3. Upload file âm thanh mới: chỉ Admin duy nhất (linhnk2013@gmail.com), yêu cầu resource == null
+      allow create: if isAdmin()
+                    && isValidSoundCatalogCreate(soundId, versionSegment, fileName);
+
+      // 4. Cập nhật tại chỗ: cấm tuyệt đối
+      allow update: if false;
+
+      // 5. Xóa: chỉ Admin duy nhất (linhnk2013@gmail.com)
+      allow delete: if isAdmin()
+                    && isValidSoundCatalogDelete(soundId, versionSegment, fileName);
     }
 
     // ------------------------------------------------------------------------

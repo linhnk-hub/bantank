@@ -6,6 +6,7 @@
 import {
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
   signOut as fbSignOut,
   onAuthStateChanged,
   getIdToken,
@@ -84,6 +85,15 @@ export interface AuthValidationResult {
   isValid: boolean;
   user: User | null;
   errorMessage: string | null;
+}
+
+export interface AccountPermissionDiagnostic {
+  operation: 'get' | 'list' | 'create' | 'update' | 'delete' | 'writeBatch';
+  path: string;
+  errorCode: string;
+  resolvedRole: UserRoleType;
+  authStatus: 'AUTHENTICATED_VERIFIED_GMAIL' | 'AUTHENTICATED_UNVERIFIED' | 'UNAUTHENTICATED';
+  timestampMs: number;
 }
 
 export type AuthStateListener = (user: User | null) => void;
@@ -691,6 +701,8 @@ export class AuthManager {
   private trialModeActive: boolean = false;
   private customPaginationAdapter: UserAccountsPaginationAdapter | null = null;
   private lastMigrationReport: SimplifiedRoleMigrationReport | null = null;
+  private permissionDiagnostics: AccountPermissionDiagnostic[] = [];
+  private signInInFlightPromise: Promise<AuthValidationResult> | null = null;
 
   private constructor() {
     onAuthStateChanged(this.auth, (user) => {
@@ -773,6 +785,68 @@ export class AuthManager {
 
   public getLastMigrationReport(): SimplifiedRoleMigrationReport | null {
     return this.lastMigrationReport;
+  }
+
+  /**
+   * M7.3.11.6 Section 2.4: Ghi nhận thông tin chẩn đoán khi xảy ra lỗi phân quyền Firestore.
+   * Chỉ log operation, đường dẫn collection/document, mã lỗi, vai trò đã suy ra và trạng thái xác thực.
+   * Tuyệt đối KHÔNG log token, session secret hoặc thông tin nhạy cảm.
+   */
+  public recordPermissionDiagnostic(
+    operation: AccountPermissionDiagnostic['operation'],
+    path: string,
+    err: unknown,
+    callerOverride?: ValidatedUserAccount | User | null
+  ): AccountPermissionDiagnostic {
+    const targetUser = callerOverride !== undefined ? callerOverride : this.getCurrentUser();
+    const resolvedRole = isAdminUser(targetUser) ? 'ADMIN' : resolveUserRole(targetUser as any);
+    const validation = validatePersonalGmailUser(targetUser);
+    const authStatus: AccountPermissionDiagnostic['authStatus'] = !targetUser
+      ? 'UNAUTHENTICATED'
+      : validation.isValid
+      ? 'AUTHENTICATED_VERIFIED_GMAIL'
+      : 'AUTHENTICATED_UNVERIFIED';
+    const rawCode =
+      err && typeof err === 'object' && 'code' in err && typeof (err as any).code === 'string'
+        ? (err as any).code
+        : 'permission-denied';
+
+    const entry: AccountPermissionDiagnostic = {
+      operation,
+      path,
+      errorCode: rawCode,
+      resolvedRole,
+      authStatus,
+      timestampMs: Date.now(),
+    };
+
+    this.permissionDiagnostics.unshift(entry);
+    if (this.permissionDiagnostics.length > 50) {
+      this.permissionDiagnostics.length = 50;
+    }
+
+    const isDev =
+      typeof import.meta !== 'undefined' &&
+      Boolean((import.meta as any).env && (import.meta as any).env.DEV);
+    if (isDev) {
+      console.warn('[AuthManager][PermissionDiagnostic]', {
+        operation: entry.operation,
+        path: entry.path,
+        errorCode: entry.errorCode,
+        resolvedRole: entry.resolvedRole,
+        authStatus: entry.authStatus,
+      });
+    }
+
+    return entry;
+  }
+
+  public getRecentPermissionDiagnostics(): AccountPermissionDiagnostic[] {
+    return [...this.permissionDiagnostics];
+  }
+
+  public clearPermissionDiagnosticsForTesting(): void {
+    this.permissionDiagnostics = [];
   }
 
   private getProfileStorageKey(user: { uid?: string; email?: string | null }): string {
@@ -1106,6 +1180,8 @@ export class AuthManager {
       };
     }
 
+    const isSoleAdminCaller = isAdminUser(caller) || callerRole === 'ADMIN';
+
     try {
       const db = getFirebaseDb();
       const usersCol = collection(db, 'users');
@@ -1115,8 +1191,10 @@ export class AuthManager {
         string,
         { role: UserRoleType; email?: string; displayName?: string; updatedAtMs?: number }
       >();
+      let adminsCollectionLoaded = false;
       try {
         const adminsSnap = await getDocs(collection(db, 'admins'));
+        adminsCollectionLoaded = true;
         for (const aDoc of adminsSnap.docs) {
           const aData = (aDoc.data() || {}) as Record<string, unknown>;
           const aUid = typeof aData.uid === 'string' && aData.uid.trim() ? aData.uid.trim() : aDoc.id;
@@ -1143,18 +1221,34 @@ export class AuthManager {
             });
           }
         }
-      } catch {
-        // Bỏ qua nếu không đọc được collection /admins
+      } catch (adminErr: any) {
+        this.recordPermissionDiagnostic('list', '/admins', adminErr, caller);
       }
 
-      // 2. Truy vấn collection(db, 'users') KHÔNG dùng orderBy('avatarUpdatedAt') làm điều kiện lọc cứng
-      const snap = await getDocs(usersCol);
+      // 2. Truy vấn collection(db, 'users') cô lập lỗi để nếu list /users bị từ chối (ví dụ Rules trên Production chưa được Publish)
+      // thì không làm gãy toàn bộ tab Tài khoản mà vẫn hiển thị hồ sơ hiện có.
       const rawDocsByUid = new Map<string, Record<string, unknown>>();
-
-      for (const d of snap.docs) {
-        const data = (d.data() || {}) as Record<string, unknown>;
-        const uid = typeof data.uid === 'string' && data.uid.trim() ? data.uid.trim() : d.id;
-        rawDocsByUid.set(uid, { ...data, uid });
+      try {
+        const snap = await getDocs(usersCol);
+        for (const d of snap.docs) {
+          const data = (d.data() || {}) as Record<string, unknown>;
+          const uid = typeof data.uid === 'string' && data.uid.trim() ? data.uid.trim() : d.id;
+          rawDocsByUid.set(uid, { ...data, uid });
+        }
+      } catch (usersListErr: any) {
+        this.recordPermissionDiagnostic('list', '/users', usersListErr, caller);
+        // Fallback an toàn: đọc hồ sơ chính chủ /users/{caller.uid} (được phép bởi isOwner(uid))
+        if (caller && caller.uid) {
+          try {
+            const ownSnap = await getDoc(doc(db, 'users', caller.uid));
+            if (ownSnap.exists()) {
+              const ownData = (ownSnap.data() || {}) as Record<string, unknown>;
+              rawDocsByUid.set(caller.uid, { ...ownData, uid: caller.uid });
+            }
+          } catch (ownErr: any) {
+            this.recordPermissionDiagnostic('get', `/users/${caller.uid}`, ownErr, caller);
+          }
+        }
       }
 
       // Hợp nhất thêm những tài khoản có trong /admins nhưng chưa có doc trong /users (nếu có)
@@ -1227,7 +1321,7 @@ export class AuthManager {
       const pageItems = slice.slice(0, pageSize);
       const nextCursor = hasNextPage && pageItems.length > 0 ? pageItems[pageItems.length - 1].uid : null;
 
-      // 5. Bổ sung trạng thái phiên & email từ /user_sessions/{uid} cho tối đa 10 tài khoản trong trang hiện tại
+      // 5. Bổ sung trạng thái phiên & email từ /user_sessions/{uid} (CHỈ cho ADMIN hoặc chính chủ; MOD không gọi đọc /user_sessions của người khác)
       const summaries = await Promise.all(
         pageItems.map(async ({ uid, data, sortLoginMs }) => {
           const adminEntry = adminRolesByUid.get(uid);
@@ -1243,30 +1337,35 @@ export class AuthManager {
           let sessionStatus: 'ACTIVE' | 'OFFLINE' =
             caller && caller.uid === uid ? 'ACTIVE' : 'OFFLINE';
 
-          try {
-            const sessionSnap = await getDoc(doc(db, 'user_sessions', uid));
-            if (sessionSnap.exists()) {
-              const sData = sessionSnap.data() as Record<string, unknown>;
-              if (!email && typeof sData.email === 'string') {
-                email = sData.email.trim().toLowerCase();
+          // M7.3.11.6 Section 2.2: Chỉ đọc /user_sessions/{uid} khi người gọi là ADMIN hoặc chính chủ tài khoản đó
+          if (isSoleAdminCaller || (caller && caller.uid === uid)) {
+            try {
+              const sessionSnap = await getDoc(doc(db, 'user_sessions', uid));
+              if (sessionSnap.exists()) {
+                const sData = sessionSnap.data() as Record<string, unknown>;
+                if (!email && typeof sData.email === 'string') {
+                  email = sData.email.trim().toLowerCase();
+                }
+                sessionUpdatedAtMs = parseFirestoreTimestampMs(
+                  sData.lastActiveAt || sData.updatedAt || sData.loginAt || sData.createdAt
+                );
+                const isSessionActiveFlag =
+                  sData.isActive === true || sData.status === 'ACTIVE';
+                const isWithin15Min =
+                  sessionUpdatedAtMs > 0 && Date.now() - sessionUpdatedAtMs <= 900000;
+                if (isSessionActiveFlag && (isWithin15Min || sessionUpdatedAtMs === 0)) {
+                  sessionStatus = 'ACTIVE';
+                }
               }
-              sessionUpdatedAtMs = parseFirestoreTimestampMs(
-                sData.lastActiveAt || sData.updatedAt || sData.loginAt || sData.createdAt
-              );
-              const isSessionActiveFlag =
-                sData.isActive === true || sData.status === 'ACTIVE';
-              const isWithin15Min =
-                sessionUpdatedAtMs > 0 && Date.now() - sessionUpdatedAtMs <= 900000;
-              if (isSessionActiveFlag && (isWithin15Min || sessionUpdatedAtMs === 0)) {
-                sessionStatus = 'ACTIVE';
-              }
+            } catch (sessErr: any) {
+              this.recordPermissionDiagnostic('get', `/user_sessions/${uid}`, sessErr, caller);
             }
-          } catch {
-            // Bỏ qua nếu không đọc được phiên của user
           }
 
           let serverRole: UserRoleType | null = adminEntry?.role ?? null;
-          if (!serverRole) {
+          if (!serverRole && adminsCollectionLoaded) {
+            serverRole = 'PLAYER';
+          } else if (!serverRole && (isSoleAdminCaller || (caller && caller.uid === uid))) {
             try {
               const adminSnap = await getDoc(doc(db, 'admins', uid));
               if (adminSnap.exists()) {
@@ -1287,8 +1386,8 @@ export class AuthManager {
                 });
                 serverRole = evalRole.resolvedRole;
               }
-            } catch {
-              // ignore
+            } catch (admDocErr: any) {
+              this.recordPermissionDiagnostic('get', `/admins/${uid}`, admDocErr, caller);
             }
           }
 
@@ -1331,14 +1430,20 @@ export class AuthManager {
         totalCount,
       };
     } catch (err: any) {
+      this.recordPermissionDiagnostic('list', '/users', err, caller);
+      const rawMsg = String(err?.message || '');
+      const isPermErr =
+        String(err?.code || '').toLowerCase().includes('permission-denied') ||
+        rawMsg.toLowerCase().includes('missing or insufficient permissions');
       return {
         success: false,
         accounts: [],
         pageSize,
         hasNextPage: false,
         nextCursor: null,
-        errorMessage:
-          err?.message || 'Không thể tải danh sách tài khoản từ Firestore. Vui lòng thử lại.',
+        errorMessage: isPermErr
+          ? 'Tài khoản hiện tại không đủ quyền truy cập dữ liệu mục Tài khoản hoặc Firestore Rules trên môi trường Production chưa được cập nhật.'
+          : rawMsg || 'Không thể tải danh sách tài khoản từ Firestore. Vui lòng thử lại.',
       };
     }
   }
@@ -1611,44 +1716,95 @@ export class AuthManager {
   }
 
   /**
-   * Signs in using GoogleAuthProvider popup.
-   * Enforces browserLocalPersistence and strict personal Gmail validation; immediately signs out if invalid.
+   * M7.3.11.6 Section 7: Đăng nhập Google nhanh gọn, tối giản bước thừa.
+   * - Không yêu cầu xác minh số điện thoại / OTP từ phía ứng dụng.
+   * - Nếu đã có phiên Gmail cá nhân hợp lệ trên trình duyệt và không yêu cầu đổi tài khoản (`forceAccountSelection`),
+   *   tái sử dụng ngay phiên hiện có mà không mở popup lặp.
+   * - Không ép `prompt: 'select_account'` hoặc `consent` mặc định để giảm tối đa bước xác nhận thừa từ Google OAuth,
+   *   chỉ bật `prompt: 'select_account'` khi người dùng chủ động đổi tài khoản.
+   * - Chống mở trùng nhiều luồng đăng nhập cùng lúc (`signInInFlightPromise`).
+   * - Hỗ trợ fallback `signInWithRedirect` nếu trình duyệt di động chặn popup (`auth/popup-blocked`).
    */
-  public async signInWithGoogle(): Promise<AuthValidationResult> {
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
-
-    try {
-      this.trialModeActive = false;
-      if (typeof window !== 'undefined') {
-        await setPersistence(this.auth, browserLocalPersistence).catch(() => {
-          // Ignore if persistence unsupported in headless environment
-        });
+  public async signInWithGoogle(options?: { forceAccountSelection?: boolean }): Promise<AuthValidationResult> {
+    if (!options?.forceAccountSelection) {
+      const existingUser = this.getCurrentUser();
+      if (existingUser) {
+        const existingValidation = validatePersonalGmailUser(existingUser);
+        if (existingValidation.isValid) {
+          this.trialModeActive = false;
+          this.applyStoredProfileOverride(existingUser);
+          void this.recordUserLoginTimestamp(existingUser);
+          return existingValidation;
+        }
       }
-      const result = await signInWithPopup(this.auth, provider);
-      const validation = validatePersonalGmailUser(result.user);
+    }
 
-      if (!validation.isValid) {
-        // Disallowed account: sign out immediately
-        await this.signOut();
+    if (this.signInInFlightPromise) {
+      return this.signInInFlightPromise;
+    }
+
+    this.signInInFlightPromise = (async (): Promise<AuthValidationResult> => {
+      const provider = new GoogleAuthProvider();
+      if (options?.forceAccountSelection) {
+        provider.setCustomParameters({ prompt: 'select_account' });
+      }
+
+      try {
+        this.trialModeActive = false;
+        if (typeof window !== 'undefined') {
+          await setPersistence(this.auth, browserLocalPersistence).catch(() => {
+            // Ignore if persistence unsupported in headless environment
+          });
+        }
+        const result = await signInWithPopup(this.auth, provider);
+        const validation = validatePersonalGmailUser(result.user);
+
+        if (!validation.isValid) {
+          // Disallowed account: sign out immediately
+          await this.signOut();
+          return {
+            isValid: false,
+            user: null,
+            errorMessage: validation.errorMessage,
+          };
+        }
+
+        this.applyStoredProfileOverride(result.user);
+        this.currentUser = result.user;
+        void this.recordUserLoginTimestamp(result.user);
+        return validation;
+      } catch (error: any) {
+        const errCode = String(error?.code || '');
+        if (errCode === 'auth/popup-blocked' && typeof window !== 'undefined') {
+          try {
+            await signInWithRedirect(this.auth, provider);
+            return {
+              isValid: false,
+              user: null,
+              errorMessage: 'Đang chuyển hướng đến trang đăng nhập Google...',
+            };
+          } catch {
+            // Fall through to standard error message
+          }
+        }
+        if (errCode === 'auth/popup-closed-by-user' || errCode === 'auth/cancelled-popup-request') {
+          return {
+            isValid: false,
+            user: null,
+            errorMessage: 'Bạn đã đóng cửa sổ đăng nhập Google trước khi hoàn tất.',
+          };
+        }
         return {
           isValid: false,
           user: null,
-          errorMessage: validation.errorMessage,
+          errorMessage: error?.message || 'Đăng nhập Google thất bại.',
         };
+      } finally {
+        this.signInInFlightPromise = null;
       }
+    })();
 
-      this.applyStoredProfileOverride(result.user);
-      this.currentUser = result.user;
-      void this.recordUserLoginTimestamp(result.user);
-      return validation;
-    } catch (error: any) {
-      return {
-        isValid: false,
-        user: null,
-        errorMessage: error?.message || 'Đăng nhập Google thất bại.',
-      };
-    }
+    return this.signInInFlightPromise;
   }
 
   /**

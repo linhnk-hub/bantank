@@ -65,9 +65,16 @@ export type SettingsTabId =
   | 'ADMIN_OTHER'
   | 'USER_ACCOUNTS';
 
+/**
+ * M7.3.11.6 Section 3: Kích thước khung chuẩn đồng nhất cho tất cả các mục con trong Cài đặt hệ thống
+ * (Lấy kích thước mục Tài khoản `max-w-4xl` làm chuẩn chung).
+ */
+export const UNIFIED_SETTINGS_MODAL_WIDTH_CLASS = 'w-full max-w-4xl';
+
 export interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: SettingsTabId;
   difficulty?: 'DEFAULT' | 'EXTREME';
   onDifficultyChange?: (diff: 'DEFAULT' | 'EXTREME') => void;
   isSuperAdmin?: boolean;
@@ -155,6 +162,7 @@ export function getAvailableSettingsTabsForRole(
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
+  initialTab,
   difficulty = 'DEFAULT',
   onDifficultyChange,
   isSuperAdmin = false,
@@ -176,7 +184,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const roleInfo = getRoleDisplayInfo(userRole);
   const roleFrameClasses = getRoleNameFrameClasses(userRole);
 
-  const [activeTab, setActiveTab] = useState<SettingsTabId>('ACCOUNT');
+  const [activeTab, setActiveTab] = useState<SettingsTabId>(initialTab || 'ACCOUNT');
 
   const [audioSettings, setAudioSettings] = useState<AudioSettings>(() =>
     soundManager.getSettings()
@@ -202,7 +210,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     null
   );
 
-  // Super Admin Catalog Management state
+  // Admin Catalog Management state
   const [stagedCatalogFile, setStagedCatalogFile] = useState<StagedCatalogAvatarFile | null>(() =>
     avatarManager.getStagedCatalogFile()
   );
@@ -222,7 +230,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [catalogSortOrderInput, setCatalogSortOrderInput] = useState<number>(10);
   const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
 
-  // Super Admin User Accounts Pagination & Role Assignment state (M7.3.11 Mục II)
+  // User Accounts Pagination & Role Assignment state (M7.3.11 Mục II)
   const [accountsPageList, setAccountsPageList] = useState<UserAccountSummary[]>([]);
   const [accountsPageIndex, setAccountsPageIndex] = useState<number>(0);
   const [accountsCursorHistory, setAccountsCursorHistory] = useState<Array<unknown | null>>([null]);
@@ -249,7 +257,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     isVerifiedSuperAdmin || hasRolePermission(userRole, 'VIEW_AUDIT_AND_MONITORING');
 
   const adminFileInputRef = useRef<HTMLInputElement | null>(null);
-  const quickProfileAvatarInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadUserAccountsPage = async (targetPageIndex: number, cursor: unknown | null) => {
     if (!canViewAccountsTab) return;
@@ -320,14 +327,29 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setFeedback(null);
     setAccountsRoleFeedback(null);
     setPendingRoleChangeConfirm(null);
-    // Reset to ACCOUNT tab if current tab is not permitted for the user's role
+
     const allowedIds = getAvailableSettingsTabsForRole(
       isVerifiedSuperAdmin ? 'ADMIN' : userRole
     ).map((t) => t.id);
-    if (!allowedIds.includes(activeTab)) {
-      setActiveTab('ACCOUNT');
+
+    if (initialTab && allowedIds.includes(initialTab)) {
+      setActiveTab(initialTab);
+    } else if (!allowedIds.includes(activeTab)) {
+      setActiveTab(allowedIds[0] || 'AUDIO_SETTINGS');
     }
-  }, [isOpen, currentUid, isVerifiedSuperAdmin, userRole]);
+  }, [isOpen, currentUid, isVerifiedSuperAdmin, userRole, initialTab]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen, onClose]);
 
   useEffect(() => {
     if (isOpen && activeTab === 'USER_ACCOUNTS' && canViewAccountsTab) {
@@ -408,6 +430,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     soundManager.updateSettings(updated);
   };
 
+  const handleResetAudioDefaults = () => {
+    soundManager.unlock();
+    const restored = soundManager.resetSettingsToDefault();
+    setAudioSettings(restored);
+    musicManager.onVolumeOrToggleChanged();
+    setFeedback({
+      type: 'success',
+      text: 'Đã khôi phục cài đặt âm thanh mặc định (Nhạc nền 35%, Hiệu ứng 50%).',
+    });
+  };
+
   const handleSelectGoogleAvatar = async () => {
     setFeedback(null);
     setIsBusy(true);
@@ -415,7 +448,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       const res = await avatarManager.selectGoogleAvatar();
       setFeedback({
         type: res.success ? 'success' : 'error',
-        text: res.message || (res.success ? 'Đã chọn Ảnh Google!' : 'Không thể chọn Ảnh Google.'),
+        text: res.message || (res.success ? 'Đã cập nhật ảnh đại diện!' : 'Không thể chọn ảnh đại diện.'),
       });
       if (res.success) {
         setAvatarLoadError(false);
@@ -435,33 +468,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         type: res.success ? 'success' : 'error',
         text:
           res.message ||
-          (res.success ? `Đã chọn avatar "${item.name}"!` : 'Không thể chọn avatar này.'),
-      });
-      if (res.success) {
-        setAvatarLoadError(false);
-        onProfileUpdated?.();
-      }
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleSuperAdminQuickUploadAvatar = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    setFeedback(null);
-    setIsBusy(true);
-    try {
-      const res = await avatarManager.uploadAndApplySuperAdminAvatar(file, displayName);
-      setFeedback({
-        type: res.success ? 'success' : 'error',
-        text:
-          res.message ||
-          (res.success
-            ? 'Đã tải lên và áp dụng ảnh đại diện mới thành công!'
-            : 'Tải ảnh đại diện thất bại. Ảnh cũ vẫn được giữ nguyên.'),
+          (res.success ? 'Đã cập nhật ảnh đại diện!' : 'Không thể chọn ảnh đại diện này.'),
       });
       if (res.success) {
         setAvatarLoadError(false);
@@ -660,17 +667,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     icon: getTabIcon(tab.id),
   }));
 
-  const isWideAdminTab =
-    activeTab === 'GAME_MODE_SETTINGS' ||
-    activeTab === 'ADMIN_OTHER' ||
-    activeTab === 'USER_ACCOUNTS';
-
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 bg-black/80 backdrop-blur-md animate-fade-in select-none">
+    <div
+      data-testid="settings-modal-backdrop"
+      className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 bg-black/80 backdrop-blur-md animate-fade-in select-none"
+    >
       <div
-        className={`bg-neutral-900 border border-neutral-700 rounded-2xl w-full ${
-          isWideAdminTab ? 'max-w-4xl' : 'max-w-2xl'
-        } max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-2xl overflow-hidden transition-all`}
+        data-testid="settings-modal-frame"
+        className={`bg-neutral-900 border border-neutral-700 rounded-2xl ${UNIFIED_SETTINGS_MODAL_WIDTH_CLASS} max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-2xl overflow-hidden`}
       >
         {/* Header */}
         <div className="bg-neutral-950 px-4 py-3 border-b border-neutral-800 flex items-center justify-between shrink-0">
@@ -754,7 +758,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* =========================================================================
-              TAB 1: THÔNG TIN (MỌI NGƯỜI CHƠI)
+              TAB 1: THÔNG TIN (MỌI NGƯỜI CHƠI — CHỈ HIỂN THỊ HÌNH ẢNH AVATAR, KHÔNG CÓ NÚT UPLOAD)
              ========================================================================= */}
           {activeTab === 'ACCOUNT' && currentUser && (
             <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-4 space-y-4">
@@ -781,46 +785,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              {/* Khu vực ẢNH ĐẠI DIỆN NGƯỜI CHƠI — M7.3.10: Giao diện Avatar nâng cấp đồng bộ trên PC, Điện thoại, Tablet */}
+              {/* Khu vực ẢNH ĐẠI DIỆN NGƯỜI CHƠI — M7.3.11.6 Section 5: Chỉ hiển thị hình ảnh Avatar, không hiển thị tên/phiên bản/trạng thái/đường dẫn và không có nút upload */}
               <div className="p-4 rounded-2xl bg-neutral-900/90 border border-neutral-800 space-y-4 shadow-inner">
                 <div className="flex items-center justify-between flex-wrap gap-2 border-b border-neutral-800/80 pb-2.5">
                   <div className="flex items-center gap-2 font-extrabold text-amber-300 text-xs sm:text-sm uppercase tracking-wider">
                     <Camera className="w-4 h-4 text-amber-400" />
-                    <span>GIAO DIỆN &amp; QUẢN LÝ ẢNH ĐẠI DIỆN (AVATAR)</span>
+                    <span>ẢNH ĐẠI DIỆN</span>
                   </div>
-                  {isVerifiedSuperAdmin ? (
-                    <>
-                      <input
-                        ref={quickProfileAvatarInputRef}
-                        type="file"
-                        accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                        onChange={handleSuperAdminQuickUploadAvatar}
-                        className="hidden"
-                      />
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={() => quickProfileAvatarInputRef.current?.click()}
-                        className="px-3.5 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1.5 shadow-lg shadow-amber-500/20 cursor-pointer disabled:opacity-50 transition-all active:scale-95"
-                      >
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>{isBusy ? 'ĐANG TẢI ẢNH...' : 'TẢI ẢNH ĐẠI DIỆN TỪ THIẾT BỊ'}</span>
-                      </button>
-                    </>
-                  ) : (
-                    <span className="text-[10px] text-neutral-400 font-mono">
-                      Ảnh Google hoặc Danh mục Avatar chung
-                    </span>
-                  )}
                 </div>
 
-                {/* Current Active Avatar Hero Card */}
-                <div className="flex flex-col sm:flex-row items-center gap-4 p-3.5 rounded-2xl bg-gradient-to-r from-neutral-950 via-neutral-900 to-neutral-950 border border-amber-500/30 shadow-lg">
+                {/* Current Active Avatar Preview (Image Only) */}
+                <div className="flex items-center justify-center p-3 rounded-2xl bg-neutral-950/80 border border-amber-500/30">
                   <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-amber-400 p-1 bg-neutral-950 overflow-hidden shadow-xl ring-4 ring-amber-500/15 flex items-center justify-center shrink-0">
                     {effectiveAvatarUrl && !avatarLoadError ? (
                       <img
                         src={effectiveAvatarUrl}
-                        alt="Ảnh đại diện hiện tại"
+                        alt="Avatar"
                         className="w-full h-full rounded-full object-cover"
                         onError={() => setAvatarLoadError(true)}
                       />
@@ -829,60 +809,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <User className="w-9 h-9" />
                       </div>
                     )}
-                    <span
-                      className="absolute bottom-0.5 right-0.5 w-5 h-5 rounded-full bg-emerald-500 border-2 border-neutral-950 flex items-center justify-center text-black shadow"
-                      title="Đang sử dụng"
-                    >
+                    <span className="absolute bottom-0.5 right-0.5 w-5 h-5 rounded-full bg-emerald-500 border-2 border-neutral-950 flex items-center justify-center text-black shadow">
                       <Check className="w-3 h-3 stroke-[3]" />
                     </span>
                   </div>
-                  <div className="flex-1 min-w-0 text-center sm:text-left space-y-1">
-                    <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/40 text-emerald-300 text-[10px] font-mono font-bold">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                      <span>AVATAR ĐANG HIỂN THỊ TRÊN TOÀN HỆ THỐNG</span>
-                    </div>
-                    <div className="text-sm sm:text-base font-extrabold text-white truncate">
-                      {selectedAvatarType === 'catalog' && isSelectedCatalogActive
-                        ? `Danh mục: ${
-                            activeCatalog.find((i) => i.avatarId === selectedCatalogId)?.name ||
-                            selectedCatalogId
-                          }`
-                        : 'Ảnh tài khoản Google'}
-                    </div>
-                    <p className="text-[11px] text-neutral-400 leading-relaxed">
-                      Hiển thị đồng bộ trên Top Menu, Hồ sơ người chơi, Phòng chờ Co-op Online và Bảng xếp hạng.
-                    </p>
-                    {selectedAvatarType === 'catalog' && !isSelectedCatalogActive && (
-                      <p className="text-[11px] text-amber-300 mt-0.5 leading-relaxed">
-                        Avatar danh mục đã chọn hiện đang tạm ẩn, hệ thống tự động hiển thị Ảnh Google dự phòng.
-                      </p>
-                    )}
-                  </div>
                 </div>
 
-                {/* Avatar Selection Grid: Option 1 (Google Avatar) + Active Catalog Items */}
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {/* Option 1: Ảnh Google */}
+                {/* Image-Only Avatar Selection Grid */}
+                <div
+                  data-testid="account-avatar-image-grid"
+                  className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3 justify-items-center"
+                >
+                  {/* Option 1: Google Avatar Image */}
                   <button
                     type="button"
                     disabled={isBusy}
                     onClick={handleSelectGoogleAvatar}
-                    className={`relative p-3 rounded-2xl border-2 text-left transition-all flex flex-col items-center gap-2.5 cursor-pointer group ${
+                    aria-label="Chọn ảnh đại diện mặc định"
+                    className={`relative p-2.5 rounded-2xl border-2 transition-all flex items-center justify-center cursor-pointer group ${
                       selectedAvatarType === 'google' || !isSelectedCatalogActive
                         ? 'bg-amber-950/40 border-amber-500 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10'
                         : 'bg-neutral-950/70 border-neutral-800 hover:border-amber-500/50 hover:bg-neutral-900'
                     }`}
                   >
                     {(selectedAvatarType === 'google' || !isSelectedCatalogActive) && (
-                      <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-amber-500 text-black flex items-center justify-center shadow">
-                        <Check className="w-3 h-3 stroke-[3]" />
+                      <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-amber-500 text-black flex items-center justify-center shadow z-10">
+                        <Check className="w-2.5 h-2.5 stroke-[3]" />
                       </span>
                     )}
                     <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-neutral-700 group-hover:border-amber-400 bg-neutral-900 flex items-center justify-center shadow-md transition-transform group-hover:scale-105">
                       {currentUser.photoURL ? (
                         <img
                           src={currentUser.photoURL}
-                          alt="Ảnh Google"
+                          alt="Avatar"
                           className="w-full h-full object-cover"
                           onError={(e) => {
                             e.currentTarget.style.display = 'none';
@@ -892,23 +851,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <User className="w-7 h-7 text-amber-400" />
                       )}
                     </div>
-                    <div className="text-center w-full space-y-0.5">
-                      <div className="text-xs font-extrabold text-white truncate">Ảnh Google</div>
-                      <div
-                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full inline-block ${
-                          selectedAvatarType === 'google' || !isSelectedCatalogActive
-                            ? 'bg-amber-500 text-black'
-                            : 'bg-neutral-800 text-neutral-400'
-                        }`}
-                      >
-                        {selectedAvatarType === 'google' || !isSelectedCatalogActive
-                          ? 'ĐANG DÙNG'
-                          : 'CHỌN'}
-                      </div>
-                    </div>
                   </button>
 
-                  {/* Active Shared Catalog Avatars */}
+                  {/* Active Shared Catalog Avatars (Image Only — No Name, No Version, No Status Text, No Path) */}
                   {activeCatalog.map((item) => {
                     const itemUrl = avatarManager.getCatalogItemUrl(item.storagePath);
                     const isLoadingUrl = avatarManager.isCatalogItemUrlLoading(item.storagePath);
@@ -924,22 +869,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         type="button"
                         disabled={isBusy || hasError}
                         onClick={() => handleSelectCatalogAvatar(item)}
-                        className={`relative p-3 rounded-2xl border-2 text-left transition-all flex flex-col items-center gap-2.5 cursor-pointer disabled:opacity-50 group ${
+                        aria-label="Chọn ảnh đại diện"
+                        className={`relative p-2.5 rounded-2xl border-2 transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 group ${
                           isSelected
                             ? 'bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-500/10'
                             : 'bg-neutral-950/70 border-neutral-800 hover:border-emerald-500/50 hover:bg-neutral-900'
                         }`}
                       >
                         {isSelected && (
-                          <span className="absolute top-2 right-2 w-5 h-5 rounded-full bg-emerald-500 text-black flex items-center justify-center shadow">
-                            <Check className="w-3 h-3 stroke-[3]" />
+                          <span className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-emerald-500 text-black flex items-center justify-center shadow z-10">
+                            <Check className="w-2.5 h-2.5 stroke-[3]" />
                           </span>
                         )}
                         <div className="w-16 h-16 rounded-full overflow-hidden border-2 border-neutral-700 group-hover:border-emerald-400 bg-neutral-900 flex items-center justify-center shadow-md transition-transform group-hover:scale-105">
                           {itemUrl && !hasError ? (
                             <img
                               src={itemUrl}
-                              alt={item.name}
+                              alt="Avatar"
                               className="w-full h-full object-cover"
                               onError={() =>
                                 setBrokenCatalogIds((prev) => ({
@@ -954,32 +900,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <ImageIcon className="w-6 h-6 text-neutral-500" />
                           )}
                         </div>
-                        <div className="text-center w-full space-y-0.5">
-                          <div className="text-xs font-extrabold text-white truncate">
-                            {item.name}
-                          </div>
-                          <div
-                            className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full inline-block ${
-                              isSelected
-                                ? 'bg-emerald-500 text-black'
-                                : hasError
-                                  ? 'bg-rose-950 text-rose-300'
-                                  : 'bg-neutral-800 text-emerald-300'
-                            }`}
-                          >
-                            {isSelected ? 'ĐANG DÙNG' : hasError ? 'LỖI ẢNH' : `CHỌN • v${item.version}`}
-                          </div>
-                        </div>
                       </button>
                     );
                   })}
                 </div>
-
-                {activeCatalog.length === 0 && (
-                  <p className="text-[11px] text-neutral-400 italic">
-                    Hiện chưa có avatar nào được kích hoạt trong Danh mục Avatar chung. Bạn đang sử dụng Ảnh đại diện Google.
-                  </p>
-                )}
               </div>
 
               {/* Tên hiển thị & Email tài khoản Google */}
@@ -1027,14 +951,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* =========================================================================
-              TAB 2: HÌNH ẢNH (CHỈ DÀNH CHO SUPER ADMIN linhnk.online@gmail.com)
+              TAB 2: HÌNH ẢNH (CHỈ DÀNH CHO ADMIN DUY NHẤT linhnk2013@gmail.com)
              ========================================================================= */}
           {activeTab === 'IMAGE_SETTINGS' && isVerifiedSuperAdmin && (
             <section className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/40 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/20 pb-2.5">
                 <div className="flex items-center gap-1.5 font-extrabold text-amber-300 uppercase">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>HÌNH ẢNH • QUẢN LÝ DANH MỤC AVATAR (SUPER ADMIN)</span>
+                  <span>HÌNH ẢNH • QUẢN LÝ DANH MỤC AVATAR (ADMIN)</span>
                 </div>
                 <span className="text-[10px] text-amber-200/80 font-mono">
                   JPEG / PNG / WebP • ≤ 5 MB • ≤ 2048×2048 px
@@ -1384,19 +1308,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* =========================================================================
-              TAB 3: ÂM THANH (BGM & SFX CÁ NHÂN + QUẢN LÝ NHẠC NỀN SUPER ADMIN)
+              TAB 3: ÂM THANH (BGM & SFX CÁ NHÂN + HƯỚNG DẪN SỬ DỤNG + QUẢN LÝ NHẠC NỀN ADMIN)
              ========================================================================= */}
           {activeTab === 'AUDIO_SETTINGS' && (
             <>
               <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-4 space-y-4">
-                <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5">
+                <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 flex-wrap gap-2">
                   <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
                     <Music className="w-4 h-4 text-amber-400" />
                     <span>ÂM THANH</span>
                   </div>
-                  <span className="text-[10px] text-neutral-400 font-mono">
-                    BGM &amp; SFX Độc Lập • Chỉ 1 nguồn BGM phát tại 1 thời điểm
-                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] text-neutral-400 font-mono hidden sm:inline">
+                      BGM &amp; SFX Độc Lập • Chỉ 1 nguồn BGM phát tại 1 thời điểm
+                    </span>
+                    <button
+                      type="button"
+                      data-testid="audio-reset-defaults-btn"
+                      onClick={handleResetAudioDefaults}
+                      className="px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
+                      title="Khôi phục cài đặt âm thanh mặc định"
+                    >
+                      <RefreshCw className="w-3 h-3 text-amber-400" />
+                      <span>Khôi phục mặc định</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* BGM Toggle & Slider */}
@@ -1485,6 +1421,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {Math.round(audioSettings.sfxVolume * 100)}%
                     </span>
                   </div>
+                </div>
+
+                {/* M7.3.11.6 Section 4.2: HƯỚNG DẪN SỬ DỤNG NGAY DƯỚI KHUNG CÀI ĐẶT ÂM THANH */}
+                <div
+                  data-testid="audio-settings-user-guide"
+                  className="p-3.5 rounded-xl bg-neutral-900/90 border border-amber-500/30 space-y-2 text-[11px] text-neutral-300"
+                >
+                  <div className="font-extrabold text-amber-300 uppercase tracking-wide flex items-center gap-1.5">
+                    <Volume2 className="w-3.5 h-3.5 text-amber-400" />
+                    <span>HƯỚNG DẪN SỬ DỤNG CÀI ĐẶT ÂM THANH</span>
+                  </div>
+                  <ul className="list-disc list-inside space-y-1 leading-relaxed text-neutral-300">
+                    <li>
+                      <strong className="text-white">Cách bật/tắt âm thanh:</strong> Nhấn nút{' '}
+                      <span className="text-amber-300 font-bold">ĐANG BẬT / ĐANG TẮT</span> ở mục{' '}
+                      <strong>Nhạc nền (BGM)</strong> hoặc <strong>Âm thanh hiệu ứng (SFX)</strong>, hoặc bấm biểu tượng Loa trên thanh công cụ.
+                    </li>
+                    <li>
+                      <strong className="text-white">Cách điều chỉnh âm lượng nhạc nền:</strong> Kéo thanh trượt{' '}
+                      <strong>Âm lượng nhạc nền</strong> từ <code>0%</code> đến <code>100%</code> để tăng hoặc giảm nhạc nền trận đấu.
+                    </li>
+                    <li>
+                      <strong className="text-white">Cách điều chỉnh âm lượng hiệu ứng:</strong> Kéo thanh trượt{' '}
+                      <strong>Âm lượng hiệu ứng</strong> từ <code>0%</code> đến <code>100%</code> để chỉnh độ lớn tiếng bắn đạn, tiếng nổ và hiệu ứng chiến đấu.
+                    </li>
+                    <li>
+                      <strong className="text-white">Cách chọn âm thanh:</strong> Hệ thống tự động phát bản nhạc nền chung đang kích hoạt cho mọi người chơi. Quản trị viên (<code>Admin</code>) có thể tải lên và bấm <strong>Kích hoạt</strong> bản nhạc trong danh mục bên dưới để phát đồng bộ toàn hệ thống.
+                    </li>
+                    <li>
+                      <strong className="text-white">Cách khôi phục cài đặt âm thanh mặc định:</strong> Nhấn nút{' '}
+                      <span className="text-amber-300 font-bold">Khôi phục mặc định</span> ở góc trên bên phải để đưa Nhạc nền (<code>35%</code>) và Hiệu ứng (<code>50%</code>) về chuẩn ban đầu.
+                    </li>
+                  </ul>
                 </div>
 
                 {/* Toggle Admin Music Management Panel — ONLY visible for Admin */}
@@ -1880,17 +1849,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               #{rowNumber}
                             </td>
 
-                            {/* 2. Avatar */}
+                            {/* 2. Avatar (Image Only — No Technical Catalog ID) */}
                             <td className="py-2.5 px-2.5 whitespace-nowrap">
-                              <div className="flex items-center gap-1.5">
-                                <div className="w-7 h-7 rounded-full bg-neutral-800 border border-neutral-600 flex items-center justify-center text-[11px] font-extrabold text-amber-400 uppercase shrink-0">
-                                  {(acc.displayName || 'U').charAt(0)}
-                                </div>
-                                <span className="text-[10px] font-mono text-neutral-400">
-                                  {acc.avatarType === 'catalog'
-                                    ? `Catalog (${acc.avatarId || 'Mặc định'})`
-                                    : 'Google'}
-                                </span>
+                              <div className="w-8 h-8 rounded-full bg-neutral-800 border border-neutral-600 flex items-center justify-center text-[11px] font-extrabold text-amber-400 uppercase shrink-0 overflow-hidden">
+                                {(acc.displayName || 'U').charAt(0)}
                               </div>
                             </td>
 

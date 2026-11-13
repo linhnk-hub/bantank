@@ -17,7 +17,7 @@ import {
   type ActiveDirection,
 } from './components/TouchControls.tsx';
 import { DevToolsDrawer } from './components/DevToolsDrawer.tsx';
-import { SettingsModal } from './components/SettingsModal.tsx';
+import { SettingsModal, type SettingsTabId } from './components/SettingsModal.tsx';
 import { SupportModal } from './components/SupportModal.tsx';
 import { SoundManager } from './core/audio.ts';
 import { MusicManager } from './core/musicManager.ts';
@@ -92,6 +92,7 @@ export default function App() {
   const [twoPlayerOption, setTwoPlayerOption] = useState<'P2_AI' | 'P2_REAL'>('P2_AI');
   const [profileRevision, setProfileRevision] = useState<number>(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
+  const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTabId>('ACCOUNT');
   const [isMatchAllowed, setIsMatchAllowed] = useState<boolean>(false);
   const [isTrialMode, setIsTrialMode] = useState<boolean>(() => authManager.isTrialMode());
 
@@ -621,6 +622,7 @@ export default function App() {
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
+          initialTab={settingsInitialTab}
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
           isSuperAdmin={isSuperAdmin}
@@ -645,7 +647,10 @@ export default function App() {
           onRetryAcquire={handleRetryAcquire}
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSettings={() => {
+            setSettingsInitialTab('ACCOUNT');
+            setIsSettingsOpen(true);
+          }}
           onOpenSupport={() => setIsSupportOpen(true)}
           onOpenDevTools={() => setIsDevDrawerOpen(true)}
           isSuperAdmin={isSuperAdmin}
@@ -678,6 +683,7 @@ export default function App() {
         <SettingsModal
           isOpen={isSettingsOpen}
           onClose={() => setIsSettingsOpen(false)}
+          initialTab={settingsInitialTab}
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
           isSuperAdmin={isSuperAdmin}
@@ -705,7 +711,10 @@ export default function App() {
           onStartOnlineMatch={handleStartOnlineMatch}
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSettings={() => {
+            setSettingsInitialTab('ACCOUNT');
+            setIsSettingsOpen(true);
+          }}
           onOpenSupport={() => setIsSupportOpen(true)}
           onOpenDevTools={() => setIsDevDrawerOpen(true)}
           selectedMode={selectedMode}
@@ -730,7 +739,7 @@ export default function App() {
   // View 3: Battle Arena with Canvas (Only mounted when player clicked "Chơi ngay")
   return (
     <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
-      {/* Developer & QA Test Suite Drawer (Super Admin Only) */}
+      {/* Developer & QA Test Suite Drawer (Admin Only) */}
       {isSuperAdmin && (
         <DevToolsDrawer
           isOpen={isDevDrawerOpen}
@@ -743,6 +752,7 @@ export default function App() {
       <SettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
+        initialTab={settingsInitialTab}
         difficulty={difficulty}
         onDifficultyChange={handleDifficultyChange}
         isSuperAdmin={isSuperAdmin}
@@ -857,7 +867,10 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={() => setIsSettingsOpen(true)}
+                onClick={() => {
+                  setSettingsInitialTab('ACCOUNT');
+                  setIsSettingsOpen(true);
+                }}
                 className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold cursor-pointer"
                 title="Cài đặt"
               >
@@ -870,7 +883,7 @@ export default function App() {
                   type="button"
                   onClick={() => setIsDevDrawerOpen(true)}
                   className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold cursor-pointer"
-                  title="Bảng Kiểm thử & QA (Super Admin)"
+                  title="Bảng Kiểm thử & QA (Admin)"
                 >
                   <Wrench className="w-3 h-3 text-amber-400" />
                   <span className="hidden sm:inline">QA</span>
@@ -1021,7 +1034,10 @@ export default function App() {
 
               <button
                 type="button"
-                onClick={() => setIsSettingsOpen(true)}
+                onClick={() => {
+                  setSettingsInitialTab('ACCOUNT');
+                  setIsSettingsOpen(true);
+                }}
                 className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 cursor-pointer"
                 title="Cài đặt"
               >
@@ -1042,7 +1058,7 @@ export default function App() {
                   type="button"
                   onClick={() => setIsDevDrawerOpen(true)}
                   className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-[10px] font-semibold cursor-pointer"
-                  title="Bảng Kiểm thử & QA (Super Admin)"
+                  title="Bảng Kiểm thử & QA (Admin)"
                 >
                   <Wrench className="w-3 h-3 text-amber-400" />
                   <span>QA</span>
@@ -1143,7 +1159,10 @@ export default function App() {
                 {!isTrialMode && (
                   <button
                     type="button"
-                    onClick={() => setIsSettingsOpen(true)}
+                    onClick={() => {
+                      setSettingsInitialTab('ACCOUNT');
+                      setIsSettingsOpen(true);
+                    }}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
                     title="Cài đặt Tài khoản & Âm thanh"
                   >
@@ -1328,7 +1347,7 @@ export default function App() {
                 localOnlineRole={coopManager.getLocalRole()}
               />
 
-              {/* Super Admin Only: Terrain Legend & QA Quick Access Card */}
+              {/* Admin Only: Terrain Legend & QA Quick Access Card */}
               {isSuperAdmin && (
                 <>
                   <TerrainLegend tileCounts={validation.tileCounts} />
@@ -1337,10 +1356,10 @@ export default function App() {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
                         <Wrench className="w-4 h-4 text-amber-400" />
-                        <span className="font-bold text-white">Bảng Kiểm Thử & QA (Super Admin)</span>
+                        <span className="font-bold text-white">Bảng Kiểm Thử & QA (Admin)</span>
                       </div>
                       <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
-                        SUPER ADMIN
+                        ADMIN
                       </span>
                     </div>
                     <button
@@ -1382,7 +1401,10 @@ export default function App() {
         onResume={handleResume}
         onRestart={handleRestart}
         onQuitToMenu={handleQuitToMenu}
-        onOpenSettings={() => setIsSettingsOpen(true)}
+        onOpenSettings={() => {
+          setSettingsInitialTab('AUDIO_SETTINGS');
+          setIsSettingsOpen(true);
+        }}
         isTrialMode={isTrialMode}
       />
 

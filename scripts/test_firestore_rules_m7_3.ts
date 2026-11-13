@@ -2138,6 +2138,207 @@ async function main(): Promise<void> {
           lastActiveAt: serverTimestamp(),
         })
     );
+
+    // =========================================================================
+    // Nhóm 23: Kiểm thử M7.3.11.6 (Tài khoản /user_sessions Admin read, /sound_catalog Firestore & Storage, /system_config/audio Storage path & /system_config/action_sfx)
+    // =========================================================================
+    await checkRule(
+      'R23_01_ALLOW_ADMIN_READ_ANY_USER_SESSION',
+      23,
+      'ALLOW',
+      'M7.3.11.6 (Mục 2): ADMIN (linhnk2013@gmail.com) được phép đọc /user_sessions/{uid} để hiển thị trạng thái phiên trên mục Tài khoản',
+      'firestore.rules: match /user_sessions/{uid} allow get: if isValidId(uid) && (isOwner(uid) || isAdmin())',
+      () => getDoc(doc(superAdminDb, 'user_sessions', 'uid_host_1'))
+    );
+
+    await checkRule(
+      'R23_02_DENY_OTHER_PLAYER_READ_USER_SESSION',
+      23,
+      'DENY',
+      'M7.3.11.6 (Mục 2): Người chơi khác (uid_third_3) bị chặn đọc /user_sessions/uid_host_1',
+      'firestore.rules: match /user_sessions/{uid} allow get: if isOwner(uid) || isAdmin()',
+      () => getDoc(doc(thirdDb, 'user_sessions', 'uid_host_1'))
+    );
+
+    const validSoundCatalogDoc = {
+      soundId: 'bgm_boss_01',
+      name: 'Boss Stage 8-Bit Theme',
+      fileName: 'boss_stage_8bit.mp3',
+      storagePath: 'sound_catalog/bgm_boss_01/v1/boss_stage_8bit.mp3',
+      contentType: 'audio/mpeg',
+      fileSize: 120_000,
+      durationSec: 96,
+      version: 1,
+      isActive: true,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      updatedBy: 'linhnk2013@gmail.com',
+    };
+
+    await checkRule(
+      'R23_03_ALLOW_ADMIN_CREATE_SOUND_CATALOG',
+      23,
+      'ALLOW',
+      'M7.3.11.6 (Mục 6): ADMIN (linhnk2013@gmail.com) tạo bản ghi âm thanh hợp lệ trong /sound_catalog/bgm_boss_01',
+      'firestore.rules: match /sound_catalog/{soundId} allow create: if isAdmin() && isValidSoundCatalogDoc(incoming(), soundId)',
+      () => setDoc(doc(superAdminDb, 'sound_catalog', 'bgm_boss_01'), validSoundCatalogDoc)
+    );
+
+    await checkRule(
+      'R23_04_ALLOW_PLAYER_AND_MOD_READ_SOUND_CATALOG',
+      23,
+      'ALLOW',
+      'M7.3.11.6 (Mục 6): Người chơi (PLAYER) và Điều hành viên (MOD) đọc được /sound_catalog để đồng bộ âm thanh',
+      'firestore.rules: match /sound_catalog/{soundId} allow get, list: if isVerifiedPersonalGmail()',
+      async () => {
+        await getDoc(doc(hostDb, 'sound_catalog', 'bgm_boss_01'));
+        await getDoc(doc(modStaffDb, 'sound_catalog', 'bgm_boss_01'));
+      }
+    );
+
+    await checkRule(
+      'R23_05_DENY_MOD_AND_PLAYER_WRITE_SOUND_CATALOG',
+      23,
+      'DENY',
+      'M7.3.11.6 (Mục 6): MOD và PLAYER bị chặn ghi/sửa /sound_catalog/{soundId}',
+      'firestore.rules: match /sound_catalog/{soundId} allow create, update, delete: if isAdmin()',
+      () =>
+        setDoc(doc(modStaffDb, 'sound_catalog', 'bgm_mod_hack'), {
+          ...validSoundCatalogDoc,
+          soundId: 'bgm_mod_hack',
+          storagePath: 'sound_catalog/bgm_mod_hack/v1/boss_stage_8bit.mp3',
+        })
+    );
+
+    await checkRule(
+      'R23_06_ALLOW_ADMIN_ACTIVATE_STORAGE_AUDIO_IN_SYSTEM_CONFIG',
+      23,
+      'ALLOW',
+      'M7.3.11.6 (Mục 6): ADMIN kích hoạt nhạc nền từ /sound_catalog lên /system_config/audio để đồng bộ thời gian thực sang mọi người chơi',
+      'firestore.rules: isValidSystemAudioConfig supports sound_catalog/{soundId}/v{version}/{fileName}',
+      () =>
+        setDoc(doc(superAdminDb, 'system_config', 'audio'), {
+          assetPath: 'sound_catalog/bgm_boss_01/v1/boss_stage_8bit.mp3',
+          storagePath: 'sound_catalog/bgm_boss_01/v1/boss_stage_8bit.mp3',
+          soundId: 'bgm_boss_01',
+          fileName: 'boss_stage_8bit.mp3',
+          contentType: 'audio/mpeg',
+          fileSize: 120_000,
+          updatedAt: Date.now(),
+          updatedBy: 'linhnk2013@gmail.com',
+          version: 2,
+          isEnabled: true,
+          displayName: 'Boss Stage 8-Bit Theme',
+          durationSec: 96,
+          trimStartSec: 0,
+          trimEndSec: 96,
+          loopGapMs: 0,
+          fadeOutMs: 800,
+        })
+    );
+
+    await checkRule(
+      'R23_07_ALLOW_ADMIN_WRITE_ACTION_SFX_CONFIG',
+      23,
+      'ALLOW',
+      'M7.3.11.6 (Mục 6): ADMIN cập nhật hiệu ứng âm thanh hành động /system_config/action_sfx và người chơi đọc được',
+      'firestore.rules: match /system_config/{docId} docId == "action_sfx"',
+      async () => {
+        await setDoc(doc(superAdminDb, 'system_config', 'action_sfx'), {
+          version: 1,
+          updatedAt: Date.now(),
+          updatedBy: 'linhnk2013@gmail.com',
+          tracks: {},
+        });
+        await getDoc(doc(hostDb, 'system_config', 'action_sfx'));
+      }
+    );
+
+    await checkRule(
+      'R23_08_DENY_MOD_WRITE_ACTION_SFX_CONFIG',
+      23,
+      'DENY',
+      'M7.3.11.6 (Mục 6): MOD bị chặn ghi /system_config/action_sfx',
+      'firestore.rules: match /system_config/{docId} allow write: if isAdmin()',
+      () =>
+        setDoc(doc(modStaffDb, 'system_config', 'action_sfx'), {
+          version: 2,
+          updatedAt: Date.now(),
+          updatedBy: 'linhnk2013@gmail.com',
+          tracks: {},
+        })
+    );
+
+    if (storageReachable) {
+      const superAdminStorage = superAdminCtx.storage();
+      const playerStorage = hostCtx.storage();
+      const modStorage = testEnv
+        .authenticatedContext('uid_mod_staff_21', {
+          email: 'mod21@gmail.com',
+          email_verified: true,
+          firebase: { sign_in_provider: 'google.com' },
+        })
+        .storage();
+      const audioBytes = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00]);
+
+      await checkRule(
+        'R23_09_ALLOW_ADMIN_STORAGE_UPLOAD_SOUND_CATALOG',
+        23,
+        'ALLOW',
+        'M7.3.11.6 (Mục 6): ADMIN (linhnk2013@gmail.com) upload file âm thanh MP3 hợp lệ vào /sound_catalog/bgm_boss_01/v1/boss_stage_8bit.mp3',
+        'storage.rules: match /sound_catalog/{soundId}/{versionSegment}/{fileName} allow create: if isValidSoundCatalogCreate',
+        () =>
+          uploadBytes(
+            storageRef(superAdminStorage, 'sound_catalog/bgm_boss_01/v1/boss_stage_8bit.mp3'),
+            audioBytes,
+            { contentType: 'audio/mpeg' }
+          )
+      );
+
+      await checkRule(
+        'R23_10_ALLOW_PLAYER_AND_MOD_STORAGE_GET_SOUND_CATALOG',
+        23,
+        'ALLOW',
+        'M7.3.11.6 (Mục 6): Người chơi (PLAYER) và Điều hành viên (MOD) tải được file âm thanh từ /sound_catalog để phát trong game',
+        'storage.rules: match /sound_catalog allow get: if isVerifiedPersonalGmail()',
+        async () => {
+          await getBytes(storageRef(playerStorage, 'sound_catalog/bgm_boss_01/v1/boss_stage_8bit.mp3'));
+          await getBytes(storageRef(modStorage, 'sound_catalog/bgm_boss_01/v1/boss_stage_8bit.mp3'));
+        }
+      );
+
+      await checkRule(
+        'R23_11_DENY_MOD_AND_PLAYER_STORAGE_UPLOAD_SOUND_CATALOG',
+        23,
+        'DENY',
+        'M7.3.11.6 (Mục 6): MOD và PLAYER bị từ chối upload file vào /sound_catalog',
+        'storage.rules: match /sound_catalog allow create -> isAdmin()',
+        () =>
+          uploadBytes(
+            storageRef(modStorage, 'sound_catalog/bgm_hack/v1/hack.mp3'),
+            audioBytes,
+            { contentType: 'audio/mpeg' }
+          )
+      );
+
+      await checkRule(
+        'R23_12_DENY_LIST_SOUND_CATALOG_STORAGE',
+        23,
+        'DENY',
+        'M7.3.11.6 (Mục 6): Chặn liệt kê hàng loạt listAll trên /sound_catalog',
+        'storage.rules: match /sound_catalog allow list: if false',
+        () => listAll(storageRef(playerStorage, 'sound_catalog/bgm_boss_01/v1'))
+      );
+
+      await checkRule(
+        'R23_13_ALLOW_ADMIN_STORAGE_DELETE_SOUND_CATALOG',
+        23,
+        'ALLOW',
+        'M7.3.11.6 (Mục 6): ADMIN xóa được file âm thanh trong /sound_catalog',
+        'storage.rules: match /sound_catalog allow delete: if isValidSoundCatalogDelete',
+        () => deleteObject(storageRef(superAdminStorage, 'sound_catalog/bgm_boss_01/v1/boss_stage_8bit.mp3'))
+      );
+    }
   } finally {
     await testEnv.cleanup();
   }

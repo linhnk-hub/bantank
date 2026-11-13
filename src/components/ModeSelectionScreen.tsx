@@ -300,7 +300,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 type="button"
                 onClick={onOpenDevTools}
                 className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold shadow cursor-pointer shrink-0"
-                title="Bảng Kiểm thử & QA (Super Admin)"
+                title="Bảng Kiểm thử & QA (Admin)"
               >
                 <Wrench className="w-3.5 h-3.5 text-amber-400" />
                 <span className="hidden md:inline">QA</span>

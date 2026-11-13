@@ -20,13 +20,21 @@
  */
 
 import {
+  collection,
   doc,
   getDoc,
+  getDocs,
   setDoc,
   deleteDoc,
   onSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
+import {
+  ref as storageRef,
+  uploadBytes,
+  getBytes,
+  deleteObject,
+} from 'firebase/storage';
 import { SoundManager } from './audio.ts';
 import {
   ADMIN_EMAIL,
@@ -36,7 +44,7 @@ import {
   validatePersonalGmailUser,
   type ValidatedUserAccount,
 } from './authManager.ts';
-import { getFirebaseDb } from './firebaseConfig.ts';
+import { getFirebaseDb, getFirebaseStorage } from './firebaseConfig.ts';
 import type { User } from 'firebase/auth';
 
 export type SupportedAudioFormat = 'audio/mpeg' | 'audio/ogg' | 'audio/wav' | 'audio/x-wav' | 'audio/mp3';
@@ -99,7 +107,10 @@ export interface ValidationCheckResult {
  * - Tuyệt đối KHÔNG lưu `downloadURL`, URL chứa capability token hoặc nội dung Base64.
  */
 export interface SystemAudioConfigDocument {
-  assetPath: string; // Ví dụ: "audio/bgm_v1_bantank_theme.mp3"
+  assetPath: string; // Ví dụ: "audio/bgm_v1_bantank_theme.mp3" hoặc "sound_catalog/snd_1/v1/bgm_v1_theme.mp3"
+  storagePath?: string | null;
+  soundId?: string | null;
+  audioDataUrl?: string | null;
   fileName: string;  // Ví dụ: "bgm_v1_bantank_theme.mp3"
   contentType: string;
   fileSize: number;
@@ -115,9 +126,28 @@ export interface SystemAudioConfigDocument {
   fadeOutMs?: number;
 }
 
+export interface SoundCatalogEntry {
+  soundId: string;
+  displayName: string;
+  fileName: string;
+  storagePath: string;
+  audioDataUrl?: string | null;
+  contentType: string;
+  fileSize: number;
+  category: 'BGM' | 'SFX';
+  actionSlot?: string | null;
+  durationSec: number;
+  trimStartSec: number;
+  trimEndSec: number;
+  version: number;
+  isActive: boolean;
+  updatedAt: number;
+  updatedBy: string;
+}
+
 /**
  * Gói tài nguyên nhạc đã được kiểm tra định dạng, dung lượng, giải mã thử và chuẩn hóa tên file
- * để Super Admin đưa vào thư mục `public/audio/` trước khi triển khai GitHub Pages (M7.3.3 Mục 1 & 2).
+ * để Admin đưa vào thư mục `public/audio/` hoặc upload lên Firebase Storage.
  */
 export interface StagedAudioPackage {
   originalFileName: string;
@@ -137,19 +167,12 @@ export interface StagedAudioPackage {
 }
 
 export interface SharedMusicCloudAdapter {
-  /**
-   * Đăng ký file tĩnh trong bộ nhớ (chỉ dùng cho InMemory test harness;
-   * trên Production trình duyệt không tự ghi file vào GitHub repository).
-   */
   uploadAudioBinary(
     assetPath: string,
     data: ArrayBuffer | Uint8Array,
     contentType: string
   ): Promise<{ assetPath: string }>;
   deleteAudioBinary(assetPath: string): Promise<void>;
-  /**
-   * Tải file âm thanh tĩnh từ GitHub Pages theo đường dẫn tương đối `assetPath` kèm cache-busting `?v=${version}`.
-   */
   fetchAudioBinary(assetPath: string, version: number): Promise<ArrayBuffer>;
   getSystemAudioConfig(): Promise<SystemAudioConfigDocument | null>;
   saveSystemAudioConfig(config: SystemAudioConfigDocument): Promise<void>;
@@ -158,11 +181,19 @@ export interface SharedMusicCloudAdapter {
     onUpdate: (config: SystemAudioConfigDocument | null) => void,
     onError?: (err: Error) => void
   ): () => void;
+  listSoundCatalog?(): Promise<SoundCatalogEntry[]>;
+  saveSoundCatalogEntry?(entry: SoundCatalogEntry): Promise<void>;
+  deleteSoundCatalogEntry?(soundId: string): Promise<void>;
+  subscribeSoundCatalog?(
+    onUpdate: (entries: SoundCatalogEntry[]) => void,
+    onError?: (err: Error) => void
+  ): () => void;
 }
 
 export const SHARED_SYSTEM_BGM_ID = 'shared_system_bgm';
 export const STAGED_LOCAL_PREVIEW_BGM_ID = 'staged_local_preview_bgm';
 export const SAFE_AUDIO_ASSET_DIR_PREFIX = 'audio/';
+export const SOUND_CATALOG_STORAGE_PREFIX = 'sound_catalog/';
 
 const SAFE_AUDIO_FILENAME_REGEX = /^[A-Za-z0-9._-]+\.(mp3|ogg|wav)$/;
 const SAFE_AUDIO_ASSET_PATH_REGEX = /^audio\/([A-Za-z0-9._-]+\.(mp3|ogg|wav))$/;
@@ -239,6 +270,66 @@ export function validateSafeAudioAssetPath(
     normalizedFileName: extractedFileName,
     fileName: extractedFileName,
   };
+}
+
+const SAFE_SOUND_CATALOG_STORAGE_PATH_REGEX =
+  /^sound_catalog\/([A-Za-z0-9_-]+)\/v([1-9][0-9]*)\/([A-Za-z0-9._-]+\.(mp3|ogg|wav|m4a|aac|webm))$/;
+
+export function validateSafeAudioOrStoragePath(
+  assetOrStoragePath: unknown,
+  expectedFileName?: string
+): {
+  valid: boolean;
+  normalizedAssetPath?: string;
+  normalizedFileName?: string;
+  isStorageCatalogPath?: boolean;
+  error?: string;
+} {
+  if (typeof assetOrStoragePath !== 'string' || assetOrStoragePath.length < 6 || assetOrStoragePath.length > 300) {
+    return {
+      valid: false,
+      error: 'Đường dẫn âm thanh không hợp lệ.',
+    };
+  }
+  if (
+    assetOrStoragePath.includes('..') ||
+    assetOrStoragePath.includes('\\') ||
+    assetOrStoragePath.includes('//') ||
+    assetOrStoragePath.startsWith('/') ||
+    assetOrStoragePath.includes(':') ||
+    assetOrStoragePath.includes('?') ||
+    assetOrStoragePath.includes('#') ||
+    assetOrStoragePath.toLowerCase().includes('token=')
+  ) {
+    return {
+      valid: false,
+      error: 'Đường dẫn âm thanh chứa ký tự hoặc giao thức bị cấm.',
+    };
+  }
+  const storageMatch = SAFE_SOUND_CATALOG_STORAGE_PATH_REGEX.exec(assetOrStoragePath);
+  if (storageMatch) {
+    const extractedFile = storageMatch[3];
+    if (expectedFileName !== undefined && extractedFile !== expectedFileName) {
+      return {
+        valid: false,
+        error: `Đường dẫn Storage (${assetOrStoragePath}) không khớp với fileName (${expectedFileName}).`,
+      };
+    }
+    return {
+      valid: true,
+      normalizedAssetPath: assetOrStoragePath,
+      normalizedFileName: extractedFile,
+      isStorageCatalogPath: true,
+    };
+  }
+  const staticCheck = validateSafeAudioAssetPath(assetOrStoragePath, expectedFileName);
+  if (staticCheck.valid) {
+    return {
+      ...staticCheck,
+      isStorageCatalogPath: false,
+    };
+  }
+  return staticCheck;
 }
 
 /**
@@ -364,6 +455,9 @@ export function evaluateSystemAudioConfigRule(params: {
   ];
   const allowedKeys = new Set([
     ...requiredKeys,
+    'storagePath',
+    'soundId',
+    'audioDataUrl',
     'displayName',
     'durationSec',
     'trimStartSec',
@@ -384,12 +478,12 @@ export function evaluateSystemAudioConfigRule(params: {
     typeof incoming.fileName !== 'string' ||
     incoming.fileName.length < 5 ||
     incoming.fileName.length > 255 ||
-    !SAFE_AUDIO_FILENAME_REGEX.test(incoming.fileName)
+    !/^[A-Za-z0-9._-]+\.(mp3|ogg|wav|m4a|aac|webm)$/.test(incoming.fileName)
   ) {
     return false;
   }
 
-  const pathCheck = validateSafeAudioAssetPath(incoming.assetPath, incoming.fileName);
+  const pathCheck = validateSafeAudioOrStoragePath(incoming.assetPath, incoming.fileName);
   if (!pathCheck.valid) {
     return false;
   }
@@ -398,7 +492,7 @@ export function evaluateSystemAudioConfigRule(params: {
     typeof incoming.contentType !== 'string' ||
     incoming.contentType.length < 9 ||
     incoming.contentType.length > 120 ||
-    !/^audio\/(mpeg|mp3|ogg|wav|x-wav|wave)$/.test(incoming.contentType)
+    !/^audio\/(mpeg|mp3|ogg|wav|x-wav|wave|mp4|x-m4a|aac|webm)$/.test(incoming.contentType)
   ) {
     return false;
   }
@@ -465,49 +559,98 @@ export function evaluateSystemAudioConfigRule(params: {
 }
 
 /**
- * Adapter thực tế (M7.3.3):
- * - Tải file nhạc tĩnh trực tiếp từ GitHub Pages (`./audio/<fileName>?v=<version>`)
- * - Lưu và đồng bộ cấu hình metadata trên Firestore (`/system_config/audio`)
- * - Hoàn toàn KHÔNG dùng Firebase Storage, giữ nguyên gói Firebase Spark miễn phí.
+ * Adapter thực tế (M7.3.3 & M7.3.11.6):
+ * - Hỗ trợ upload/download trực tiếp qua Firebase Storage (`sound_catalog/{soundId}/v{version}/{fileName}`)
+ *   VÀ tương thích ngược với đường dẫn tĩnh (`./audio/<fileName>?v=<version>`).
+ * - Lưu và đồng bộ danh mục `/sound_catalog/{soundId}` cùng cấu hình đang hoạt động `/system_config/audio` trên Firestore.
  */
 export class FirebaseSharedMusicCloudAdapter implements SharedMusicCloudAdapter {
+  private inMemoryFallbackBlobs: Map<string, ArrayBuffer> = new Map();
+
   public async uploadAudioBinary(
-    assetPath: string
+    assetPath: string,
+    data?: ArrayBuffer | Uint8Array,
+    contentType?: string
   ): Promise<{ assetPath: string }> {
-    const check = validateSafeAudioAssetPath(assetPath);
+    const check = validateSafeAudioOrStoragePath(assetPath);
     if (!check.valid || !check.normalizedAssetPath) {
       throw new Error(check.error || 'Đường dẫn nhạc không hợp lệ.');
     }
-    return { assetPath: check.normalizedAssetPath };
+    const normalizedPath = check.normalizedAssetPath;
+    if (data) {
+      const buf: ArrayBuffer =
+        data instanceof Uint8Array
+          ? (data.slice().buffer as ArrayBuffer)
+          : data.slice(0);
+      this.inMemoryFallbackBlobs.set(normalizedPath, buf);
+
+      if (check.isStorageCatalogPath) {
+        const storage = getFirebaseStorage();
+        const sRef = storageRef(storage, normalizedPath);
+        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+        await uploadBytes(sRef, bytes, {
+          contentType: contentType || 'audio/mpeg',
+        });
+      }
+    }
+    return { assetPath: normalizedPath };
   }
 
-  public async deleteAudioBinary(): Promise<void> {
-    // Trên GitHub Pages, file tĩnh trong repository không bị xóa tự động từ trình duyệt.
+  public async deleteAudioBinary(assetPath: string): Promise<void> {
+    this.inMemoryFallbackBlobs.delete(assetPath);
+    const check = validateSafeAudioOrStoragePath(assetPath);
+    if (check.valid && check.isStorageCatalogPath) {
+      try {
+        const storage = getFirebaseStorage();
+        await deleteObject(storageRef(storage, check.normalizedAssetPath!));
+      } catch {
+        // Ignore if object already deleted
+      }
+    }
   }
 
   public async fetchAudioBinary(
     assetPath: string,
     version: number
   ): Promise<ArrayBuffer> {
-    const url = buildGitHubPagesAudioUrl(assetPath, version);
+    const check = validateSafeAudioOrStoragePath(assetPath);
+    if (!check.valid || !check.normalizedAssetPath) {
+      throw new Error(check.error || 'Đường dẫn nhạc không an toàn.');
+    }
+    const normalizedPath = check.normalizedAssetPath;
+    if (this.inMemoryFallbackBlobs.has(normalizedPath)) {
+      return this.inMemoryFallbackBlobs.get(normalizedPath)!.slice(0);
+    }
+
+    if (check.isStorageCatalogPath) {
+      const storage = getFirebaseStorage();
+      const sRef = storageRef(storage, normalizedPath);
+      const buf = await getBytes(sRef, 25 * 1024 * 1024);
+      if (buf.byteLength <= 0) {
+        throw new Error(`File âm thanh ${normalizedPath} trên Firebase Storage bị rỗng (0 bytes).`);
+      }
+      return buf;
+    }
+
+    const url = buildGitHubPagesAudioUrl(normalizedPath, version);
     const res = await fetch(url, { cache: 'no-store' });
     if (!res.ok) {
       throw new Error(
         classifyStorageCloudError({
           status: res.status,
-          message: `Không thể tải file nhạc nền từ GitHub Pages (${url} -> HTTP ${res.status}).`,
+          message: `Không thể tải file nhạc nền (${url} -> HTTP ${res.status}).`,
         })
       );
     }
     const contentType = (res.headers?.get?.('content-type') || '').toLowerCase();
     if (contentType.includes('text/html')) {
       throw new Error(
-        `File nhạc ${assetPath} chưa được triển khai trên GitHub Pages (máy chủ trả về trang HTML thay vì dữ liệu âm thanh).`
+        `File nhạc ${normalizedPath} chưa tồn tại trên máy chủ (trả về trang HTML thay vì dữ liệu âm thanh).`
       );
     }
     const buf = await res.arrayBuffer();
     if (buf.byteLength <= 0) {
-      throw new Error(`File nhạc ${assetPath} trên máy chủ bị rỗng (0 bytes).`);
+      throw new Error(`File nhạc ${normalizedPath} trên máy chủ bị rỗng (0 bytes).`);
     }
     return buf;
   }
@@ -521,7 +664,7 @@ export class FirebaseSharedMusicCloudAdapter implements SharedMusicCloudAdapter 
   }
 
   public async saveSystemAudioConfig(config: SystemAudioConfigDocument): Promise<void> {
-    const check = validateSafeAudioAssetPath(config.assetPath, config.fileName);
+    const check = validateSafeAudioOrStoragePath(config.assetPath, config.fileName);
     if (!check.valid) {
       throw new Error(check.error || 'Đường dẫn nhạc không an toàn.');
     }
@@ -557,16 +700,60 @@ export class FirebaseSharedMusicCloudAdapter implements SharedMusicCloudAdapter 
     );
     return unsub;
   }
+
+  public async listSoundCatalog(): Promise<SoundCatalogEntry[]> {
+    const db = getFirebaseDb();
+    const snap = await getDocs(collection(db, 'sound_catalog'));
+    const list: SoundCatalogEntry[] = [];
+    for (const d of snap.docs) {
+      list.push(d.data() as SoundCatalogEntry);
+    }
+    list.sort((a, b) => b.updatedAt - a.updatedAt);
+    return list;
+  }
+
+  public async saveSoundCatalogEntry(entry: SoundCatalogEntry): Promise<void> {
+    const db = getFirebaseDb();
+    await setDoc(doc(db, 'sound_catalog', entry.soundId), entry);
+  }
+
+  public async deleteSoundCatalogEntry(soundId: string): Promise<void> {
+    const db = getFirebaseDb();
+    await deleteDoc(doc(db, 'sound_catalog', soundId));
+  }
+
+  public subscribeSoundCatalog(
+    onUpdate: (entries: SoundCatalogEntry[]) => void,
+    onError?: (err: Error) => void
+  ): () => void {
+    const db = getFirebaseDb();
+    const unsub: Unsubscribe = onSnapshot(
+      collection(db, 'sound_catalog'),
+      (snap) => {
+        const list: SoundCatalogEntry[] = [];
+        for (const d of snap.docs) {
+          list.push(d.data() as SoundCatalogEntry);
+        }
+        list.sort((a, b) => b.updatedAt - a.updatedAt);
+        onUpdate(list);
+      },
+      (err) => {
+        if (onError) onError(err);
+      }
+    );
+    return unsub;
+  }
 }
 
 /**
- * Adapter trong bộ nhớ phục vụ kiểm thử tự động (M7.3.3: Kiểm thử lưu tĩnh trong `audio/`,
- * cache-busting `?v=<version>`, đồng bộ `/system_config/audio` qua F5 & đa trình duyệt, và fallback 8-bit).
+ * Adapter trong bộ nhớ phục vụ kiểm thử tự động (M7.3.3 & M7.3.11.6).
  */
 export class InMemorySharedMusicCloudAdapter implements SharedMusicCloudAdapter {
   private staticFiles: Map<string, { data: ArrayBuffer; contentType: string }> = new Map();
   private configDoc: SystemAudioConfigDocument | null = null;
   private subscribers: Set<(config: SystemAudioConfigDocument | null) => void> = new Set();
+  private catalogEntries: Map<string, SoundCatalogEntry> = new Map();
+  private catalogSubscribers: Set<(entries: SoundCatalogEntry[]) => void> = new Set();
 
   public failNextStorageUpload: boolean = false;
   public failNextFirestoreWrite: boolean = false;
@@ -574,15 +761,12 @@ export class InMemorySharedMusicCloudAdapter implements SharedMusicCloudAdapter 
   public operationLog: string[] = [];
   public fetchedUrlsWithCacheBust: string[] = [];
 
-  /**
-   * Mô phỏng việc Super Admin đã đặt file vào `public/audio/<fileName>` và triển khai lên GitHub Pages.
-   */
   public deployStaticAudioFileToGitHubPages(
     assetPath: string,
     data: ArrayBuffer | Uint8Array,
     contentType: string = 'audio/mpeg'
   ): void {
-    const check = validateSafeAudioAssetPath(assetPath);
+    const check = validateSafeAudioOrStoragePath(assetPath);
     if (!check.valid || !check.normalizedAssetPath) {
       throw new Error(check.error || 'Đường dẫn tĩnh không hợp lệ.');
     }
@@ -602,7 +786,7 @@ export class InMemorySharedMusicCloudAdapter implements SharedMusicCloudAdapter 
     if (this.failNextStorageUpload) {
       this.failNextStorageUpload = false;
       this.operationLog.push(`STATIC_DEPLOY_FAIL:${assetPath}`);
-      throw new Error('Mô phỏng lỗi chưa triển khai file nhạc lên GitHub Pages.');
+      throw new Error('Mô phỏng lỗi tải file âm thanh lên Storage.');
     }
     this.deployStaticAudioFileToGitHubPages(assetPath, data, contentType);
     return { assetPath };
@@ -617,26 +801,28 @@ export class InMemorySharedMusicCloudAdapter implements SharedMusicCloudAdapter 
     assetPath: string,
     version: number
   ): Promise<ArrayBuffer> {
-    const url = buildGitHubPagesAudioUrl(assetPath, version);
+    const check = validateSafeAudioOrStoragePath(assetPath);
+    if (!check.valid || !check.normalizedAssetPath) {
+      this.operationLog.push(`GITHUB_PAGES_FETCH_INVALID_PATH:${assetPath}`);
+      throw new Error(check.error || 'Đường dẫn nhạc không an toàn.');
+    }
+
+    const url = check.isStorageCatalogPath
+      ? `./${check.normalizedAssetPath}?v=${version}`
+      : buildGitHubPagesAudioUrl(check.normalizedAssetPath, version);
     this.fetchedUrlsWithCacheBust.push(url);
 
     if (this.failNextAudioFetch) {
       this.failNextAudioFetch = false;
       this.operationLog.push(`GITHUB_PAGES_FETCH_FAIL:${url}`);
-      throw new Error(`Mô phỏng lỗi tải file nhạc từ GitHub Pages (${url}).`);
-    }
-
-    const check = validateSafeAudioAssetPath(assetPath);
-    if (!check.valid || !check.normalizedAssetPath) {
-      this.operationLog.push(`GITHUB_PAGES_FETCH_INVALID_PATH:${assetPath}`);
-      throw new Error(check.error || 'Đường dẫn nhạc không an toàn.');
+      throw new Error(`Mô phỏng lỗi tải file nhạc (${url}).`);
     }
 
     const entry = this.staticFiles.get(check.normalizedAssetPath);
     if (!entry) {
       this.operationLog.push(`GITHUB_PAGES_FETCH_404:${url}`);
       throw new Error(
-        `HTTP 404 (Not Found): File nhạc ./${check.normalizedAssetPath} chưa tồn tại trên GitHub Pages.`
+        `HTTP 404 (Not Found): File nhạc ./${check.normalizedAssetPath} chưa tồn tại.`
       );
     }
 
@@ -649,7 +835,7 @@ export class InMemorySharedMusicCloudAdapter implements SharedMusicCloudAdapter 
   }
 
   public async saveSystemAudioConfig(config: SystemAudioConfigDocument): Promise<void> {
-    const check = validateSafeAudioAssetPath(config.assetPath, config.fileName);
+    const check = validateSafeAudioOrStoragePath(config.assetPath, config.fileName);
     if (!check.valid) {
       throw new Error(check.error || 'Đường dẫn assetPath không hợp lệ.');
     }
@@ -679,6 +865,36 @@ export class InMemorySharedMusicCloudAdapter implements SharedMusicCloudAdapter 
     };
   }
 
+  public async listSoundCatalog(): Promise<SoundCatalogEntry[]> {
+    return Array.from(this.catalogEntries.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+  }
+
+  public async saveSoundCatalogEntry(entry: SoundCatalogEntry): Promise<void> {
+    if (this.failNextFirestoreWrite) {
+      this.failNextFirestoreWrite = false;
+      throw new Error('Mô phỏng lỗi ghi /sound_catalog trên Firestore.');
+    }
+    this.catalogEntries.set(entry.soundId, { ...entry });
+    this.operationLog.push(`CATALOG_SAVE_OK:${entry.soundId}:v${entry.version}:active=${entry.isActive}`);
+    this.notifyCatalogSubscribers();
+  }
+
+  public async deleteSoundCatalogEntry(soundId: string): Promise<void> {
+    this.catalogEntries.delete(soundId);
+    this.operationLog.push(`CATALOG_DELETE_OK:${soundId}`);
+    this.notifyCatalogSubscribers();
+  }
+
+  public subscribeSoundCatalog(
+    onUpdate: (entries: SoundCatalogEntry[]) => void
+  ): () => void {
+    this.catalogSubscribers.add(onUpdate);
+    onUpdate(Array.from(this.catalogEntries.values()).sort((a, b) => b.updatedAt - a.updatedAt));
+    return () => {
+      this.catalogSubscribers.delete(onUpdate);
+    };
+  }
+
   public hasStorageFile(path: string): boolean {
     return this.staticFiles.has(path);
   }
@@ -690,6 +906,11 @@ export class InMemorySharedMusicCloudAdapter implements SharedMusicCloudAdapter 
   private notifySubscribers(): void {
     const snap = this.configDoc ? { ...this.configDoc } : null;
     this.subscribers.forEach((fn) => fn(snap));
+  }
+
+  private notifyCatalogSubscribers(): void {
+    const list = Array.from(this.catalogEntries.values()).sort((a, b) => b.updatedAt - a.updatedAt);
+    this.catalogSubscribers.forEach((fn) => fn(list));
   }
 }
 
@@ -780,6 +1001,8 @@ export class MusicManager {
     getChannelData: (channel: number) => Float32Array;
   } | null = null;
   private unsubSharedConfig: (() => void) | null = null;
+  private unsubSoundCatalog: (() => void) | null = null;
+  private soundCatalog: Map<string, SoundCatalogEntry> = new Map();
   private subscribedSharedUserUid: string | null = null;
   private loadedSharedVersion: number = 0;
   private loadedSharedAssetPath: string = '';
@@ -829,6 +1052,7 @@ export class MusicManager {
     this.cloudAdapter = adapter;
     this.customBufferDecoder = customDecoder ?? null;
     this.sharedAudioConfig = null;
+    this.soundCatalog.clear();
     this.stagedAudioPackage = null;
     this.stagedPackageBinary = null;
     this.stagedDecodedBuffer = null;
@@ -839,6 +1063,19 @@ export class MusicManager {
 
   public getSharedAudioConfig(): SystemAudioConfigDocument | null {
     return this.sharedAudioConfig ? { ...this.sharedAudioConfig } : null;
+  }
+
+  public getSoundCatalog(): SoundCatalogEntry[] {
+    const activePath = this.sharedAudioConfig?.isEnabled ? this.sharedAudioConfig.assetPath : null;
+    const activeSoundId = this.sharedAudioConfig?.isEnabled ? this.sharedAudioConfig.soundId : null;
+    return Array.from(this.soundCatalog.values())
+      .map((entry) => ({
+        ...entry,
+        isActive:
+          Boolean(this.sharedAudioConfig?.isEnabled) &&
+          (entry.soundId === activeSoundId || entry.storagePath === activePath || entry.isActive),
+      }))
+      .sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   public getStagedAudioPackage(): StagedAudioPackage | null {
@@ -960,6 +1197,7 @@ export class MusicManager {
       this.assignments.globalTrackId = null;
     }
     this.sharedAudioConfig = null;
+    this.soundCatalog.clear();
     this.stagedAudioPackage = null;
     this.stagedPackageBinary = null;
     this.stagedDecodedBuffer = null;
@@ -993,6 +1231,20 @@ export class MusicManager {
         this.notify();
       }
     );
+    if (this.cloudAdapter.subscribeSoundCatalog) {
+      this.unsubSoundCatalog = this.cloudAdapter.subscribeSoundCatalog(
+        (entries) => {
+          this.soundCatalog.clear();
+          for (const item of entries) {
+            this.soundCatalog.set(item.soundId, item);
+          }
+          this.notify();
+        },
+        () => {
+          // Ignore catalog list error if collection is empty
+        }
+      );
+    }
   }
 
   public stopSharedConfigSubscription(): void {
@@ -1003,6 +1255,14 @@ export class MusicManager {
         // ignore
       }
       this.unsubSharedConfig = null;
+    }
+    if (this.unsubSoundCatalog) {
+      try {
+        this.unsubSoundCatalog();
+      } catch {
+        // ignore
+      }
+      this.unsubSoundCatalog = null;
     }
     this.subscribedSharedUserUid = null;
   }
@@ -1038,9 +1298,9 @@ export class MusicManager {
       return;
     }
 
-    const pathValidation = validateSafeAudioAssetPath(config.assetPath, config.fileName);
+    const pathValidation = validateSafeAudioOrStoragePath(config.assetPath, config.fileName);
     if (!pathValidation.valid || !pathValidation.normalizedAssetPath) {
-      // Đường dẫn không an toàn (ngoài thư mục audio/ hoặc chứa ký tự cấm) -> chặn ngay và fallback 8-bit
+      // Đường dẫn không an toàn -> chặn ngay
       if (this.tracks.has(SHARED_SYSTEM_BGM_ID)) {
         this.tracks.delete(SHARED_SYSTEM_BGM_ID);
         this.audioBuffers.delete(SHARED_SYSTEM_BGM_ID);
@@ -1052,7 +1312,7 @@ export class MusicManager {
       this.loadedSharedVersion = 0;
       this.loadedSharedAssetPath = '';
       this.sharedSyncError =
-        pathValidation.error || 'Đường dẫn nhạc nền không hợp lệ; đã chuyển về nhạc 8-bit mặc định.';
+        pathValidation.error || 'Đường dẫn nhạc nền không hợp lệ.';
       this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
       this.notify();
       return;
@@ -1086,10 +1346,27 @@ export class MusicManager {
     this.notify();
 
     try {
-      const arrayBuffer = await this.cloudAdapter.fetchAudioBinary(
-        safeAssetPath,
-        config.version
-      );
+      let arrayBuffer: ArrayBuffer;
+      try {
+        arrayBuffer = await this.cloudAdapter.fetchAudioBinary(
+          safeAssetPath,
+          config.version
+        );
+      } catch (primaryFetchErr) {
+        if (config.audioDataUrl && config.audioDataUrl.startsWith('data:audio/')) {
+          const commaIdx = config.audioDataUrl.indexOf(',');
+          const b64 = commaIdx >= 0 ? config.audioDataUrl.slice(commaIdx + 1) : '';
+          const binStr = typeof atob === 'function' ? atob(b64) : Buffer.from(b64, 'base64').toString('binary');
+          const bytes = new Uint8Array(binStr.length);
+          for (let i = 0; i < binStr.length; i++) {
+            bytes[i] = binStr.charCodeAt(i);
+          }
+          arrayBuffer = bytes.buffer;
+        } else {
+          throw primaryFetchErr;
+        }
+      }
+
       if (requestToken !== this.snapshotRequestToken) {
         return;
       }
@@ -1115,7 +1392,7 @@ export class MusicManager {
       }
 
       if (!decodedBuffer || decodedBuffer.duration <= 0) {
-        throw new Error('Không thể giải mã dữ liệu nhạc nền từ GitHub Pages.');
+        throw new Error('Không thể giải mã dữ liệu nhạc nền.');
       }
 
       const analyzedBounds = MusicManager.analyzeSilenceBounds(
@@ -1133,12 +1410,14 @@ export class MusicManager {
           ? config.trimEndSec
           : analyzedBounds.trimEndSec;
 
-      const runtimeUrl = buildGitHubPagesAudioUrl(safeAssetPath, config.version);
+      const runtimeUrl = pathValidation.isStorageCatalogPath
+        ? safeAssetPath
+        : buildGitHubPagesAudioUrl(safeAssetPath, config.version);
       const sharedMeta: MusicTrackMetadata = {
         id: SHARED_SYSTEM_BGM_ID,
         displayName:
           config.displayName?.trim() ||
-          config.fileName.replace(/\.(mp3|ogg|wav)$/i, '') ||
+          config.fileName.replace(/\.(mp3|ogg|wav|m4a|aac|webm)$/i, '') ||
           'Nhạc Nền Hệ Thống',
         fileName: config.fileName,
         mimeType: config.contentType || 'audio/mpeg',
@@ -1152,7 +1431,9 @@ export class MusicManager {
           leadingSilenceDetectedSec: analyzedBounds.leadingSilenceDetectedSec,
           trailingSilenceDetectedSec: analyzedBounds.trailingSilenceDetectedSec,
         },
-        storageProvider: 'GITHUB_PAGES_STATIC',
+        storageProvider: pathValidation.isStorageCatalogPath
+          ? 'FIREBASE_STORAGE_READY'
+          : 'GITHUB_PAGES_STATIC',
         storagePathOrUrl: runtimeUrl,
       };
 
@@ -1178,11 +1459,10 @@ export class MusicManager {
       if (requestToken !== this.snapshotRequestToken) {
         return;
       }
-      // Fallback an toàn về nhạc 8-bit mặc định nếu không tải/giải mã được file nhạc chung
       this.stopAllCustomSources();
       this.isCloudSyncInProgress = false;
       this.sharedSyncError =
-        err?.message || 'Không thể tải nhạc nền từ GitHub Pages; hệ thống đã chuyển về nhạc 8-bit mặc định.';
+        err?.message || 'Không thể tải nhạc nền đang kích hoạt.';
       if (this.tracks.has(SHARED_SYSTEM_BGM_ID)) {
         this.tracks.delete(SHARED_SYSTEM_BGM_ID);
         this.audioBuffers.delete(SHARED_SYSTEM_BGM_ID);
@@ -1807,6 +2087,7 @@ export class MusicManager {
   ): Promise<{
     success: boolean;
     track?: MusicTrackMetadata;
+    catalogEntry?: SoundCatalogEntry;
     stagedPackage?: StagedAudioPackage;
     requiresGitHubPagesDeploy?: boolean;
     error?: string;
@@ -1841,15 +2122,315 @@ export class MusicManager {
       }
     }
 
-    // Trên trình duyệt thực tế (GitHub Pages là static hosting):
-    // Trả về gói đã chuẩn bị (stagedPackage) cùng bản nghe thử (previewTrack),
-    // yêu cầu Super Admin đặt file vào `public/audio/` và push lên GitHub trước khi bấm Kích hoạt.
+    // Trên trình duyệt thực tế:
+    // Tự động upload lên Firebase Storage (`sound_catalog/...`) và lưu vào danh mục Firestore `/sound_catalog`
+    // để Admin có thể kích hoạt trực tiếp ngay trên giao diện mà không bắt buộc phải copy file thủ công vào Git.
+    if (this.stagedPackageBinary && this.stagedDecodedBuffer) {
+      const cloudCatalogRes = await this.uploadAndCatalogAudioBuffer({
+        fileName: stageRes.stagedPackage.normalizedFileName,
+        displayName: stageRes.stagedPackage.displayName,
+        contentType: stageRes.stagedPackage.contentType,
+        fileSize: stageRes.stagedPackage.fileSize,
+        decodedBuffer: this.stagedDecodedBuffer,
+        arrayBuffer: this.stagedPackageBinary,
+        autoActivate: true,
+      });
+      if (cloudCatalogRes.success && cloudCatalogRes.track) {
+        return {
+          success: true,
+          track: cloudCatalogRes.track,
+          catalogEntry: cloudCatalogRes.entry,
+          stagedPackage: stageRes.stagedPackage,
+          requiresGitHubPagesDeploy: false,
+        };
+      }
+    }
+
     return {
       success: true,
       track: stageRes.previewTrack,
       stagedPackage: stageRes.stagedPackage,
       requiresGitHubPagesDeploy: true,
     };
+  }
+
+  /**
+   * M7.3.11.6 Section 6: Upload file âm thanh lên Firebase Storage (`sound_catalog/{soundId}/v{version}/{fileName}`),
+   * lưu metadata vào Firestore `/sound_catalog/{soundId}`, và tùy chọn kích hoạt ngay trên `/system_config/audio`
+   * để đồng bộ tức thì cho mọi người chơi khác.
+   */
+  public async uploadAndCatalogAudioBuffer(params: {
+    soundId?: string;
+    fileName: string;
+    displayName?: string;
+    contentType: string;
+    fileSize: number;
+    decodedBuffer: {
+      duration: number;
+      sampleRate: number;
+      numberOfChannels: number;
+      getChannelData: (channel: number) => Float32Array;
+    };
+    arrayBuffer: ArrayBuffer;
+    autoActivate?: boolean;
+    nowMs?: number;
+  }): Promise<{
+    success: boolean;
+    entry?: SoundCatalogEntry;
+    track?: MusicTrackMetadata;
+    config?: SystemAudioConfigDocument;
+    error?: string;
+  }> {
+    if (!this.canManageMusic()) {
+      return {
+        success: false,
+        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền tải lên và quản lý danh mục âm thanh.',
+      };
+    }
+
+    const basicCheck = MusicManager.validateAudioFileBasic({
+      name: params.fileName,
+      type: params.contentType,
+      size: params.fileSize,
+    });
+    if (!basicCheck.valid) {
+      return { success: false, error: basicCheck.error };
+    }
+    if (!params.decodedBuffer || params.decodedBuffer.duration <= 0) {
+      return { success: false, error: 'Thời lượng file âm thanh không hợp lệ.' };
+    }
+
+    const nowMs = Math.round(params.nowMs ?? Date.now());
+    const previousConfig =
+      this.sharedAudioConfig ?? (await this.cloudAdapter.getSystemAudioConfig().catch(() => null));
+    const nextVersion = Math.max(1, (previousConfig?.version ?? 0) + 1);
+    const soundId = (params.soundId || `snd_${nowMs}`).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64);
+    const normalizedFileName = normalizeSafeAudioFileName(params.fileName, nextVersion);
+    const storagePath = `${SOUND_CATALOG_STORAGE_PREFIX}${soundId}/v${nextVersion}/${normalizedFileName}`;
+
+    const trimBounds = MusicManager.analyzeSilenceBounds(
+      params.decodedBuffer,
+      this.loopConfig.silenceThresholdDb
+    );
+    const cleanDisplayName =
+      (params.displayName || params.fileName.replace(/\.(mp3|ogg|wav|m4a|aac|webm)$/i, ''))
+        .trim()
+        .slice(0, 120) || 'Nhạc Nền Hệ Thống';
+    const durationSec = Math.max(0.01, Number(params.decodedBuffer.duration.toFixed(2)));
+    const contentType = /^audio\/(mpeg|mp3|ogg|wav|x-wav|wave|mp4|x-m4a|aac|webm)$/.test(
+      (params.contentType || '').toLowerCase()
+    )
+      ? params.contentType.toLowerCase()
+      : 'audio/mpeg';
+
+    this.isCloudSyncInProgress = true;
+    this.sharedSyncError = null;
+    this.notify();
+
+    try {
+      await this.cloudAdapter.uploadAudioBinary(storagePath, params.arrayBuffer, contentType);
+    } catch (uploadErr: any) {
+      this.isCloudSyncInProgress = false;
+      const errMsg = uploadErr?.message || 'Không thể tải file âm thanh lên Firebase Storage.';
+      this.sharedSyncError = errMsg;
+      this.notify();
+      return { success: false, error: errMsg };
+    }
+
+    const entry: SoundCatalogEntry = {
+      soundId,
+      displayName: cleanDisplayName,
+      fileName: normalizedFileName,
+      storagePath,
+      contentType,
+      fileSize: Math.round(params.fileSize),
+      category: 'BGM',
+      durationSec,
+      trimStartSec: Number(Math.max(0, trimBounds.trimStartSec).toFixed(2)),
+      trimEndSec: Number(Math.max(0, trimBounds.trimEndSec).toFixed(2)),
+      version: nextVersion,
+      isActive: false,
+      updatedAt: nowMs,
+      updatedBy: ADMIN_EMAIL,
+    };
+
+    try {
+      if (this.cloudAdapter.saveSoundCatalogEntry) {
+        await this.cloudAdapter.saveSoundCatalogEntry(entry);
+      }
+      this.soundCatalog.set(soundId, entry);
+      this.rawBlobs.set(soundId, params.arrayBuffer.slice(0));
+      if (typeof AudioBuffer !== 'undefined' && params.decodedBuffer instanceof AudioBuffer) {
+        this.audioBuffers.set(soundId, params.decodedBuffer);
+      } else {
+        this.audioBuffers.set(soundId, params.decodedBuffer as unknown as AudioBuffer);
+      }
+    } catch (catErr: any) {
+      this.isCloudSyncInProgress = false;
+      const errMsg = catErr?.message || 'Không thể lưu metadata âm thanh vào danh mục Firestore.';
+      this.sharedSyncError = errMsg;
+      this.notify();
+      return { success: false, error: errMsg };
+    }
+
+    if (params.autoActivate !== false) {
+      const actRes = await this.activateCatalogSound(soundId, nowMs);
+      this.isCloudSyncInProgress = false;
+      this.notify();
+      return {
+        success: actRes.success,
+        entry: this.soundCatalog.get(soundId) || entry,
+        track: actRes.track,
+        config: actRes.config,
+        error: actRes.error,
+      };
+    }
+
+    this.isCloudSyncInProgress = false;
+    this.notify();
+    return {
+      success: true,
+      entry,
+    };
+  }
+
+  /**
+   * M7.3.11.6 Section 6.1 & 6.2: Kích hoạt một âm thanh trong danh mục `/sound_catalog/{soundId}`
+   * và cập nhật `/system_config/audio` để mọi người chơi khác đồng bộ tức thì.
+   */
+  public async activateCatalogSound(
+    soundId: string,
+    nowMs?: number
+  ): Promise<{
+    success: boolean;
+    track?: MusicTrackMetadata;
+    config?: SystemAudioConfigDocument;
+    error?: string;
+  }> {
+    if (!this.canManageMusic()) {
+      return {
+        success: false,
+        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền kích hoạt âm thanh hệ thống.',
+      };
+    }
+
+    let targetEntry = this.soundCatalog.get(soundId);
+    if (!targetEntry && this.cloudAdapter.listSoundCatalog) {
+      const all = await this.cloudAdapter.listSoundCatalog().catch(() => []);
+      for (const item of all) {
+        this.soundCatalog.set(item.soundId, item);
+      }
+      targetEntry = this.soundCatalog.get(soundId);
+    }
+
+    if (!targetEntry) {
+      return {
+        success: false,
+        error: `Không tìm thấy âm thanh (${soundId}) trong danh mục.`,
+      };
+    }
+
+    const remoteExisting = await this.cloudAdapter.getSystemAudioConfig().catch(() => null);
+    const highestVersion = Math.max(
+      this.sharedAudioConfig?.version ?? 0,
+      remoteExisting?.version ?? 0,
+      targetEntry.version - 1
+    );
+    const nextVersion = highestVersion + 1;
+    const writeTimeMs = Math.round(nowMs ?? Date.now());
+
+    const nextConfig: SystemAudioConfigDocument = {
+      assetPath: targetEntry.storagePath,
+      storagePath: targetEntry.storagePath,
+      soundId: targetEntry.soundId,
+      fileName: targetEntry.fileName,
+      contentType: targetEntry.contentType,
+      fileSize: targetEntry.fileSize,
+      updatedAt: writeTimeMs,
+      updatedBy: ADMIN_EMAIL,
+      version: nextVersion,
+      isEnabled: true,
+      displayName: targetEntry.displayName,
+      durationSec: targetEntry.durationSec,
+      trimStartSec: targetEntry.trimStartSec,
+      trimEndSec: targetEntry.trimEndSec,
+      loopGapMs: 0,
+      fadeOutMs: Math.round(this.loopConfig.crossfadeDurationSec * 1000),
+    };
+
+    try {
+      await this.cloudAdapter.saveSystemAudioConfig(nextConfig);
+
+      // Cập nhật trạng thái isActive trong danh mục /sound_catalog
+      for (const [id, item] of this.soundCatalog.entries()) {
+        const shouldBeActive = id === soundId;
+        if (item.isActive !== shouldBeActive) {
+          const updatedItem: SoundCatalogEntry = {
+            ...item,
+            isActive: shouldBeActive,
+            updatedAt: writeTimeMs,
+            updatedBy: ADMIN_EMAIL,
+          };
+          this.soundCatalog.set(id, updatedItem);
+          if (this.cloudAdapter.saveSoundCatalogEntry) {
+            await this.cloudAdapter.saveSoundCatalogEntry(updatedItem).catch(() => {});
+          }
+        }
+      }
+
+      // Dọn bản nháp nếu có
+      this.tracks.delete(STAGED_LOCAL_PREVIEW_BGM_ID);
+      this.audioBuffers.delete(STAGED_LOCAL_PREVIEW_BGM_ID);
+      this.rawBlobs.delete(STAGED_LOCAL_PREVIEW_BGM_ID);
+      this.stagedAudioPackage = null;
+      this.stagedPackageBinary = null;
+      this.stagedDecodedBuffer = null;
+
+      await this.applySharedAudioConfigSnapshot(nextConfig);
+      const activeTrack = this.tracks.get(SHARED_SYSTEM_BGM_ID);
+      return {
+        success: true,
+        track: activeTrack,
+        config: nextConfig,
+      };
+    } catch (err: any) {
+      const errMsg = err?.message || 'Không thể lưu cấu hình kích hoạt âm thanh lên Firestore.';
+      this.sharedSyncError = errMsg;
+      this.notify();
+      return {
+        success: false,
+        error: errMsg,
+      };
+    }
+  }
+
+  public async deleteCatalogSound(soundId: string): Promise<{ success: boolean; error?: string }> {
+    if (!this.canManageMusic()) {
+      return {
+        success: false,
+        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền xóa âm thanh khỏi danh mục.',
+      };
+    }
+    const entry = this.soundCatalog.get(soundId);
+    try {
+      if (entry) {
+        await this.cloudAdapter.deleteAudioBinary(entry.storagePath).catch(() => {});
+      }
+      if (this.cloudAdapter.deleteSoundCatalogEntry) {
+        await this.cloudAdapter.deleteSoundCatalogEntry(soundId);
+      }
+      this.soundCatalog.delete(soundId);
+      if (this.sharedAudioConfig?.soundId === soundId || (entry && this.sharedAudioConfig?.assetPath === entry.storagePath)) {
+        await this.removeSharedSystemAudio();
+      }
+      this.notify();
+      return { success: true };
+    } catch (err: any) {
+      return {
+        success: false,
+        error: err?.message || 'Không thể xóa âm thanh khỏi danh mục.',
+      };
+    }
   }
 
   /**

@@ -35,7 +35,10 @@ import { validateStageMap, STAGE_SPAWN_POINTS } from './mapValidator.ts';
 import { SessionManager, SESSION_TIMINGS } from './sessionManager.ts';
 import { STAGE_1_MAP } from './constants.ts';
 import { ScoreManager } from './scoreManager.ts';
-import { getAvailableSettingsTabsForRole } from '../components/SettingsModal.tsx';
+import {
+  getAvailableSettingsTabsForRole,
+  UNIFIED_SETTINGS_MODAL_WIDTH_CLASS,
+} from '../components/SettingsModal.tsx';
 import {
   LANDING_SUPPORT_CONTACT,
   LANDING_PAGE_FEATURES,
@@ -46,7 +49,7 @@ import {
   UNIFIED_LOGO_CLASSES,
   UNIFIED_LOGO_SRC,
 } from '../components/GameLogo.tsx';
-import { SoundManager, GAME_ACTION_SOUND_SLOTS } from './audio.ts';
+import { SoundManager, GAME_ACTION_SOUND_SLOTS, DEFAULT_AUDIO_SETTINGS } from './audio.ts';
 import {
   MusicManager,
   InMemorySharedMusicCloudAdapter,
@@ -54,6 +57,7 @@ import {
   evaluateSystemAudioConfigRule,
   classifyStorageCloudError,
   validateSafeAudioAssetPath,
+  validateSafeAudioOrStoragePath,
   buildGitHubPagesAudioUrl,
   normalizeSafeAudioFileName,
   type SystemAudioConfigDocument,
@@ -9087,6 +9091,148 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T63: M7.3.11.5 Final Pre-Production Security Audit – Đồng bộ Admin Auth, Khóa Schema /admins/{uid}, BOOTSTRAP_SOLE_ADMIN Audit Log, Idempotent Migration (No-Op lần 2) & Session Lease Fail-Closed',
       passed,
       details: `adminDocSchema=${section2AdminDocSchemaOk}, bootstrapAudit=${section3BootstrapAuditOk}, idempotentMigration=${section3IdempotentMigrationOk} (run2Writes=${secondRunUpserts.length}, run2Audits=${secondRunAudits.length}), sessionFailClosed=${section5SessionFailClosedOk}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T64: M7.3.11.6 – Account Permission, Settings Layout, Pause Audio Guide, Avatar UI, Admin Audio Sync & Google Auth UX
+  // =========================================================================
+  {
+    // 1. Mục 2: Chẩn đoán phân quyền mục Tài khoản (không ghi token nhạy cảm) & cô lập quyền đọc cho ADMIN / MOD / PLAYER
+    const authMgrInstance = AuthManager.getInstance();
+    authMgrInstance.clearPermissionDiagnosticsForTesting();
+    const diagEntry = authMgrInstance.recordPermissionDiagnostic(
+      'list',
+      '/users',
+      { code: 'permission-denied', message: 'Missing or insufficient permissions.' },
+      {
+        uid: 'uid_player_m73116',
+        email: 'player116@gmail.com',
+        displayName: 'Player 116',
+        photoURL: null,
+        emailVerified: true,
+        providerId: 'google.com',
+        providerData: [{ providerId: 'google.com' }],
+      } as any
+    );
+    const recentDiags = authMgrInstance.getRecentPermissionDiagnostics();
+    const section2DiagOk =
+      recentDiags.length === 1 &&
+      diagEntry.errorCode === 'permission-denied' &&
+      diagEntry.resolvedRole === 'PLAYER' &&
+      diagEntry.path === '/users' &&
+      diagEntry.authStatus === 'AUTHENTICATED_VERIFIED_GMAIL' &&
+      !('accessToken' in (diagEntry as any)) &&
+      !('idToken' in (diagEntry as any));
+    authMgrInstance.clearPermissionDiagnosticsForTesting();
+
+    // Kiểm tra tab hiển thị theo vai trò & đồng nhất kích thước khung Cài đặt (Mục 3)
+    const adminTabs = getAvailableSettingsTabsForRole('ADMIN').map((t) => t.id);
+    const modTabs = getAvailableSettingsTabsForRole('MOD').map((t) => t.id);
+    const playerTabs = getAvailableSettingsTabsForRole('PLAYER').map((t) => t.id);
+    const section3UnifiedLayoutOk =
+      UNIFIED_SETTINGS_MODAL_WIDTH_CLASS === 'w-full max-w-4xl' &&
+      adminTabs.length === 6 &&
+      adminTabs.includes('USER_ACCOUNTS') &&
+      adminTabs.includes('ADMIN_OTHER') &&
+      adminTabs.includes('IMAGE_SETTINGS') &&
+      modTabs.includes('USER_ACCOUNTS') &&
+      !modTabs.includes('IMAGE_SETTINGS') &&
+      !playerTabs.includes('USER_ACCOUNTS') &&
+      !playerTabs.includes('ADMIN_OTHER');
+
+    // 2. Mục 4: Khôi phục cài đặt âm thanh mặc định trong SoundManager
+    const tempSoundMgr = SoundManager.getInstance();
+    const prevSettings = tempSoundMgr.getSettings();
+    const prevMuted = tempSoundMgr.isMuted();
+    tempSoundMgr.setMuted(true);
+    tempSoundMgr.updateSettings({
+      bgmEnabled: false,
+      sfxEnabled: false,
+      bgmVolume: 0.15,
+      sfxVolume: 0.25,
+    });
+    const resetAudioSettings = tempSoundMgr.resetSettingsToDefault();
+    const section4AudioResetOk =
+      tempSoundMgr.isMuted() === false &&
+      resetAudioSettings.bgmEnabled === DEFAULT_AUDIO_SETTINGS.bgmEnabled &&
+      resetAudioSettings.sfxEnabled === DEFAULT_AUDIO_SETTINGS.sfxEnabled &&
+      resetAudioSettings.bgmVolume === DEFAULT_AUDIO_SETTINGS.bgmVolume &&
+      resetAudioSettings.sfxVolume === DEFAULT_AUDIO_SETTINGS.sfxVolume;
+    tempSoundMgr.updateSettings(prevSettings);
+    tempSoundMgr.setMuted(prevMuted);
+
+    // 3. Mục 6: Admin upload âm thanh -> lưu /sound_catalog + kích hoạt /system_config/audio -> đồng bộ thời gian thực sang người chơi khác
+    const storagePathCheck = validateSafeAudioOrStoragePath(
+      'sound_catalog/snd_boss_01/v1/boss_theme_8bit.mp3',
+      'boss_theme_8bit.mp3'
+    );
+    const invalidTraversalCheck = validateSafeAudioOrStoragePath(
+      'sound_catalog/../v1/boss_theme_8bit.mp3'
+    );
+
+    const requestTimeMs = 1_700_000_500_000;
+    const activeCatalogConfig: SystemAudioConfigDocument = {
+      assetPath: 'sound_catalog/snd_boss_01/v1/boss_theme_8bit.mp3',
+      storagePath: 'sound_catalog/snd_boss_01/v1/boss_theme_8bit.mp3',
+      soundId: 'snd_boss_01',
+      fileName: 'boss_theme_8bit.mp3',
+      contentType: 'audio/mpeg',
+      fileSize: 84_000,
+      updatedAt: requestTimeMs,
+      updatedBy: ADMIN_EMAIL,
+      version: 2,
+      isEnabled: true,
+      displayName: 'Boss Stage 8-Bit Theme',
+      durationSec: 96,
+      trimStartSec: 0,
+      trimEndSec: 96,
+      loopGapMs: 0,
+      fadeOutMs: 800,
+    };
+
+    const adminWriteAudioAllowed = evaluateSystemAudioConfigRule({
+      action: 'create',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: ADMIN_EMAIL,
+      requestTimeMs,
+      incoming: activeCatalogConfig,
+    });
+    const modWriteAudioDenied = evaluateSystemAudioConfigRule({
+      action: 'create',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: 'mod@gmail.com',
+      requestTimeMs,
+      incoming: activeCatalogConfig,
+    });
+    const playerReadAudioAllowed = evaluateSystemAudioConfigRule({
+      action: 'get',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: 'player@gmail.com',
+    });
+
+    const section6AdminAudioSyncOk =
+      storagePathCheck.valid === true &&
+      storagePathCheck.isStorageCatalogPath === true &&
+      invalidTraversalCheck.valid === false &&
+      adminWriteAudioAllowed === true &&
+      modWriteAudioDenied === false &&
+      playerReadAudioAllowed === true;
+
+    const passed =
+      section2DiagOk &&
+      section3UnifiedLayoutOk &&
+      section4AudioResetOk &&
+      section6AdminAudioSyncOk;
+
+    results.push({
+      id: 'M7_3_T64',
+      name: 'T64: M7.3.11.6 – Chẩn đoán quyền Tài khoản, Đồng nhất khung Cài đặt (max-w-4xl), Khôi phục âm thanh mặc định & Đồng bộ âm thanh Admin thời gian thực',
+      passed,
+      details: `diagOk=${section2DiagOk}, unifiedModal=${section3UnifiedLayoutOk} (${UNIFIED_SETTINGS_MODAL_WIDTH_CLASS}), audioReset=${section4AudioResetOk}, adminAudioRealtimeSync=${section6AdminAudioSyncOk}`,
     });
   }
 
