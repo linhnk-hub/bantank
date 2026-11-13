@@ -367,7 +367,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
             {/* 1. Chọn độ khó */}
             <div className="space-y-2">
               <label className="block text-xs font-extrabold uppercase tracking-wider text-amber-300">
-                1. Chọn Độ Khó Phòng Chơi
+                1. Chọn độ khó
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <button
@@ -421,7 +421,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
             {/* 2. Cấu hình mật khẩu phòng */}
             <div className="space-y-2.5">
               <label className="block text-xs font-extrabold uppercase tracking-wider text-sky-300">
-                2. Chế Độ Bảo Mật Phòng
+                2. Chế độ bảo mật phòng
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {/* Mặc định: Có mật khẩu */}
@@ -531,7 +531,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     A. VÀO NHANH
                   </h3>
                   <p className="text-xs text-neutral-300 leading-relaxed">
-                    Tự động tìm và vào ngay phòng công khai (Không mật khẩu) đang ở trạng thái chờ và mới có 1 người chơi (P1).
+                    Tự động tìm và vào ngay phòng công khai (không mật khẩu) đang ở trạng thái chờ.
                   </p>
 
                   {quickJoinEmptyMsg && (
@@ -561,7 +561,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                   ) : (
                     <Zap className="w-4 h-4" />
                   )}
-                  <span>VÀO NHANH NGAY</span>
+                  <span>VÀO NGAY</span>
                 </button>
               </div>
 
@@ -576,7 +576,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                       <LogIn className="w-5 h-5" />
                     </div>
                     <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-sky-950 text-sky-300 border border-sky-500/30">
-                      Mã Phòng 6 Ký Tự
+                      Mã phòng 6 ký tự
                     </span>
                   </div>
                   <h3 className="text-base font-black uppercase tracking-wider text-white">
@@ -592,7 +592,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                       maxLength={6}
                       value={joinCodeInput}
                       onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-                      placeholder="NHẬP MÃ 6 KÝ TỰ (VD: TK2026)"
+                      placeholder="NHẬP MÃ 6 KÝ TỰ"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-neutral-700 focus:border-sky-400 focus:outline-none text-center font-mono text-sm font-black tracking-[0.25em] text-sky-300 uppercase placeholder:tracking-normal placeholder:font-sans placeholder:text-xs placeholder:text-neutral-600"
                     />
                   </div>
@@ -660,14 +660,14 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
 
   // Thông điệp trạng thái phòng chờ chính xác theo tiến trình thực tế (Sửa lỗi Hạng mục 6 - Mục VII.6.1 & VII.6.2)
   const lobbyStatusSummaryText = !bothPresent
-    ? 'Đang chờ người chơi thứ 2 tham gia phòng...'
+    ? 'Đang chờ P2 tham gia phòng...'
     : room.hostReady && room.guestReady
       ? 'Cả 2 người chơi đã Sẵn sàng! Chủ phòng (P1) có thể Bắt đầu trận đấu.'
       : room.hostReady && !room.guestReady
-        ? 'Người chơi 1 (Chủ phòng) đã Sẵn sàng — Đang chờ Người chơi 2 bấm Sẵn sàng.'
+        ? 'P1 (Chủ phòng) đã Sẵn sàng — Đang chờ P2 bấm Sẵn sàng.'
         : !room.hostReady && room.guestReady
-          ? 'Người chơi 2 (Đồng đội) đã Sẵn sàng — Đang chờ Chủ phòng (P1) bấm Sẵn sàng.'
-          : 'Người chơi 2 đã vào phòng (2/2)! Hãy nhấn Báo Sẵn Sàng để xuất kích.';
+          ? 'P2 (Đồng đội) đã Sẵn sàng — Đang chờ Chủ phòng (P1) bấm Sẵn sàng.'
+          : 'P2 đã vào phòng (2/2)! Hãy nhấn Báo Sẵn Sàng để xuất kích.';
 
   return (
     <div className="p-4 sm:p-5 rounded-2xl bg-neutral-900/95 border border-sky-500/40 space-y-4 shadow-2xl">
@@ -730,7 +730,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
         <div className="flex items-center gap-2 bg-neutral-950 border border-sky-500/40 rounded-xl px-3 py-1.5">
           <div>
             <div className="text-[9px] uppercase tracking-wider text-neutral-500 font-bold">
-              Mã Phòng (6 Ký Tự)
+              Mã phòng (6 ký tự)
             </div>
             <div className="font-mono text-base font-black tracking-[0.2em] text-sky-300">
               {room.roomCode}
@@ -740,7 +740,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
             type="button"
             onClick={handleCopyCode}
             className="p-2 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-300 transition-all cursor-pointer"
-            title="Sao chép mã phòng"
+            title="Copy mã phòng"
           >
             {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
           </button>
@@ -774,11 +774,11 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
             )}
             <span>
               {room.rtcConnectionState === 'CONNECTED'
-                ? 'Đã thiết lập kênh P2P trực tiếp (WebRTC DataChannel) – Sẵn sàng xuất kích!'
+                ? 'Đã kết nối máy chủ – Sẵn sàng vào trận!'
                 : room.rtcConnectionState === 'FAILED'
                   ? coopManager.getWebrtcErrorMessage() ||
-                    'Kết nối P2P trực tiếp (WebRTC) thất bại. Vui lòng thử kết nối lại hoặc rời phòng an toàn.'
-                  : 'Đang thiết lập kênh P2P trực tiếp (WebRTC DataChannel)...'}
+                    'Kết nối máy chủ thất bại. Vui lòng thử kết nối lại hoặc rời phòng.'
+                  : 'Đang kết nối máy chủ'}
             </span>
           </div>
           {room.rtcConnectionState === 'FAILED' && (
@@ -788,7 +788,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
               disabled={isBusy}
               className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-black text-[11px] uppercase tracking-wider shrink-0 cursor-pointer"
             >
-              Thử Kết Nối Lại P2P
+              Kết nối lại
             </button>
           )}
         </div>
@@ -804,7 +804,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
             </div>
             <div className="min-w-0">
               <div className="text-[10px] font-black uppercase tracking-wider text-amber-400">
-                Người Chơi 1 (Chủ Phòng)
+                P1 (Chủ phòng)
               </div>
               <div
                 className={`mt-0.5 inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-900 text-xs font-bold text-white truncate max-w-[165px] ${hostFrameClasses}`}
@@ -820,7 +820,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                 : 'bg-neutral-900 text-neutral-400 border-neutral-700'
             }`}
           >
-            {room.hostReady ? 'Đã Sẵn Sàng' : 'Chưa Sẵn Sàng'}
+            {room.hostReady ? 'Đã sẵn sàng' : 'Chưa sẵn sàng'}
           </span>
         </div>
 
@@ -838,7 +838,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                 </div>
                 <div className="min-w-0">
                   <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
-                    Người Chơi 2 (Đồng Đội)
+                    P2 (Đồng đội)
                   </div>
                   <div
                     className={`mt-0.5 inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-900 text-xs font-bold text-white truncate max-w-[165px] ${guestFrameClasses}`}
@@ -854,13 +854,13 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     : 'bg-neutral-900 text-neutral-400 border-neutral-700'
                 }`}
               >
-                {room.guestReady ? 'Đã Sẵn Sàng' : 'Chưa Sẵn Sàng'}
+                {room.guestReady ? 'Đã sẵn sàng' : 'Chưa sẵn sàng'}
               </span>
             </>
           ) : (
             <div className="flex items-center gap-2.5 text-neutral-500 py-1">
               <Loader2 className="w-4 h-4 animate-spin text-sky-400" />
-              <span className="text-xs">Đang chờ Người chơi 2 tham gia phòng...</span>
+              <span className="text-xs">Đang chờ P2 tham gia phòng...</span>
             </div>
           )}
         </div>
@@ -875,7 +875,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
           className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs transition-all cursor-pointer"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Rời Phòng</span>
+          <span>Rời phòng</span>
         </button>
 
         <div className="flex items-center gap-2.5">
@@ -890,7 +890,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
             }`}
           >
             <ShieldCheck className="w-4 h-4" />
-            <span>{myReady ? 'Hủy Sẵn Sàng' : 'Báo Sẵn Sàng'}</span>
+            <span>{myReady ? 'Hủy sẵn sàng' : 'Sẵn sàng'}</span>
           </button>
 
           {role === 'HOST' && (
@@ -901,7 +901,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
               className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-yellow-400 to-amber-500 hover:from-amber-400 hover:to-yellow-300 text-black font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-lg transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
             >
               <Play className="w-4 h-4 fill-black" />
-              <span>Bắt Đầu Trận Online</span>
+              <span>Vào trận</span>
             </button>
           )}
         </div>

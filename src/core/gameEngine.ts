@@ -345,7 +345,6 @@ export class GameEngine {
         this.state.isGameOver = true;
         this.state.isStageClear = false;
         this.state.isTimeoutGameOver = false;
-        this.state.gameOverReason = 'Cả hai người chơi đều hết mạng! Game Over.';
         this.state.matchState = MATCH_STATES.GAME_OVER;
         this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
       }
@@ -1448,7 +1447,6 @@ export class GameEngine {
       this.state.isGameOver = true;
       this.state.isStageClear = false;
       this.state.isTimeoutGameOver = false;
-      this.state.gameOverReason = 'Căn cứ đã bị phá hủy! Game Over.';
       this.state.matchState = MATCH_STATES.GAME_OVER;
       this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
     } else if (!hasLivingPlayer) {
@@ -1456,9 +1454,6 @@ export class GameEngine {
       this.state.isGameOver = true;
       this.state.isStageClear = false;
       this.state.isTimeoutGameOver = false;
-      this.state.gameOverReason = this.isCoopMode()
-        ? 'Cả hai người chơi đều hết mạng! Game Over.'
-        : 'P1 hết mạng! Game Over.';
       this.state.matchState = MATCH_STATES.GAME_OVER;
       this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
     } else if (
@@ -1479,7 +1474,6 @@ export class GameEngine {
       this.state.isGameOver = true;
       this.state.isStageClear = false;
       this.state.isTimeoutGameOver = true;
-      this.state.gameOverReason = 'Hết thời gian chiến đấu! Game Over.';
       this.state.matchState = MATCH_STATES.GAME_OVER;
       this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
     }

@@ -903,7 +903,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <form onSubmit={handleSaveDisplayName} className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
                   <label className="block text-xs font-semibold text-neutral-300 mb-1">
-                    Tên hiển thị người chơi
+                    Đổi Nickname
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -911,7 +911,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       maxLength={32}
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="Nhập biệt danh (tối đa 32 ký tự)"
+                      placeholder="(tối đa 32 ký tự)"
                       className="flex-1 px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 text-white text-xs focus:outline-none focus:border-amber-500"
                     />
                     <button
@@ -927,7 +927,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                 <div>
                   <label className="block text-xs font-semibold text-neutral-300 mb-1">
-                    Email tài khoản Google (Chỉ đọc)
+                    Email
                   </label>
                   <div className="relative">
                     <input
