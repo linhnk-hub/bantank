@@ -13,9 +13,11 @@ import type { GameCoreState } from '../core/types.ts';
 
 interface PhaserGameProps {
   mode: 'inspector' | 'battle';
+  // Props for Milestone 1 inspector
   showGrid?: boolean;
   showCoords?: boolean;
   onTileHover?: (info: SceneTileHoverInfo | null) => void;
+  // Props for Milestone 2 battle
   engine?: GameEngine;
   onStateUpdate?: (state: GameCoreState) => void;
   onFpsUpdate?: (fps: number) => void;
@@ -73,8 +75,8 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       parent: containerRef.current,
       width: MAP_DIMENSIONS.TOTAL_WIDTH_PX,
       height: MAP_DIMENSIONS.TOTAL_HEIGHT_PX,
-      backgroundColor: '#050508',
-      pixelArt: true,
+      backgroundColor: '#000000',
+      pixelArt: true, // Crisp retro nearest-neighbor pixel rendering
       roundPixels: true,
       scale: {
         mode: Phaser.Scale.FIT,
@@ -90,6 +92,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     const game = new Phaser.Game(config);
     gameRef.current = game;
 
+    // Handle tab visibility change for simulation pausing
     const handleVisibility = () => {
       const isVisible = document.visibilityState === 'visible';
       if (mode === 'battle' && battleSceneRef.current) {
@@ -107,42 +110,49 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     };
   }, [mode, engine]);
 
+  // Sync grid overlay toggle (Inspector mode)
   useEffect(() => {
     if (stageSceneRef.current && showGrid !== undefined) {
       stageSceneRef.current.toggleGrid(showGrid);
     }
   }, [showGrid]);
 
+  // Sync coords overlay toggle (Inspector mode)
   useEffect(() => {
     if (stageSceneRef.current && showCoords !== undefined) {
       stageSceneRef.current.toggleCoords(showCoords);
     }
   }, [showCoords]);
 
+  // Sync hover callback (Inspector mode)
   useEffect(() => {
     if (stageSceneRef.current && onTileHover) {
       stageSceneRef.current.setTileHoverCallback(onTileHover);
     }
   }, [onTileHover]);
 
+  // Sync state callback (Battle mode)
   useEffect(() => {
     if (battleSceneRef.current && onStateUpdate) {
       battleSceneRef.current.setStateCallback(onStateUpdate);
     }
   }, [onStateUpdate]);
 
+  // Sync fps callback (Battle mode)
   useEffect(() => {
     if (battleSceneRef.current && onFpsUpdate) {
       battleSceneRef.current.setFpsCallback(onFpsUpdate);
     }
   }, [onFpsUpdate]);
 
+  // Sync FPS Limit setting (30 FPS vs 60 FPS)
   useEffect(() => {
     if (battleSceneRef.current && fpsLimit !== undefined) {
       battleSceneRef.current.setFpsLimit(fpsLimit);
     }
   }, [fpsLimit]);
 
+  // Instantly recalculate & refresh Phaser scale on canvasSizePx or orientation update
   useEffect(() => {
     if (gameRef.current) {
       gameRef.current.scale.resize(MAP_DIMENSIONS.TOTAL_WIDTH_PX, MAP_DIMENSIONS.TOTAL_HEIGHT_PX);
@@ -152,9 +162,10 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
 
   return (
     <div className="relative flex items-start justify-center w-full h-full select-none overflow-hidden p-0 m-0">
+      {/* Crisp pixel scaling container: strictly aspect-square 1:1, 1px thin border, no rounded-corner clipping */}
       <div
         ref={containerRef}
-        className="game-canvas-container aspect-square pixel-corners border-4 border-neo-amber shadow-[0_0_20px_rgba(255,184,0,0.5)] overflow-hidden bg-black flex items-start justify-center shrink-0 p-0 m-0 relative z-10"
+        className="game-canvas-container aspect-square rounded-none sm:rounded-sm border border-neutral-800/90 shadow-2xl overflow-hidden bg-black flex items-start justify-center shrink-0 p-0 m-0"
         style={{
           boxSizing: 'content-box',
           width: canvasSizePx ? `${canvasSizePx}px` : '100%',
