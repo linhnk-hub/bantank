@@ -12,12 +12,7 @@ export const TestHarnessJoystickPanel: React.FC = () => {
   const [isRunning, setIsRunning] = useState<boolean>(false);
 
   const handleRunAll = () => {
-    setIsRunning(true);
-    setTimeout(() => {
-      const res = runAllJoystickTests();
-      setResults(res);
-      setIsRunning(false);
-    }, 100);
+    setIsRunning(true); setTimeout(() => { setResults(runAllJoystickTests()); setIsRunning(false); }, 100);
   };
 
   const passCount = results.filter((r) => r.passed).length;
@@ -25,72 +20,41 @@ export const TestHarnessJoystickPanel: React.FC = () => {
   const allPassed = passCount === totalCount;
 
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 shadow-xl flex flex-col gap-4 text-xs select-none">
-      <div className="flex items-center justify-between pb-3 border-b border-neutral-800">
-        <div className="flex items-center gap-2">
-          <Gamepad2 className="w-4 h-4 text-amber-400" />
-          <h2 className="text-sm font-bold text-white">
-            Kiểm toán Joystick Ảo, PC Scale & Game Over Scroll (6 Tests)
-          </h2>
-          <span
-            className={`px-2 py-0.5 rounded text-[11px] font-bold ${
-              allPassed
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
-                : 'bg-red-500/20 text-red-400'
-            }`}
-          >
-            {passCount}/{totalCount} PASS
-          </span>
+    <div className="bg-black border-4 border-neo-cyan pixel-corners p-6 shadow-[0_0_20px_rgba(0,240,255,0.3)] flex flex-col gap-6 font-display text-white">
+      <div className="flex items-center justify-between pb-4 border-b-2 border-neo-cyan">
+        <div className="flex items-center gap-4">
+          <div className="w-12 h-12 bg-neo-cyan/20 border-2 border-neo-cyan flex items-center justify-center text-neo-cyan pixel-corners"><Gamepad2 className="w-6 h-6" /></div>
+          <div>
+            <h2 className="font-pixel text-3xl text-neo-cyan uppercase">JOYSTICK & PC SCALE AUDIT</h2>
+            <span className={`inline-block mt-2 px-3 py-1 font-pixel text-xl border-2 pixel-corners ${allPassed ? 'bg-green-900/40 text-green-400 border-green-500' : 'bg-neo-rose/20 text-neo-rose border-neo-rose'}`}>
+              {passCount}/{totalCount} PASS
+            </span>
+          </div>
         </div>
 
-        <button
-          type="button"
-          onClick={handleRunAll}
-          disabled={isRunning}
-          className="flex items-center gap-1.5 px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold active:scale-95 transition-all shadow"
-        >
-          <Play className="w-3.5 h-3.5 fill-black" />
-          <span>{isRunning ? 'Đang chạy...' : 'Chạy lại 6 Tests'}</span>
+        <button type="button" onClick={handleRunAll} disabled={isRunning} className="btn-arcade-outline px-6 py-3 flex items-center gap-2">
+          <Play className="w-5 h-5" /> {isRunning ? 'RUNNING...' : 'EXECUTE 6 TESTS'}
         </button>
       </div>
 
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-4">
         {results.map((r) => (
-          <div
-            key={r.id}
-            className={`p-3 rounded-lg border transition-all ${
-              r.passed
-                ? 'bg-neutral-950/70 border-emerald-900/40 hover:border-emerald-700/60'
-                : 'bg-red-950/40 border-red-800/80'
-            }`}
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-2 font-mono">
-                <span className="font-bold text-amber-400">{r.id}</span>
-                <span className="text-neutral-200 font-sans font-semibold">{r.name}</span>
+          <div key={r.id} className={`p-4 border-2 pixel-corners transition-all ${r.passed ? 'bg-black border-gray-700 hover:border-green-500' : 'bg-neo-rose/20 border-neo-rose'}`}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-3">
+                <span className="font-pixel text-2xl text-neo-amber bg-gray-900 px-2 py-1 border border-gray-700 pixel-corners">{r.id}</span>
+                <span className="font-pixel text-xl text-white uppercase">{r.name}</span>
               </div>
-              <div className="flex items-center gap-1 font-bold">
-                {r.passed ? (
-                  <span className="flex items-center gap-1 text-emerald-400">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> PASS
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1 text-red-400">
-                    <XCircle className="w-3.5 h-3.5" /> FAIL
-                  </span>
-                )}
+              <div className="font-pixel text-2xl">
+                {r.passed ? <span className="text-green-400 flex items-center gap-2"><CheckCircle2 className="w-6 h-6" /> PASS</span> : <span className="text-neo-rose flex items-center gap-2"><XCircle className="w-6 h-6" /> FAIL</span>}
               </div>
             </div>
 
-            <p className="text-[11px] text-neutral-400 mb-2 leading-relaxed">{r.details}</p>
+            <p className="text-sm text-gray-400 mb-4">{r.details}</p>
 
-            <div className="bg-neutral-900/90 p-2 rounded text-[10px] font-mono space-y-1 border border-neutral-800">
-              <div className="text-neutral-400">
-                <strong className="text-neutral-300">Kỳ vọng:</strong> {r.expected}
-              </div>
-              <div className={r.passed ? 'text-emerald-400' : 'text-red-400'}>
-                <strong className="text-neutral-300">Thực tế:</strong> {r.actual}
-              </div>
+            <div className="bg-gray-900 p-3 border-2 border-gray-700 pixel-corners font-pixel text-lg space-y-2">
+              <div className="text-gray-400">EXPECTED: <span className="text-white break-all">{r.expected}</span></div>
+              <div className={r.passed ? 'text-green-400' : 'text-neo-rose'}>ACTUAL: <span className="break-all">{r.actual}</span></div>
             </div>
           </div>
         ))}
