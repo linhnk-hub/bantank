@@ -1,35 +1,23 @@
 rules_version = '2';
 
 // ============================================================================
-// BẮN TANK ONLINE – FIREBASE STORAGE SECURITY RULES (M7.3.5.4)
+// BẮN TANK ONLINE – FIREBASE STORAGE SECURITY RULES (M7.3.11.5)
 // Project ID: bantank-bd525
 // Storage Bucket: bantank-bd525.firebasestorage.app
-// Super Admin duy nhất: linhnk.online@gmail.com
-//
-// Tài liệu đối chiếu:
-// https://firebase.google.com/docs/storage/security/core-syntax
-//
-// Phân quyền chi tiết theo phương thức chuẩn của Firebase Storage Security Rules:
-// - get    : Đọc 1 object cụ thể (chỉ Gmail cá nhân đã xác minh, đăng nhập qua Google).
-// - list   : Liệt kê danh sách object (if false - cấm list/listAll; danh mục đọc từ Firestore).
-// - create : Áp dụng cho ghi nội dung file qua uploadBytes / uploadBytesResumable (chỉ Super Admin,
-//            kèm điều kiện kiểm tra đường dẫn, kích thước 1 byte .. 5 MiB, contentType thuộc
-//            image/jpeg | image/png | image/webp và điều kiện resource == null && request.resource != null).
-//            Lưu ý kiểm toán (M7.3.5.4): Không tự kết luận điều kiện resource == null chắc chắn chặn
-//            uploadBytes lần thứ hai vào cùng một path khi chưa kiểm chứng trên môi trường Firebase
-//            thực tế và khi trạng thái Object Versioning của bucket là UNKNOWN.
-// - update : Áp dụng cho cập nhật metadata của file hiện có qua updateMetadata (if false - cấm tuyệt đối).
-//            Lưu ý kiểm toán (M7.3.5.4): allow update: if false chỉ chặn cập nhật metadata, KHÔNG được
-//            mô tả là biện pháp chắc chắn ngăn uploadBytes ghi đè nội dung file.
-//            Cơ chế chống ghi đè chính dựa trên cấp phát đường dẫn bất biến gắn UUID & version mới ở tầng
-//            ứng dụng: APP-LEVEL IMMUTABLE PATH – BEST EFFORT, NOT ABSOLUTE STORAGE ENFORCEMENT.
-// - delete : Xóa object hiện có (chỉ Super Admin, bắt buộc resource != null && request.resource == null).
+// Admin duy nhất: linhnk2013@gmail.com (Thay thế hoàn toàn linhnk.online@gmail.com)
 // ============================================================================
 service firebase.storage {
   match /b/{bucket}/o {
 
     function isSignedIn() {
       return request.auth != null && request.auth.uid != null;
+    }
+
+    function isValidId(id) {
+      return id is string
+        && id.size() >= 1
+        && id.size() <= 128
+        && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
     function hasGoogleSignInProvider() {
@@ -39,21 +27,35 @@ service firebase.storage {
     }
 
     function hasNoHostedDomainClaim() {
-      return !('firebase' in request.auth.token)
-        || !('sign_in_attributes' in request.auth.token.firebase)
-        || !('hd' in request.auth.token.firebase.sign_in_attributes);
+      return !('hd' in request.auth.token)
+        && (
+          !('firebase' in request.auth.token)
+          || !('sign_in_attributes' in request.auth.token.firebase)
+          || !('hd' in request.auth.token.firebase.sign_in_attributes)
+        );
     }
 
+    // M7.3.11.5 Section 2.1: Đồng bộ 100% điều kiện xác thực Gmail cá nhân giữa Firestore Rules và Storage Rules
     function isVerifiedPersonalGmail() {
       return isSignedIn()
+        && isValidId(request.auth.uid)
+        && ('email_verified' in request.auth.token)
         && request.auth.token.email_verified == true
+        && ('email' in request.auth.token)
         && request.auth.token.email is string
-        && request.auth.token.email.lower().matches('^[^@\\s]+@(gmail\\.com|googlemail\\.com)$')
+        && request.auth.token.email.size() >= 6
+        && request.auth.token.email.size() <= 254
+        && request.auth.token.email.lower().matches('^[a-z0-9._%+-]+@(gmail|googlemail)\\.com$')
         && hasGoogleSignInProvider()
-        && !('hd' in request.auth.token)
         && hasNoHostedDomainClaim();
     }
 
+    // M7.3.11.5 Section 2.1: Điều kiện xác thực ADMIN duy nhất (linhnk2013@gmail.com)
+    // - Email khớp chính xác linhnk2013@gmail.com
+    // - email_verified == true
+    // - Provider là google.com
+    // - UID hợp lệ từ Firebase Authentication token
+    // - Từ chối tuyệt đối email cũ linhnk.online@gmail.com
     function isAdmin() {
       return isVerifiedPersonalGmail()
         && request.auth.token.email.lower() == 'linhnk2013@gmail.com'
@@ -73,9 +75,6 @@ service firebase.storage {
         && fileName.matches('^[A-Za-z0-9._-]+\\.(jpg|jpeg|png|webp)$');
     }
 
-    // Kiểm tra điều kiện ghi nội dung file mới (allow create):
-    // - Yêu cầu resource == null (chỉ cho phép tạo khi chưa có object tại path) và request.resource != null.
-    // - Kích thước 1..5242880 bytes (<= 5 MiB) và contentType thuộc image/jpeg, image/png, image/webp.
     function isValidCatalogCreate(avatarId, versionSegment, fileName) {
       return isValidCatalogPath(avatarId, versionSegment, fileName)
         && resource == null
@@ -86,8 +85,6 @@ service firebase.storage {
         && request.resource.contentType.matches('^image/(jpeg|png|webp)$');
     }
 
-    // Kiểm tra điều kiện xóa object (allow delete):
-    // - Bắt buộc object đang tồn tại (resource != null) và request.resource == null.
     function isValidCatalogDelete(avatarId, versionSegment, fileName) {
       return isValidCatalogPath(avatarId, versionSegment, fileName)
         && resource != null
@@ -105,25 +102,23 @@ service firebase.storage {
       // 2. Liệt kê: cấm tuyệt đối (danh mục lấy từ Firestore /avatar_catalog)
       allow list: if false;
 
-      // 3. Upload nội dung file mới: chỉ Admin duy nhất, yêu cầu resource == null
+      // 3. Upload nội dung file mới: chỉ Admin duy nhất (linhnk2013@gmail.com), yêu cầu resource == null
       allow create: if isAdmin()
                     && isValidCatalogCreate(avatarId, versionSegment, fileName);
 
       // 4. Cập nhật metadata của file hiện có: cấm tuyệt đối
       allow update: if false;
 
-      // 5. Xóa: chỉ Admin duy nhất khi resource != null && request.resource == null
+      // 5. Xóa: chỉ Admin duy nhất (linhnk2013@gmail.com) khi resource != null && request.resource == null
       allow delete: if isAdmin()
                     && isValidCatalogDelete(avatarId, versionSegment, fileName);
     }
 
     // ------------------------------------------------------------------------
     // CHẶN MẶC ĐỊNH MỌI ĐƯỜNG DẪN KHÁC TRONG BUCKET
-    // (Không có match hoặc wildcard nào khác cấp quyền rộng hơn)
     // ------------------------------------------------------------------------
     match /{allPaths=**} {
       allow read, write: if false;
     }
   }
 }
-

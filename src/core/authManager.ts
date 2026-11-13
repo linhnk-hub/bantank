@@ -875,7 +875,14 @@ export class AuthManager {
         convertOtherLegacyAdminsToMod: true,
       });
 
-      if (!report.success) {
+      if (!report.success || report.isIdempotentNoOp) {
+        for (const act of report.actions) {
+          if (act.newRole === 'ADMIN' || act.newRole === 'MOD') {
+            setVerifiedServerRoleForUid(act.uid, act.newRole);
+          } else {
+            setVerifiedServerRoleForUid(act.uid, 'PLAYER');
+          }
+        }
         this.lastMigrationReport = report;
         return report;
       }
@@ -889,9 +896,8 @@ export class AuthManager {
             updatedAt: serverTimestamp(),
           });
           setVerifiedServerRoleForUid(act.uid, act.upsertedAdminDoc.role);
-        } else if (act.deleteAdminDoc) {
-          batch.delete(ref);
-          setVerifiedServerRoleForUid(act.uid, 'PLAYER');
+        } else {
+          setVerifiedServerRoleForUid(act.uid, act.newRole);
         }
         if (act.auditEntry) {
           const auditRef = doc(db, 'role_audit_logs', act.auditEntry.auditId);
@@ -1398,6 +1404,7 @@ export class AuthManager {
 
     // Chuẩn bị bản ghi Audit Log và kiểm tra tính hợp lệ trước khi commit nguyên tử
     const candidateAudit = buildRoleChangeAuditEntry({
+      actionType: params.newRole === 'MOD' ? 'GRANT_MOD' : 'REVOKE_TO_PLAYER',
       actorUid,
       actorEmail,
       targetUid: params.targetUid,
@@ -1512,6 +1519,7 @@ export class AuthManager {
     const normalizedTargetEmail = (params.targetEmail || '').trim().toLowerCase();
 
     const candidateAudit = buildRoleChangeAuditEntry({
+      actionType: params.newRole === 'MOD' ? 'GRANT_MOD' : 'REVOKE_TO_PLAYER',
       actorUid,
       actorEmail,
       targetUid: params.targetUid,
@@ -1545,22 +1553,20 @@ export class AuthManager {
       const adminRef = doc(db, 'admins', params.targetUid);
       const auditRef = doc(db, 'role_audit_logs', candidateAudit.auditId);
 
-      if (params.newRole === 'MOD') {
-        batch.set(adminRef, {
-          uid: params.targetUid,
-          email: normalizedTargetEmail,
-          displayName: safeDisplayName,
-          role: 'MOD',
-          isActive: true,
-          updatedBy: ADMIN_EMAIL,
-          updatedAt: serverTimestamp(),
-        });
-      } else {
-        batch.delete(adminRef);
-      }
+      batch.set(adminRef, {
+        uid: params.targetUid,
+        email: normalizedTargetEmail,
+        displayName: safeDisplayName,
+        role: params.newRole === 'MOD' ? 'MOD' : 'PLAYER',
+        isActive: params.newRole === 'MOD',
+        lastAuditId: candidateAudit.auditId,
+        updatedBy: ADMIN_EMAIL,
+        updatedAt: serverTimestamp(),
+      });
 
       batch.set(auditRef, {
         auditId: candidateAudit.auditId,
+        actionType: candidateAudit.actionType,
         actorUid: candidateAudit.actorUid,
         actorEmail: candidateAudit.actorEmail,
         targetUid: candidateAudit.targetUid,

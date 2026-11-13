@@ -24,6 +24,7 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  writeBatch,
   serverTimestamp,
   Timestamp,
 } from 'firebase/firestore';
@@ -807,10 +808,12 @@ async function main(): Promise<void> {
       'R17_ALLOW_SUPER_ADMIN_WRITE_ADMINS',
       17,
       'ALLOW',
-      'Admin duy nhất (linhnk2013@gmail.com) có quyền ghi /admins/{uid} để cấp quyền MOD',
-      'firestore.rules: match /admins/{uid} allow create, update, delete: if isAdmin()',
-      () =>
-        setDoc(doc(superAdminDb, 'admins', 'uid_host_1'), {
+      'Admin duy nhất (linhnk2013@gmail.com) có quyền ghi nguyên tử /admins/{uid} + /role_audit_logs/{logId} để cấp quyền MOD',
+      'firestore.rules: match /admins/{uid} & /role_audit_logs/{logId} allow create, update: if isAdmin() && hasMatchingAtomicRoleAuditLog()',
+      async () => {
+        const batch = writeBatch(superAdminDb);
+        const auditId = 'audit_r17_grant_mod_host1';
+        batch.set(doc(superAdminDb, 'admins', 'uid_host_1'), {
           uid: 'uid_host_1',
           email: 'host1@gmail.com',
           role: 'MOD',
@@ -818,15 +821,30 @@ async function main(): Promise<void> {
           grantedBy: 'linhnk2013@gmail.com',
           grantedAt: Timestamp.now(),
           updatedAt: Timestamp.now(),
-        })
+          lastAuditId: auditId,
+        });
+        batch.set(doc(superAdminDb, 'role_audit_logs', auditId), {
+          auditId,
+          actionType: 'GRANT_MOD',
+          actorUid: 'uid_super_admin',
+          actorEmail: 'linhnk2013@gmail.com',
+          targetUid: 'uid_host_1',
+          targetEmail: 'host1@gmail.com',
+          targetDisplayName: 'Host 1',
+          previousRole: 'PLAYER',
+          newRole: 'MOD',
+          timestampMs: Date.now(),
+        });
+        await batch.commit();
+      }
     );
 
     await checkRule(
       'R17_DENY_NON_SUPER_ADMIN_WRITE_ADMINS',
       17,
       'DENY',
-      'Người dùng thường không có quyền ghi /admins/{uid}',
-      'firestore.rules: match /admins/{uid} allow create, update, delete: if isSuperAdmin()',
+      'Người dùng thường không có quyền ghi/xóa /admins/{uid}',
+      'firestore.rules: match /admins/{uid} allow delete: if false',
       () =>
         deleteDoc(doc(hostDb, 'admins', 'uid_host_1'))
     );
@@ -1430,7 +1448,696 @@ async function main(): Promise<void> {
         'storage.rules: allow delete (resource != null && request.resource == null)',
         () => deleteObject(storageRef(superAdminStorage, 'avatar_catalog/tank_01/v1/gold.jpg'))
       );
+
+      // =======================================================================
+      // Nhóm 22: Kiểm thử Storage Emulator bổ sung cho M7.3.11.5 (Mục 6.2)
+      // =======================================================================
+      const oldAdminStorage = testEnv
+        .authenticatedContext('uid_old_admin_storage', {
+          email: 'linhnk.online@gmail.com',
+          email_verified: true,
+          firebase: { sign_in_provider: 'google.com' },
+        })
+        .storage();
+      const modStorage = testEnv
+        .authenticatedContext('uid_host_1', {
+          email: 'host1@gmail.com',
+          email_verified: true,
+          firebase: { sign_in_provider: 'google.com' },
+        })
+        .storage();
+      const unverifiedAdminStorage = testEnv
+        .authenticatedContext('uid_super_admin', {
+          email: 'linhnk2013@gmail.com',
+          email_verified: false,
+          firebase: { sign_in_provider: 'google.com' },
+        })
+        .storage();
+      const nonGoogleAdminStorage = testEnv
+        .authenticatedContext('uid_super_admin', {
+          email: 'linhnk2013@gmail.com',
+          email_verified: true,
+          firebase: { sign_in_provider: 'password' },
+        })
+        .storage();
+      const hdWorkspaceAdminStorage = testEnv
+        .authenticatedContext('uid_super_admin', {
+          email: 'linhnk2013@gmail.com',
+          email_verified: true,
+          hd: 'company.vn',
+          firebase: { sign_in_provider: 'google.com' },
+        })
+        .storage();
+
+      await checkRule(
+        'R22_01_DENY_OLD_ADMIN_STORAGE_UPLOAD',
+        22,
+        'DENY',
+        'M7.3.11.5 (6.2.5): Email quản trị cũ linhnk.online@gmail.com bị từ chối upload vào avatar_catalog',
+        'storage.rules: isAdmin() requires request.auth.token.email == "linhnk2013@gmail.com"',
+        () =>
+          uploadBytes(
+            storageRef(oldAdminStorage, 'avatar_catalog/tank_old/v1/old.png'),
+            samplePayload,
+            { contentType: 'image/png' }
+          )
+      );
+
+      await checkRule(
+        'R22_02_DENY_OLD_ADMIN_STORAGE_DELETE',
+        22,
+        'DENY',
+        'M7.3.11.5 (6.2.5): Email quản trị cũ linhnk.online@gmail.com bị từ chối xóa object trong avatar_catalog',
+        'storage.rules: allow delete -> isAdmin()',
+        () => deleteObject(storageRef(oldAdminStorage, 'avatar_catalog/tank_01/v1/gold.png'))
+      );
+
+      await checkRule(
+        'R22_03_DENY_MOD_STORAGE_UPLOAD',
+        22,
+        'DENY',
+        'M7.3.11.5 (6.2.6): MOD bị từ chối upload vào avatar_catalog',
+        'storage.rules: allow create -> isAdmin()',
+        () =>
+          uploadBytes(
+            storageRef(modStorage, 'avatar_catalog/tank_mod/v1/mod.png'),
+            samplePayload,
+            { contentType: 'image/png' }
+          )
+      );
+
+      await checkRule(
+        'R22_04_DENY_MOD_STORAGE_DELETE',
+        22,
+        'DENY',
+        'M7.3.11.5 (6.2.6): MOD bị từ chối xóa object trong avatar_catalog',
+        'storage.rules: allow delete -> isAdmin()',
+        () => deleteObject(storageRef(modStorage, 'avatar_catalog/tank_01/v1/gold.png'))
+      );
+
+      await checkRule(
+        'R22_05_DENY_UNVERIFIED_ADMIN_STORAGE_UPLOAD',
+        22,
+        'DENY',
+        'M7.3.11.5 (6.2.7): linhnk2013@gmail.com nhưng email_verified == false bị từ chối upload Storage',
+        'storage.rules: isVerifiedPersonalGmail() -> email_verified == true',
+        () =>
+          uploadBytes(
+            storageRef(unverifiedAdminStorage, 'avatar_catalog/tank_unv/v1/unv.png'),
+            samplePayload,
+            { contentType: 'image/png' }
+          )
+      );
+
+      await checkRule(
+        'R22_06_DENY_NON_GOOGLE_ADMIN_STORAGE_UPLOAD',
+        22,
+        'DENY',
+        'M7.3.11.5 (6.2.7): linhnk2013@gmail.com nhưng provider != google.com bị từ chối upload Storage',
+        'storage.rules: hasGoogleSignInProvider()',
+        () =>
+          uploadBytes(
+            storageRef(nonGoogleAdminStorage, 'avatar_catalog/tank_pw/v1/pw.png'),
+            samplePayload,
+            { contentType: 'image/png' }
+          )
+      );
+
+      await checkRule(
+        'R22_07_DENY_HD_CLAIM_ADMIN_STORAGE_UPLOAD',
+        22,
+        'DENY',
+        'M7.3.11.5 (6.2.7): linhnk2013@gmail.com nhưng có claim hd (Workspace) bị từ chối upload Storage',
+        'storage.rules: hasNoHostedDomainClaim()',
+        () =>
+          uploadBytes(
+            storageRef(hdWorkspaceAdminStorage, 'avatar_catalog/tank_hd/v1/hd.png'),
+            samplePayload,
+            { contentType: 'image/png' }
+          )
+      );
     }
+
+    // =========================================================================
+    // Nhóm 21: Kiểm thử toàn diện M7.3.11.5 trên Firestore Emulator (Mục 2, 3, 4, 5, 6.1)
+    // =========================================================================
+    const oldAdminDb = testEnv
+      .authenticatedContext('uid_old_admin_99', {
+        email: 'linhnk.online@gmail.com',
+        email_verified: true,
+        firebase: { sign_in_provider: 'google.com' },
+      })
+      .firestore();
+    const lookalikeEmailDb = testEnv
+      .authenticatedContext('uid_lookalike_admin', {
+        email: 'linhnk2013@gmail.com.vn',
+        email_verified: true,
+        firebase: { sign_in_provider: 'google.com' },
+      })
+      .firestore();
+    const unverifiedAdminDb = testEnv
+      .authenticatedContext('uid_super_admin', {
+        email: 'linhnk2013@gmail.com',
+        email_verified: false,
+        firebase: { sign_in_provider: 'google.com' },
+      })
+      .firestore();
+    const nonGoogleProviderAdminDb = testEnv
+      .authenticatedContext('uid_super_admin', {
+        email: 'linhnk2013@gmail.com',
+        email_verified: true,
+        firebase: { sign_in_provider: 'password' },
+      })
+      .firestore();
+    const hdWorkspaceAdminDb = testEnv
+      .authenticatedContext('uid_super_admin', {
+        email: 'linhnk2013@gmail.com',
+        email_verified: true,
+        hd: 'workspace.org',
+        firebase: { sign_in_provider: 'google.com' },
+      })
+      .firestore();
+    const modStaffDb = testEnv
+      .authenticatedContext('uid_mod_staff_21', {
+        email: 'mod21@gmail.com',
+        email_verified: true,
+        firebase: { sign_in_provider: 'google.com' },
+      })
+      .firestore();
+
+    // 6.1.1 & Mục 3.1: ADMIN (linhnk2013@gmail.com) tự bootstrap nguyên tử /admins/{adminUid} + /role_audit_logs/{logId} -> ALLOW
+    await checkRule(
+      'R21_01_ALLOW_SOLE_ADMIN_ATOMIC_BOOTSTRAP',
+      21,
+      'ALLOW',
+      'M7.3.11.5 (6.1.1 & 3.1): linhnk2013@gmail.com tự bootstrap nguyên tử /admins/uid_super_admin + BOOTSTRAP_SOLE_ADMIN Audit Log',
+      'firestore.rules: isValidSoleAdminBootstrapWrite & isValidRoleAuditLogDoc(BOOTSTRAP_SOLE_ADMIN)',
+      async () => {
+        const batch = writeBatch(superAdminDb);
+        const auditId = 'audit_boot_sole_admin_21';
+        batch.set(doc(superAdminDb, 'admins', 'uid_super_admin'), {
+          uid: 'uid_super_admin',
+          email: 'linhnk2013@gmail.com',
+          role: 'ADMIN',
+          isActive: true,
+          grantedBy: 'linhnk2013@gmail.com',
+          grantedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          lastAuditId: auditId,
+        });
+        batch.set(doc(superAdminDb, 'role_audit_logs', auditId), {
+          auditId,
+          actionType: 'BOOTSTRAP_SOLE_ADMIN',
+          actorUid: 'uid_super_admin',
+          actorEmail: 'linhnk2013@gmail.com',
+          targetUid: 'uid_super_admin',
+          targetEmail: 'linhnk2013@gmail.com',
+          targetDisplayName: 'Linh NK 2013 (Sole Admin)',
+          previousRole: 'PLAYER',
+          newRole: 'ADMIN',
+          timestampMs: Date.now(),
+        });
+        await batch.commit();
+      }
+    );
+
+    // 6.1.1b (Mục 3.3): Chặn chạy lại BOOTSTRAP_SOLE_ADMIN khi /admins/uid_super_admin đã active (chống spam ghi lặp)
+    await checkRule(
+      'R21_02_DENY_DUPLICATE_SOLE_ADMIN_BOOTSTRAP_WHEN_ALREADY_ACTIVE',
+      21,
+      'DENY',
+      'M7.3.11.5 (3.3): Chặn ghi lặp BOOTSTRAP_SOLE_ADMIN khi hồ sơ /admins/uid_super_admin đã ở trạng thái role=ADMIN, isActive=true',
+      'firestore.rules: isValidSoleAdminBootstrapWrite requires !exists || !(existing.role == ADMIN && existing.isActive == true)',
+      async () => {
+        const batch = writeBatch(superAdminDb);
+        const dupAuditId = 'audit_boot_dup_blocked_21';
+        batch.set(doc(superAdminDb, 'admins', 'uid_super_admin'), {
+          uid: 'uid_super_admin',
+          email: 'linhnk2013@gmail.com',
+          role: 'ADMIN',
+          isActive: true,
+          grantedBy: 'linhnk2013@gmail.com',
+          grantedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          lastAuditId: dupAuditId,
+        });
+        batch.set(doc(superAdminDb, 'role_audit_logs', dupAuditId), {
+          auditId: dupAuditId,
+          actionType: 'BOOTSTRAP_SOLE_ADMIN',
+          actorUid: 'uid_super_admin',
+          actorEmail: 'linhnk2013@gmail.com',
+          targetUid: 'uid_super_admin',
+          targetEmail: 'linhnk2013@gmail.com',
+          targetDisplayName: 'Linh NK 2013 (Duplicate)',
+          previousRole: 'PLAYER',
+          newRole: 'ADMIN',
+          timestampMs: Date.now(),
+        });
+        await batch.commit();
+      }
+    );
+
+    // 6.1.3 & 6.1.4: ADMIN cấp quyền MOD (GRANT_MOD) và thu hồi quyền MOD về PLAYER (REVOKE_TO_PLAYER) kèm Audit Log nguyên tử -> ALLOW
+    await checkRule(
+      'R21_03_ALLOW_ADMIN_ATOMIC_GRANT_MOD',
+      21,
+      'ALLOW',
+      'M7.3.11.5 (6.1.3): ADMIN cấp quyền MOD nguyên tử kèm Audit Log hợp lệ',
+      'firestore.rules: isValidModOrPlayerRoleWrite & hasMatchingAtomicRoleAuditLog',
+      async () => {
+        const batch = writeBatch(superAdminDb);
+        const auditId = 'audit_21_grant_mod_staff';
+        batch.set(doc(superAdminDb, 'admins', 'uid_mod_staff_21'), {
+          uid: 'uid_mod_staff_21',
+          email: 'mod21@gmail.com',
+          role: 'MOD',
+          isActive: true,
+          grantedBy: 'linhnk2013@gmail.com',
+          grantedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          lastAuditId: auditId,
+        });
+        batch.set(doc(superAdminDb, 'role_audit_logs', auditId), {
+          auditId,
+          actionType: 'GRANT_MOD',
+          actorUid: 'uid_super_admin',
+          actorEmail: 'linhnk2013@gmail.com',
+          targetUid: 'uid_mod_staff_21',
+          targetEmail: 'mod21@gmail.com',
+          targetDisplayName: 'Mod Staff 21',
+          previousRole: 'PLAYER',
+          newRole: 'MOD',
+          timestampMs: Date.now(),
+        });
+        await batch.commit();
+      }
+    );
+
+    await checkRule(
+      'R21_04_ALLOW_ADMIN_ATOMIC_REVOKE_MOD_TO_PLAYER',
+      21,
+      'ALLOW',
+      'M7.3.11.5 (6.1.4): ADMIN thu hồi quyền MOD về PLAYER (isActive: false) nguyên tử kèm Audit Log',
+      'firestore.rules: isValidModOrPlayerRoleWrite (role == PLAYER && isActive == false)',
+      async () => {
+        const batch = writeBatch(superAdminDb);
+        const auditId = 'audit_21_revoke_mod_staff';
+        batch.set(doc(superAdminDb, 'admins', 'uid_mod_staff_21'), {
+          uid: 'uid_mod_staff_21',
+          email: 'mod21@gmail.com',
+          role: 'PLAYER',
+          isActive: false,
+          grantedBy: 'linhnk2013@gmail.com',
+          grantedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          lastAuditId: auditId,
+        });
+        batch.set(doc(superAdminDb, 'role_audit_logs', auditId), {
+          auditId,
+          actionType: 'REVOKE_TO_PLAYER',
+          actorUid: 'uid_super_admin',
+          actorEmail: 'linhnk2013@gmail.com',
+          targetUid: 'uid_mod_staff_21',
+          targetEmail: 'mod21@gmail.com',
+          targetDisplayName: 'Mod Staff 21',
+          previousRole: 'MOD',
+          newRole: 'PLAYER',
+          timestampMs: Date.now(),
+        });
+        await batch.commit();
+      }
+    );
+
+    // Cấp lại MOD cho uid_mod_staff_21 để kiểm thử quyền đọc/ghi của MOD ở bước 6.1.11 - 6.1.12
+    await checkRule(
+      'R21_04B_REGRANT_MOD_FOR_MOD_TESTS',
+      21,
+      'ALLOW',
+      'M7.3.11.5: ADMIN cấp lại quyền MOD cho uid_mod_staff_21 kèm Audit Log mới',
+      'firestore.rules: isValidModOrPlayerRoleWrite',
+      async () => {
+        const batch = writeBatch(superAdminDb);
+        const auditId = 'audit_21_regrant_mod_staff';
+        batch.set(doc(superAdminDb, 'admins', 'uid_mod_staff_21'), {
+          uid: 'uid_mod_staff_21',
+          email: 'mod21@gmail.com',
+          role: 'MOD',
+          isActive: true,
+          grantedBy: 'linhnk2013@gmail.com',
+          grantedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          lastAuditId: auditId,
+        });
+        batch.set(doc(superAdminDb, 'role_audit_logs', auditId), {
+          auditId,
+          actionType: 'GRANT_MOD',
+          actorUid: 'uid_super_admin',
+          actorEmail: 'linhnk2013@gmail.com',
+          targetUid: 'uid_mod_staff_21',
+          targetEmail: 'mod21@gmail.com',
+          targetDisplayName: 'Mod Staff 21',
+          previousRole: 'PLAYER',
+          newRole: 'MOD',
+          timestampMs: Date.now(),
+        });
+        await batch.commit();
+      }
+    );
+
+    // 6.1.5: Ghi /admins/{uid} nhưng thiếu Audit Log trong batch hoặc Audit Log sai nội dung -> DENY
+    await checkRule(
+      'R21_05A_DENY_ADMIN_WRITE_WITHOUT_AUDIT_LOG',
+      21,
+      'DENY',
+      'M7.3.11.5 (6.1.5): Chặn ADMIN ghi /admins/{uid} đơn lẻ không có Audit Log trong cùng writeBatch',
+      'firestore.rules: hasMatchingAtomicRoleAuditLog -> existsAfter(/role_audit_logs/$(lastAuditId))',
+      () =>
+        setDoc(doc(superAdminDb, 'admins', 'uid_no_audit_target'), {
+          uid: 'uid_no_audit_target',
+          email: 'noaudit@gmail.com',
+          role: 'MOD',
+          isActive: true,
+          grantedBy: 'linhnk2013@gmail.com',
+          grantedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          lastAuditId: 'audit_missing_doc_999',
+        })
+    );
+
+    await checkRule(
+      'R21_05B_DENY_ADMIN_WRITE_WITH_MISMATCHED_AUDIT_LOG',
+      21,
+      'DENY',
+      'M7.3.11.5 (6.1.5): Chặn writeBatch khi role trong /admins/{uid} (MOD) lệch với newRole trong /role_audit_logs/{logId} (PLAYER)',
+      'firestore.rules: getAfter(/role_audit_logs/$(lastAuditId)).data.newRole == data.role',
+      async () => {
+        const batch = writeBatch(superAdminDb);
+        const auditId = 'audit_mismatch_role_21';
+        batch.set(doc(superAdminDb, 'admins', 'uid_mismatch_target'), {
+          uid: 'uid_mismatch_target',
+          email: 'mismatch@gmail.com',
+          role: 'MOD',
+          isActive: true,
+          grantedBy: 'linhnk2013@gmail.com',
+          grantedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          lastAuditId: auditId,
+        });
+        batch.set(doc(superAdminDb, 'role_audit_logs', auditId), {
+          auditId,
+          actionType: 'REVOKE_TO_PLAYER',
+          actorUid: 'uid_super_admin',
+          actorEmail: 'linhnk2013@gmail.com',
+          targetUid: 'uid_mismatch_target',
+          targetEmail: 'mismatch@gmail.com',
+          targetDisplayName: 'Mismatch Target',
+          previousRole: 'MOD',
+          newRole: 'PLAYER',
+          timestampMs: Date.now(),
+        });
+        await batch.commit();
+      }
+    );
+
+    await checkRule(
+      'R21_05C_DENY_STANDALONE_AUDIT_LOG_WITHOUT_ADMIN_DOC_WRITE',
+      21,
+      'DENY',
+      'M7.3.11.5 (3.2): Chặn ghi đơn lẻ /role_audit_logs/{logId} mà không cập nhật /admins/{targetUid} tương ứng',
+      'firestore.rules: isValidRoleAuditLogDoc -> getAfter(/admins/$(targetUid)).data.lastAuditId == logId',
+      () =>
+        setDoc(doc(superAdminDb, 'role_audit_logs', 'audit_standalone_fake_21'), {
+          auditId: 'audit_standalone_fake_21',
+          actionType: 'GRANT_MOD',
+          actorUid: 'uid_super_admin',
+          actorEmail: 'linhnk2013@gmail.com',
+          targetUid: 'uid_mod_staff_21',
+          targetEmail: 'mod21@gmail.com',
+          targetDisplayName: 'Mod Staff 21',
+          previousRole: 'PLAYER',
+          newRole: 'MOD',
+          timestampMs: Date.now(),
+        })
+    );
+
+    // 6.1.6: Cố tạo ADMIN thứ hai -> DENY; cố delete trực tiếp /admins/{uid} -> DENY
+    await checkRule(
+      'R21_06A_DENY_CREATING_SECOND_ADMIN',
+      21,
+      'DENY',
+      'M7.3.11.5 (6.1.6): Chặn tuyệt đối việc tạo ADMIN thứ hai cho UID/email khác kể cả khi người gọi là linhnk2013@gmail.com',
+      'firestore.rules: isValidSoleAdminBootstrapWrite requires uid == request.auth.uid && email == linhnk2013@gmail.com',
+      async () => {
+        const batch = writeBatch(superAdminDb);
+        const auditId = 'audit_illegal_second_admin';
+        batch.set(doc(superAdminDb, 'admins', 'uid_second_admin_illegal'), {
+          uid: 'uid_second_admin_illegal',
+          email: 'secondadmin@gmail.com',
+          role: 'ADMIN',
+          isActive: true,
+          grantedBy: 'linhnk2013@gmail.com',
+          grantedAt: Timestamp.now(),
+          updatedAt: Timestamp.now(),
+          lastAuditId: auditId,
+        });
+        batch.set(doc(superAdminDb, 'role_audit_logs', auditId), {
+          auditId,
+          actionType: 'BOOTSTRAP_SOLE_ADMIN',
+          actorUid: 'uid_super_admin',
+          actorEmail: 'linhnk2013@gmail.com',
+          targetUid: 'uid_second_admin_illegal',
+          targetEmail: 'secondadmin@gmail.com',
+          targetDisplayName: 'Illegal Second Admin',
+          previousRole: 'PLAYER',
+          newRole: 'ADMIN',
+          timestampMs: Date.now(),
+        });
+        await batch.commit();
+      }
+    );
+
+    await checkRule(
+      'R21_06B_DENY_DIRECT_DELETE_ON_ADMINS_COLLECTION',
+      21,
+      'DENY',
+      'M7.3.11.5 (2.2): Chặn delete trực tiếp tài liệu /admins/{uid} từ client kể cả với ADMIN (bắt buộc thu hồi qua isActive: false + Audit Log)',
+      'firestore.rules: match /admins/{uid} allow delete: if false',
+      () => deleteDoc(doc(superAdminDb, 'admins', 'uid_mod_staff_21'))
+    );
+
+    // 6.1.7, 6.1.8, 6.1.9, 6.1.10: Kiểm tra từ chối email cũ, email gần giống, chưa xác minh, sai provider, có claim hd
+    await checkRule(
+      'R21_07_DENY_OLD_ADMIN_EMAIL_WRITE',
+      21,
+      'DENY',
+      'M7.3.11.5 (6.1.7): Email quản trị cũ linhnk.online@gmail.com bị từ chối hoàn toàn quyền ADMIN',
+      'firestore.rules: isAdmin() requires email == "linhnk2013@gmail.com"',
+      () => setDoc(doc(oldAdminDb, 'system_config', 'audio'), validSystemAudioPayload)
+    );
+
+    await checkRule(
+      'R21_08_DENY_LOOKALIKE_ADMIN_EMAIL_WRITE',
+      21,
+      'DENY',
+      'M7.3.11.5 (6.1.8): Email gần giống linhnk2013@gmail.com.vn bị từ chối quyền ADMIN',
+      'firestore.rules: isAdmin() & isVerifiedPersonalGmail()',
+      () => setDoc(doc(lookalikeEmailDb, 'system_config', 'audio'), validSystemAudioPayload)
+    );
+
+    await checkRule(
+      'R21_09_DENY_UNVERIFIED_ADMIN_EMAIL_WRITE',
+      21,
+      'DENY',
+      'M7.3.11.5 (6.1.9): linhnk2013@gmail.com nhưng email_verified == false bị từ chối quyền ADMIN',
+      'firestore.rules: isVerifiedPersonalGmail() requires email_verified == true',
+      () => setDoc(doc(unverifiedAdminDb, 'system_config', 'audio'), validSystemAudioPayload)
+    );
+
+    await checkRule(
+      'R21_10A_DENY_NON_GOOGLE_PROVIDER_ADMIN_WRITE',
+      21,
+      'DENY',
+      'M7.3.11.5 (6.1.10): linhnk2013@gmail.com nhưng sign_in_provider != google.com bị từ chối quyền ADMIN',
+      'firestore.rules: hasGoogleSignInProvider()',
+      () => setDoc(doc(nonGoogleProviderAdminDb, 'system_config', 'audio'), validSystemAudioPayload)
+    );
+
+    await checkRule(
+      'R21_10B_DENY_HD_WORKSPACE_CLAIM_ADMIN_WRITE',
+      21,
+      'DENY',
+      'M7.3.11.5 (2.1): linhnk2013@gmail.com nhưng có claim hd (Google Workspace) bị từ chối quyền ADMIN',
+      'firestore.rules: hasNoHostedDomainClaim()',
+      () => setDoc(doc(hdWorkspaceAdminDb, 'system_config', 'audio'), validSystemAudioPayload)
+    );
+
+    // 6.1.11 & 6.1.12 & Mục 4: Quyền đọc/ghi của MOD và cách ly thông tin nhạy cảm
+    await checkRule(
+      'R21_11_ALLOW_MOD_READ_USERS_ADMINS_AND_AUDIT_LOGS',
+      21,
+      'ALLOW',
+      'M7.3.11.5 (6.1.11 & Mục 4): MOD đang active đọc được /users/{uid}, /admins/{uid} và /role_audit_logs/{logId}',
+      'firestore.rules: isStaffModOrAdmin()',
+      async () => {
+        await getDoc(doc(modStaffDb, 'users', 'uid_guest_2'));
+        await getDoc(doc(modStaffDb, 'admins', 'uid_mod_staff_21'));
+        await getDoc(doc(modStaffDb, 'role_audit_logs', 'audit_boot_sole_admin_21'));
+      }
+    );
+
+    await checkRule(
+      'R21_12A_DENY_MOD_WRITE_SYSTEM_CONFIG_OR_AVATAR_CATALOG',
+      21,
+      'DENY',
+      'M7.3.11.5 (6.1.12): MOD bị từ chối ghi /system_config và /avatar_catalog',
+      'firestore.rules: match /system_config & /avatar_catalog allow write: if isAdmin()',
+      () => setDoc(doc(modStaffDb, 'system_config', 'audio'), validSystemAudioPayload)
+    );
+
+    await checkRule(
+      'R21_12B_DENY_MOD_READ_OTHER_USER_SESSION_DEVICE_INFO',
+      21,
+      'DENY',
+      'M7.3.11.5 (Mục 4): MOD bị từ chối đọc /user_sessions/{otherUid} (bảo vệ deviceId, sessionId, userAgentSummary của người chơi)',
+      'firestore.rules: match /user_sessions/{uid} allow get: if isOwner(uid)',
+      () => getDoc(doc(modStaffDb, 'user_sessions', sessionDocId))
+    );
+
+    // 6.1.13: PLAYER cố đọc dữ liệu quản trị hoặc đọc hồ sơ /users/{otherUid} của người chơi khác -> DENY
+    await checkRule(
+      'R21_13A_DENY_PLAYER_READ_OTHER_USER_PROFILE',
+      21,
+      'DENY',
+      'M7.3.11.5 (Mục 4 & 6.1.13): Người chơi thường (uid_third_3) bị chặn đọc /users/uid_guest_2 của người chơi khác',
+      'firestore.rules: match /users/{uid} allow get: if isOwner(uid) || isStaffModOrAdmin()',
+      () => getDoc(doc(thirdDb, 'users', 'uid_guest_2'))
+    );
+
+    await checkRule(
+      'R21_13B_DENY_PLAYER_READ_ADMINS_OR_AUDIT_LOGS',
+      21,
+      'DENY',
+      'M7.3.11.5 (6.1.13): Người chơi thường bị chặn đọc /admins và /role_audit_logs',
+      'firestore.rules: match /admins & /role_audit_logs allow get: if isStaffModOrAdmin()',
+      () => getDoc(doc(thirdDb, 'role_audit_logs', 'audit_boot_sole_admin_21'))
+    );
+
+    // 6.1.15 (Mục 5.3): Người chơi Gmail xác minh không thuộc phòng cố đọc /coop_rooms/{roomCode}/private/signaling -> DENY
+    await checkRule(
+      'R21_15_DENY_NON_MEMBER_READ_COOP_SIGNALING_IN_WAITING_ROOM',
+      21,
+      'DENY',
+      'M7.3.11.5 (5.3 & 6.1.15): Người chơi Gmail xác minh không phải Host/Guest của phòng bị từ chối đọc /coop_rooms/{roomCode}/private/signaling kể cả khi phòng đang WAITING',
+      'firestore.rules: match /coop_rooms/{roomCode}/private/{docId} allow get: if isRoomHost() || isJoinedRoomGuest()',
+      async () => {
+        await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
+          const bypassDb = adminCtx.firestore();
+          await setDoc(doc(bypassDb, 'coop_rooms', 'SIG530'), baseWaitingLobby('SIG530'));
+          await setDoc(doc(bypassDb, 'coop_rooms', 'SIG530', 'private', 'signaling'), baseSignaling('SIG530'));
+        });
+        await getDoc(doc(thirdDb, 'coop_rooms', 'SIG530', 'private', 'signaling'));
+      }
+    );
+
+    // 6.1.16 (Mục 5.1): Bảo vệ Stage 1 trong /system_config/stages_catalog
+    const officialStage1MapRows = {
+      r0: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      r1: [0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0],
+      r2: [0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0],
+      r3: [0, 1, 1, 0, 1, 1, 2, 1, 1, 0, 1, 1, 0],
+      r4: [0, 1, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1, 0],
+      r5: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      r6: [0, 1, 1, 0, 2, 0, 0, 0, 2, 0, 1, 1, 0],
+      r7: [0, 1, 1, 0, 2, 1, 1, 1, 2, 0, 1, 1, 0],
+      r8: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      r9: [1, 1, 0, 1, 1, 1, 0, 1, 1, 1, 0, 1, 1],
+      r10: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      r11: [0, 1, 1, 0, 1, 1, 1, 1, 1, 0, 1, 1, 0],
+      r12: [0, 1, 1, 0, 1, 1, 9, 1, 1, 0, 1, 1, 0],
+    };
+
+    await checkRule(
+      'R21_16A_ALLOW_ADMIN_WRITE_VALID_STAGE1_CATALOG',
+      21,
+      'ALLOW',
+      'M7.3.11.5 (5.1 & 6.1.16): ADMIN ghi /system_config/stages_catalog với stage1Map chuẩn 13x13 (1 BASE tại r12[6] và gạch bảo vệ Eagle)',
+      'firestore.rules: isValidSystemStagesCatalogConfig & isValidOfficialStage1Map',
+      () =>
+        setDoc(doc(superAdminDb, 'system_config', 'stages_catalog'), {
+          version: 1,
+          updatedAtMs: Date.now(),
+          updatedBy: 'linhnk2013@gmail.com',
+          stages: [],
+          stage1Map: officialStage1MapRows,
+        })
+    );
+
+    await checkRule(
+      'R21_16B_DENY_ADMIN_WRITE_CORRUPTED_STAGE1_CATALOG',
+      21,
+      'DENY',
+      'M7.3.11.5 (5.1 & 6.1.16): Chặn ghi /system_config/stages_catalog nếu stage1Map làm mất gạch bảo vệ Eagle hoặc sai vị trí BASE',
+      'firestore.rules: isValidOfficialStage1Map requires r12[5]==1 && r12[6]==9 && r12[7]==1',
+      () =>
+        setDoc(doc(superAdminDb, 'system_config', 'stages_catalog'), {
+          version: 2,
+          updatedAtMs: Date.now(),
+          updatedBy: 'linhnk2013@gmail.com',
+          stages: [],
+          stage1Map: {
+            ...officialStage1MapRows,
+            r12: [0, 1, 1, 0, 1, 0, 9, 0, 1, 0, 1, 1, 0],
+          },
+        })
+    );
+
+    // 6.1.17 (Mục 5.4): Session Lease Fail-Closed khi isActive == true nhưng lastActiveAt bị thiếu hoặc sai kiểu
+    await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
+      const bypassDb = adminCtx.firestore();
+      await setDoc(doc(bypassDb, 'user_sessions', 'uid_host_1'), {
+        uid: 'uid_host_1',
+        sessionId: 'sess_corrupted_lease_token_123',
+        deviceId: device1,
+        isActive: true,
+        userAgentSummary: 'Chrome Corrupted Lease',
+        loginAt: Timestamp.now(),
+        lastActiveAt: null,
+      });
+    });
+
+    await checkRule(
+      'R21_17A_DENY_SECOND_DEVICE_HIJACK_WHEN_LAST_ACTIVE_AT_NULL',
+      21,
+      'DENY',
+      'M7.3.11.5 (5.4 & 6.1.17): Fail-Closed – Thiết bị thứ 2 bị từ chối chiếm quyền khi phiên đang isActive == true nhưng lastActiveAt bị null/hỏng',
+      'firestore.rules: isExistingSessionConfirmedExpiredOrInactive()',
+      () =>
+        updateDoc(doc(hostDb, 'user_sessions', 'uid_host_1'), {
+          sessionId: 'sess_hijack_attempt_device2_999',
+          deviceId: device2,
+          isActive: true,
+          userAgentSummary: 'Intruder Device 2',
+          loginAt: serverTimestamp(),
+          lastActiveAt: serverTimestamp(),
+        })
+    );
+
+    await checkRule(
+      'R21_17B_ALLOW_SAME_DEVICE_RECOVER_OWN_CORRUPTED_LEASE',
+      21,
+      'ALLOW',
+      'M7.3.11.5 (5.4): Cùng thiết bị (device1) được phép khôi phục lại phiên của chính mình khi lastActiveAt bị null/hỏng',
+      'firestore.rules: isNewSessionAcquisitionAction -> incoming().deviceId == existing().deviceId',
+      () =>
+        updateDoc(doc(hostDb, 'user_sessions', 'uid_host_1'), {
+          sessionId: 'sess_recovered_same_device1_888',
+          deviceId: device1,
+          isActive: true,
+          userAgentSummary: 'Chrome Recovered',
+          loginAt: serverTimestamp(),
+          lastActiveAt: serverTimestamp(),
+        })
+    );
   } finally {
     await testEnv.cleanup();
   }

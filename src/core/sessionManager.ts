@@ -544,21 +544,25 @@ export class SessionManager {
 
         if (snap.exists()) {
           const existing = snap.data() as SessionDocument;
-          const existingLastActiveMs =
-            typeof existing.lastActiveAt?.toMillis === 'function'
-              ? existing.lastActiveAt.toMillis()
-              : typeof existing.lastActiveAt === 'number'
-                ? existing.lastActiveAt
-                : 0;
-          const isHeldByAnotherActiveDevice =
+          const hasValidTimestampObj =
+            existing.lastActiveAt != null &&
+            typeof existing.lastActiveAt === 'object' &&
+            typeof existing.lastActiveAt.toMillis === 'function';
+          const rawMillis = hasValidTimestampObj ? existing.lastActiveAt.toMillis() : NaN;
+          const isValidTimestampMs =
+            typeof rawMillis === 'number' && Number.isFinite(rawMillis) && rawMillis > 0;
+          const isConfirmedInactive = existing.isActive === false;
+          const isConfirmedExpired =
             existing.isActive === true &&
-            existing.deviceId !== this.deviceId &&
-            (existingLastActiveMs === 0 ||
-              Date.now() - existingLastActiveMs <= SESSION_TIMINGS.IDLE_TIMEOUT_MS);
+            isValidTimestampMs &&
+            Date.now() - rawMillis > SESSION_TIMINGS.IDLE_TIMEOUT_MS;
+          // M7.3.11.5 Section 5.4: Fail-Closed nếu isActive == true nhưng lastActiveAt thiếu, null hoặc sai kiểu
+          const isHeldByAnotherActiveDevice =
+            existing.deviceId !== this.deviceId && !(isConfirmedInactive || isConfirmedExpired);
 
           // M7.3.11.1 Section I (First-Active-Session Wins):
-          // If Device A holds an active session lease (<= 900s), Device B MUST be rejected immediately
-          // and MUST NOT overwrite Device A's session document or displace Device A!
+          // If Device A holds an active session lease (<= 900s) or timestamp is corrupted while active,
+          // Device B MUST be rejected immediately and MUST NOT overwrite Device A's session document!
           if (isHeldByAnotherActiveDevice) {
             const err: any = new Error('SESSION_HELD_BY_ACTIVE_DEVICE');
             err.code = 'permission-denied';
@@ -1195,13 +1199,23 @@ export class SessionManager {
       };
     }
 
-    const isExistingStillActive =
+    const rawLastActiveMs = (existingServerLease as any).lastActiveAtMs;
+    const isValidLastActiveMs =
+      typeof rawLastActiveMs === 'number' &&
+      Number.isFinite(rawLastActiveMs) &&
+      rawLastActiveMs > 0;
+    const isConfirmedInactive = existingServerLease.isActive === false;
+    const isConfirmedExpired =
       existingServerLease.isActive === true &&
-      serverNowMs <= existingServerLease.lastActiveAtMs + SESSION_TIMINGS.IDLE_TIMEOUT_MS;
+      isValidLastActiveMs &&
+      serverNowMs > rawLastActiveMs + SESSION_TIMINGS.IDLE_TIMEOUT_MS;
+
+    // M7.3.11.5 Section 5.4: Fail-Closed nếu isActive === true nhưng lastActiveAtMs thiếu, null, <= 0, NaN hoặc sai kiểu
+    const isExistingStillActive = !(isConfirmedInactive || isConfirmedExpired);
 
     const isSameDevice = incomingAttempt.deviceId === existingServerLease.deviceId;
 
-    // 2. Nếu Thiết bị A đang có phiên hợp lệ và Thiết bị B khác deviceId thử đăng nhập:
+    // 2. Nếu Thiết bị A đang có phiên hợp lệ (hoặc Fail-Closed do timestamp lỗi khi isActive == true) và Thiết bị B khác deviceId thử đăng nhập:
     //    BỊ TỪ CHỐI! Thiết bị A vẫn giữ nguyên lease và trạng thái ACTIVE.
     if (isExistingStillActive && !isSameDevice) {
       return {
@@ -1209,8 +1223,9 @@ export class SessionManager {
         bStatusAfterAttempt: 'DISPLACED',
         aStatusOnServer: 'ACTIVE',
         resultingServerLease: { ...existingServerLease },
-        reasonVi:
-          'Từ chối Thiết bị B: Thiết bị A đang giữ phiên hoạt động hợp lệ (First-Active-Session Wins). Thiết bị A tiếp tục ACTIVE.',
+        reasonVi: !isValidLastActiveMs
+          ? 'Fail-Closed (M7.3.11.5 Section 5.4): Phiên hiện tại có isActive == true nhưng lastActiveAt thiếu hoặc không hợp lệ; từ chối Thiết bị B chiếm lease.'
+          : 'Từ chối Thiết bị B: Thiết bị A đang giữ phiên hoạt động hợp lệ (First-Active-Session Wins). Thiết bị A tiếp tục ACTIVE.',
       };
     }
 

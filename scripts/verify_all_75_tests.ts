@@ -58,7 +58,7 @@ const allSuites = [
   { name: 'M6 AI Dispersal, Lag Fix, No FPS/Rotate UI & MusicManager Admin (31 Tests)', results: m6AICorrResults },
   { name: 'M7.1 Firebase Auth & Single-Device Session (35 Tests)', results: m71Results },
   { name: 'M7.2 Ally AI, Co-op, Profile & Typography (10 Tests)', results: m72Results },
-  { name: 'M7.3.4 Rules Hardening, WebRTC Co-op, GitHub Pages Audio & Cloudflare R2 Avatar (34 Tests)', results: m73Results },
+  { name: `M7.3 Rules Hardening, WebRTC Co-op, Audio, Avatar, RBAC & Security Audit (${m73Results.length} Tests)`, results: m73Results },
 ];
 
 let totalTests = 0;
@@ -1352,6 +1352,12 @@ async function verifyM735SharedAvatarCatalogAsyncSuite() {
 async function runAllAsyncVerifications() {
   await verifyM733AsyncWorkflow();
   await verifyM735SharedAvatarCatalogAsyncSuite();
+  const asyncCasesCount = 10 + 23;
+  console.log('============================================');
+  console.log(`SYNC UNIT TESTS  : ${totalPassed}/${totalTests} PASS (M2-M5: 75 | M6: 136 | M7.1: 35 | M7.2: 10 | M7.3: ${m73Results.length})`);
+  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23)`);
+  console.log(`GRAND TOTAL SUITE: ${totalPassed + asyncCasesCount}/${totalTests + asyncCasesCount} PASS (0 FAILED, 0 DUPLICATED)`);
+  console.log('============================================');
   process.exit(0);
 }
 

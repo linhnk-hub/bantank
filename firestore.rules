@@ -11,7 +11,7 @@ service cloud.firestore {
     // 1. Primitive Helpers & Personal Gmail Verification
     // =========================================================================
     function isSignedIn() {
-      return request.auth != null;
+      return request.auth != null && request.auth.uid != null;
     }
 
     function isValidId(id) {
@@ -36,89 +36,129 @@ service cloud.firestore {
       return resource.data;
     }
 
-    // Xác thực phía máy chủ:
-    // - Phải đăng nhập qua Google ('google.com')
-    // - Email đã xác minh (email_verified == true)
-    // - Email kết thúc chính xác bằng @gmail.com hoặc @googlemail.com
-    // - Không chứa claim 'hd' (Hosted Domain của Google Workspace)
+    function hasGoogleSignInProvider() {
+      return ('firebase' in request.auth.token)
+        && ('sign_in_provider' in request.auth.token.firebase)
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+
+    function hasNoHostedDomainClaim() {
+      return !('hd' in request.auth.token)
+        && (
+          !('firebase' in request.auth.token)
+          || !('sign_in_attributes' in request.auth.token.firebase)
+          || !('hd' in request.auth.token.firebase.sign_in_attributes)
+        );
+    }
+
+    // M7.3.11.5 Section 2.1: Đồng bộ 100% điều kiện xác thực Gmail cá nhân giữa Firestore Rules và Storage Rules
     function isVerifiedPersonalGmail() {
       return isSignedIn()
+        && isValidId(request.auth.uid)
+        && ('email_verified' in request.auth.token)
         && request.auth.token.email_verified == true
-        && request.auth.token.firebase.sign_in_provider == 'google.com'
+        && ('email' in request.auth.token)
         && request.auth.token.email is string
+        && request.auth.token.email.size() >= 6
         && request.auth.token.email.size() <= 254
-        && request.auth.token.email.matches('^[a-zA-Z0-9._%+-]+@(gmail|googlemail)\\.com$')
-        && !('hd' in request.auth.token);
+        && request.auth.token.email.lower().matches('^[a-z0-9._%+-]+@(gmail|googlemail)\\.com$')
+        && hasGoogleSignInProvider()
+        && hasNoHostedDomainClaim();
     }
 
     function isOwner(uid) {
       return isVerifiedPersonalGmail() && request.auth.uid == uid;
     }
 
-    // M7.3.11.4: Chỉ định ADMIN chính thức và duy nhất của hệ thống (linhnk2013@gmail.com).
-    // Thay thế hoàn toàn cấp SUPER_ADMIN và mô hình ADMIN cũ; thu hồi vĩnh viễn linhnk.online@gmail.com.
-    // Xác thực phía máy chủ kết hợp:
-    // 1. Token Google cá nhân đã xác minh (email_verified == true, sign_in_provider == 'google.com')
-    // 2. UID hợp lệ (isValidId(request.auth.uid))
-    // 3. Email khớp chính xác 'linhnk2013@gmail.com' và khác 'linhnk.online@gmail.com'
-    // 4. Nếu tài liệu /admins/$(request.auth.uid) đã được liên kết, bắt buộc role == 'ADMIN', isActive == true và uid khớp request.auth.uid.
+    // M7.3.11.5 Section 2.1: Xác thực ADMIN duy nhất (linhnk2013@gmail.com)
+    // - Email khớp chính xác linhnk2013@gmail.com
+    // - email_verified == true
+    // - Provider là google.com
+    // - UID hợp lệ từ Firebase Authentication token
+    // - Từ chối tuyệt đối email cũ linhnk.online@gmail.com
+    // - Nếu tài liệu /admins/$(request.auth.uid) đã tồn tại, bắt buộc role == 'ADMIN', isActive == true, uid == request.auth.uid và email == 'linhnk2013@gmail.com'.
     function isAdmin() {
       return isVerifiedPersonalGmail()
-        && isValidId(request.auth.uid)
-        && (
-          request.auth.token.email == 'linhnk2013@gmail.com'
-          || request.auth.token.email.lower() == 'linhnk2013@gmail.com'
-        )
+        && request.auth.token.email.lower() == 'linhnk2013@gmail.com'
         && request.auth.token.email.lower() != 'linhnk.online@gmail.com'
         && (
-          !exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-          || (
-            ('role' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
-            && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'ADMIN'
-            && ('isActive' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
-            && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive is bool
-            && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive == true
-            && (
-              !('uid' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
-              || get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.uid == request.auth.uid
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+            ? (
+              ('role' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'ADMIN'
+              && ('isActive' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive is bool
+              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive == true
+              && ('uid' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.uid == request.auth.uid
+              && ('email' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.email is string
+              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.email.lower() == 'linhnk2013@gmail.com'
             )
-          )
+            : true
         );
     }
 
-    // M7.3.11.4: Nguồn dữ liệu vai trò điều hành viên (MOD) chính thức duy nhất là /admins/{uid}.
+    // M7.3.11.5: Nguồn dữ liệu vai trò điều hành viên (MOD) chính thức duy nhất là /admins/{uid}.
     // Tuyệt đối KHÔNG đọc trường 'role' từ /users/{uid} để xét quyền.
     // Chính sách Fail-Closed nghiêm ngặt:
     // - Bắt buộc tài liệu /admins/$(request.auth.uid) phải tồn tại.
-    // - Bắt buộc có trường 'role' == 'MOD' (các bản ghi 'ADMIN' cũ của tài khoản khác không bao giờ được nhận quyền ADMIN hay MOD tự động khi chưa chuẩn hóa).
-    // - Bắt buộc có trường 'isActive' kiểu bool và giá trị bằng true.
+    // - Bắt buộc có trường 'uid' == request.auth.uid, 'role' == 'MOD', 'isActive' == true.
     function isActiveStaffModRecord() {
       return isVerifiedPersonalGmail()
-        && isValidId(request.auth.uid)
         && request.auth.token.email.lower() != 'linhnk2013@gmail.com'
         && request.auth.token.email.lower() != 'linhnk.online@gmail.com'
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-        && ('role' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
-        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'MOD'
-        && ('isActive' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
-        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive is bool
-        && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive == true
         && (
-          !('uid' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
-          || get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.uid == request.auth.uid
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+            ? (
+              ('uid' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.uid == request.auth.uid
+              && ('role' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'MOD'
+              && ('isActive' in get(/databases/$(database)/documents/admins/$(request.auth.uid)).data)
+              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive is bool
+              && get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.isActive == true
+            )
+            : false
         );
     }
 
-    // M7.3.11.4: Quyền đọc danh sách tài khoản & nhật ký phân quyền cho ADMIN duy nhất hoặc MOD hợp lệ.
-    // MOD chỉ đi qua hàm này (chỉ dùng tại allow get/list), tuyệt đối không được thừa hưởng quyền ghi của isAdmin().
     function isStaffModOrAdmin() {
       return isAdmin() || isActiveStaffModRecord();
     }
 
     // Kiểm tra phiên hiện tại có còn hiệu lực trong vòng 900 giây (15 phút) theo giờ máy chủ hay không
     function isExistingSessionStillActive() {
-      return existing().isActive == true
-        && request.time <= existing().lastActiveAt + duration.value(900, 's');
+      return ('isActive' in existing())
+        && existing().isActive is bool
+        && existing().isActive == true
+        && ('lastActiveAt' in existing())
+        && (
+          existing().lastActiveAt is timestamp
+            ? request.time <= existing().lastActiveAt + duration.value(900, 's')
+            : false
+        );
+    }
+
+    // M7.3.11.5 Section 5.4: Kiểm tra Fail-Closed khi thiết bị mới xin tiếp quản Session Lease:
+    // - Nếu existing().isActive == true nhưng lastActiveAt bị thiếu, null hoặc sai kiểu (không phải timestamp),
+    //   hàm trả về FALSE (Fail-Closed) -> Thiết bị mới bị TỪ CHỐI chiếm lease!
+    // - Chỉ trả về TRUE khi phiên cũ đã xác nhận isActive == false HOẶC có lastActiveAt kiểu timestamp hợp lệ đã quá 900 giây.
+    function isExistingSessionConfirmedExpiredOrInactive() {
+      return ('isActive' in existing())
+        && existing().isActive is bool
+        && (
+          existing().isActive == false
+          || (
+            existing().isActive == true
+            && ('lastActiveAt' in existing())
+            && (
+              existing().lastActiveAt is timestamp
+                ? request.time > existing().lastActiveAt + duration.value(900, 's')
+                : false
+            )
+          )
+        );
     }
 
     // =========================================================================
@@ -165,7 +205,11 @@ service cloud.firestore {
     function isSameDeviceHeartbeatAction() {
       return existing().isActive == true
         && isExistingSessionStillActive()
-        && request.time >= existing().lastActiveAt + duration.value(120, 's')
+        && (
+          existing().lastActiveAt is timestamp
+            ? request.time >= existing().lastActiveAt + duration.value(120, 's')
+            : false
+        )
         && incoming().deviceId == existing().deviceId
         && incoming().sessionId == existing().sessionId
         && incoming().loginAt == existing().loginAt
@@ -195,7 +239,7 @@ service cloud.firestore {
     //   (b) Cùng chính thiết bị đó (incoming().deviceId == existing().deviceId) đăng nhập/khởi tạo lại phiên mới
     function isNewSessionAcquisitionAction() {
       return (
-          !isExistingSessionStillActive()
+          isExistingSessionConfirmedExpiredOrInactive()
           || incoming().deviceId == existing().deviceId
         )
         && incoming().isActive == true
@@ -242,39 +286,111 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 4. Collection Rules: /admins/{uid} (M7.3.11.4: Nguồn dữ liệu vai trò chính thức cho ADMIN duy nhất và MOD)
-    //    - Chỉ duy nhất ADMIN (linhnk2013@gmail.com) được quyền tạo, cập nhật, xóa.
-    //    - Khi uid == request.auth.uid (tài khoản ADMIN duy nhất liên kết UID của chính mình):
-    //      bắt buộc role == 'ADMIN' && isActive == true && email khớp 'linhnk2013@gmail.com'.
-    //    - Khi uid != request.auth.uid (cấp/cập nhật quyền điều hành viên cho tài khoản khác):
-    //      CHỈ cho phép role == 'MOD' (tuyệt đối CẤM cấp 'ADMIN' hoặc 'SUPER_ADMIN' cho bất kỳ tài khoản nào khác).
-    //    - Cho phép ADMIN xóa bản ghi /admins/{uid} của tài khoản khác (thu hồi quyền MOD hoặc thu hồi bản ghi ADMIN cũ).
+    // 4. Collection Rules: /admins/{uid} (M7.3.11.5 Section 2.2 & Section 3)
+    //    - Whitelist chặt chẽ các trường được phép ghi, kiểm tra kiểu dữ liệu và tính nhất quán giữa uid, email, role, isActive, lastAuditId.
+    //    - Bắt buộc đối chiếu nguyên tử 2 chiều với /role_audit_logs/$(incoming().lastAuditId) bằng getAfter() / existsAfter().
+    //    - Cấm xóa trực tiếp (allow delete: if false); thu hồi quyền phải cập nhật role == 'PLAYER', isActive == false kèm Audit Log nguyên tử.
     // =========================================================================
+    function isValidAdminDocSchema(data, uid) {
+      return isValidId(uid)
+        && data.keys().hasAll([
+          'uid',
+          'email',
+          'role',
+          'isActive',
+          'lastAuditId',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'email',
+          'displayName',
+          'role',
+          'isActive',
+          'lastAuditId',
+          'updatedBy',
+          'updatedAt',
+          'grantedBy',
+          'grantedAt'
+        ])
+        && data.uid is string
+        && data.uid == uid
+        && data.email is string
+        && data.email.size() >= 6
+        && data.email.size() <= 254
+        && data.email.lower().matches('^[a-z0-9._%+-]+@(gmail|googlemail)\\.com$')
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60))
+        && data.role in ['ADMIN', 'MOD', 'PLAYER']
+        && data.isActive is bool
+        && isValidId(data.lastAuditId)
+        && (('updatedBy' in data) || ('grantedBy' in data))
+        && (!('updatedBy' in data) || (data.updatedBy is string && data.updatedBy.lower() == 'linhnk2013@gmail.com'))
+        && (!('grantedBy' in data) || (data.grantedBy is string && data.grantedBy.lower() == 'linhnk2013@gmail.com'))
+        && data.updatedAt is timestamp
+        && (!('grantedAt' in data) || data.grantedAt is timestamp);
+    }
+
+    function hasMatchingAtomicRoleAuditLog(data, uid) {
+      return !exists(/databases/$(database)/documents/role_audit_logs/$(data.lastAuditId))
+        && (
+          existsAfter(/databases/$(database)/documents/role_audit_logs/$(data.lastAuditId))
+            ? (
+              getAfter(/databases/$(database)/documents/role_audit_logs/$(data.lastAuditId)).data.auditId == data.lastAuditId
+              && getAfter(/databases/$(database)/documents/role_audit_logs/$(data.lastAuditId)).data.actorUid == request.auth.uid
+              && getAfter(/databases/$(database)/documents/role_audit_logs/$(data.lastAuditId)).data.actorEmail.lower() == 'linhnk2013@gmail.com'
+              && getAfter(/databases/$(database)/documents/role_audit_logs/$(data.lastAuditId)).data.targetUid == uid
+              && getAfter(/databases/$(database)/documents/role_audit_logs/$(data.lastAuditId)).data.targetEmail.lower() == data.email.lower()
+              && getAfter(/databases/$(database)/documents/role_audit_logs/$(data.lastAuditId)).data.newRole == data.role
+            )
+            : false
+        );
+    }
+
+    function isValidSoleAdminBootstrapWrite(data, uid) {
+      return uid == request.auth.uid
+        && data.email.lower() == 'linhnk2013@gmail.com'
+        && data.role == 'ADMIN'
+        && data.isActive == true
+        && (
+          exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+            ? (resource.data.role != 'ADMIN' || resource.data.isActive != true)
+            : true
+        )
+        && (
+          existsAfter(/databases/$(database)/documents/role_audit_logs/$(data.lastAuditId))
+            ? getAfter(/databases/$(database)/documents/role_audit_logs/$(data.lastAuditId)).data.actionType == 'BOOTSTRAP_SOLE_ADMIN'
+            : false
+        );
+    }
+
+    function isValidModOrPlayerRoleWrite(data, uid) {
+      return uid != request.auth.uid
+        && data.email.lower() != 'linhnk2013@gmail.com'
+        && (
+          (
+            data.role == 'MOD'
+            && data.isActive == true
+            && data.email.lower() != 'linhnk.online@gmail.com'
+          )
+          ||
+          (
+            data.role == 'PLAYER'
+            && data.isActive == false
+          )
+        );
+    }
+
     match /admins/{uid} {
       allow get: if (isValidId(uid) && isOwner(uid)) || isStaffModOrAdmin();
       allow list: if isStaffModOrAdmin();
       allow create, update: if isAdmin()
-        && isValidId(uid)
-        && (!('uid' in incoming()) || incoming().uid == uid)
-        && (!('isActive' in incoming()) || incoming().isActive is bool)
+        && isValidAdminDocSchema(incoming(), uid)
+        && hasMatchingAtomicRoleAuditLog(incoming(), uid)
         && (
-          (
-            uid == request.auth.uid
-            && ('role' in incoming())
-            && incoming().role == 'ADMIN'
-            && ('isActive' in incoming())
-            && incoming().isActive == true
-            && (!('email' in incoming()) || incoming().email.lower() == 'linhnk2013@gmail.com')
-          )
-          ||
-          (
-            uid != request.auth.uid
-            && ('role' in incoming())
-            && incoming().role == 'MOD'
-            && (!('email' in incoming()) || (incoming().email.lower() != 'linhnk2013@gmail.com' && incoming().email.lower() != 'linhnk.online@gmail.com'))
-          )
+          isValidSoleAdminBootstrapWrite(incoming(), uid)
+          || isValidModOrPlayerRoleWrite(incoming(), uid)
         );
-      allow delete: if isAdmin() && isValidId(uid) && uid != request.auth.uid;
+      allow delete: if false;
     }
 
     // =========================================================================
@@ -465,9 +581,7 @@ service cloud.firestore {
     // - Bắt buộc kiểm tra quyền sở hữu hồ sơ theo đường dẫn tài liệu: uid == request.auth.uid.
     // - Không cho phép 'uid' xuất hiện trong affectedKeys().hasOnly(...).
     function isUserAvatarSelectionUpdate(uid) {
-      return isOwner(uid)
-        && uid == request.auth.uid
-        && isValidUserAvatarFields(incoming(), uid)
+      return isValidUserAvatarFields(incoming(), uid)
         && incoming().diff(existing()).affectedKeys().hasOnly([
           'avatarType',
           'avatarId',
@@ -475,33 +589,23 @@ service cloud.firestore {
         ]);
     }
 
-    // Nhánh cập nhật 2: Quyền chỉnh tên hiển thị displayName (tách biệt hoàn toàn khỏi quyền chọn avatar)
-    // - Bắt buộc kiểm tra quyền sở hữu hồ sơ theo đường dẫn tài liệu: uid == request.auth.uid.
-    // - Không cho phép 'uid' xuất hiện trong affectedKeys().hasOnly(...).
-    function isUserDisplayNameUpdate(uid) {
-      return isOwner(uid)
-        && uid == request.auth.uid
-        && isValidUserDisplayNameField(incoming())
+    function isUserDisplayNameUpdate() {
+      return isValidUserDisplayNameField(incoming())
         && incoming().diff(existing()).affectedKeys().hasOnly([
           'displayName'
         ]);
     }
 
-    // Nhánh cập nhật 3 (M7.3.11.2): Đồng bộ mốc đăng nhập gần nhất (lastLoginAt và bổ sung email xác thực nếu hồ sơ cũ chưa có email)
-    // - Tách biệt hoàn toàn khỏi avatar và displayName (không cho phép gộp chung).
-    // - Tuyệt đối không cho phép sửa email nếu đã tồn tại, và không cho phép sửa role, isSuperAdmin, xp, xu, rank, createdAt.
-    function isUserLoginMetadataUpdate(uid) {
-      return isOwner(uid)
-        && uid == request.auth.uid
-        && ('lastLoginAt' in incoming())
+    function isUserLoginMetadataUpdate() {
+      return ('lastLoginAt' in incoming())
         && incoming().lastLoginAt is timestamp
         && incoming().lastLoginAt == request.time
         && (
-          !('email' in incoming().diff(existing()).affectedKeys())
+          !('email' in incoming())
           || (
-            !('email' in existing())
-            && incoming().email is string
+            incoming().email is string
             && incoming().email.lower() == request.auth.token.email.lower()
+            && (!('email' in existing()) || incoming().email == existing().email)
           )
         )
         && incoming().diff(existing()).affectedKeys().hasOnly([
@@ -510,56 +614,31 @@ service cloud.firestore {
         ]);
     }
 
-    // Khi cập nhật tài liệu /users/{uid} đã tồn tại (kể cả hồ sơ cũ có hoặc không có trường 'uid', có xp, xu, rank, createdAt...):
-    // 1. Điều kiện sở hữu hồ sơ bắt buộc cho MỌI trường hợp (kể cả hồ sơ cũ chưa có trường 'uid'):
-    //    uid == request.auth.uid && isOwner(uid).
-    // 2. UID bất biến tuyệt đối:
-    //    - Nếu tài liệu cũ có trường 'uid': bắt buộc incoming().uid == existing().uid && incoming().uid == uid && incoming().uid == request.auth.uid.
-    //    - Nếu tài liệu cũ chưa có trường 'uid': không bắt buộc thêm 'uid' và không cho phép chèn 'uid' mới trong thao tác update
-    //      (!('uid' in incoming())), nhưng vẫn bắt buộc kiểm tra uid == request.auth.uid theo đường dẫn tài liệu.
-    //    - Không cho phép 'uid' xuất hiện trong incoming().diff(existing()).affectedKeys().
-    // 3. Ngăn xóa trường cũ: incoming().keys().hasAll(existing().keys()).
-    // 4. Ngăn sửa giá trị trường ngoài phạm vi cho phép: kết hợp !affectedKeys().hasAny([...])
-    //    và affectedKeys().hasOnly(['avatarType', 'avatarId', 'avatarUpdatedAt']) hoặc affectedKeys().hasOnly(['displayName'])
-    //    hoặc isUserLoginMetadataUpdate(uid).
     function isValidExistingUserUpdate(uid) {
-      return isOwner(uid)
-        && uid == request.auth.uid
+      return uid == request.auth.uid
         && (
           (
             ('uid' in existing())
             && ('uid' in incoming())
             && incoming().uid == existing().uid
             && incoming().uid == uid
-            && incoming().uid == request.auth.uid
           )
           ||
           (
             !('uid' in existing())
             && !('uid' in incoming())
-            && uid == request.auth.uid
           )
         )
         && incoming().keys().hasAll(existing().keys())
-        && !incoming().diff(existing()).affectedKeys().hasAny([
-          'uid',
-          'role',
-          'isAdmin',
-          'isSuperAdmin',
-          'xp',
-          'xu',
-          'rank',
-          'createdAt'
-        ])
         && (
           isUserAvatarSelectionUpdate(uid)
-          || isUserDisplayNameUpdate(uid)
-          || isUserLoginMetadataUpdate(uid)
+          || isUserDisplayNameUpdate()
+          || isUserLoginMetadataUpdate()
         );
     }
 
     match /users/{uid} {
-      allow get: if isValidId(uid) && isVerifiedPersonalGmail();
+      allow get: if isValidId(uid) && (isOwner(uid) || isStaffModOrAdmin());
       allow list: if isStaffModOrAdmin();
       allow create: if isValidId(uid)
         && isOwner(uid)
@@ -1034,7 +1113,7 @@ service cloud.firestore {
         allow get: if isVerifiedPersonalGmail()
           && roomCode.matches('^[A-Z0-9]{6}$')
           && docId == 'signaling'
-          && (isAdmin() || isRoomHost() || isJoinedRoomGuest());
+          && (isRoomHost() || isJoinedRoomGuest());
 
         allow list: if false;
 
@@ -1201,23 +1280,45 @@ service cloud.firestore {
         && (!('fadeOutMs' in data) || (data.fadeOutMs is int && data.fadeOutMs >= 0 && data.fadeOutMs <= 10000));
     }
 
-    // M7.3.11.4: Kiểm tra schema cho cấu hình danh mục Stage (/system_config/stages_catalog)
-    // - Chế độ Chơi thử (Trial Mode) luôn đọc trực tiếp STAGE_1_MAP tích hợp sẵn trong mã nguồn,
-    //   do đó /system_config/stages_catalog KHÔNG mở unauthenticated read và KHÔNG mở allow list.
-    // - Chỉ Admin duy nhất (linhnk2013@gmail.com) được phép tạo hoặc cập nhật.
+    // M7.3.11.5 Section 5.1: Kiểm tra bất biến cấu trúc Stage 1 (13x13, đúng 1 BASE tại [12,6], BRICK bảo vệ tại [12,5] và [12,7])
+    function isValidOfficialStage1Map(m) {
+      return m is map
+        && m.keys().hasAll(['r0','r1','r2','r3','r4','r5','r6','r7','r8','r9','r10','r11','r12'])
+        && m.keys().hasOnly(['r0','r1','r2','r3','r4','r5','r6','r7','r8','r9','r10','r11','r12'])
+        && m.r0 == [0,0,0,0,0,0,0,0,0,0,0,0,0]
+        && m.r1 == [0,1,1,0,1,1,0,1,1,0,1,1,0]
+        && m.r2 == [0,1,1,0,1,1,0,1,1,0,1,1,0]
+        && m.r3 == [0,1,1,0,1,1,2,1,1,0,1,1,0]
+        && m.r4 == [0,1,1,0,1,1,0,1,1,0,1,1,0]
+        && m.r5 == [0,0,0,0,0,0,0,0,0,0,0,0,0]
+        && m.r6 == [0,1,1,0,2,0,0,0,2,0,1,1,0]
+        && m.r7 == [0,1,1,0,2,1,1,1,2,0,1,1,0]
+        && m.r8 == [0,0,0,0,0,0,0,0,0,0,0,0,0]
+        && m.r9 == [1,1,0,1,1,1,0,1,1,1,0,1,1]
+        && m.r10 == [0,0,0,0,0,0,0,0,0,0,0,0,0]
+        && m.r11 == [0,1,1,0,1,1,1,1,1,0,1,1,0]
+        && m.r12 == [0,1,1,0,1,1,9,1,1,0,1,1,0]
+        && m.r12[6] == 9
+        && m.r12[5] == 1
+        && m.r12[7] == 1;
+    }
+
     function isValidSystemStagesCatalogConfig(data) {
       return data.keys().hasAll([
+          'stage1Map',
           'stages',
           'updatedAtMs',
           'updatedBy',
           'version'
         ])
         && data.keys().hasOnly([
+          'stage1Map',
           'stages',
           'updatedAtMs',
           'updatedBy',
           'version'
         ])
+        && isValidOfficialStage1Map(data.stage1Map)
         && data.stages is list
         && data.stages.size() <= 50
         && data.updatedAtMs is int
@@ -1245,16 +1346,12 @@ service cloud.firestore {
     }
 
     // =========================================================================
-    // 9. Collection Rules: /role_audit_logs/{logId} (M7.3.11.4: Nhật ký cấp/thu hồi quyền nguyên tử & bất biến)
-    //    - Chỉ Admin duy nhất (linhnk2013@gmail.com) được tạo bản ghi nhật ký khi thay đổi quyền.
-    //    - Kiểm tra chặt chẽ:
-    //      + auditId khớp tuyệt đối với document ID (logId)
-    //      + actorUid khớp request.auth.uid và actorEmail khớp 'linhnk2013@gmail.com'
-    //      + targetUid hợp lệ và khác actorUid; targetEmail khác 'linhnk2013@gmail.com'
-    //      + previousRole thuộc ['ADMIN', 'MOD', 'PLAYER'] (cho phép ghi nhật ký hạ cấp/thu hồi bản ghi ADMIN cũ về MOD/PLAYER)
-    //      + newRole chỉ thuộc ['MOD', 'PLAYER'] (tuyệt đối CẤM cấp thêm quyền ADMIN cho bất kỳ tài khoản nào khác)
-    //    - Admin duy nhất và Mod hợp lệ được đọc để đối soát minh bạch.
-    //    - Cấm tuyệt đối sửa hoặc xóa bản ghi nhật ký đã ghi (allow update, delete: if false).
+    // 9. Collection Rules: /role_audit_logs/{logId} (M7.3.11.5 Section 3)
+    //    - Hỗ trợ 2 nhánh kiểm toán nguyên tử gắn với getAfter(/admins/$(targetUid)):
+    //      (1) BOOTSTRAP_SOLE_ADMIN: Khởi tạo ADMIN duy nhất cho chính UID của linhnk2013@gmail.com (actorUid == targetUid == request.auth.uid, newRole == 'ADMIN').
+    //      (2) Cấp/thu hồi MOD cho tài khoản khác (targetUid != request.auth.uid, newRole in ['MOD', 'PLAYER']).
+    //    - Tuyệt đối không cho phép tạo ADMIN cho UID khác.
+    //    - Cấm sửa hoặc xóa audit log sau khi ghi (allow update, delete: if false).
     // =========================================================================
     function isValidRoleAuditLogDoc(data, logId) {
       return isValidId(logId)
@@ -1267,11 +1364,11 @@ service cloud.firestore {
           'targetDisplayName',
           'previousRole',
           'newRole',
-          'timestampMs',
-          'createdAt'
+          'timestampMs'
         ])
         && data.keys().hasOnly([
           'auditId',
+          'actionType',
           'actorUid',
           'actorEmail',
           'targetUid',
@@ -1288,20 +1385,44 @@ service cloud.firestore {
         && data.actorEmail.lower() == request.auth.token.email.lower()
         && data.actorEmail.lower() == 'linhnk2013@gmail.com'
         && isValidId(data.targetUid)
-        && data.targetUid != request.auth.uid
         && data.targetEmail is string
         && data.targetEmail.size() >= 6
         && data.targetEmail.size() <= 254
-        && data.targetEmail.lower() != 'linhnk2013@gmail.com'
         && data.targetDisplayName is string
         && data.targetDisplayName.size() >= 1
         && data.targetDisplayName.size() <= 60
-        && data.previousRole in ['ADMIN', 'MOD', 'PLAYER']
-        && data.newRole in ['MOD', 'PLAYER']
-        && data.previousRole != data.newRole
         && isValidClientMillisTimestamp(data.timestampMs)
-        && data.createdAt is timestamp
-        && data.createdAt == request.time;
+        && (!('createdAt' in data) || (data.createdAt is timestamp && data.createdAt == request.time))
+        && (
+          existsAfter(/databases/$(database)/documents/admins/$(data.targetUid))
+            ? (
+              getAfter(/databases/$(database)/documents/admins/$(data.targetUid)).data.uid == data.targetUid
+              && getAfter(/databases/$(database)/documents/admins/$(data.targetUid)).data.lastAuditId == logId
+              && getAfter(/databases/$(database)/documents/admins/$(data.targetUid)).data.role == data.newRole
+              && (
+                (
+                  ('actionType' in data)
+                  && data.actionType == 'BOOTSTRAP_SOLE_ADMIN'
+                  && data.targetUid == request.auth.uid
+                  && data.targetEmail.lower() == 'linhnk2013@gmail.com'
+                  && data.previousRole in ['PLAYER', 'ADMIN']
+                  && data.newRole == 'ADMIN'
+                  && getAfter(/databases/$(database)/documents/admins/$(data.targetUid)).data.isActive == true
+                )
+                ||
+                (
+                  (!('actionType' in data) || data.actionType in ['GRANT_MOD', 'REVOKE_TO_PLAYER', 'CONVERT_LEGACY_ADMIN_TO_MOD'])
+                  && data.targetUid != request.auth.uid
+                  && data.targetEmail.lower() != 'linhnk2013@gmail.com'
+                  && data.previousRole in ['ADMIN', 'MOD', 'PLAYER']
+                  && data.newRole in ['MOD', 'PLAYER']
+                  && data.previousRole != data.newRole
+                  && getAfter(/databases/$(database)/documents/admins/$(data.targetUid)).data.isActive == (data.newRole == 'MOD')
+                )
+              )
+            )
+            : false
+        );
     }
 
     match /role_audit_logs/{logId} {

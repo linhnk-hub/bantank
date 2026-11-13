@@ -8019,7 +8019,13 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       email: ADMIN_EMAIL,
       isVerifiedPersonalGmail: true,
       adminEmail: ADMIN_EMAIL,
-      adminDoc: { exists: true, role: 'ADMIN', isActive: true },
+      adminDoc: {
+        exists: true,
+        uid: 'uid_sole_admin_active',
+        email: ADMIN_EMAIL,
+        role: 'ADMIN',
+        isActive: true,
+      },
       userDoc: { role: 'PLAYER', isSuperAdmin: false },
     });
     const case1Ok =
@@ -8034,14 +8040,26 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       email: 'admin.other@bantank.online',
       isVerifiedPersonalGmail: true,
       adminEmail: ADMIN_EMAIL,
-      adminDoc: { exists: true, role: 'ADMIN', isActive: true },
+      adminDoc: {
+        exists: true,
+        uid: 'uid_admin_other_email',
+        email: 'admin.other@bantank.online',
+        role: 'ADMIN',
+        isActive: true,
+      },
     });
     const r2ModInactiveDenied = evaluateCanonicalStaffRoleFromDocs({
       uid: 'uid_mod_inactive',
       email: 'mod.inactive@bantank.online',
       isVerifiedPersonalGmail: true,
       adminEmail: ADMIN_EMAIL,
-      adminDoc: { exists: true, role: 'MOD', isActive: false },
+      adminDoc: {
+        exists: true,
+        uid: 'uid_mod_inactive',
+        email: 'mod.inactive@bantank.online',
+        role: 'MOD',
+        isActive: false,
+      },
     });
     const case2Ok =
       r2OtherAdminDocDenied.isStaffAdmin === false &&
@@ -8057,7 +8075,13 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       email: 'mod.active@bantank.online',
       isVerifiedPersonalGmail: true,
       adminEmail: ADMIN_EMAIL,
-      adminDoc: { exists: true, role: 'MOD', isActive: true },
+      adminDoc: {
+        exists: true,
+        uid: 'uid_mod_active',
+        email: 'mod.active@bantank.online',
+        role: 'MOD',
+        isActive: true,
+      },
     });
     const case3Ok =
       r3ModActive.isStaffAdmin === false &&
@@ -8354,7 +8378,13 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       email: soleAdminAuthUser.email,
       isVerifiedPersonalGmail: true,
       adminEmail: ADMIN_EMAIL,
-      adminDoc: { exists: true, role: 'ADMIN', isActive: true },
+      adminDoc: {
+        exists: true,
+        uid: soleAdminAuthUser.uid,
+        email: soleAdminAuthUser.email,
+        role: 'ADMIN',
+        isActive: true,
+      },
     });
     const tc1Pass =
       tc1Role === 'ADMIN' &&
@@ -8392,7 +8422,13 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       email: oldAdminAuthUser.email,
       isVerifiedPersonalGmail: true,
       adminEmail: ADMIN_EMAIL,
-      adminDoc: { exists: true, role: 'SUPER_ADMIN', isActive: true },
+      adminDoc: {
+        exists: true,
+        uid: oldAdminAuthUser.uid,
+        email: oldAdminAuthUser.email,
+        role: 'SUPER_ADMIN',
+        isActive: true,
+      },
       userDoc: { role: 'SUPER_ADMIN', isSuperAdmin: true },
     });
     const tc3Pass =
@@ -8413,7 +8449,13 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       email: unverifiedNewAdmin.email,
       isVerifiedPersonalGmail: false,
       adminEmail: ADMIN_EMAIL,
-      adminDoc: { exists: true, role: 'ADMIN', isActive: true },
+      adminDoc: {
+        exists: true,
+        uid: unverifiedNewAdmin.uid,
+        email: unverifiedNewAdmin.email,
+        role: 'ADMIN',
+        isActive: true,
+      },
     });
     const tc4Pass =
       isAdminUser(unverifiedNewAdmin) === false &&
@@ -8427,7 +8469,13 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       email: 'impersonator@gmail.com',
       isVerifiedPersonalGmail: true,
       adminEmail: ADMIN_EMAIL,
-      adminDoc: { exists: true, role: 'ADMIN', isActive: true },
+      adminDoc: {
+        exists: true,
+        uid: 'uid_impersonator_999',
+        email: 'impersonator@gmail.com',
+        role: 'ADMIN',
+        isActive: true,
+      },
       userDoc: { role: 'ADMIN', isAdmin: true, isSuperAdmin: true },
     });
     const migrationMismatchUidCheck = runSimplifiedRoleMigrationForRecords({
@@ -8446,18 +8494,22 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
         },
       ],
     });
-    const upsertedDocsTc5 = migrationMismatchUidCheck.actions
+    const activeAdminDocsTc5 = migrationMismatchUidCheck.actions
       .map((a) => a.upsertedAdminDoc)
-      .filter((d): d is NonNullable<typeof d> => d !== null);
+      .filter((d): d is NonNullable<typeof d> => d !== null && d.isActive === true);
     const tc5Pass =
       differentUidOrEmailEval.isAdmin === false &&
       differentUidOrEmailEval.resolvedRole === 'PLAYER' &&
-      // Bản ghi có UID lệch với UID thực tế của linhnk2013@gmail.com bị thu hồi và chỉ đúng UID đã xác minh mới được ghi /admins/{uid}
+      // Bản ghi có UID lệch với UID thực tế của linhnk2013@gmail.com bị thu hồi (isActive: false, role: 'PLAYER') và chỉ đúng UID đã xác minh mới được giữ isActive: true, role: 'ADMIN'
       migrationMismatchUidCheck.success === true &&
-      upsertedDocsTc5.length === 1 &&
-      upsertedDocsTc5[0].uid === 'uid_linhnk2013_verified' &&
+      activeAdminDocsTc5.length === 1 &&
+      activeAdminDocsTc5[0].uid === 'uid_linhnk2013_verified' &&
       migrationMismatchUidCheck.actions.some(
-        (a) => a.uid === 'uid_wrong_linked_for_new_admin' && a.deleteAdminDoc === true
+        (a) =>
+          a.uid === 'uid_wrong_linked_for_new_admin' &&
+          a.newRole === 'PLAYER' &&
+          a.upsertedAdminDoc?.isActive === false &&
+          a.auditEntry?.actionType === 'REVOKE_TO_PLAYER'
       );
 
     // TC6 & TC7: ADMIN cấp quyền MOD -> Thành công, có Audit Log; ADMIN thu hồi quyền MOD -> Chuyển về PLAYER, có Audit Log
@@ -8498,9 +8550,12 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       },
     });
     const logsAfter6And7 = getRoleChangeAuditLogs();
+    const updatedAfter6And7 = adapter62
+      .getAllRecords()
+      .find((a) => a.uid === 'uid_mod_candidate_62');
     const tc6Pass =
       tc6GrantMod.success === true &&
-      tc6GrantMod.updatedAccount?.role === 'MOD' &&
+      tc6GrantMod.newRole === 'MOD' &&
       logsAfter6And7.some(
         (l) =>
           l.targetUid === 'uid_mod_candidate_62' &&
@@ -8510,7 +8565,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       );
     const tc7Pass =
       tc7RevokeMod.success === true &&
-      tc7RevokeMod.updatedAccount?.role === 'PLAYER' &&
+      tc7RevokeMod.newRole === 'PLAYER' &&
+      updatedAfter6And7?.role === 'PLAYER' &&
       logsAfter6And7.some(
         (l) =>
           l.targetUid === 'uid_mod_candidate_62' &&
@@ -8588,33 +8644,32 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       !hasRolePermission('PLAYER', 'VIEW_ACCOUNT_LIST') &&
       !hasRolePermission('PLAYER', 'MANAGE_STAGES');
 
-    const tc12ProfileRuleSpoofRole = evaluateUserProfileMetadataRule({
-      auth: {
-        uid: 'uid_player_62',
-        email: 'player62@gmail.com',
-        emailVerified: true,
-        providerId: 'google.com',
-      },
-      targetUid: 'uid_player_62',
-      operation: 'update',
-      existingData: {
+    const tc12ProfileRuleSpoofRoleAllowed = evaluateUserProfileMetadataRule({
+      action: 'update',
+      uid: 'uid_player_62',
+      authUid: 'uid_player_62',
+      authEmail: 'player62@gmail.com',
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: Date.now(),
+      existing: {
         uid: 'uid_player_62',
         displayName: 'Player 62',
         avatarType: 'google',
         avatarId: null,
+        avatarUpdatedAt: Date.now() - 5000,
       },
-      incomingData: {
+      incoming: {
         uid: 'uid_player_62',
         displayName: 'Player 62',
         avatarType: 'google',
         avatarId: null,
+        avatarUpdatedAt: Date.now(),
         role: 'ADMIN',
         isAdmin: true,
         isSuperAdmin: true,
-      } as any,
-      catalogStore: new Map(),
+      },
     });
-    const tc12Pass = tc12ProfileRuleSpoofRole.allowed === false;
+    const tc12Pass = tc12ProfileRuleSpoofRoleAllowed === false;
 
     // TC13: Stage 1 và các Stage hợp lệ -> Hoạt động bình thường
     const stage1 = stageMgr.getStage(1);
@@ -8697,20 +8752,30 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       migrationHaltedWhenMissingNewAdmin.haltedReasonVi !== null &&
       migrationSuccessWhenVerified.success === true &&
       migrationSuccessWhenVerified.actions.some(
-        (a) => a.uid === 'uid_old_super' && a.deleteAdminDoc === true && a.newRole === 'PLAYER'
+        (a) =>
+          a.uid === 'uid_old_super' &&
+          a.newRole === 'PLAYER' &&
+          a.upsertedAdminDoc?.role === 'PLAYER' &&
+          a.upsertedAdminDoc?.isActive === false &&
+          a.auditEntry?.actionType === 'REVOKE_TO_PLAYER'
       ) &&
       upsertedDocsTc15.some(
         (d) =>
           d.uid === 'uid_linhnk2013_verified' &&
           d.email === 'linhnk2013@gmail.com' &&
           d.role === 'ADMIN' &&
-          d.isActive === true
+          d.isActive === true &&
+          typeof d.lastAuditId === 'string'
       ) &&
       upsertedDocsTc15.some(
-        (d) => d.uid === 'uid_legacy_admin_2' && d.role === 'MOD' && d.isActive === true
+        (d) =>
+          d.uid === 'uid_legacy_admin_2' &&
+          d.role === 'MOD' &&
+          d.isActive === true &&
+          typeof d.lastAuditId === 'string'
       ) &&
-      upsertedDocsTc15.some(
-        (d) => d.uid === 'uid_existing_mod_3' && d.role === 'MOD' && d.isActive === true
+      migrationSuccessWhenVerified.actions.some(
+        (a) => a.uid === 'uid_existing_mod_3' && a.action === 'KEEP_MOD' && a.newRole === 'MOD'
       );
 
     authMgr.setCustomPaginationAdapterForTesting(null);
@@ -8740,6 +8805,288 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T62: M7.3.11.4 Simplified Admin & Mod Role Migration – Kiểm chứng 15 kịch bản bắt buộc (Mục 7): Admin duy nhất linhnk2013@gmail.com, Thu hồi linhnk.online@gmail.com, Cấp/Thu hồi MOD, Chặn cấp ADMIN, Bảo toàn MOD/PLAYER/Stage 1 & Di chuyển dữ liệu an toàn',
       passed,
       details: `TC1=${tc1Pass}, TC2=${tc2Pass}, TC3(OldRevoked)=${tc3Pass}, TC4(UnverifiedDenied)=${tc4Pass}, TC5(WrongUidDenied)=${tc5Pass}, TC6(GrantMod)=${tc6Pass}, TC7(RevokeMod)=${tc7Pass}, TC8(BlockGrantAdmin)=${tc8Pass}, TC9(ModRead)=${tc9Pass}, TC10(ModWriteDenied)=${tc10Pass}, TC11(PlayerDenied)=${tc11Pass}, TC12(SelfEscalateDenied)=${tc12Pass}, TC13(Stage1Ok)=${tc13Pass}, TC14(AtomicRollback)=${tc14Pass}, TC15(SafeMigration)=${tc15Pass}`,
+    });
+  }
+
+  // =========================================================================
+  // T63: M7.3.11.5 – FINAL PRE-PRODUCTION SECURITY AUDIT & ROLE MIGRATION VALIDATION
+  // =========================================================================
+  {
+    const sessionMgr = SessionManager.getInstance();
+    clearVerifiedServerRoles();
+    clearRoleChangeAuditLogsForTesting();
+
+    // 1. Mục 2.2: Bảo vệ /admins/{uid} – Kiểm tra tính nhất quán uid, email, role, isActive (Fail-Closed khi uid hoặc email trong doc bị lệch/thiếu)
+    const adminDocUidMismatchEval = evaluateCanonicalStaffRoleFromDocs({
+      uid: 'uid_linhnk2013_real',
+      email: 'linhnk2013@gmail.com',
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: {
+        exists: true,
+        uid: 'uid_tampered_other',
+        email: 'linhnk2013@gmail.com',
+        role: 'ADMIN',
+        isActive: true,
+      },
+    });
+    const adminDocEmailMismatchEval = evaluateCanonicalStaffRoleFromDocs({
+      uid: 'uid_linhnk2013_real',
+      email: 'linhnk2013@gmail.com',
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: {
+        exists: true,
+        uid: 'uid_linhnk2013_real',
+        email: 'linhnk.online@gmail.com',
+        role: 'ADMIN',
+        isActive: true,
+      },
+    });
+    const modDocMissingUidEval = evaluateCanonicalStaffRoleFromDocs({
+      uid: 'uid_mod_missing_uid_field',
+      email: 'mod99@gmail.com',
+      isVerifiedPersonalGmail: true,
+      adminEmail: ADMIN_EMAIL,
+      adminDoc: {
+        exists: true,
+        role: 'MOD',
+        isActive: true,
+      },
+    });
+    const section2AdminDocSchemaOk =
+      adminDocUidMismatchEval.isAdmin === false &&
+      adminDocUidMismatchEval.resolvedRole === 'PLAYER' &&
+      adminDocEmailMismatchEval.isAdmin === false &&
+      adminDocEmailMismatchEval.resolvedRole === 'PLAYER' &&
+      modDocMissingUidEval.isStaffModOrAdmin === false &&
+      modDocMissingUidEval.resolvedRole === 'PLAYER';
+
+    // 2. Mục 3.1 & 3.2: BOOTSTRAP_SOLE_ADMIN Audit Log hợp lệ cho đúng linhnk2013@gmail.com tự bootstrap, từ chối mọi UID/email khác
+    const validBootstrapAudit = validateRoleAuditLogPayload(
+      {
+        auditId: 'audit_bootstrap_sole_admin_1',
+        actionType: 'BOOTSTRAP_SOLE_ADMIN',
+        actorUid: 'uid_linhnk2013_real',
+        actorEmail: 'linhnk2013@gmail.com',
+        targetUid: 'uid_linhnk2013_real',
+        targetEmail: 'linhnk2013@gmail.com',
+        targetDisplayName: 'Linh NK 2013 (Sole Admin)',
+        previousRole: 'PLAYER',
+        newRole: 'ADMIN',
+        timestampMs: 1_700_000_000_000,
+      },
+      'audit_bootstrap_sole_admin_1',
+      ADMIN_EMAIL
+    );
+    const invalidBootstrapDifferentTarget = validateRoleAuditLogPayload(
+      {
+        auditId: 'audit_bootstrap_other_uid',
+        actionType: 'BOOTSTRAP_SOLE_ADMIN',
+        actorUid: 'uid_linhnk2013_real',
+        actorEmail: 'linhnk2013@gmail.com',
+        targetUid: 'uid_second_admin_illegal',
+        targetEmail: 'linhnk2013@gmail.com',
+        targetDisplayName: 'Second Admin Illegal',
+        previousRole: 'PLAYER',
+        newRole: 'ADMIN',
+        timestampMs: 1_700_000_000_000,
+      },
+      'audit_bootstrap_other_uid',
+      ADMIN_EMAIL
+    );
+    const invalidBootstrapOtherEmail = validateRoleAuditLogPayload(
+      {
+        auditId: 'audit_bootstrap_other_email',
+        actionType: 'BOOTSTRAP_SOLE_ADMIN',
+        actorUid: 'uid_linhnk2013_real',
+        actorEmail: 'linhnk2013@gmail.com',
+        targetUid: 'uid_linhnk2013_real',
+        targetEmail: 'other@gmail.com',
+        targetDisplayName: 'Other Email',
+        previousRole: 'PLAYER',
+        newRole: 'ADMIN',
+        timestampMs: 1_700_000_000_000,
+      },
+      'audit_bootstrap_other_email',
+      ADMIN_EMAIL
+    );
+    const section3BootstrapAuditOk =
+      validBootstrapAudit.valid === true &&
+      invalidBootstrapDifferentTarget.valid === false &&
+      invalidBootstrapOtherEmail.valid === false;
+
+    // 3. Mục 3.3: Idempotent Migration – chạy lần 1 thực hiện chuyển đổi + sinh Audit Log; chạy lần 2 trên dữ liệu đã chuẩn hóa là No-Op (0 ghi lặp, 0 Audit Log trùng)
+    const firstMigrationRun = runSimplifiedRoleMigrationForRecords({
+      verifiedNewAdminAuth: {
+        uid: 'uid_linhnk2013_real',
+        email: 'linhnk2013@gmail.com',
+        emailVerified: true,
+        providerId: 'google.com',
+      },
+      existingAdminRecords: [
+        {
+          uid: 'uid_old_admin_revoked',
+          email: 'linhnk.online@gmail.com',
+          role: 'SUPER_ADMIN',
+          isActive: true,
+        },
+        {
+          uid: 'uid_legacy_admin_staff',
+          email: 'staff@gmail.com',
+          role: 'ADMIN',
+          isActive: true,
+        },
+        {
+          uid: 'uid_existing_mod_clean',
+          email: 'modclean@gmail.com',
+          role: 'MOD',
+          isActive: true,
+        },
+      ],
+      nowMs: 1_700_000_100_000,
+    });
+
+    // Mô phỏng trạng thái /admins sau khi Lần 1 commit thành công
+    const postFirstRunRecords = [
+      {
+        uid: 'uid_linhnk2013_real',
+        email: 'linhnk2013@gmail.com',
+        role: 'ADMIN',
+        isActive: true,
+      },
+      {
+        uid: 'uid_old_admin_revoked',
+        email: 'linhnk.online@gmail.com',
+        role: 'PLAYER',
+        isActive: false,
+      },
+      {
+        uid: 'uid_legacy_admin_staff',
+        email: 'staff@gmail.com',
+        role: 'MOD',
+        isActive: true,
+      },
+      {
+        uid: 'uid_existing_mod_clean',
+        email: 'modclean@gmail.com',
+        role: 'MOD',
+        isActive: true,
+      },
+    ];
+
+    const secondMigrationRun = runSimplifiedRoleMigrationForRecords({
+      verifiedNewAdminAuth: {
+        uid: 'uid_linhnk2013_real',
+        email: 'linhnk2013@gmail.com',
+        emailVerified: true,
+        providerId: 'google.com',
+      },
+      existingAdminRecords: postFirstRunRecords,
+      nowMs: 1_700_000_200_000,
+    });
+    const secondRunUpserts = secondMigrationRun.actions.filter((a) => a.upsertedAdminDoc !== null);
+    const secondRunAudits = secondMigrationRun.actions.filter((a) => a.auditEntry !== null);
+
+    const section3IdempotentMigrationOk =
+      firstMigrationRun.success === true &&
+      firstMigrationRun.isIdempotentNoOp === false &&
+      firstMigrationRun.actions.filter((a) => a.auditEntry !== null).length === 3 &&
+      secondMigrationRun.success === true &&
+      secondMigrationRun.isIdempotentNoOp === true &&
+      secondRunUpserts.length === 0 &&
+      secondRunAudits.length === 0 &&
+      secondMigrationRun.actions.some(
+        (a) => a.uid === 'uid_linhnk2013_real' && a.action === 'KEEP_SOLE_ADMIN_NOOP'
+      );
+
+    // 4. Mục 5.4: Session Lease Fail-Closed khi isActive == true nhưng thiếu hoặc hỏng lastActiveAtMs
+    const corruptedNullLastActiveBlockedForDeviceB =
+      sessionMgr.evaluateFirstActiveSessionLeaseForTesting({
+        serverNowMs: 1_700_000_999_000,
+        existingServerLease: {
+          uid: 'uid_session_fail_closed',
+          deviceId: 'dev_A_active',
+          sessionId: 'sess_A_active',
+          isActive: true,
+          lastActiveAtMs: null as any,
+        },
+        incomingAttempt: {
+          uid: 'uid_session_fail_closed',
+          deviceId: 'dev_B_intruder',
+          newSessionId: 'sess_B_intruder_1',
+        },
+      });
+    const corruptedZeroLastActiveBlockedForDeviceB =
+      sessionMgr.evaluateFirstActiveSessionLeaseForTesting({
+        serverNowMs: 1_700_000_999_000,
+        existingServerLease: {
+          uid: 'uid_session_fail_closed',
+          deviceId: 'dev_A_active',
+          sessionId: 'sess_A_active',
+          isActive: true,
+          lastActiveAtMs: 0,
+        },
+        incomingAttempt: {
+          uid: 'uid_session_fail_closed',
+          deviceId: 'dev_B_intruder',
+          newSessionId: 'sess_B_intruder_2',
+        },
+      });
+    const corruptedNaNLastActiveBlockedForDeviceB =
+      sessionMgr.evaluateFirstActiveSessionLeaseForTesting({
+        serverNowMs: 1_700_000_999_000,
+        existingServerLease: {
+          uid: 'uid_session_fail_closed',
+          deviceId: 'dev_A_active',
+          sessionId: 'sess_A_active',
+          isActive: true,
+          lastActiveAtMs: Number.NaN,
+        },
+        incomingAttempt: {
+          uid: 'uid_session_fail_closed',
+          deviceId: 'dev_B_intruder',
+          newSessionId: 'sess_B_intruder_3',
+        },
+      });
+    const sameDeviceCanStillRecoverCorruptedOwnLease =
+      sessionMgr.evaluateFirstActiveSessionLeaseForTesting({
+        serverNowMs: 1_700_000_999_000,
+        existingServerLease: {
+          uid: 'uid_session_fail_closed',
+          deviceId: 'dev_A_active',
+          sessionId: 'sess_A_active',
+          isActive: true,
+          lastActiveAtMs: null as any,
+        },
+        incomingAttempt: {
+          uid: 'uid_session_fail_closed',
+          deviceId: 'dev_A_active',
+          newSessionId: 'sess_A_recover_1',
+        },
+      });
+
+    const section5SessionFailClosedOk =
+      corruptedNullLastActiveBlockedForDeviceB.bAcquisitionAllowed === false &&
+      corruptedNullLastActiveBlockedForDeviceB.aStatusOnServer === 'ACTIVE' &&
+      corruptedZeroLastActiveBlockedForDeviceB.bAcquisitionAllowed === false &&
+      corruptedZeroLastActiveBlockedForDeviceB.aStatusOnServer === 'ACTIVE' &&
+      corruptedNaNLastActiveBlockedForDeviceB.bAcquisitionAllowed === false &&
+      corruptedNaNLastActiveBlockedForDeviceB.aStatusOnServer === 'ACTIVE' &&
+      sameDeviceCanStillRecoverCorruptedOwnLease.bAcquisitionAllowed === true &&
+      sameDeviceCanStillRecoverCorruptedOwnLease.bStatusAfterAttempt === 'ACTIVE';
+
+    const passed =
+      section2AdminDocSchemaOk &&
+      section3BootstrapAuditOk &&
+      section3IdempotentMigrationOk &&
+      section5SessionFailClosedOk;
+
+    results.push({
+      id: 'M7_3_T63',
+      name: 'T63: M7.3.11.5 Final Pre-Production Security Audit – Đồng bộ Admin Auth, Khóa Schema /admins/{uid}, BOOTSTRAP_SOLE_ADMIN Audit Log, Idempotent Migration (No-Op lần 2) & Session Lease Fail-Closed',
+      passed,
+      details: `adminDocSchema=${section2AdminDocSchemaOk}, bootstrapAudit=${section3BootstrapAuditOk}, idempotentMigration=${section3IdempotentMigrationOk} (run2Writes=${secondRunUpserts.length}, run2Audits=${secondRunAudits.length}), sessionFailClosed=${section5SessionFailClosedOk}`,
     });
   }
 

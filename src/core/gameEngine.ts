@@ -1924,7 +1924,9 @@ export class GameEngine {
         isFreezeRecoveryFrame ||
         this.catchUpTicksRemaining > 1 ||
         totalAvailableTicksInAccumulator > SIMULATION_CONFIG.MAX_TICKS_PER_FRAME ||
-        (plannedTicksThisFrame > 1 && ticksRun < plannedTicksThisFrame - 1);
+        ((plannedTicksThisFrame > 2 ||
+          (this.gameMode === 'TWO_PLAYERS_ONLINE' && plannedTicksThisFrame > 1)) &&
+          ticksRun < plannedTicksThisFrame - 1);
 
       if (this.catchUpTicksRemaining > 0) {
         this.catchUpTicksRemaining -= 1;

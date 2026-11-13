@@ -517,14 +517,27 @@ export function evaluateCanonicalStaffRoleFromDocs(params: {
           denyReasonVi: 'Fail-Closed: Hồ sơ /admins/{uid} của Admin có role không khớp ADMIN.',
         };
       }
-      if (typeof adminDoc.uid === 'string' && adminDoc.uid.trim() !== params.uid) {
+      if (typeof adminDoc.uid !== 'string' || adminDoc.uid.trim() !== params.uid) {
         return {
           resolvedRole: 'PLAYER',
           isAdmin: false,
           isSuperAdmin: false,
           isStaffAdmin: false,
           isStaffModOrAdmin: false,
-          denyReasonVi: 'Fail-Closed: Trường uid trong /admins/{uid} không khớp với UID xác thực.',
+          denyReasonVi: 'Fail-Closed: Trường uid trong /admins/{uid} bị thiếu hoặc không khớp với UID xác thực.',
+        };
+      }
+      if (
+        typeof adminDoc.email !== 'string' ||
+        adminDoc.email.trim().toLowerCase() !== SOLE_ADMIN_EMAIL
+      ) {
+        return {
+          resolvedRole: 'PLAYER',
+          isAdmin: false,
+          isSuperAdmin: false,
+          isStaffAdmin: false,
+          isStaffModOrAdmin: false,
+          denyReasonVi: 'Fail-Closed: Trường email trong /admins/{uid} của Admin không khớp linhnk2013@gmail.com.',
         };
       }
     }
@@ -573,14 +586,14 @@ export function evaluateCanonicalStaffRoleFromDocs(params: {
     };
   }
 
-  if (typeof adminDoc.uid === 'string' && adminDoc.uid.trim() !== params.uid) {
+  if (typeof adminDoc.uid !== 'string' || adminDoc.uid.trim() !== params.uid) {
     return {
       resolvedRole: 'PLAYER',
       isAdmin: false,
       isSuperAdmin: false,
       isStaffAdmin: false,
       isStaffModOrAdmin: false,
-      denyReasonVi: 'Fail-Closed: Trường uid trong /admins/{uid} không khớp với Document ID.',
+      denyReasonVi: 'Fail-Closed: Trường uid trong /admins/{uid} bị thiếu hoặc không khớp với Document ID.',
     };
   }
 
@@ -619,12 +632,19 @@ export function evaluateCanonicalStaffRoleFromDocs(params: {
   };
 }
 
+export type RoleAuditActionType =
+  | 'BOOTSTRAP_SOLE_ADMIN'
+  | 'GRANT_MOD'
+  | 'REVOKE_TO_PLAYER'
+  | 'CONVERT_LEGACY_ADMIN_TO_MOD';
+
 /**
- * Nhật ký kiểm toán thay đổi quyền (M7.3.11.4 Mục 4, 5 & 6):
- * Ghi lại: người thực hiện (Admin `linhnk2013@gmail.com`), tài khoản được thay đổi, quyền cũ, quyền mới, thời gian.
+ * Nhật ký kiểm toán thay đổi quyền (M7.3.11.5 Mục 3):
+ * Ghi lại: người thực hiện (Admin `linhnk2013@gmail.com`), tài khoản được thay đổi, quyền cũ, quyền mới, loại sự kiện, thời gian.
  */
 export interface RoleChangeAuditEntry {
   auditId: string;
+  actionType?: RoleAuditActionType;
   actorUid: string;
   actorEmail: string;
   targetUid: string;
@@ -668,6 +688,7 @@ export function validateRoleAuditLogPayload(
   const data = payload as Record<string, unknown>;
   const allowedKeys = new Set([
     'auditId',
+    'actionType',
     'actorUid',
     'actorEmail',
     'targetUid',
@@ -727,20 +748,13 @@ export function validateRoleAuditLogPayload(
     };
   }
 
-  if (
-    typeof data.targetUid !== 'string' ||
-    !VALID_DOC_ID_REGEX.test(data.targetUid) ||
-    data.targetUid === data.actorUid
-  ) {
+  if (typeof data.targetUid !== 'string' || !VALID_DOC_ID_REGEX.test(data.targetUid)) {
     return { valid: false, reasonVi: 'Trường targetUid trong Audit Log không hợp lệ.' };
   }
 
-  if (
-    typeof data.targetEmail !== 'string' ||
-    data.targetEmail.trim().length < 6 ||
-    data.targetEmail.trim().toLowerCase() === SOLE_ADMIN_EMAIL ||
-    data.targetEmail.trim().toLowerCase() === normalizedAdmin
-  ) {
+  const targetEmailLower =
+    typeof data.targetEmail === 'string' ? data.targetEmail.trim().toLowerCase() : '';
+  if (!targetEmailLower || targetEmailLower.length < 6 || targetEmailLower.length > 254) {
     return { valid: false, reasonVi: 'Trường targetEmail trong Audit Log không hợp lệ.' };
   }
 
@@ -750,6 +764,48 @@ export function validateRoleAuditLogPayload(
     data.targetDisplayName.trim().length > 60
   ) {
     return { valid: false, reasonVi: 'Trường targetDisplayName trong Audit Log không hợp lệ.' };
+  }
+
+  if (typeof data.timestampMs !== 'number' || !Number.isFinite(data.timestampMs) || data.timestampMs <= 0) {
+    return { valid: false, reasonVi: 'Trường timestampMs trong Audit Log không hợp lệ.' };
+  }
+
+  const actionType = typeof data.actionType === 'string' ? data.actionType : undefined;
+
+  // Nhánh 1: Sự kiện khởi tạo ADMIN duy nhất (BOOTSTRAP_SOLE_ADMIN)
+  if (actionType === 'BOOTSTRAP_SOLE_ADMIN') {
+    if (
+      data.targetUid !== data.actorUid ||
+      targetEmailLower !== SOLE_ADMIN_EMAIL ||
+      targetEmailLower !== normalizedAdmin ||
+      (data.previousRole !== 'PLAYER' && data.previousRole !== 'ADMIN') ||
+      data.newRole !== 'ADMIN'
+    ) {
+      return {
+        valid: false,
+        reasonVi:
+          'Sự kiện BOOTSTRAP_SOLE_ADMIN chỉ hợp lệ khi actorUid == targetUid, email là linhnk2013@gmail.com và newRole == ADMIN.',
+      };
+    }
+    return { valid: true, reasonVi: null };
+  }
+
+  // Nhánh 2: Cấp/thu hồi MOD cho tài khoản khác
+  if (
+    actionType !== undefined &&
+    actionType !== 'GRANT_MOD' &&
+    actionType !== 'REVOKE_TO_PLAYER' &&
+    actionType !== 'CONVERT_LEGACY_ADMIN_TO_MOD'
+  ) {
+    return { valid: false, reasonVi: 'Loại sự kiện actionType trong Audit Log không hợp lệ.' };
+  }
+
+  if (data.targetUid === data.actorUid) {
+    return { valid: false, reasonVi: 'Trường targetUid trong Audit Log không được trùng với actorUid.' };
+  }
+
+  if (targetEmailLower === SOLE_ADMIN_EMAIL || targetEmailLower === normalizedAdmin) {
+    return { valid: false, reasonVi: 'Không được phép ghi thay đổi quyền MOD/PLAYER lên tài khoản Admin duy nhất.' };
   }
 
   const allowedPreviousRoles = new Set(['ADMIN', 'MOD', 'PLAYER']);
@@ -766,10 +822,6 @@ export function validateRoleAuditLogPayload(
       reasonVi:
         'Trường previousRole hoặc newRole trong Audit Log không hợp lệ (chỉ cho phép chuyển đổi về MOD hoặc PLAYER, không cấp thêm ADMIN/SUPER_ADMIN).',
     };
-  }
-
-  if (typeof data.timestampMs !== 'number' || !Number.isFinite(data.timestampMs) || data.timestampMs <= 0) {
-    return { valid: false, reasonVi: 'Trường timestampMs trong Audit Log không hợp lệ.' };
   }
 
   return { valid: true, reasonVi: null };
@@ -791,6 +843,7 @@ export interface MigratedStaffRecordAction {
   newRole: UserRoleType;
   action:
     | 'PROMOTE_SOLE_ADMIN'
+    | 'KEEP_SOLE_ADMIN_NOOP'
     | 'REVOKE_OLD_SUPER_ADMIN_TO_PLAYER'
     | 'CONVERT_LEGACY_ADMIN_TO_MOD'
     | 'KEEP_MOD'
@@ -801,8 +854,9 @@ export interface MigratedStaffRecordAction {
     uid: string;
     email: string;
     displayName: string;
-    role: 'ADMIN' | 'MOD';
-    isActive: true;
+    role: 'ADMIN' | 'MOD' | 'PLAYER';
+    isActive: boolean;
+    lastAuditId: string;
     updatedBy: string;
   } | null;
   deleteAdminDoc: boolean;
@@ -811,6 +865,7 @@ export interface MigratedStaffRecordAction {
 
 export interface SimplifiedRoleMigrationReport {
   success: boolean;
+  isIdempotentNoOp: boolean;
   haltedReasonVi: string | null;
   soleAdminVerifiedUid: string | null;
   soleAdminEmail: string;
@@ -823,15 +878,14 @@ export interface SimplifiedRoleMigrationReport {
 }
 
 /**
- * M7.3.11.4 Mục 3 & Mục 5: Migration vai trò an toàn từ mô hình cũ (`SUPER_ADMIN`, `ADMIN`, `MOD`, `PLAYER`)
- * sang mô hình 3 vai trò (`ADMIN`, `MOD`, `PLAYER`):
+ * M7.3.11.5 Mục 3: Migration vai trò an toàn và IDEMPOTENT sang mô hình 3 vai trò (`ADMIN`, `MOD`, `PLAYER`):
  * 1. Bắt buộc xác minh tài khoản `linhnk2013@gmail.com` đã tồn tại, đã xác minh email Google (`emailVerified === true`, `providerId === 'google.com'`)
  *    và có `uid` hợp lệ. Nếu chưa có hoặc chưa xác minh -> DỪNG migration và báo cáo rõ, tuyệt đối KHÔNG đoán UID.
- * 2. Gán quyền `ADMIN` duy nhất cho `linhnk2013@gmail.com` theo đúng `uid` đã xác minh.
- * 3. Thu hồi toàn bộ quyền `SUPER_ADMIN` / `ADMIN` của `linhnk.online@gmail.com` về `PLAYER` (xóa khỏi `/admins/{uid}`).
- * 4. Chuyển các bản ghi `ADMIN` cũ khác (nếu hợp lệ, `isActive === true`) sang `MOD` hoặc đánh dấu `FLAG_MANUAL_REVIEW` nếu thiếu thông tin/không rõ ràng;
- *    tuyệt đối không tự nâng bất kỳ UID nào khác lên `ADMIN`.
- * 5. Giữ nguyên `MOD` -> `MOD`, `PLAYER` -> `PLAYER`. Không xóa dữ liệu người chơi, XP, Xu, Rank hay Audit Log.
+ * 2. Khởi tạo `ADMIN` duy nhất cho `linhnk2013@gmail.com` kèm Audit Log `BOOTSTRAP_SOLE_ADMIN` (`newRole: 'ADMIN'`) và `lastAuditId`.
+ *    Nếu bản ghi `/admins/{authUid}` đã ở trạng thái `role === 'ADMIN' && isActive === true && email === 'linhnk2013@gmail.com'` -> IDEMPOTENT NO-OP (không ghi trùng và không tạo log trùng).
+ * 3. Thu hồi toàn bộ quyền `SUPER_ADMIN` / `ADMIN` của `linhnk.online@gmail.com` về `PLAYER` (`role: 'PLAYER', isActive: false`) kèm Audit Log nguyên tử.
+ * 4. Chuyển các bản ghi `ADMIN` cũ khác (nếu hợp lệ, `isActive === true`) sang `MOD` kèm Audit Log hoặc đánh dấu `FLAG_MANUAL_REVIEW` nếu thiếu thông tin.
+ * 5. Giữ nguyên `MOD` hợp lệ (`KEEP_MOD`, không ghi trùng).
  */
 export function runSimplifiedRoleMigrationForRecords(params: {
   verifiedNewAdminAuth: {
@@ -859,8 +913,9 @@ export function runSimplifiedRoleMigrationForRecords(params: {
   if (!isVerifiedGoogle) {
     return {
       success: false,
+      isIdempotentNoOp: false,
       haltedReasonVi:
-        'Dừng Migration (M7.3.11.4 Mục 3.8): Tài khoản linhnk2013@gmail.com chưa đăng nhập/xác minh Google Authentication hoặc chưa xác định được UID thực tế. Tuyệt đối không đoán UID hoặc cấp quyền cho tài khoản chưa xác minh.',
+        'Dừng Migration (M7.3.11.5 Mục 2.1 & 3): Tài khoản linhnk2013@gmail.com chưa đăng nhập/xác minh Google Authentication hoặc chưa xác định được UID thực tế. Tuyệt đối không đoán UID hoặc cấp quyền cho tài khoản chưa xác minh.',
       soleAdminVerifiedUid: null,
       soleAdminEmail: SOLE_ADMIN_EMAIL,
       revokedLegacyAdminEmail: REVOKED_LEGACY_ADMIN_EMAIL,
@@ -878,34 +933,68 @@ export function runSimplifiedRoleMigrationForRecords(params: {
   const auditLogs: RoleChangeAuditEntry[] = [];
   const processedUids = new Set<string>();
 
-  // Bước 1: Đảm bảo tài khoản ADMIN duy nhất (linhnk2013@gmail.com) được liên kết đúng UID đã xác minh
-  const existingNewAdminRec = params.existingAdminRecords.find(
-    (r) => r.uid === authUid || (r.email || '').trim().toLowerCase() === SOLE_ADMIN_EMAIL
-  );
+  // Bước 1: Kiểm tra idempotent hồ sơ ADMIN duy nhất (linhnk2013@gmail.com) theo đúng authUid
+  const existingExactAdminRec = params.existingAdminRecords.find((r) => r.uid === authUid);
   const newAdminDisplayName =
-    (auth?.displayName || existingNewAdminRec?.displayName || 'linhnk2013').trim().slice(0, 60) ||
+    (auth?.displayName || existingExactAdminRec?.displayName || 'linhnk2013').trim().slice(0, 60) ||
     'linhnk2013';
 
+  const isAlreadyBootstrappedAdmin =
+    Boolean(existingExactAdminRec) &&
+    (existingExactAdminRec?.email || '').trim().toLowerCase() === SOLE_ADMIN_EMAIL &&
+    String(existingExactAdminRec?.role || '').trim().toUpperCase() === 'ADMIN' &&
+    existingExactAdminRec?.isActive === true;
+
   processedUids.add(authUid);
-  actions.push({
-    uid: authUid,
-    email: SOLE_ADMIN_EMAIL,
-    displayName: newAdminDisplayName,
-    previousRole: existingNewAdminRec?.role ? String(existingNewAdminRec.role) : 'PLAYER',
-    newRole: 'ADMIN',
-    action: 'PROMOTE_SOLE_ADMIN',
-    reasonVi: 'Gán quyền ADMIN duy nhất cho tài khoản linhnk2013@gmail.com đã xác minh Google & UID.',
-    upsertedAdminDoc: {
+
+  if (isAlreadyBootstrappedAdmin) {
+    actions.push({
       uid: authUid,
       email: SOLE_ADMIN_EMAIL,
       displayName: newAdminDisplayName,
-      role: 'ADMIN',
-      isActive: true,
-      updatedBy: SOLE_ADMIN_EMAIL,
-    },
-    deleteAdminDoc: false,
-    auditEntry: null,
-  });
+      previousRole: 'ADMIN',
+      newRole: 'ADMIN',
+      action: 'KEEP_SOLE_ADMIN_NOOP',
+      reasonVi: 'Idempotent: Hồ sơ ADMIN duy nhất (linhnk2013@gmail.com) đã được xác lập hợp lệ, không ghi trùng và không tạo Audit Log trùng.',
+      upsertedAdminDoc: null,
+      deleteAdminDoc: false,
+      auditEntry: null,
+    });
+  } else {
+    const bootstrapAudit = buildRoleChangeAuditEntry({
+      actionType: 'BOOTSTRAP_SOLE_ADMIN',
+      actorUid: authUid,
+      actorEmail: SOLE_ADMIN_EMAIL,
+      targetUid: authUid,
+      targetEmail: SOLE_ADMIN_EMAIL,
+      targetDisplayName: newAdminDisplayName,
+      previousRole: 'PLAYER',
+      newRole: 'ADMIN',
+      timestampMs: nowMs,
+      customAuditId: `audit_bootstrap_${authUid}_${nowMs}`,
+    });
+    auditLogs.push(bootstrapAudit);
+    actions.push({
+      uid: authUid,
+      email: SOLE_ADMIN_EMAIL,
+      displayName: newAdminDisplayName,
+      previousRole: existingExactAdminRec?.role ? String(existingExactAdminRec.role) : 'PLAYER',
+      newRole: 'ADMIN',
+      action: 'PROMOTE_SOLE_ADMIN',
+      reasonVi: 'Khởi tạo quyền ADMIN duy nhất cho tài khoản linhnk2013@gmail.com đã xác minh Google & UID kèm Audit Log BOOTSTRAP_SOLE_ADMIN.',
+      upsertedAdminDoc: {
+        uid: authUid,
+        email: SOLE_ADMIN_EMAIL,
+        displayName: newAdminDisplayName,
+        role: 'ADMIN',
+        isActive: true,
+        lastAuditId: bootstrapAudit.auditId,
+        updatedBy: SOLE_ADMIN_EMAIL,
+      },
+      deleteAdminDoc: false,
+      auditEntry: bootstrapAudit,
+    });
+  }
 
   // Bước 2: Duyệt từng bản ghi hiện có trong /admins
   for (const rec of params.existingAdminRecords) {
@@ -922,35 +1011,66 @@ export function runSimplifiedRoleMigrationForRecords(params: {
         : uid;
     const rawRole = typeof rec.role === 'string' ? rec.role.trim().toUpperCase() : 'UNKNOWN';
 
+    // Nếu bản ghi đã bị thu hồi về PLAYER (isActive === false) trước đó -> Idempotent KEEP_PLAYER
+    if (rawRole === 'PLAYER' && rec.isActive === false) {
+      actions.push({
+        uid,
+        email: email || 'unknown@gmail.com',
+        displayName,
+        previousRole: 'PLAYER',
+        newRole: 'PLAYER',
+        action: 'KEEP_PLAYER',
+        reasonVi: 'Idempotent: Bản ghi đã được thu hồi về PLAYER (isActive == false) trước đó.',
+        upsertedAdminDoc: null,
+        deleteAdminDoc: false,
+        auditEntry: null,
+      });
+      continue;
+    }
+
     // 2a. Thu hồi hoàn toàn đặc quyền của tài khoản cũ linhnk.online@gmail.com, bất kỳ bản ghi SUPER_ADMIN nào, hoặc bản ghi có email linhnk2013@gmail.com nhưng sai UID
     if (
       email === REVOKED_LEGACY_ADMIN_EMAIL ||
       rawRole === 'SUPER_ADMIN' ||
       (email === SOLE_ADMIN_EMAIL && uid !== authUid)
     ) {
+      const safeTargetEmail =
+        email === SOLE_ADMIN_EMAIL
+          ? `revoked_mismatch_${uid}@gmail.com`
+          : email || REVOKED_LEGACY_ADMIN_EMAIL;
       const audit = buildRoleChangeAuditEntry({
+        actionType: 'REVOKE_TO_PLAYER',
         actorUid: authUid,
         actorEmail: SOLE_ADMIN_EMAIL,
         targetUid: uid,
-        targetEmail: email || REVOKED_LEGACY_ADMIN_EMAIL,
+        targetEmail: safeTargetEmail,
         targetDisplayName: displayName,
         previousRole: 'ADMIN',
         newRole: 'PLAYER',
         timestampMs: nowMs,
+        customAuditId: `audit_revoke_${uid}_${nowMs}`,
       });
       auditLogs.push(audit);
       actions.push({
         uid,
-        email: email || REVOKED_LEGACY_ADMIN_EMAIL,
+        email: safeTargetEmail,
         displayName,
         previousRole: rawRole,
         newRole: 'PLAYER',
         action: 'REVOKE_OLD_SUPER_ADMIN_TO_PLAYER',
         reasonVi:
           email === SOLE_ADMIN_EMAIL && uid !== authUid
-            ? 'Thu hồi và xóa bản ghi /admins có email linhnk2013@gmail.com nhưng không khớp UID thực tế đã xác minh.'
+            ? 'Thu hồi bản ghi /admins có email linhnk2013@gmail.com nhưng không khớp UID thực tế đã xác minh.'
             : 'Thu hồi hoàn toàn quyền SUPER_ADMIN / ADMIN của tài khoản quản trị cũ linhnk.online@gmail.com về PLAYER.',
-        upsertedAdminDoc: null,
+        upsertedAdminDoc: {
+          uid,
+          email: safeTargetEmail,
+          displayName,
+          role: 'PLAYER',
+          isActive: false,
+          lastAuditId: audit.auditId,
+          updatedBy: SOLE_ADMIN_EMAIL,
+        },
         deleteAdminDoc: true,
         auditEntry: audit,
       });
@@ -980,6 +1100,7 @@ export function runSimplifiedRoleMigrationForRecords(params: {
 
       if (convertLegacyAdminToMod) {
         const audit = buildRoleChangeAuditEntry({
+          actionType: 'CONVERT_LEGACY_ADMIN_TO_MOD',
           actorUid: authUid,
           actorEmail: SOLE_ADMIN_EMAIL,
           targetUid: uid,
@@ -988,6 +1109,7 @@ export function runSimplifiedRoleMigrationForRecords(params: {
           previousRole: 'ADMIN',
           newRole: 'MOD',
           timestampMs: nowMs,
+          customAuditId: `audit_convert_mod_${uid}_${nowMs}`,
         });
         auditLogs.push(audit);
         actions.push({
@@ -1005,6 +1127,7 @@ export function runSimplifiedRoleMigrationForRecords(params: {
             displayName,
             role: 'MOD',
             isActive: true,
+            lastAuditId: audit.auditId,
             updatedBy: SOLE_ADMIN_EMAIL,
           },
           deleteAdminDoc: false,
@@ -1029,7 +1152,7 @@ export function runSimplifiedRoleMigrationForRecords(params: {
       continue;
     }
 
-    // 2c. Giữ nguyên MOD hợp lệ
+    // 2c. Giữ nguyên MOD hợp lệ (Idempotent: không ghi đè lại nếu đã là MOD hợp lệ)
     if (rawRole === 'MOD' && rec.isActive === true && VALID_DOC_ID_REGEX.test(uid)) {
       actions.push({
         uid,
@@ -1038,15 +1161,8 @@ export function runSimplifiedRoleMigrationForRecords(params: {
         previousRole: 'MOD',
         newRole: 'MOD',
         action: 'KEEP_MOD',
-        reasonVi: 'Giữ nguyên vai trò MOD hợp lệ.',
-        upsertedAdminDoc: {
-          uid,
-          email,
-          displayName,
-          role: 'MOD',
-          isActive: true,
-          updatedBy: SOLE_ADMIN_EMAIL,
-        },
+        reasonVi: 'Idempotent: Giữ nguyên vai trò MOD hợp lệ hiện có.',
+        upsertedAdminDoc: null,
         deleteAdminDoc: false,
         auditEntry: null,
       });
@@ -1070,10 +1186,14 @@ export function runSimplifiedRoleMigrationForRecords(params: {
     flaggedForManualReview.push(flagged);
   }
 
-  const afterActiveDocsCount = actions.filter((a) => a.upsertedAdminDoc !== null).length;
+  const afterActiveDocsCount = actions.filter(
+    (a) => a.newRole === 'ADMIN' || a.newRole === 'MOD'
+  ).length;
+  const hasAnyWriteMutation = actions.some((a) => a.upsertedAdminDoc !== null);
 
   return {
     success: true,
+    isIdempotentNoOp: !hasAnyWriteMutation,
     haltedReasonVi: null,
     soleAdminVerifiedUid: authUid,
     soleAdminEmail: SOLE_ADMIN_EMAIL,

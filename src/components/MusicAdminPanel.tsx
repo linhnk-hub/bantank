@@ -106,7 +106,7 @@ export const MusicAdminPanel: React.FC = () => {
     };
   }, [musicManager, soundManager]);
 
-  const isSuperAdmin = role === 'SUPER_ADMIN';
+  const isSuperAdmin = role === 'ADMIN';
 
   if (!isSuperAdmin) {
     return null;

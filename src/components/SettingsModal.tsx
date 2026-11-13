@@ -99,7 +99,7 @@ export function getAvailableSettingsTabsForRole(
   const effectiveRole: UserRole =
     typeof roleOrIsSuperAdmin === 'boolean'
       ? roleOrIsSuperAdmin
-        ? 'SUPER_ADMIN'
+        ? 'ADMIN'
         : 'PLAYER'
       : roleOrIsSuperAdmin;
 
@@ -236,7 +236,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   } | null>(null);
   const [pendingRoleChangeConfirm, setPendingRoleChangeConfirm] = useState<{
     account: UserAccountSummary;
-    newRole: 'ADMIN' | 'MOD' | 'PLAYER';
+    newRole: 'MOD' | 'PLAYER';
     label: string;
   } | null>(null);
   const [isChangingRole, setIsChangingRole] = useState<boolean>(false);
@@ -322,7 +322,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setPendingRoleChangeConfirm(null);
     // Reset to ACCOUNT tab if current tab is not permitted for the user's role
     const allowedIds = getAvailableSettingsTabsForRole(
-      isVerifiedSuperAdmin ? 'SUPER_ADMIN' : userRole
+      isVerifiedSuperAdmin ? 'ADMIN' : userRole
     ).map((t) => t.id);
     if (!allowedIds.includes(activeTab)) {
       setActiveTab('ACCOUNT');
@@ -654,7 +654,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   const availableTabs = getAvailableSettingsTabsForRole(
-    isVerifiedSuperAdmin ? 'SUPER_ADMIN' : userRole
+    isVerifiedSuperAdmin ? 'ADMIN' : userRole
   ).map((tab) => ({
     ...tab,
     icon: getTabIcon(tab.id),
@@ -1487,11 +1487,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* Toggle Super Admin Music Management Panel — ONLY visible for Super Admin */}
+                {/* Toggle Admin Music Management Panel — ONLY visible for Admin */}
                 {canShowAdminMusic && (
                   <div className="pt-3 border-t border-neutral-800 flex items-center justify-between">
                     <span className="text-[11px] text-amber-300 font-bold">
-                      Quản trị Thư viện Nhạc nền Hệ thống (Super Admin)
+                      Quản trị Thư viện Nhạc nền Hệ thống (Admin: {SUPER_ADMIN_EMAIL})
                     </span>
                     <button
                       type="button"
@@ -1563,28 +1563,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Interactive Stage Manager & 13x13 Drag-and-Drop Map Editor */}
               <StageEditorPanel
-                actorRole={isVerifiedSuperAdmin ? 'SUPER_ADMIN' : userRole}
+                actorRole={isVerifiedSuperAdmin ? 'ADMIN' : userRole}
                 actorEmail={currentUser?.email || SUPER_ADMIN_EMAIL}
               />
             </section>
           )}
 
           {/* =========================================================================
-              TAB 5: CẤP QUYỀN & BẢNG MA TRẬN PHÂN QUYỀN (M7.3.11 MỤC IV)
+              TAB 5: CẤP QUYỀN & BẢNG MA TRẬN PHÂN QUYỀN 3 VAI TRÒ (M7.3.11.4)
              ========================================================================= */}
           {activeTab === 'ADMIN_OTHER' && canViewPermissionMatrixTab && (
-            <section className="p-4 rounded-xl bg-neutral-950/90 border border-red-500/40 space-y-4">
-              <div className="flex items-center justify-between border-b border-red-500/20 pb-2.5 flex-wrap gap-2">
-                <div className="flex items-center gap-2 font-extrabold text-red-300 uppercase tracking-wider">
-                  <Shield className="w-4 h-4 text-red-400" />
-                  <span>MA TRẬN PHÂN QUYỀN HỆ THỐNG (SUPER ADMIN / ADMIN / MOD)</span>
+            <section className="p-4 rounded-xl bg-neutral-950/90 border border-emerald-500/40 space-y-4">
+              <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2.5 flex-wrap gap-2">
+                <div className="flex items-center gap-2 font-extrabold text-emerald-300 uppercase tracking-wider">
+                  <Shield className="w-4 h-4 text-emerald-400" />
+                  <span>MA TRẬN PHÂN QUYỀN HỆ THỐNG 3 VAI TRÒ (ADMIN / MOD / NGƯỜI CHƠI)</span>
                 </div>
-                <span className="text-[10px] font-mono text-red-200/80">
-                  Super Admin duy nhất: {SUPER_ADMIN_EMAIL}
+                <span className="text-[10px] font-mono text-emerald-200/80">
+                  Admin duy nhất: {SUPER_ADMIN_EMAIL}
                 </span>
               </div>
 
-              {/* 5-Column RBAC Permission Matrix Table */}
+              {/* 5-Column RBAC Permission Matrix Table (ADMIN / MOD / PLAYER) */}
               <div className="overflow-x-auto rounded-xl border border-neutral-800 bg-neutral-900/60">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
@@ -1593,25 +1593,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         Nhóm chức năng
                       </th>
                       <th className="py-2.5 px-3 font-extrabold">Quyền cụ thể</th>
-                      <th className="py-2.5 px-3 font-extrabold text-center text-red-400 whitespace-nowrap">
-                        Super Admin
-                      </th>
                       <th className="py-2.5 px-3 font-extrabold text-center text-emerald-400 whitespace-nowrap">
                         Admin
                       </th>
                       <th className="py-2.5 px-3 font-extrabold text-center text-sky-400 whitespace-nowrap">
                         Mod
                       </th>
+                      <th className="py-2.5 px-3 font-extrabold text-center text-neutral-300 whitespace-nowrap">
+                        Người chơi
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-neutral-800/70">
                     {RBAC_PERMISSION_MATRIX.map((perm) => {
-                      const saLabel =
-                        perm.status === 'NOT_DEPLOYED'
-                          ? 'Chưa triển khai'
-                          : perm.SUPER_ADMIN
-                            ? 'Có'
-                            : 'Không';
                       const adminLabel =
                         perm.status === 'NOT_DEPLOYED'
                           ? 'Chưa triển khai'
@@ -1622,6 +1616,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         perm.status === 'NOT_DEPLOYED'
                           ? 'Chưa triển khai'
                           : perm.MOD
+                            ? 'Có'
+                            : 'Không';
+                      const playerLabel =
+                        perm.status === 'NOT_DEPLOYED'
+                          ? 'Chưa triển khai'
+                          : perm.PLAYER
                             ? 'Có'
                             : 'Không';
                       return (
@@ -1638,17 +1638,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 </span>
                               )}
                             </div>
-                          </td>
-                          <td className="py-2 px-3 text-center whitespace-nowrap">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                perm.SUPER_ADMIN && perm.status === 'DEPLOYED'
-                                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
-                                  : 'bg-neutral-800 text-neutral-400'
-                              }`}
-                            >
-                              {saLabel}
-                            </span>
                           </td>
                           <td className="py-2 px-3 text-center whitespace-nowrap">
                             <span
@@ -1672,6 +1661,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               {modLabel}
                             </span>
                           </td>
+                          <td className="py-2 px-3 text-center whitespace-nowrap">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                perm.PLAYER && perm.status === 'DEPLOYED'
+                                  ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
+                                  : 'bg-neutral-800 text-neutral-400'
+                              }`}
+                            >
+                              {playerLabel}
+                            </span>
+                          </td>
                         </tr>
                       );
                     })}
@@ -1682,19 +1682,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* Role Frame Color Legend */}
               <div className="space-y-2 pt-1">
                 <div className="text-xs font-bold text-white">
-                  Quy ước màu khung tên hiển thị theo phân quyền:
+                  Quy ước màu khung tên hiển thị theo 3 vai trò hệ thống (M7.3.11.4):
                 </div>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  <div className="p-2 rounded-xl bg-neutral-900 border-2 border-red-500 flex items-center justify-between">
-                    <span className="font-extrabold text-white text-[11px]">Super Admin</span>
-                    <span className="text-[10px] font-mono text-red-300 font-bold">Đỏ</span>
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div className="p-2 rounded-xl bg-neutral-900 border-2 border-emerald-500 flex items-center justify-between">
-                    <span className="font-extrabold text-white text-[11px]">Admin</span>
+                    <span className="font-extrabold text-white text-[11px]">Admin ({SUPER_ADMIN_EMAIL})</span>
                     <span className="text-[10px] font-mono text-emerald-300 font-bold">Xanh lá</span>
                   </div>
                   <div className="p-2 rounded-xl bg-neutral-900 border-2 border-sky-500 flex items-center justify-between">
-                    <span className="font-extrabold text-white text-[11px]">Mod</span>
+                    <span className="font-extrabold text-white text-[11px]">Mod (Điều hành viên)</span>
                     <span className="text-[10px] font-mono text-sky-300 font-bold">Xanh dương</span>
                   </div>
                   <div className="p-2 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
@@ -1872,8 +1868,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {accountsPageList.map((acc, idx) => {
                         const accRoleInfo = getRoleDisplayInfo(acc.role);
                         const rowNumber = accountsPageIndex * USER_ACCOUNTS_PAGE_SIZE + idx + 1;
-                        const isTargetSuperAdmin =
-                          acc.role === 'SUPER_ADMIN' ||
+                        const isTargetSoleAdmin =
+                          acc.role === 'ADMIN' ||
                           (acc.email && acc.email.toLowerCase() === SUPER_ADMIN_EMAIL);
                         const isSelfAccount = Boolean(currentUid && acc.uid === currentUid);
 
@@ -1924,13 +1920,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <td className="py-2.5 px-2.5 whitespace-nowrap">
                               <span
                                 className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
-                                  acc.role === 'SUPER_ADMIN'
-                                    ? 'bg-red-950/90 text-red-300 border border-red-600/70'
-                                    : acc.role === 'ADMIN'
-                                      ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-600/70'
-                                      : acc.role === 'MOD'
-                                        ? 'bg-sky-950/90 text-sky-300 border border-sky-600/70'
-                                        : 'bg-neutral-800 text-neutral-300 border border-neutral-700'
+                                  acc.role === 'ADMIN'
+                                    ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-600/70'
+                                    : acc.role === 'MOD'
+                                      ? 'bg-sky-950/90 text-sky-300 border border-sky-600/70'
+                                      : 'bg-neutral-800 text-neutral-300 border border-neutral-700'
                                 }`}
                               >
                                 {acc.role === 'PLAYER' ? 'Người chơi' : accRoleInfo.label}
@@ -1957,33 +1951,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               </span>
                             </td>
 
-                            {/* 8. Thao tác (Super Admin Role Assignment) */}
+                            {/* 8. Thao tác (Admin duy nhất cấp/thu hồi quyền MOD) */}
                             <td className="py-2.5 px-2.5 text-right whitespace-nowrap">
                               {!isVerifiedSuperAdmin ? (
                                 <span className="text-[10px] text-neutral-500 font-mono">
                                   Chỉ xem
                                 </span>
-                              ) : isTargetSuperAdmin || isSelfAccount ? (
-                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-950/60 border border-red-800/60 text-red-300 text-[10px] font-bold">
+                              ) : isTargetSoleAdmin || isSelfAccount ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-800/60 text-emerald-300 text-[10px] font-bold">
                                   <Lock className="w-3 h-3" />
-                                  Super Admin Cố định
+                                  Admin Duy nhất
                                 </span>
                               ) : (
                                 <div className="inline-flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    disabled={acc.role === 'ADMIN' || isChangingRole}
-                                    onClick={() =>
-                                      setPendingRoleChangeConfirm({
-                                        account: acc,
-                                        newRole: 'ADMIN',
-                                        label: 'Cấp Admin',
-                                      })
-                                    }
-                                    className="px-2 py-1 rounded bg-emerald-900/70 hover:bg-emerald-800 disabled:opacity-35 border border-emerald-600/70 text-emerald-200 text-[10px] font-bold transition-colors cursor-pointer"
-                                  >
-                                    Cấp Admin
-                                  </button>
                                   <button
                                     type="button"
                                     disabled={acc.role === 'MOD' || isChangingRole}
