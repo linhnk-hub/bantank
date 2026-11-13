@@ -19,240 +19,588 @@
     <meta property="og:locale" content="vi_VN" />
     <meta property="og:image" content="https://bantank.online/logo-bantank.png" />
     <meta property="og:type" content="website" />
-    
-    <!-- Google Fonts cho phong cách Neo-Retro -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;600;700&family=VT323&display=swap" rel="stylesheet">
-    
     <script src="https://cdn.tailwindcss.com"></script>
-    <script>
-      tailwind.config = {
-        theme: {
-          extend: {
-            colors: {
-              'neo-bg': '#050508',
-              'neo-amber': '#FFB800',
-              'neo-cyan': '#00F0FF',
-              'neo-rose': '#FF0055',
-            },
-            fontFamily: {
-              pixel: ['"VT323"', 'monospace'],
-              display: ['"Space Grotesk"', 'sans-serif'],
-            }
-          }
-        }
-      }
-    </script>
     <style>
-      :root { color-scheme: dark; }
+      :root {
+        color-scheme: dark;
+      }
       body {
-        margin: 0; background-color: #050508; color: #f5f5f5;
-        font-family: 'Space Grotesk', system-ui, sans-serif;
-      }
-      .tactical-grid-bg {
-        background-image: 
-          linear-gradient(to right, rgba(255, 184, 0, 0.1) 1px, transparent 1px),
-          linear-gradient(to bottom, rgba(255, 184, 0, 0.1) 1px, transparent 1px);
-        background-size: 32px 32px;
-      }
-      .crt-overlay {
-        position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-        background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
-                    linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
-        background-size: 100% 4px, 6px 100%;
-        pointer-events: none; z-index: 50;
-      }
-      .btn-arcade {
-        background-color: #FFB800; color: #000; text-transform: uppercase;
-        box-shadow: 4px 4px 0px #b45309, 0 0 15px rgba(255, 184, 0, 0.4);
-        transition: all 0.1s ease;
-        border-radius: 2px;
-      }
-      .btn-arcade:active {
-        transform: translate(2px, 2px);
-        box-shadow: 2px 2px 0px #b45309, 0 0 5px rgba(255, 184, 0, 0.4);
-      }
-      .btn-arcade-outline {
-        background-color: transparent; color: #FFB800; border: 2px solid #FFB800; text-transform: uppercase;
-        box-shadow: 4px 4px 0px rgba(255, 184, 0, 0.3);
-        transition: all 0.1s ease;
-        border-radius: 2px;
-      }
-      .btn-arcade-outline:active {
-        transform: translate(2px, 2px);
-        box-shadow: 2px 2px 0px rgba(255, 184, 0, 0.3);
-      }
-      .pixel-corners {
-        clip-path: polygon(0 4px, 4px 4px, 4px 0, calc(100% - 4px) 0, calc(100% - 4px) 4px, 100% 4px, 100% calc(100% - 4px), calc(100% - 4px) calc(100% - 4px), calc(100% - 4px) 100%, 4px 100%, 4px calc(100% - 4px), 0 calc(100% - 4px));
-      }
-      .glitch-text {
-        text-shadow: 2px 0 #FF0055, -2px 0 #00F0FF;
+        margin: 0;
+        background-color: #0a0a0a;
+        color: #f5f5f5;
+        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       }
     </style>
   </head>
-  <body class="min-h-[100dvh] w-full bg-neo-bg text-neutral-100 font-display selection:bg-neo-amber selection:text-black overflow-x-hidden flex flex-col justify-start">
-    <div class="crt-overlay"></div>
-    
-    <header class="sticky top-0 z-40 w-full bg-neo-bg/90 backdrop-blur-md border-b-2 border-neo-amber/50 pt-[env(safe-area-inset-top)]">
+  <body class="min-h-[100dvh] w-full bg-neutral-950 text-neutral-100 font-sans selection:bg-amber-500 selection:text-black overflow-x-hidden flex flex-col justify-start">
+    <!-- =====================================================================
+         THANH ĐIỀU HƯỚNG ĐẦU TRANG (ĐỒNG BỘ VỚI LANDING PAGE)
+    ====================================================================== -->
+    <header class="sticky top-0 z-40 w-full bg-neutral-950/90 backdrop-blur-md border-b border-neutral-800/80 pt-[env(safe-area-inset-top)]">
       <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-20 flex items-center justify-between gap-4">
-        <a href="/" class="flex items-center gap-3 group focus:outline-none">
-          <img src="/logo-bantank.png" onerror="this.onerror=null;this.src='https://i.ibb.co/Rkf42RD9/bantank.png';" alt="Logo" class="w-10 h-10 sm:w-11 sm:h-11 object-contain pixel-corners border-2 border-neo-amber bg-black p-1 shadow-[0_0_10px_rgba(255,184,0,0.5)] group-hover:border-white transition-colors" />
+        <!-- Thương hiệu & Logo -->
+        <a
+          href="/"
+          class="flex items-center gap-3 group focus:outline-none"
+          aria-label="Trang chủ Bắn Tank Online"
+        >
+          <img
+            src="/logo-bantank.png"
+            onerror="this.onerror=null;this.src='https://i.ibb.co/Rkf42RD9/bantank.png';"
+            alt="Logo Bắn Tank Online"
+            class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl object-contain border border-amber-500/40 bg-neutral-900 p-1 shadow-md group-hover:border-amber-400 transition-colors"
+          />
           <div class="flex flex-col">
-            <span class="text-base sm:text-2xl font-pixel uppercase tracking-wider text-white group-hover:text-neo-amber transition-colors glitch-text">Bắn Tank Online</span>
-            <span class="text-[10px] text-neo-cyan font-bold hidden sm:inline uppercase">Tactical Warfare 60Hz</span>
+            <span class="text-base sm:text-lg font-black uppercase tracking-wider text-white group-hover:text-amber-400 transition-colors">
+              Bắn Tank Online
+            </span>
+            <span class="text-[11px] text-neutral-400 font-medium hidden sm:inline">
+              Game bắn xe tăng chiến thuật trực tuyến
+            </span>
           </div>
         </a>
-        
-        <nav class="hidden md:flex items-center gap-6 lg:gap-8 text-sm font-bold text-gray-400 uppercase tracking-widest">
-          <a href="/#gioi-thieu" class="hover:text-neo-amber transition-colors py-1">Intel</a>
-          <a href="/#tinh-nang" class="hover:text-neo-amber transition-colors py-1">Specs</a>
-          <a href="/#che-do-choi" class="hover:text-neo-amber transition-colors py-1">Modes</a>
-          <a href="/#huong-dan" class="hover:text-neo-amber transition-colors py-1">Manual</a>
-          <a href="/privacy.html" aria-current="page" class="text-neo-cyan font-bold border-b-2 border-neo-cyan py-1">Quyền riêng tư</a>
+
+        <!-- Liên kết điều hướng trên Desktop -->
+        <nav
+          class="hidden md:flex items-center gap-6 lg:gap-8 text-sm font-semibold text-neutral-300"
+          aria-label="Điều hướng chính"
+        >
+          <a href="/#gioi-thieu" class="hover:text-amber-400 transition-colors py-1">Giới thiệu</a>
+          <a href="/#tinh-nang" class="hover:text-amber-400 transition-colors py-1">Tính năng</a>
+          <a href="/#che-do-choi" class="hover:text-amber-400 transition-colors py-1">Chế độ chơi</a>
+          <a href="/#huong-dan" class="hover:text-amber-400 transition-colors py-1">Hướng dẫn</a>
+          <a
+            href="/privacy.html"
+            aria-current="page"
+            class="text-amber-400 font-bold border-b-2 border-amber-400 py-1"
+          >
+            Quyền riêng tư
+          </a>
         </nav>
-        
-        <div class="hidden sm:flex items-center gap-3">
-          <a href="/?mode=trial" class="px-4 py-2 bg-black border-2 border-neo-cyan text-neo-cyan font-pixel text-lg hover:bg-neo-cyan hover:text-black transition-colors">TRIAL</a>
-          <a href="/?mode=play" class="btn-arcade px-6 py-2 font-pixel text-lg flex items-center gap-2">
-            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg> START
+
+        <!-- Cụm nút hành động bên phải -->
+        <div class="hidden sm:flex items-center gap-2.5">
+          <a
+            href="/?mode=trial"
+            class="px-3.5 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 hover:border-amber-500/50 text-amber-300 font-bold text-xs uppercase tracking-wider transition-all active:scale-[0.98]"
+          >
+            Chơi thử
+          </a>
+          <a
+            href="/?mode=play"
+            class="px-4 sm:px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs sm:text-sm uppercase tracking-wider transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2 active:scale-[0.98]"
+          >
+            <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span>Chơi ngay</span>
           </a>
         </div>
-        
+
+        <!-- Nút mở menu trên Mobile -->
         <div class="flex items-center gap-2 sm:hidden">
-          <a href="/" class="btn-arcade-outline px-3 py-1 font-pixel text-lg !border-neo-cyan !text-neo-cyan">HOME</a>
-          <button id="mobile-menu-toggle" type="button" class="p-2 bg-black border-2 border-neo-amber text-neo-amber">
-            <svg id="icon-menu-open" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="20" y2="18"></line></svg>
-            <svg id="icon-menu-close" class="w-5 h-5 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+          <a
+            href="/"
+            class="px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-800 hover:border-amber-500/40 text-amber-300 font-bold text-xs uppercase tracking-wider"
+          >
+            ← Trang chủ
+          </a>
+          <button
+            id="mobile-menu-toggle"
+            type="button"
+            class="p-2 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-white"
+            aria-label="Mở menu điều hướng"
+            aria-expanded="false"
+          >
+            <svg id="icon-menu-open" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <line x1="4" y1="6" x2="20" y2="6"></line>
+              <line x1="4" y1="12" x2="20" y2="12"></line>
+              <line x1="4" y1="18" x2="20" y2="18"></line>
+            </svg>
+            <svg id="icon-menu-close" class="w-5 h-5 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
           </button>
         </div>
       </div>
-      
-      <nav id="mobile-menu-panel" class="hidden md:hidden bg-black/95 border-b-2 border-neo-amber px-4 pt-4 pb-6 space-y-4">
-        <div class="grid grid-cols-2 gap-3 text-center font-pixel text-xl text-neo-amber">
-          <a href="/#gioi-thieu" class="mobile-nav-link p-2 border-2 border-neutral-800 hover:border-neo-amber">INTEL</a>
-          <a href="/#tinh-nang" class="mobile-nav-link p-2 border-2 border-neutral-800 hover:border-neo-amber">SPECS</a>
-          <a href="/#che-do-choi" class="mobile-nav-link p-2 border-2 border-neutral-800 hover:border-neo-amber">MODES</a>
-          <a href="/#huong-dan" class="mobile-nav-link p-2 border-2 border-neutral-800 hover:border-neo-amber">MANUAL</a>
+
+      <!-- Menu điều hướng thu gọn trên Mobile -->
+      <nav
+        id="mobile-menu-panel"
+        class="hidden md:hidden bg-neutral-900/95 border-b border-neutral-800 px-4 pt-3 pb-4 space-y-2"
+        aria-label="Menu di động"
+      >
+        <div class="grid grid-cols-2 gap-2 text-sm font-semibold">
+          <a
+            href="/#gioi-thieu"
+            class="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+          >
+            Giới thiệu
+          </a>
+          <a
+            href="/#tinh-nang"
+            class="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+          >
+            Tính năng
+          </a>
+          <a
+            href="/#che-do-choi"
+            class="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+          >
+            Chế độ chơi
+          </a>
+          <a
+            href="/#huong-dan"
+            class="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+          >
+            Hướng dẫn
+          </a>
         </div>
-        <div class="flex flex-col gap-3">
-          <a href="/?mode=play" class="btn-arcade text-center py-3 font-pixel text-xl">START GAME</a>
-          <a href="/?mode=trial" class="btn-arcade-outline text-center py-3 font-pixel text-xl !border-neo-cyan !text-neo-cyan">FREE TRIAL</a>
+        <div class="pt-2 flex flex-col gap-2">
+          <a
+            href="/?mode=play"
+            class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+          >
+            <span>Chơi ngay</span>
+          </a>
+          <a
+            href="/?mode=trial"
+            class="w-full py-2.5 rounded-xl bg-neutral-950 border border-amber-500/40 text-amber-300 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+          >
+            <span>Chơi thử ngay (Không cần đăng nhập)</span>
+          </a>
         </div>
       </nav>
     </header>
 
+    <!-- =====================================================================
+         NỘI DUNG CHÍNH: CHÍNH SÁCH QUYỀN RIÊNG TƯ
+    ====================================================================== -->
     <main id="top" class="flex-1 relative">
-      <div class="absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_75%_60%_at_50%_-10%,rgba(0,240,255,0.15),rgba(10,10,10,0))] pointer-events-none"></div>
+      <!-- Ánh sáng nền đồng bộ với Hero của Landing Page -->
+      <div
+        class="absolute inset-x-0 top-0 h-96 bg-[radial-gradient(ellipse_75%_60%_at_50%_-10%,rgba(245,158,11,0.15),rgba(10,10,10,0))] pointer-events-none"
+      ></div>
 
-      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-16 relative z-10 space-y-8">
-        <div class="space-y-4 pb-6 border-b-4 border-neo-cyan text-center">
-          <div class="inline-flex items-center gap-2 px-4 py-1.5 border-2 border-neo-cyan bg-neo-cyan/10 text-neo-cyan text-sm font-pixel uppercase tracking-widest mb-4">
-            <span>LEGAL DOCUMENTATION • SECTOR 01</span>
+      <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 relative z-10 space-y-6">
+        <!-- Phần mở đầu tiêu đề trang -->
+        <div class="space-y-4 pb-4 border-b border-neutral-800/90">
+          <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold uppercase tracking-wider">
+            <span>Tài liệu pháp lý công khai • Bắn Tank Online</span>
           </div>
-          <h1 class="font-pixel text-5xl sm:text-6xl uppercase tracking-widest text-white leading-none">
-            PRIVACY <span class="text-neo-cyan drop-shadow-[0_0_15px_rgba(0,240,255,0.6)]">POLICY</span>
+          <h1 class="text-3xl sm:text-4xl lg:text-5xl font-black uppercase tracking-tight text-white leading-tight">
+            Chính sách <span class="text-amber-400">Quyền riêng tư</span>
           </h1>
-          <div class="flex flex-wrap items-center justify-center gap-4 mt-6">
-            <span class="px-3 py-1 bg-black border-2 border-gray-700 font-pixel text-xl text-gray-300">EFFECTIVE: 11/11/2026</span>
-            <span class="px-3 py-1 bg-black border-2 border-gray-700 font-pixel text-xl text-gray-300">VERSION 1.0</span>
+          <div class="flex flex-wrap items-center gap-3 text-xs sm:text-sm text-neutral-400">
+            <span class="px-2.5 py-1 rounded-md bg-neutral-900 border border-neutral-800 text-neutral-300 font-medium">
+              Ngày có hiệu lực: 11/11/2026
+            </span>
+            <span class="px-2.5 py-1 rounded-md bg-neutral-900 border border-neutral-800 text-neutral-300 font-medium">
+              Phiên bản 1.0
+            </span>
+            <span class="text-neutral-400">
+              Áp dụng cho: <a href="https://bantank.online/" class="text-amber-400 hover:underline font-semibold">https://bantank.online/</a>
+            </span>
           </div>
         </div>
 
-        <section class="bg-black border-4 border-neo-cyan p-6 sm:p-8 pixel-corners shadow-[0_0_20px_rgba(0,240,255,0.3)]">
-          <p class="text-sm sm:text-base text-gray-300 leading-relaxed font-display mb-4">
+        <!-- Khung giới thiệu tổng quan -->
+        <section class="rounded-2xl bg-neutral-900/90 border border-amber-500/40 border-l-4 border-l-amber-400 p-6 sm:p-7 space-y-3 shadow-xl">
+          <p class="text-sm sm:text-base text-neutral-200 leading-relaxed">
             <strong class="text-white">Bắn Tank Online</strong> tôn trọng quyền riêng tư của người chơi. Chính sách này giải thích những loại thông tin có thể được xử lý khi bạn đăng nhập, chơi game và sử dụng các tính năng trực tuyến; mục đích sử dụng; cách bảo vệ và lựa chọn của bạn.
           </p>
-          <p class="text-sm sm:text-base text-gray-300 leading-relaxed font-display">
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
             Khi sử dụng trò chơi, bạn xác nhận đã đọc chính sách này. Khách truy cập có thể xem toàn bộ trang chủ giới thiệu, đọc chính sách này hoặc trải nghiệm chế độ <strong>Chơi thử</strong> mà không cần đăng nhập tài khoản. Nếu không đồng ý với chính sách này, vui lòng ngừng sử dụng trò chơi.
           </p>
         </section>
 
-        <div class="space-y-6">
-          <article class="bg-black border-2 border-gray-800 p-6 pixel-corners hover:border-neo-cyan transition-colors">
-            <h2 class="font-pixel text-3xl text-neo-cyan mb-4 uppercase">1. Thông tin thu thập</h2>
-            <ul class="space-y-3 text-sm text-gray-300">
-              <li class="flex items-start gap-3"><span class="text-neo-cyan font-pixel text-2xl mt-0.5">></span><span><strong>Thông tin đăng nhập Google:</strong> mã định danh tài khoản do Firebase Authentication cung cấp (UID), địa chỉ email, tên hiển thị và ảnh hồ sơ nếu bạn cho phép.</span></li>
-              <li class="flex items-start gap-3"><span class="text-neo-cyan font-pixel text-2xl mt-0.5">></span><span><strong>Thông tin hồ sơ trong game:</strong> tên/ảnh đại diện được chọn, thiết lập tài khoản và các lựa chọn cá nhân trong trò chơi.</span></li>
-              <li class="flex items-start gap-3"><span class="text-neo-cyan font-pixel text-2xl mt-0.5">></span><span><strong>Dữ liệu trò chơi:</strong> tiến trình, điểm số, XP, Xu, cấp bậc, thành tích, lịch sử hoặc trạng thái trận đấu.</span></li>
-              <li class="flex items-start gap-3"><span class="text-neo-cyan font-pixel text-2xl mt-0.5">></span><span><strong>Dữ liệu tính năng cộng đồng:</strong> thông tin bạn tạo hoặc gửi khi sử dụng bạn bè, clan, lời mời, tin nhắn.</span></li>
-              <li class="flex items-start gap-3"><span class="text-neo-cyan font-pixel text-2xl mt-0.5">></span><span><strong>Dữ liệu kỹ thuật và an toàn:</strong> trạng thái phiên đăng nhập, thông tin thiết bị/phiên cần thiết để quản lý đăng nhập và duy trì kết nối.</span></li>
-            </ul>
-            <div class="mt-4 p-3 bg-gray-900 border-2 border-gray-700 pixel-corners text-xs text-gray-400">
-              Chúng tôi <strong class="text-white">không yêu cầu mật khẩu Google</strong>. Xác thực thực hiện qua OAuth Google/Firebase.
-            </div>
-          </article>
-
-          <article class="bg-black border-2 border-gray-800 p-6 pixel-corners hover:border-neo-amber transition-colors">
-            <h2 class="font-pixel text-3xl text-neo-amber mb-4 uppercase">2. Mục đích xử lý</h2>
-            <ul class="space-y-3 text-sm text-gray-300">
-              <li class="flex items-start gap-3"><span class="text-neo-amber font-pixel text-xl mt-0.5">[+]</span><span>Xác thực người chơi và duy trì tài khoản.</span></li>
-              <li class="flex items-start gap-3"><span class="text-neo-amber font-pixel text-xl mt-0.5">[+]</span><span>Lưu, đồng bộ tiến trình, hồ sơ và dữ liệu trong game.</span></li>
-              <li class="flex items-start gap-3"><span class="text-neo-amber font-pixel text-xl mt-0.5">[+]</span><span>Vận hành trận đấu trực tuyến, tính năng nhiều người chơi.</span></li>
-              <li class="flex items-start gap-3"><span class="text-neo-amber font-pixel text-xl mt-0.5">[+]</span><span>Quản lý phiên đăng nhập, bảo vệ tài khoản chống gian lận.</span></li>
-              <li class="flex items-start gap-3"><span class="text-neo-amber font-pixel text-xl mt-0.5">[+]</span><span>Bảo trì, cải thiện độ ổn định và an toàn của hệ thống.</span></li>
-            </ul>
-          </article>
-
-          <article class="bg-black border-2 border-gray-800 p-6 pixel-corners hover:border-neo-cyan transition-colors">
-            <h2 class="font-pixel text-3xl text-neo-cyan mb-4 uppercase">3. Dịch vụ Google & Firebase</h2>
-            <p class="text-sm text-gray-300 mb-3">
-              Trò chơi sử dụng dịch vụ Google/Firebase (Firebase Authentication, Cloud Firestore) để vận hành.
-            </p>
-            <p class="text-sm text-gray-300">
-              Bạn có thể tham khảo <a href="https://policies.google.com/privacy" class="text-neo-cyan hover:underline">Chính sách của Google</a> và <a href="https://firebase.google.com/support/privacy" class="text-neo-cyan hover:underline">Bảo mật của Firebase</a>.
-            </p>
-          </article>
-
-          <article class="bg-black border-2 border-gray-800 p-6 pixel-corners hover:border-neo-amber transition-colors">
-            <h2 class="font-pixel text-3xl text-neo-amber mb-4 uppercase">4. Chia sẻ dữ liệu</h2>
-            <p class="text-sm text-white font-bold mb-3">Chúng tôi KHÔNG bán thông tin cá nhân của bạn.</p>
-            <ul class="space-y-3 text-sm text-gray-300">
-              <li class="flex items-start gap-3"><span class="text-neo-amber font-pixel text-2xl mt-0.5">></span><span>Chia sẻ với Google/Firebase để vận hành tính năng cốt lõi.</span></li>
-              <li class="flex items-start gap-3"><span class="text-neo-amber font-pixel text-2xl mt-0.5">></span><span>Chia sẻ với người chơi khác các thông tin hiển thị công khai (Tên, Avatar, Thành tích).</span></li>
-              <li class="flex items-start gap-3"><span class="text-neo-amber font-pixel text-2xl mt-0.5">></span><span>Cung cấp cho cơ quan chức năng khi có yêu cầu hợp pháp.</span></li>
-            </ul>
-          </article>
-
-          <article class="bg-black border-2 border-gray-800 p-6 pixel-corners hover:border-neo-cyan transition-colors">
-            <h2 class="font-pixel text-3xl text-neo-cyan mb-4 uppercase">5. Quyền của Người Chơi</h2>
-            <ul class="space-y-3 text-sm text-gray-300 mb-4">
-              <li class="flex items-start gap-3"><span class="text-neo-cyan font-pixel text-xl mt-0.5">[+]</span><span>Ngừng sử dụng trò chơi bất cứ lúc nào.</span></li>
-              <li class="flex items-start gap-3"><span class="text-neo-cyan font-pixel text-xl mt-0.5">[+]</span><span>Quản lý quyền truy cập trong cài đặt tài khoản Google.</span></li>
-              <li class="flex items-start gap-3"><span class="text-neo-cyan font-pixel text-xl mt-0.5">[+]</span><span>Yêu cầu chỉnh sửa, xóa dữ liệu bằng cách liên hệ Admin.</span></li>
-            </ul>
-            <p class="text-sm text-gray-500">Chúng tôi không thu thập thông tin trẻ em ngoài dữ liệu game tiêu chuẩn.</p>
-          </article>
-        </div>
-
-        <article class="bg-black border-4 border-neo-amber p-6 sm:p-8 pixel-corners shadow-[0_0_20px_rgba(255,184,0,0.3)] mt-8">
-          <h2 class="font-pixel text-4xl text-neo-amber mb-6 uppercase">CONTACT COMM_LINK</h2>
-          <p class="text-sm text-gray-300 mb-6">Mọi thắc mắc về quyền riêng tư, vui lòng mã hóa tín hiệu gửi về:</p>
-          
-          <div className="bg-gray-900 border-2 border-gray-700 p-6 pixel-corners space-y-4 mb-8 text-lg font-pixel">
-            <div className="flex gap-4"><span className="text-gray-500">HQ:</span> <span className="text-white">BẮN TANK ONLINE</span></div>
-            <div className="flex gap-4"><span className="text-gray-500">EMAIL:</span> <a href="mailto:admin@bantank.online" className="text-neo-amber hover:underline">admin@bantank.online</a></div>
-            <div className="flex gap-4"><span className="text-gray-500">WEB:</span> <a href="https://bantank.online/" className="text-neo-cyan hover:underline">HTTPS://BANTANK.ONLINE/</a></div>
+        <!-- Mục 1 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              01
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Thông tin chúng tôi xử lý
+            </h2>
           </div>
-          
-          <div className="flex flex-col sm:flex-row gap-4">
-            <a href="/" className="btn-arcade-outline flex-1 text-center py-4 font-pixel text-xl">RETURN TO BASE (HOME)</a>
-            <a href="/?mode=trial" className="btn-arcade flex-1 text-center py-4 font-pixel text-xl !bg-neo-cyan">START FREE TRIAL</a>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Tùy theo tính năng bạn sử dụng, Bắn Tank Online có thể xử lý các nhóm thông tin sau:
+          </p>
+          <ul class="space-y-2.5 text-sm text-neutral-300 leading-relaxed pl-1">
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold mt-0.5">•</span>
+              <span>
+                <strong class="text-white">Thông tin đăng nhập Google:</strong> mã định danh tài khoản do Firebase Authentication cung cấp (UID), địa chỉ email, tên hiển thị và ảnh hồ sơ nếu bạn cho phép Google cung cấp các thông tin đó.
+              </span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold mt-0.5">•</span>
+              <span>
+                <strong class="text-white">Thông tin hồ sơ trong game:</strong> tên/ảnh đại diện được chọn, thiết lập tài khoản và các lựa chọn cá nhân trong trò chơi.
+              </span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold mt-0.5">•</span>
+              <span>
+                <strong class="text-white">Dữ liệu trò chơi:</strong> tiến trình, điểm số, XP, Xu, cấp bậc, thành tích, lịch sử hoặc trạng thái trận đấu và dữ liệu cần thiết để vận hành các chế độ chơi.
+              </span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold mt-0.5">•</span>
+              <span>
+                <strong class="text-white">Dữ liệu tính năng cộng đồng:</strong> thông tin bạn tạo hoặc gửi khi sử dụng bạn bè, clan, lời mời, tin nhắn hoặc tính năng tương tác khác, nếu các tính năng đó được bật.
+              </span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold mt-0.5">•</span>
+              <span>
+                <strong class="text-white">Dữ liệu kỹ thuật và an toàn:</strong> trạng thái phiên đăng nhập, thông tin thiết bị/phiên cần thiết để quản lý đăng nhập, phát hiện sử dụng bất thường, duy trì kết nối và xử lý lỗi. Nhà cung cấp hạ tầng có thể tự xử lý một số nhật ký kỹ thuật theo tài liệu và chính sách riêng của họ.
+              </span>
+            </li>
+          </ul>
+          <div class="pt-2">
+            <p class="p-3.5 rounded-xl bg-neutral-950/80 border border-neutral-800 text-xs sm:text-sm text-neutral-300">
+              Chúng tôi <strong class="text-amber-300">không yêu cầu bạn cung cấp mật khẩu Google</strong>. Việc xác thực được thực hiện thông qua cơ chế đăng nhập chính thức của Google và Firebase Authentication.
+            </p>
           </div>
         </article>
 
+        <!-- Mục 2 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              02
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Mục đích sử dụng thông tin
+            </h2>
+          </div>
+          <ul class="space-y-2 text-sm text-neutral-300 leading-relaxed pl-1">
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Xác thực người chơi và duy trì tài khoản.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Lưu, đồng bộ tiến trình, hồ sơ và dữ liệu trong game giữa các lần chơi.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Vận hành trận đấu trực tuyến, tính năng nhiều người chơi và các tính năng cộng đồng.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Quản lý phiên đăng nhập, bảo vệ tài khoản và hạn chế hành vi gian lận hoặc truy cập trái phép.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Khắc phục lỗi, bảo trì, cải thiện độ ổn định và an toàn của trò chơi.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Phản hồi yêu cầu hỗ trợ và thực hiện nghĩa vụ pháp lý hợp lệ (nếu có).</span>
+            </li>
+          </ul>
+        </article>
+
+        <!-- Mục 3 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              03
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Đăng nhập Google và dịch vụ Firebase
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Trò chơi sử dụng dịch vụ Google/Firebase, bao gồm Firebase Authentication để xác thực tài khoản và Cloud Firestore để lưu trữ, đồng bộ dữ liệu cần thiết cho trò chơi.
+          </p>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Khi bạn chọn đăng nhập Google, Google xử lý thông tin đăng nhập theo
+            <a
+              href="https://policies.google.com/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-amber-400 hover:text-amber-300 underline font-semibold"
+            >Chính sách quyền riêng tư của Google</a>.
+            Firebase xử lý dữ liệu theo
+            <a
+              href="https://firebase.google.com/support/privacy"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="text-amber-400 hover:text-amber-300 underline font-semibold"
+            >Thông tin quyền riêng tư và bảo mật của Firebase</a>.
+          </p>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Việc sử dụng các dịch vụ này có thể khiến dữ liệu được xử lý trên hệ thống máy chủ của Google theo cấu hình dịch vụ, điều khoản và chính sách áp dụng của Google.
+          </p>
+        </article>
+
+        <!-- Mục 4 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              04
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Chia sẻ thông tin
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-200 font-semibold">
+            Chúng tôi không bán thông tin cá nhân của người chơi.
+          </p>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Thông tin chỉ được chia sẻ hoặc xử lý trong phạm vi cần thiết với:
+          </p>
+          <ul class="space-y-2 text-sm text-neutral-300 leading-relaxed pl-1">
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold">•</span>
+              <span>Google/Firebase và các nhà cung cấp hạ tầng phục vụ xác thực, lưu trữ, kết nối và vận hành trò chơi.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold">•</span>
+              <span>Người chơi khác, trong phạm vi thông tin hồ sơ, trạng thái hoặc hoạt động mà tính năng nhiều người chơi/cộng đồng cần hiển thị.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-amber-400 font-bold">•</span>
+              <span>Cơ quan có thẩm quyền khi có yêu cầu hợp pháp hoặc khi cần thiết để bảo vệ quyền, an toàn và tính toàn vẹn của dịch vụ.</span>
+            </li>
+          </ul>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Chúng tôi không chủ động công khai địa chỉ email của bạn cho người chơi khác, trừ khi một tính năng cụ thể thông báo rõ và cần thông tin đó để hoạt động.
+          </p>
+        </article>
+
+        <!-- Mục 5 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              05
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Lưu trữ và bảo mật dữ liệu
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Dữ liệu được lưu trong các dịch vụ Google/Firebase được cấu hình cho Bắn Tank Online. Chúng tôi áp dụng các biện pháp hợp lý trong phạm vi khả năng quản trị, chẳng hạn như kiểm soát quyền truy cập và sử dụng quy tắc bảo mật của Firestore.
+          </p>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Không có phương thức truyền tải hoặc lưu trữ điện tử nào bảo đảm an toàn tuyệt đối. Bạn nên bảo vệ tài khoản Google và không chia sẻ quyền truy cập tài khoản của mình.
+          </p>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Dữ liệu được lưu trong thời gian cần thiết để cung cấp trò chơi, duy trì tiến trình, bảo đảm an toàn hoặc đáp ứng nghĩa vụ pháp lý. Thời gian lưu cụ thể có thể phụ thuộc vào loại dữ liệu và cấu hình của dịch vụ.
+          </p>
+        </article>
+
+        <!-- Mục 6 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              06
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Phiên đăng nhập và thiết bị
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Trò chơi có thể áp dụng cơ chế quản lý phiên để bảo vệ tài khoản, bao gồm giới hạn phiên hoạt động và tự kết thúc phiên khi không có hoạt động trong một khoảng thời gian theo cấu hình hiện hành.
+          </p>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Thông tin phiên có thể được xử lý để phát hiện đăng nhập đồng thời hoặc hoạt động bất thường. Khi phiên hết hạn, bạn có thể cần đăng nhập lại để tiếp tục chơi.
+          </p>
+        </article>
+
+        <!-- Mục 7 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              07
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Quyền và lựa chọn của người chơi
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Bạn có thể:
+          </p>
+          <ul class="space-y-2 text-sm text-neutral-300 leading-relaxed pl-1">
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Ngừng sử dụng trò chơi bất cứ lúc nào.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Quản lý quyền truy cập tài khoản Google đối với ứng dụng trong phần cài đặt tài khoản Google.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Yêu cầu xem, chỉnh sửa hoặc xóa dữ liệu tài khoản trong phạm vi chúng tôi có thể xác minh và xử lý.</span>
+            </li>
+            <li class="flex items-start gap-2.5">
+              <span class="text-emerald-400 font-bold">✓</span>
+              <span>Gửi yêu cầu hỗ trợ hoặc yêu cầu xóa tài khoản/dữ liệu qua địa chỉ liên hệ ở cuối chính sách.</span>
+            </li>
+          </ul>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Khi tiếp nhận yêu cầu xóa, chúng tôi có thể cần xác minh bạn là chủ tài khoản. Một số dữ liệu có thể được giữ lại trong thời gian cần thiết để bảo đảm an toàn, giải quyết tranh chấp hoặc tuân thủ quy định pháp luật; dữ liệu trong bản sao lưu của nhà cung cấp có thể được xóa theo chu kỳ lưu giữ của họ.
+          </p>
+        </article>
+
+        <!-- Mục 8 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              08
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Quyền riêng tư của trẻ em
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Trò chơi không chủ đích yêu cầu trẻ em cung cấp thông tin cá nhân ngoài thông tin cần thiết cho việc đăng nhập và vận hành tài khoản. Nếu bạn là cha mẹ/người giám hộ và cho rằng trẻ đã cung cấp thông tin cá nhân không phù hợp, vui lòng liên hệ với chúng tôi để được hỗ trợ xem xét.
+          </p>
+        </article>
+
+        <!-- Mục 9 -->
+        <article class="rounded-2xl bg-neutral-900/60 border border-neutral-800 p-6 sm:p-7 space-y-3">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-300">
+              09
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Thay đổi chính sách
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Chúng tôi có thể cập nhật chính sách này khi trò chơi thay đổi tính năng, cách xử lý dữ liệu hoặc yêu cầu pháp lý. Bản cập nhật sẽ được đăng tại trang này cùng ngày có hiệu lực mới. Bạn nên kiểm tra trang định kỳ.
+          </p>
+        </article>
+
+        <!-- Mục 10 -->
+        <article class="rounded-2xl bg-gradient-to-r from-neutral-900 via-neutral-900 to-amber-950/30 border border-amber-500/40 p-6 sm:p-7 space-y-4">
+          <div class="flex items-center gap-3">
+            <span class="text-xs font-mono font-black px-2.5 py-1 rounded-md bg-amber-500/20 border border-amber-500/40 text-amber-300">
+              10
+            </span>
+            <h2 class="text-lg sm:text-xl font-bold text-white">
+              Thông tin liên hệ
+            </h2>
+          </div>
+          <p class="text-sm sm:text-base text-neutral-300 leading-relaxed">
+            Nếu có câu hỏi, yêu cầu truy cập, chỉnh sửa hoặc xóa dữ liệu, vui lòng liên hệ:
+          </p>
+          <div class="p-4 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-1.5 text-sm text-neutral-200">
+            <div class="font-black text-amber-400 uppercase tracking-wider">Bắn Tank Online</div>
+            <div>
+              Email hỗ trợ:
+              <a href="mailto:admin@bantank.online" class="text-amber-300 hover:underline font-semibold">
+                admin@bantank.online
+              </a>
+            </div>
+            <div>
+              Website chính thức:
+              <a href="https://bantank.online/" class="text-amber-300 hover:underline font-semibold">
+                https://bantank.online/
+              </a>
+            </div>
+          </div>
+          <div class="pt-2 flex flex-wrap items-center gap-3">
+            <a
+              href="/"
+              class="px-5 py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs sm:text-sm uppercase tracking-wider transition-all shadow-lg inline-flex items-center gap-2"
+            >
+              <span>← Quay lại trang chủ Bắn Tank Online</span>
+            </a>
+            <a
+              href="/?mode=trial"
+              class="px-5 py-3 rounded-xl bg-neutral-950 hover:bg-neutral-800 border border-amber-500/40 text-amber-300 font-bold text-xs sm:text-sm uppercase tracking-wider transition-all inline-flex items-center gap-2"
+            >
+              <span>Chơi thử Màn 1</span>
+            </a>
+          </div>
+        </article>
       </div>
     </main>
 
-    <footer className="bg-black text-gray-500 text-xs sm:text-sm py-8 border-t-2 border-gray-900 mt-10">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
-        <div className="flex items-center gap-2 font-pixel text-xl text-white">
-          <img src="/logo-bantank.png" alt="Logo" className="w-6 h-6 pixel-corners" />
-          BẮN TANK ONLINE © 2026
+    <!-- =====================================================================
+         FOOTER CÔNG KHAI (ĐỒNG BỘ VỚI LANDING PAGE)
+    ====================================================================== -->
+    <footer class="bg-neutral-950 border-t border-neutral-800/90 text-neutral-400 text-xs sm:text-sm mt-10">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-12">
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-8 pb-8 border-b border-neutral-900">
+          <!-- Cột 1: Thương hiệu & Mô tả -->
+          <div class="md:col-span-5 space-y-3">
+            <div class="flex items-center gap-3">
+              <img
+                src="/logo-bantank.png"
+            onerror="this.onerror=null;this.src='https://i.ibb.co/Rkf42RD9/bantank.png';"
+                alt="Logo Bắn Tank Online"
+                class="w-9 h-9 rounded-lg object-contain border border-amber-500/40 bg-neutral-900 p-1"
+              />
+              <span class="text-base font-black uppercase tracking-wider text-white">
+                Bắn Tank Online
+              </span>
+            </div>
+            <p class="text-xs sm:text-sm text-neutral-400 leading-relaxed max-w-md">
+              Trò chơi bắn xe tăng chiến thuật 2D trực tuyến trên trình duyệt web. Hỗ trợ chơi đơn (Solo), phối hợp đồng đội AI, chơi trực tuyến 2 người (Co-op Online) và chế độ Chơi thử không cần đăng nhập.
+            </p>
+            <p class="text-xs text-neutral-500">
+              Trang chủ chính thức:
+              <a href="https://bantank.online/" class="text-neutral-300 hover:text-amber-400 underline">https://bantank.online/</a>
+            </p>
+          </div>
+
+          <!-- Cột 2: Liên kết điều hướng nhanh -->
+          <div class="md:col-span-3 space-y-2.5">
+            <div class="text-xs font-black uppercase tracking-wider text-neutral-200">
+              Danh mục trang chủ
+            </div>
+            <ul class="space-y-2 text-xs sm:text-sm">
+              <li><a href="/#gioi-thieu" class="hover:text-amber-400 transition-colors">Giới thiệu trò chơi</a></li>
+              <li><a href="/#tinh-nang" class="hover:text-amber-400 transition-colors">Tính năng nổi bật</a></li>
+              <li><a href="/#che-do-choi" class="hover:text-amber-400 transition-colors">Các chế độ chơi</a></li>
+              <li><a href="/#huong-dan" class="hover:text-amber-400 transition-colors">Hướng dẫn bắt đầu</a></li>
+            </ul>
+          </div>
+
+          <!-- Cột 3: Pháp lý, Quyền riêng tư & Liên hệ hỗ trợ -->
+          <div class="md:col-span-4 space-y-2.5">
+            <div class="text-xs font-black uppercase tracking-wider text-neutral-200">
+              Pháp lý &amp; Hỗ trợ người chơi
+            </div>
+            <ul class="space-y-2 text-xs sm:text-sm">
+              <li>
+                <a
+                  href="/privacy.html"
+                  class="inline-flex items-center gap-1.5 text-amber-400 hover:text-amber-300 font-semibold transition-colors"
+                >
+                  <span>Chính sách quyền riêng tư (Privacy Policy)</span>
+                </a>
+              </li>
+              <li class="flex items-center gap-1.5 text-neutral-300">
+                <span>Liên hệ hỗ trợ:</span>
+                <a href="mailto:admin@bantank.online" class="text-neutral-200 hover:text-amber-400 underline">
+                  admin@bantank.online
+                </a>
+              </li>
+            </ul>
+            <p class="text-[11px] text-neutral-500 leading-relaxed pt-1">
+              Việc xác thực tài khoản được thực hiện thông qua Google OAuth &amp; Firebase Authentication. Khách truy cập có thể xem toàn bộ thông tin giới thiệu và Chính sách quyền riêng tư mà không cần đăng nhập.
+            </p>
+          </div>
         </div>
-        <div className="flex gap-6 font-display font-bold uppercase">
-          <a href="/" className="hover:text-neo-amber transition-colors">Trang chủ</a>
-          <a href="mailto:admin@bantank.online" className="hover:text-neo-amber transition-colors">Hỗ trợ</a>
+
+        <!-- Dòng bản quyền dưới cùng -->
+        <div class="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-500">
+          <div>© 2026 Bắn Tank Online. Bảo lưu mọi quyền.</div>
+          <div class="flex items-center gap-4">
+            <a href="/" class="hover:text-neutral-300 transition-colors">Trang chủ</a>
+            <span>•</span>
+            <a href="#top" class="hover:text-neutral-300 transition-colors">Lên đầu trang ↑</a>
+          </div>
         </div>
       </div>
     </footer>
@@ -261,11 +609,25 @@
       (function () {
         var toggleBtn = document.getElementById('mobile-menu-toggle');
         var panel = document.getElementById('mobile-menu-panel');
+        var iconOpen = document.getElementById('icon-menu-open');
+        var iconClose = document.getElementById('icon-menu-close');
         if (!toggleBtn || !panel) return;
         toggleBtn.addEventListener('click', function () {
-          panel.classList.toggle('hidden');
+          var isHidden = panel.classList.contains('hidden');
+          if (isHidden) {
+            panel.classList.remove('hidden');
+            toggleBtn.setAttribute('aria-expanded', 'true');
+            if (iconOpen) iconOpen.classList.add('hidden');
+            if (iconClose) iconClose.classList.remove('hidden');
+          } else {
+            panel.classList.add('hidden');
+            toggleBtn.setAttribute('aria-expanded', 'false');
+            if (iconOpen) iconOpen.classList.remove('hidden');
+            if (iconClose) iconClose.classList.add('hidden');
+          }
         });
       })();
     </script>
   </body>
 </html>
+
