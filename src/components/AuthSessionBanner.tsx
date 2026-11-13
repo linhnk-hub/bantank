@@ -34,18 +34,11 @@ export function formatAccountStatusMessage(
   status?: SessionStateStatus
 ): string {
   if (!rawMessage) {
-    if (status === 'DISPLACED') {
-      return 'Tài khoản này đang được mở trên một thiết bị khác. Trận đấu hiện tại đã tạm dừng.';
-    }
-    if (status === 'PAUSED_IDLE' || status === 'EXPIRED') {
-      return 'Tài khoản đã tạm dừng sau 5 phút không hoạt động. Vui lòng đăng nhập lại để tiếp tục.';
-    }
-    if (status === 'CONNECTION_LOST_UNVERIFIED') {
-      return 'Mất kết nối mạng khi kiểm tra tài khoản. Trận đấu đang tạm dừng cho đến khi kết nối lại.';
-    }
+    if (status === 'DISPLACED') return 'Tài khoản này đang được mở trên một thiết bị khác. Trận đấu hiện tại đã tạm dừng.';
+    if (status === 'PAUSED_IDLE' || status === 'EXPIRED') return 'Tài khoản đã tạm dừng sau 5 phút không hoạt động. Vui lòng đăng nhập lại để tiếp tục.';
+    if (status === 'CONNECTION_LOST_UNVERIFIED') return 'Mất kết nối mạng khi kiểm tra tài khoản. Trận đấu đang tạm dừng cho đến khi kết nối lại.';
     return '';
   }
-
   return rawMessage
     .replace(/Phiên đăng nhập đã được mở trên một thiết bị khác/gi, 'Tài khoản này đang được mở trên một thiết bị khác')
     .replace(/Phiên làm việc đã tạm dừng sau 5 phút không hoạt động/gi, 'Tài khoản đã tạm dừng sau 5 phút không hoạt động')
@@ -66,75 +59,21 @@ export function getSessionBadgeInfo(
   isHeartbeatInFlight: boolean,
   hasUser: boolean
 ): SessionBadgeDisplay {
-  if (isProcessing && !hasUser) {
-    return {
-      label: 'Đang đăng nhập...',
-      badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
-      dotStyle: 'bg-amber-400 animate-pulse',
-    };
-  }
+  if (isProcessing && !hasUser) return { label: 'ĐANG ĐĂNG NHẬP...', badgeStyle: 'bg-black text-neo-amber border-neo-amber', dotStyle: 'bg-neo-amber animate-pulse' };
+  if (!hasUser) return { label: 'CHƯA ĐĂNG NHẬP', badgeStyle: 'bg-black text-gray-500 border-gray-700', dotStyle: 'bg-gray-500' };
 
-  if (!hasUser) {
-    return {
-      label: 'Chưa đăng nhập',
-      badgeStyle: 'bg-neutral-800 text-neutral-400 border-neutral-700',
-      dotStyle: 'bg-neutral-500',
-    };
-  }
-
-  // User is authenticated with Google
   switch (status) {
-    case 'ACQUIRING':
-      return {
-        label: 'Đang kiểm tra tài khoản...',
-        badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
-        dotStyle: 'bg-amber-400 animate-pulse',
-      };
+    case 'ACQUIRING': return { label: 'ĐANG KIỂM TRA...', badgeStyle: 'bg-black text-neo-amber border-neo-amber', dotStyle: 'bg-neo-amber animate-pulse' };
     case 'ACTIVE':
-      if (isHeartbeatInFlight) {
-        return {
-          label: 'Đang kiểm tra kết nối...',
-          badgeStyle: 'bg-sky-950/80 text-sky-300 border-sky-800/80',
-          dotStyle: 'bg-sky-400 animate-pulse',
-        };
-      }
-      return {
-        label: '',
-        badgeStyle: 'hidden',
-        dotStyle: 'bg-emerald-400',
-      };
-    case 'CONNECTION_LOST_UNVERIFIED':
-      return {
-        label: 'Mất kết nối',
-        badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
-        dotStyle: 'bg-amber-400',
-      };
-    case 'DISPLACED':
-      return {
-        label: 'Đang mở ở thiết bị khác',
-        badgeStyle: 'bg-rose-950/80 text-rose-300 border-rose-800/80',
-        dotStyle: 'bg-rose-500',
-      };
+      if (isHeartbeatInFlight) return { label: 'ĐANG KẾT NỐI...', badgeStyle: 'bg-black text-neo-cyan border-neo-cyan', dotStyle: 'bg-neo-cyan animate-pulse' };
+      return { label: '', badgeStyle: 'hidden', dotStyle: 'bg-green-400' };
+    case 'CONNECTION_LOST_UNVERIFIED': return { label: 'MẤT KẾT NỐI', badgeStyle: 'bg-black text-neo-amber border-neo-amber', dotStyle: 'bg-neo-amber' };
+    case 'DISPLACED': return { label: 'ĐANG MỞ Ở THIẾT BỊ KHÁC', badgeStyle: 'bg-black text-neo-rose border-neo-rose', dotStyle: 'bg-neo-rose' };
     case 'PAUSED_IDLE':
-    case 'EXPIRED':
-      return {
-        label: 'Tạm dừng do ngưng thao tác',
-        badgeStyle: 'bg-rose-950/80 text-rose-300 border-rose-800/80',
-        dotStyle: 'bg-rose-500',
-      };
-    case 'NO_SESSION':
-      return {
-        label: 'Chưa kết nối máy chủ',
-        badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
-        dotStyle: 'bg-amber-400',
-      };
+    case 'EXPIRED': return { label: 'TẠM DỪNG (AFK)', badgeStyle: 'bg-black text-neo-rose border-neo-rose', dotStyle: 'bg-neo-rose' };
+    case 'NO_SESSION': return { label: 'CHƯA KẾT NỐI MÁY CHỦ', badgeStyle: 'bg-black text-neo-amber border-neo-amber', dotStyle: 'bg-neo-amber' };
     case 'HEARTBEAT_REJECTED_UNCLASSIFIED':
-    default:
-      return {
-        label: 'Cần xác thực',
-        badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
-        dotStyle: 'bg-amber-400 animate-pulse',
-      };
+    default: return { label: 'CẦN XÁC THỰC', badgeStyle: 'bg-black text-neo-amber border-neo-amber', dotStyle: 'bg-neo-amber animate-pulse' };
   }
 }
 
@@ -142,9 +81,7 @@ interface AuthSessionBannerProps {
   onStartMatchAllowedChange?: (allowed: boolean) => void;
 }
 
-export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
-  onStartMatchAllowedChange,
-}) => {
+export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({ onStartMatchAllowedChange }) => {
   const authManager = AuthManager.getInstance();
   const sessionManager = SessionManager.getInstance();
   const avatarManager = AvatarManager.getInstance();
@@ -153,9 +90,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
   const [session, setSession] = useState<SessionStateSnapshot>(() => sessionManager.getSnapshot());
   const [, setAvatarTick] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'error' | 'success'; text: string } | null>(
-    null
-  );
+  const [feedbackMsg, setFeedbackMsg] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
 
   useEffect(() => {
     const unsubAuth = authManager.subscribe((u) => {
@@ -175,33 +110,17 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
       }
     });
 
-    const unsubAvatar = avatarManager.subscribe(() => {
-      setAvatarTick((t) => t + 1);
-    });
-
-    return () => {
-      unsubAuth();
-      unsubSession();
-      unsubAvatar();
-    };
+    const unsubAvatar = avatarManager.subscribe(() => setAvatarTick((t) => t + 1));
+    return () => { unsubAuth(); unsubSession(); unsubAvatar(); };
   }, [authManager, sessionManager, avatarManager, onStartMatchAllowedChange]);
 
   const handleSignIn = async () => {
-    setIsProcessing(true);
-    setFeedbackMsg(null);
+    setIsProcessing(true); setFeedbackMsg(null);
     try {
       const res = await authManager.signInWithGoogle();
-      if (!res.isValid) {
-        setFeedbackMsg({
-          type: 'error',
-          text: res.errorMessage || 'Đăng nhập không thành công.',
-        });
-      }
-    } catch (e: any) {
-      setFeedbackMsg({ type: 'error', text: e?.message || 'Lỗi đăng nhập Google.' });
-    } finally {
-      setIsProcessing(false);
-    }
+      if (!res.isValid) setFeedbackMsg({ type: 'error', text: res.errorMessage || 'Đăng nhập không thành công.' });
+    } catch (e: any) { setFeedbackMsg({ type: 'error', text: e?.message || 'Lỗi đăng nhập Google.' }); }
+    finally { setIsProcessing(false); }
   };
 
   const handleSignOut = async () => {
@@ -209,95 +128,60 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
     try {
       await sessionManager.releaseSessionAndSignOut();
       setFeedbackMsg({ type: 'success', text: 'Đã đăng xuất an toàn.' });
-    } finally {
-      setIsProcessing(false);
-    }
+    } finally { setIsProcessing(false); }
   };
 
   const handleRetryAcquire = async () => {
     if (!user) return;
-    setIsProcessing(true);
-    setFeedbackMsg(null);
+    setIsProcessing(true); setFeedbackMsg(null);
     try {
       const res = await sessionManager.acquireSession(user.uid);
-      if (!res.success && res.message) {
-        setFeedbackMsg({ type: 'error', text: formatAccountStatusMessage(res.message, session.status) });
-      }
-    } finally {
-      setIsProcessing(false);
-    }
+      if (!res.success && res.message) setFeedbackMsg({ type: 'error', text: formatAccountStatusMessage(res.message, session.status) });
+    } finally { setIsProcessing(false); }
   };
 
   const handleReauth = async () => {
-    setIsProcessing(true);
-    setFeedbackMsg(null);
+    setIsProcessing(true); setFeedbackMsg(null);
     try {
       const res = await sessionManager.handleUserReauthenticate();
-      setFeedbackMsg({
-        type: res.success ? 'success' : 'error',
-        text: formatAccountStatusMessage(res.message, session.status),
-      });
-    } finally {
-      setIsProcessing(false);
-    }
+      setFeedbackMsg({ type: res.success ? 'success' : 'error', text: formatAccountStatusMessage(res.message, session.status) });
+    } finally { setIsProcessing(false); }
   };
 
   const isTrialMode = authManager.isTrialMode();
-
-  const badgeInfo = getSessionBadgeInfo(
-    session.status,
-    isProcessing,
-    session.isHeartbeatInFlight ?? false,
-    Boolean(user)
-  );
-
-  const effectiveAvatarUrl = user
-    ? avatarManager.getEffectivePlayerAvatarUrl({
-        uid: user.uid,
-        photoURL: user.photoURL,
-      })
-    : null;
+  const badgeInfo = getSessionBadgeInfo(session.status, isProcessing, session.isHeartbeatInFlight ?? false, Boolean(user));
+  const effectiveAvatarUrl = user ? avatarManager.getEffectivePlayerAvatarUrl({ uid: user.uid, photoURL: user.photoURL }) : null;
 
   return (
     <>
-      {/* Top Banner Status Bar */}
-      <div className="bg-neutral-950/90 border-b border-neutral-800/80 px-3 py-1.5 flex items-center justify-between text-xs text-neutral-300 shrink-0">
+      <div className="bg-black/90 border-b-2 border-neo-amber/50 px-3 py-1.5 flex items-center justify-between text-xs text-white shrink-0 font-display">
         <div className="flex items-center gap-2">
           {user ? (
-            <div
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-neutral-900/90 ${getRoleNameFrameClasses(
-                resolveUserRole(user)
-              )}`}
-            >
+            <div className={`flex items-center gap-2 px-2 py-0.5 rounded-sm bg-black border border-neo-amber ${getRoleNameFrameClasses(resolveUserRole(user))}`}>
               {effectiveAvatarUrl ? (
-                <img
-                  src={effectiveAvatarUrl}
-                  alt={getUserDisplayLabel(user)}
-                  className="w-5 h-5 rounded-full object-cover border border-amber-500/40 shrink-0"
-                  referrerPolicy="no-referrer"
-                />
+                <img src={effectiveAvatarUrl} alt={getUserDisplayLabel(user)} className="w-5 h-5 pixel-corners object-cover border border-neo-amber shrink-0" referrerPolicy="no-referrer" />
               ) : (
-                <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <UserCheck className="w-3.5 h-3.5 text-neo-cyan shrink-0" />
               )}
-              <span className="font-bold text-amber-300 truncate max-w-[160px] sm:max-w-[220px]">
+              <span className="font-pixel text-lg text-neo-amber truncate max-w-[160px] sm:max-w-[220px]">
                 {getUserDisplayLabel(user)}
               </span>
               {badgeInfo.label && (
-                <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-sm border font-pixel ${badgeInfo.badgeStyle}`}>
                   {badgeInfo.label}
                 </span>
               )}
             </div>
           ) : isTrialMode ? (
-            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-amber-950/70 border border-amber-500/40 text-amber-300 font-bold">
-              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-              <span>Chế độ Chơi thử • Stage 1 (Không lưu dữ liệu)</span>
+            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-sm bg-black border border-neo-amber text-neo-amber font-pixel text-lg">
+              <span className="w-2 h-2 rounded-sm bg-neo-amber animate-pulse" />
+              <span>TRIAL MODE • STAGE 1 (NO SAVE)</span>
             </div>
           ) : (
-            <div className="flex items-center gap-1.5 text-amber-400">
-              <span className={`w-2 h-2 rounded-full ${badgeInfo.dotStyle}`} />
+            <div className="flex items-center gap-1.5 text-neo-amber font-pixel text-lg">
+              <span className={`w-2 h-2 rounded-sm ${badgeInfo.dotStyle}`} />
               <AlertTriangle className="w-3.5 h-3.5" />
-              <span>{isProcessing ? 'Đang đăng nhập...' : 'Chưa đăng nhập (Cần Gmail cá nhân để chơi)'}</span>
+              <span>{isProcessing ? 'AUTHENTICATING...' : 'NO LOGIN (REQUIRE GMAIL)'}</span>
             </div>
           )}
         </div>
@@ -306,64 +190,33 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
           {user ? (
             <div className="flex items-center gap-1.5">
               {session.status === 'NO_SESSION' && (
-                <button
-                  onClick={handleRetryAcquire}
-                  disabled={isProcessing}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-black transition-all font-bold text-[11px] active:scale-95 disabled:opacity-50"
-                  title="Thử kết nối lại máy chủ"
-                >
+                <button onClick={handleRetryAcquire} disabled={isProcessing} className="btn-arcade-outline px-2 py-0.5 text-xs flex items-center gap-1" title="Thử kết nối lại máy chủ">
                   <RefreshCw className={`w-3 h-3 ${isProcessing ? 'animate-spin' : ''}`} />
-                  <span>Kết nối máy chủ</span>
+                  <span>RECONNECT</span>
                 </button>
               )}
-              <button
-                onClick={handleSignOut}
-                disabled={isProcessing}
-                className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-all font-semibold active:scale-95 disabled:opacity-50"
-              >
-                <LogOut className="w-3 h-3 text-red-400" />
-                <span>Đăng xuất</span>
+              <button onClick={handleSignOut} disabled={isProcessing} className="btn-arcade-outline !border-neo-rose !text-neo-rose px-2.5 py-1 flex items-center gap-1">
+                <LogOut className="w-3 h-3" />
+                <span>LOGOUT</span>
               </button>
             </div>
           ) : (
-            <button
-              onClick={handleSignIn}
-              disabled={isProcessing}
-              className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-amber-500 hover:bg-amber-400 text-black font-bold transition-all shadow active:scale-95 disabled:opacity-50"
-            >
+            <button onClick={handleSignIn} disabled={isProcessing} className="btn-arcade px-3 py-1 flex items-center gap-1.5 text-xs">
               <LogIn className="w-3.5 h-3.5" />
-              <span>{isProcessing ? 'Đang xác thực...' : 'Đăng nhập Google'}</span>
+              <span>{isProcessing ? 'AUTH...' : 'GOOGLE LOGIN'}</span>
             </button>
           )}
         </div>
       </div>
 
       {feedbackMsg && (
-        <div
-          className={`px-3 py-1.5 text-[11px] font-medium flex items-center justify-between ${
-            feedbackMsg.type === 'error'
-              ? 'bg-red-950/90 text-red-300 border-b border-red-800/80'
-              : 'bg-emerald-950/90 text-emerald-300 border-b border-emerald-800/80'
-          }`}
-        >
+        <div className={`px-3 py-1.5 font-pixel text-lg flex items-center justify-between ${feedbackMsg.type === 'error' ? 'bg-black text-neo-rose border-b-2 border-neo-rose' : 'bg-black text-neo-cyan border-b-2 border-neo-cyan'}`}>
           <span>{formatAccountStatusMessage(feedbackMsg.text, session.status)}</span>
-          <button
-            onClick={() => setFeedbackMsg(null)}
-            className="text-neutral-400 hover:text-white px-1"
-          >
-            ✕
-          </button>
+          <button onClick={() => setFeedbackMsg(null)} className="text-gray-400 hover:text-white px-1">✕</button>
         </div>
       )}
 
-      {/* Protective Interruption Modal */}
-      <SessionAlertModal
-        session={session}
-        isProcessing={isProcessing}
-        onReauth={handleReauth}
-        onSignIn={handleSignIn}
-        onSignOut={handleSignOut}
-      />
+      <SessionAlertModal session={session} isProcessing={isProcessing} onReauth={handleReauth} onSignIn={handleSignIn} onSignOut={handleSignOut} />
     </>
   );
 };

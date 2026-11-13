@@ -11,70 +11,46 @@ interface FullscreenGuideModalProps {
   onClose: () => void;
 }
 
-export const FullscreenGuideModal: React.FC<FullscreenGuideModalProps> = ({
-  isOpen,
-  onClose,
-}) => {
+export const FullscreenGuideModal: React.FC<FullscreenGuideModalProps> = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 backdrop-blur-sm pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-4 select-none animate-in fade-in duration-150">
-      <div className="bg-neutral-900 border border-neutral-700 rounded-2xl max-w-sm w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] overflow-y-auto p-5 space-y-4 shadow-2xl relative">
-        <button
-          onClick={onClose}
-          className="absolute top-3.5 right-3.5 p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-400 hover:text-white"
-          aria-label="Đóng hướng dẫn"
-        >
-          <X className="w-4 h-4" />
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 backdrop-blur-sm pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-4 select-none animate-in fade-in duration-150 font-display">
+      <div className="bg-black border-4 border-neo-amber pixel-corners max-w-sm w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] overflow-y-auto p-6 space-y-6 shadow-[0_0_20px_rgba(255,184,0,0.4)] relative">
+        <button onClick={onClose} className="absolute top-4 right-4 p-2 bg-black border-2 border-neo-amber text-neo-amber pixel-corners hover:bg-neo-amber hover:text-black transition-colors">
+          <X className="w-5 h-5" />
         </button>
 
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-            <Maximize className="w-5 h-5" />
+        <div className="flex items-center gap-4 border-b-2 border-neo-amber pb-4">
+          <div className="w-12 h-12 bg-neo-amber/20 border-2 border-neo-amber flex items-center justify-center text-neo-amber pixel-corners shrink-0">
+            <Maximize className="w-6 h-6" />
           </div>
           <div>
-            <h3 className="text-base font-extrabold text-white">Chế độ Toàn Màn Hình</h3>
-            <p className="text-xs text-neutral-400">Hướng dẫn cho thiết bị di động & iOS</p>
+            <h3 className="text-2xl font-pixel text-white uppercase">Fullscreen Mode</h3>
+            <p className="text-sm text-gray-400">Mobile & iOS Optimization</p>
           </div>
         </div>
 
-        <div className="space-y-2.5 text-xs text-neutral-300 leading-relaxed bg-neutral-950 p-3.5 rounded-xl border border-neutral-800">
-          <p className="font-semibold text-amber-400">
-            Trình duyệt hạn chế Fullscreen API tự động (như Safari trên iPhone):
-          </p>
-          <div className="space-y-2 pt-1">
-            <div className="flex items-start gap-2">
-              <span className="w-5 h-5 rounded-full bg-neutral-800 text-neutral-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-                1
-              </span>
-              <span>
-                Nhấn nút <strong className="text-white flex inline-flex items-center gap-1"><Share className="w-3 h-3" /> Chia sẻ</strong> ở thanh công cụ trình duyệt.
-              </span>
+        <div className="space-y-4 text-sm text-gray-300 bg-black p-4 border-2 border-gray-800 pixel-corners">
+          <p className="font-pixel text-xl text-neo-amber">Lưu ý cho thiết bị di động:</p>
+          <div className="space-y-3">
+            <div className="flex items-start gap-3">
+              <span className="font-pixel text-2xl text-neo-cyan mt-0.5">1</span>
+              <span>Nhấn nút <strong className="text-white inline-flex items-center gap-1"><Share className="w-4 h-4" /> Chia sẻ</strong> trên trình duyệt.</span>
             </div>
-            <div className="flex items-start gap-2">
-              <span className="w-5 h-5 rounded-full bg-neutral-800 text-neutral-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-                2
-              </span>
-              <span>
-                Chọn <strong className="text-white flex inline-flex items-center gap-1"><PlusSquare className="w-3 h-3" /> Thêm vào MH chính</strong> (Add to Home Screen).
-              </span>
+            <div className="flex items-start gap-3">
+              <span className="font-pixel text-2xl text-neo-cyan mt-0.5">2</span>
+              <span>Chọn <strong className="text-white inline-flex items-center gap-1"><PlusSquare className="w-4 h-4" /> Thêm vào MH chính</strong>.</span>
             </div>
-            <div className="flex items-start gap-2">
-              <span className="w-5 h-5 rounded-full bg-neutral-800 text-neutral-300 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
-                3
-              </span>
-              <span>
-                Mở game từ màn hình chính để trải nghiệm <strong className="text-amber-400">toàn màn hình 100%</strong> không bị che bởi thanh địa chỉ!
-              </span>
+            <div className="flex items-start gap-3">
+              <span className="font-pixel text-2xl text-neo-cyan mt-0.5">3</span>
+              <span>Mở game từ màn hình chính để tận hưởng góc nhìn <strong className="text-neo-amber">toàn cảnh 100%</strong> chuẩn Arcade!</span>
             </div>
           </div>
         </div>
 
-        <button
-          onClick={onClose}
-          className="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs transition-colors shadow-lg shadow-amber-500/20"
-        >
-          ĐÃ HIỂU, TIẾP TỤC CHƠI
+        <button onClick={onClose} className="btn-arcade w-full py-4 text-xl">
+          ĐÃ HIỂU (CONTINUE)
         </button>
       </div>
     </div>
