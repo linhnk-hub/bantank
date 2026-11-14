@@ -903,7 +903,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <form onSubmit={handleSaveDisplayName} className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
                   <label className="block text-xs font-semibold text-neutral-300 mb-1">
-                    Đổi Nickname
+                    Đổi tên
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -1323,7 +1323,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       title="Khôi phục cài đặt âm thanh mặc định"
                     >
                       <RefreshCw className="w-3 h-3 text-amber-400" />
-                      <span>Khôi phục mặc định</span>
+                      <span>Mặc định</span>
                     </button>
                   </div>
                 </div>
@@ -1783,9 +1783,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <thead>
                       <tr className="bg-neutral-950 text-neutral-400 border-b border-neutral-800">
                         <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">STT</th>
-                        <th className="py-2.5 px-2.5 font-bold">Nickname</th>
+                        <th className="py-2.5 px-2.5 font-bold">Tên</th>
                         <th className="py-2.5 px-2.5 font-bold">Email</th>
-                        <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">Vai trò</th>
+                        <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">Quyền</th>
                         <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">
                           Đăng nhập gần nhất
                         </th>
