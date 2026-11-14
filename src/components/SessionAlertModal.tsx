@@ -61,14 +61,14 @@ export const SessionAlertModal: React.FC<SessionAlertModalProps> = ({
         <div>
           <h3 className="text-base sm:text-lg font-black text-white">
             {isIdleWarning && 'Cảnh Báo Phiên Sắp Hết Hạn Không Hoạt Động'}
-            {!isIdleWarning && session.status === 'DISPLACED' && 'Tài Khoản Đang Mở Ở Thiết Bị Khác'}
-            {!isIdleWarning && session.status === 'PAUSED_IDLE' && 'Tài Khoản Tạm Dừng Do Không Hoạt Động'}
-            {!isIdleWarning && session.status === 'CONNECTION_LOST_UNVERIFIED' && 'Mất Kết Nối Máy Chủ'}
-            {!isIdleWarning && session.status === 'HEARTBEAT_REJECTED_UNCLASSIFIED' && 'Bảo Vệ Tài Khoản Người Chơi'}
+            {!isIdleWarning && session.status === 'DISPLACED' && 'Tài khoản đang đăng nhập trên thiết bị khác'}
+            {!isIdleWarning && session.status === 'PAUSED_IDLE' && 'Tài khoản bị tạm dừng do không hoạt động'}
+            {!isIdleWarning && session.status === 'CONNECTION_LOST_UNVERIFIED' && 'Mất kết nối máy chủ'}
+            {!isIdleWarning && session.status === 'HEARTBEAT_REJECTED_UNCLASSIFIED' && 'Bảo vệ tài khoản người dùng'}
           </h3>
           {isIdleWarning ? (
             <p className="text-xs sm:text-sm text-neutral-300 mt-2 leading-relaxed">
-              Bạn đã không thao tác trong hơn 14 phút. Phiên đăng nhập sẽ tự động kết thúc sau{' '}
+              Bạn đã không thao tác trong hơn 14 phút. Game sẽ tự động kết thúc sau{' '}
               <strong className="text-amber-400 font-mono text-base">
                 {session.idleRemainingSeconds ?? 60} giây
               </strong>{' '}
@@ -124,7 +124,7 @@ export const SessionAlertModal: React.FC<SessionAlertModalProps> = ({
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold transition-all border border-neutral-700"
             >
               <LogIn className="w-4 h-4" />
-              <span>Đăng nhập lại bằng Google</span>
+              <span>Đăng nhập lại</span>
             </button>
           )}
 
@@ -133,7 +133,7 @@ export const SessionAlertModal: React.FC<SessionAlertModalProps> = ({
             disabled={isProcessing}
             className="w-full py-2 rounded-xl text-neutral-400 hover:text-neutral-200 text-xs transition-all"
           >
-            Đăng xuất tài khoản an toàn
+            Đăng xuất tài khoản
           </button>
         </div>
       </div>
