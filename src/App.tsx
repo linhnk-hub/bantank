@@ -622,7 +622,7 @@ export default function App() {
       <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         {!isAuthReady && (
           <div className="w-full bg-neutral-900/90 border-b border-neutral-800 px-3 py-1 text-center text-[11px] font-mono text-amber-300/90">
-            Đang kiểm tra trạng thái phiên đăng nhập...
+            Đang kiểm tra trạng thái kết nối...
           </div>
         )}
         <WelcomeScreen
