@@ -1696,6 +1696,7 @@ export class AuthManager {
         auditEntry,
       };
     } catch (err: any) {
+      this.recordPermissionDiagnostic('writeBatch', `/admins/${params.targetUid} + /role_audit_logs/${candidateAudit.auditId}`, err, caller);
       const rawCode = String(err?.code || '').toLowerCase();
       const rawMsg = String(err?.message || '');
       const isPermissionDenied =

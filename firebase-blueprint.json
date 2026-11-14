@@ -117,7 +117,7 @@
       "description": "Metadata tối thiểu của phòng chơi Co-op Online (không chứa WebRTC SDP/ICE, ảnh đại diện hay kết quả riêng).",
       "type": "object",
       "properties": {
-        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6 },
+        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6, "pattern": "^BT[A-Z0-9]{4}$" },
         "status": { "type": "string", "enum": ["WAITING", "PLAYING", "FINISHED", "ABANDONED", "EXPIRED"] },
         "difficulty": { "type": "string", "enum": ["DEFAULT", "EXTREME"] },
         "hostUid": { "type": "string" },
@@ -152,7 +152,7 @@
       "description": "Tài liệu phụ riêng tư chỉ cho phép Host và Guest đã tham gia phòng đọc/ghi WebRTC SDP/ICE và kết quả trận đấu.",
       "type": "object",
       "properties": {
-        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6 },
+        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6, "pattern": "^BT[A-Z0-9]{4}$" },
         "hostUid": { "type": "string" },
         "guestUid": { "type": "string" },
         "rtcOffer": { "type": "string", "maxLength": 16384 },

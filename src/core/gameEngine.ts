@@ -652,6 +652,9 @@ export class GameEngine {
   }
 
   public pause(): boolean {
+    if (this.gameMode === 'TWO_PLAYERS_ONLINE') {
+      return false;
+    }
     this.clearAllInputs();
     if (this.state.matchState === MATCH_STATES.PLAYING) {
       const trans = this.matchStateMachine.transitionTo(MATCH_STATES.PAUSED);
@@ -1414,6 +1417,8 @@ export class GameEngine {
             } else {
               this.state.p1State.respawnTimer = 0;
               this.state.p1State.isSpectator = true;
+              this.externalInput = { ...NEUTRAL_INPUT };
+              this.virtualTouchInput = { ...NEUTRAL_INPUT };
             }
 
             // Immediately delete player 1 bullets; enemy bullets keep flying! (Point H)
@@ -1447,6 +1452,7 @@ export class GameEngine {
               this.state.p2State.respawnTimer = 0;
               this.state.p2State.isSpectator = true;
               this.externalInputP2 = { ...NEUTRAL_INPUT };
+              this.virtualTouchInputP2 = { ...NEUTRAL_INPUT };
             }
             this.state.bullets = this.state.bullets.filter(
               (b) => b.ownerId !== 'p2'
@@ -1554,6 +1560,34 @@ export class GameEngine {
 
   public pauseMatch(): void {
     this.pause();
+  }
+
+  public forceFinishFromOnlineRoom(
+    outcome: 'VICTORY' | 'GAME_OVER',
+    finalScore?: number,
+    reason?: string
+  ): void {
+    if (this.state.isGameOver || this.state.isStageClear) return;
+    this.clearAllInputs();
+    this.isPaused = false;
+    this.isForcedSafetyPaused = false;
+    if (typeof finalScore === 'number' && Number.isFinite(finalScore) && finalScore > this.state.score) {
+      this.state.score = finalScore;
+    }
+    if (outcome === 'VICTORY') {
+      this.state.isStageClear = true;
+      this.state.isGameOver = false;
+      this.state.isTimeoutGameOver = false;
+      this.state.gameOverReason = null;
+      this.state.matchState = MATCH_STATES.STAGE_CLEAR;
+      this.matchStateMachine.transitionTo(MATCH_STATES.STAGE_CLEAR, true);
+    } else {
+      this.state.isGameOver = true;
+      this.state.isStageClear = false;
+      this.state.gameOverReason = reason || 'Trận đấu đã kết thúc.';
+      this.state.matchState = MATCH_STATES.GAME_OVER;
+      this.matchStateMachine.transitionTo(MATCH_STATES.GAME_OVER, true);
+    }
   }
 
   public getLastAppliedStageRunSeq(): number {

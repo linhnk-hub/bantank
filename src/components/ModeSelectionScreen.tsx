@@ -15,7 +15,7 @@ import { AvatarManager } from '../core/avatarManager.ts';
 import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
 import { CoopOnlineLobbyPanel, type CoopLobbySubView } from './CoopOnlineLobbyModal.tsx';
 import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
-import type { CoopRoomDocument } from '../core/coopOnlineManager.ts';
+import { CoopOnlineManager, type CoopRoomDocument } from '../core/coopOnlineManager.ts';
 import {
   ArrowLeft,
   ArrowRight,
@@ -136,18 +136,54 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   isSuperAdmin = false,
 }) => {
   const deriveInitialCardMode = (): SelectionCardMode => {
+    const activeRoom = CoopOnlineManager.getInstance().getCurrentRoom();
+    if (
+      activeRoom &&
+      activeRoom.status !== 'FINISHED' &&
+      activeRoom.status !== 'ABANDONED' &&
+      activeRoom.status !== 'EXPIRED'
+    ) {
+      return 'COOP_ONLINE';
+    }
     if (controlledMode === 'TWO_PLAYERS') {
       return controlledTwoPlayerOption === 'P2_REAL' ? 'COOP_ONLINE' : 'COOP_AI';
     }
     return 'SOLO';
   };
 
+  const deriveInitialFlowStep = (): SelectionFlowStep => {
+    const activeRoom = CoopOnlineManager.getInstance().getCurrentRoom();
+    if (
+      activeRoom &&
+      activeRoom.status !== 'FINISHED' &&
+      activeRoom.status !== 'ABANDONED' &&
+      activeRoom.status !== 'EXPIRED'
+    ) {
+      return 'COOP_ONLINE_LOBBY';
+    }
+    return 'SELECT_MODE';
+  };
+
   const [cardMode, setCardMode] = useState<SelectionCardMode>(deriveInitialCardMode);
-  const [flowStep, setFlowStep] = useState<SelectionFlowStep>('SELECT_MODE');
+  const [flowStep, setFlowStep] = useState<SelectionFlowStep>(deriveInitialFlowStep);
   const avatarManager = AvatarManager.getInstance();
   const effectiveUid = user.uid || firebaseUser?.uid || '';
   const [avatarError, setAvatarError] = useState(false);
   const [, setAvatarTick] = useState(0);
+
+  useEffect(() => {
+    const coopMgr = CoopOnlineManager.getInstance();
+    return coopMgr.subscribe((room) => {
+      if (
+        room &&
+        room.status === 'WAITING' &&
+        flowStep !== 'COOP_ONLINE_LOBBY'
+      ) {
+        setCardMode('COOP_ONLINE');
+        setFlowStep('COOP_ONLINE_LOBBY');
+      }
+    });
+  }, [flowStep]);
 
   useEffect(() => {
     avatarManager.observeCatalog();
@@ -548,16 +584,24 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-black text-amber-300 text-lg sm:text-xl font-mono flex items-center gap-2.5">
-                      <Shield className="w-5 h-5 text-amber-400" />
-                      <span>Giải trí</span>
-                    </span>
-                    {difficulty === 'DEFAULT' && (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500 text-black font-black font-mono">
-                        ĐANG CHỌN
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-amber-300 text-lg sm:text-xl font-mono flex items-center gap-2.5">
+                        <Shield className="w-5 h-5 text-amber-400" />
+                        <span>Giải trí</span>
                       </span>
-                    )}
+                      {difficulty === 'DEFAULT' && (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500 text-black font-black font-mono">
+                          ĐANG CHỌN
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      data-testid="difficulty-note-default"
+                      className="text-xs text-neutral-300 leading-relaxed mt-3"
+                    >
+                      3 mạng mỗi người chơi, thời gian trận đấu 120 giây (02:00). Nhịp độ cân bằng, phù hợp chơi thư giãn và rèn kỹ năng phòng thủ căn cứ.
+                    </p>
                   </div>
 
                   <div className="mt-5 pt-3 border-t border-neutral-800/80">
@@ -588,16 +632,24 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="font-black text-rose-300 text-lg sm:text-xl font-mono flex items-center gap-2.5">
-                      <Flame className="w-5 h-5 text-rose-400" />
-                      <span>Thử thách</span>
-                    </span>
-                    {difficulty === 'EXTREME' && (
-                      <span className="text-[10px] px-2 py-0.5 rounded bg-rose-600 text-white font-black font-mono">
-                        ĐANG CHỌN
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-black text-rose-300 text-lg sm:text-xl font-mono flex items-center gap-2.5">
+                        <Flame className="w-5 h-5 text-rose-400" />
+                        <span>Thử thách</span>
                       </span>
-                    )}
+                      {difficulty === 'EXTREME' && (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-rose-600 text-white font-black font-mono">
+                          ĐANG CHỌN
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      data-testid="difficulty-note-extreme"
+                      className="text-xs text-neutral-300 leading-relaxed mt-3"
+                    >
+                      3 mạng mỗi người chơi, giới hạn 60 giây (01:00). Xe địch phản ứng nhanh và dồn hỏa lực mạnh vào Căn cứ — đòi hỏi phản xạ và chiến thuật cao.
+                    </p>
                   </div>
 
                   <div className="mt-5 pt-3 border-t border-neutral-800/80">

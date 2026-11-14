@@ -289,6 +289,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       const res = await authManager.changeUserRole({
         targetUid: pendingRoleChangeConfirm.account.uid,
         targetEmail: pendingRoleChangeConfirm.account.email,
+        targetDisplayName: pendingRoleChangeConfirm.account.displayName,
         currentTargetRole: pendingRoleChangeConfirm.account.role,
         newRole: pendingRoleChangeConfirm.newRole,
       });

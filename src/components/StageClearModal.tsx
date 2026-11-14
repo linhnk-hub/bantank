@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Trophy, Award, RotateCcw, Home, Clock, Heart } from 'lucide-react';
+import { Trophy, Award, RotateCcw, Home, Clock, Heart, Users, Loader2 } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
 
 interface StageClearModalProps {
@@ -12,6 +12,9 @@ interface StageClearModalProps {
   state: GameCoreState | null;
   onNextStageOrReplay: () => void;
   onQuitToMenu: () => void;
+  onReturnToLobby?: () => void;
+  isReturningToLobby?: boolean;
+  returnToLobbyError?: string | null;
   isTrialMode?: boolean;
 }
 
@@ -20,9 +23,14 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
   state,
   onNextStageOrReplay,
   onQuitToMenu,
+  onReturnToLobby,
+  isReturningToLobby = false,
+  returnToLobbyError = null,
   isTrialMode = false,
 }) => {
   if (!isOpen || !state) return null;
+
+  const isCoopOnline = state.gameMode === 'TWO_PLAYERS_ONLINE';
 
   const counts = state.defeatedCounts || { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 };
   const totalDefeated = counts.BASIC + counts.FAST + counts.POWER + counts.ARMOR;
@@ -126,9 +134,30 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
           </div>
         </div>
 
+        {returnToLobbyError && isCoopOnline && (
+          <div className="mx-4 mb-2 p-2.5 rounded-xl bg-red-950/75 border border-red-500/40 text-red-200 text-[11px] font-medium text-center">
+            {returnToLobbyError}
+          </div>
+        )}
+
         {/* Sticky Action Footer: ALWAYS accessible */}
         <div className="p-3 sm:p-4 bg-neutral-950/95 border-t border-neutral-800 flex gap-2.5 shrink-0 safe-area-inset">
-          {!isTrialMode && (
+          {isCoopOnline && onReturnToLobby ? (
+            <button
+              type="button"
+              data-testid="stageclear-return-lobby-btn"
+              disabled={isReturningToLobby}
+              onClick={onReturnToLobby}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-extrabold text-xs transition-all shadow-lg shadow-sky-500/20 active:scale-95 disabled:opacity-60 cursor-pointer"
+            >
+              {isReturningToLobby ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Users className="w-4 h-4" />
+              )}
+              <span>{isReturningToLobby ? 'ĐANG VÀO PHÒNG CHỜ...' : 'VỀ PHÒNG CHỜ'}</span>
+            </button>
+          ) : !isTrialMode ? (
             <button
               type="button"
               onClick={onNextStageOrReplay}
@@ -137,13 +166,14 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
               <RotateCcw className="w-4 h-4" />
               <span>CHƠI LẠI / TIẾP TỤC</span>
             </button>
-          )}
+          ) : null}
 
           <button
             type="button"
             data-testid={isTrialMode ? 'trial-return-login-btn' : 'stageclear-quit-menu-btn'}
+            disabled={isReturningToLobby}
             onClick={onQuitToMenu}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 ${
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 cursor-pointer ${
               isTrialMode
                 ? 'bg-amber-500 hover:bg-amber-400 text-black font-extrabold shadow-lg shadow-amber-500/20'
                 : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700'

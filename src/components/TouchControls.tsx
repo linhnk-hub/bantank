@@ -236,6 +236,7 @@ export interface TouchControlsProps {
   onPauseClick: () => void;
   isPaused: boolean;
   controlType?: 'joystick' | 'dpad';
+  disablePause?: boolean;
 }
 
 export const TouchControls: React.FC<TouchControlsProps> = ({
@@ -243,6 +244,7 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
   onPauseClick,
   isPaused,
   controlType = 'joystick',
+  disablePause = false,
 }) => {
   const [activeDirection, setActiveDirection] = useState<ActiveDirection>(null);
   const [isShooting, setIsShooting] = useState<boolean>(false);
@@ -322,20 +324,22 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
         )}
       </div>
 
-      {/* Center Column: Pause Button Centered */}
-      <div className="flex-none flex flex-col items-center justify-center gap-1 px-2 shrink-0">
-        <button
-          type="button"
-          onClick={onPauseClick}
-          className="w-11 h-11 rounded-full bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 text-neutral-300 flex items-center justify-center transition-transform active:scale-90 shadow"
-          aria-label="Tạm dừng"
-        >
-          <Pause className="w-4 h-4 fill-neutral-300" />
-        </button>
-        <span className="text-[9px] text-neutral-400 font-bold uppercase tracking-wider">
-          PAUSE (P)
-        </span>
-      </div>
+      {/* Center Column: Pause Button Centered (hidden in Co-op Online) */}
+      {!disablePause && (
+        <div className="flex-none flex flex-col items-center justify-center gap-1 px-2 shrink-0">
+          <button
+            type="button"
+            onClick={onPauseClick}
+            className="w-11 h-11 rounded-full bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 text-neutral-300 flex items-center justify-center transition-transform active:scale-90 shadow"
+            aria-label="Tạm dừng"
+          >
+            <Pause className="w-4 h-4 fill-neutral-300" />
+          </button>
+          <span className="text-[9px] text-neutral-400 font-bold uppercase tracking-wider">
+            PAUSE (P)
+          </span>
+        </div>
+      )}
 
       {/* Right Column: Shoot Action Button aligned to right hand zone */}
       <div className="flex items-center justify-end shrink-0">

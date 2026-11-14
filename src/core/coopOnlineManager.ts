@@ -89,6 +89,17 @@ export interface CoopAuthoritativeSnapshot {
 export type CoopDataChannelMessage =
   | { type: 'GUEST_INPUT'; packet: SequencedInputPacket }
   | { type: 'HOST_SNAPSHOT'; snapshot: CoopAuthoritativeSnapshot }
+  | { type: 'GUEST_TERMINAL_ACK'; snapshotSeq: number; timestamp: number }
+  | { type: 'REQUEST_RETURN_TO_LOBBY'; timestamp: number }
+  | {
+      type: 'RETURN_TO_LOBBY';
+      nextRoomCode: string;
+      hasPassword: boolean;
+      password?: string;
+      difficulty: 'DEFAULT' | 'EXTREME';
+      hostUid: string;
+      timestamp: number;
+    }
   | { type: 'PLAYER_LEFT'; role: 'HOST' | 'GUEST'; reason: string; timestamp: number }
   | { type: 'PING'; timestamp: number };
 
@@ -321,12 +332,13 @@ export function buildCreateRoomStepErrorMessage(
 const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
 
 /**
- * Sinh mã phòng ngẫu nhiên gồm 6 ký tự chữ in hoa và số (loại bỏ O/0/I/1 dễ nhầm lẫn).
+ * Sinh mã phòng ngẫu nhiên theo định dạng BTxxxx (bắt đầu bằng "BT" + 4 ký tự chữ in hoa/số, loại bỏ O/0/I/1 dễ nhầm lẫn).
  */
 export function generateRoomCode(existingCodes?: Set<string>): string {
+  const randomSuffixLength = Math.max(1, COOP_ONLINE_CONFIG.ROOM_CODE_LENGTH - 2);
   for (let attempt = 0; attempt < 20; attempt++) {
-    let code = '';
-    for (let i = 0; i < COOP_ONLINE_CONFIG.ROOM_CODE_LENGTH; i++) {
+    let code = 'BT';
+    for (let i = 0; i < randomSuffixLength; i++) {
       const idx = Math.floor(Math.random() * ROOM_CODE_ALPHABET.length);
       code += ROOM_CODE_ALPHABET[idx];
     }
@@ -334,15 +346,15 @@ export function generateRoomCode(existingCodes?: Set<string>): string {
       return code;
     }
   }
-  return 'TANK88';
+  return 'BT8899';
 }
 
 /**
- * Chuẩn hóa và kiểm tra định dạng mã phòng 6 ký tự.
+ * Chuẩn hóa và kiểm tra định dạng mã phòng BTxxxx (bắt buộc "BT" + 4 ký tự chữ/số).
  */
 export function validateRoomCodeFormat(rawCode: string): { valid: boolean; normalized: string } {
   const normalized = (rawCode || '').trim().toUpperCase();
-  const valid = /^[A-Z0-9]{6}$/.test(normalized);
+  const valid = /^BT[A-Z0-9]{4}$/.test(normalized);
   return { valid, normalized };
 }
 
@@ -461,10 +473,10 @@ export function getPublicQuickJoinSlotCodesForBucket(bucketIndex: number): strin
   const base36 = Math.max(0, Math.floor(bucketIndex))
     .toString(36)
     .toUpperCase()
-    .padStart(4, '2')
-    .slice(-4);
+    .padStart(3, '2')
+    .slice(-3);
   const slotChars = ['2', '3', '4', '5', '6'];
-  return slotChars.map((s) => `Q${base36}${s}`);
+  return slotChars.map((s) => `BT${base36}${s}`);
 }
 
 export function getPublicQuickJoinCandidateCodes(nowMs: number = Date.now()): string[] {
@@ -650,7 +662,7 @@ export function evaluateJoinRoomCandidate(
     return {
       success: false,
       errorCode: 'INVALID_CODE_FORMAT',
-      message: 'Mã phòng không hợp lệ (cần đúng 6 ký tự chữ và số).',
+      message: 'Mã phòng không hợp lệ (định dạng bắt buộc BTxxxx, gồm BT + 4 ký tự chữ hoặc số).',
     };
   }
 
@@ -816,7 +828,7 @@ export function evaluateCoopRoomRuleCreate(params: {
 }): boolean {
   const { authUid, isVerifiedPersonalGmail, requestTimeMs, roomCode, incoming } = params;
   if (!authUid || !isVerifiedPersonalGmail) return false;
-  if (!/^[A-Z0-9]{6}$/.test(roomCode) || incoming.roomCode !== roomCode) return false;
+  if (!/^BT[A-Z0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) return false;
   if (incoming.hostUid !== authUid) return false;
   if (incoming.status !== 'WAITING') return false;
   if (incoming.difficulty !== 'DEFAULT' && incoming.difficulty !== 'EXTREME') return false;
@@ -931,7 +943,7 @@ export function evaluateCoopRoomRuleUpdate(params: {
   // Immutable core fields & schema check (expiresAt cannot be extended or modified on update)
   if (
     incoming.roomCode !== existing.roomCode ||
-    !/^[A-Z0-9]{6}$/.test(incoming.roomCode) ||
+    !/^BT[A-Z0-9]{4}$/.test(incoming.roomCode) ||
     incoming.hostUid !== existing.hostUid ||
     incoming.hostDisplayName !== existing.hostDisplayName ||
     incoming.difficulty !== existing.difficulty ||
@@ -1157,7 +1169,7 @@ export function evaluateCoopSignalingRuleCreate(params: {
   if (!authUid || !isVerifiedPersonalGmail) return false;
   if (existingSignaling !== null) return false; // Document already exists -> create denied
   if (!parentRoom) return false; // Parent room must exist
-  if (!/^[A-Z0-9]{6}$/.test(roomCode) || incoming.roomCode !== roomCode) return false;
+  if (!/^BT[A-Z0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) return false;
   if (parentRoom.hostUid !== authUid) return false;
   if (parentRoom.status !== 'WAITING') return false;
   if (requestTimeMs >= parentRoom.expiresAt) return false;
@@ -1194,7 +1206,7 @@ export function evaluateCoopSignalingRuleUpdate(params: {
   if (!authUid || !isVerifiedPersonalGmail || !parentRoom) {
     return { allowed: false, matchedBranch: null };
   }
-  if (!/^[A-Z0-9]{6}$/.test(roomCode) || incoming.roomCode !== roomCode) {
+  if (!/^BT[A-Z0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) {
     return { allowed: false, matchedBranch: null };
   }
 
@@ -1946,6 +1958,41 @@ export class CoopOnlineManager {
   private lastBroadcastStageId: number = -1;
   private hasRecordedMatchFinishInFirestore: boolean = false;
   private isRecordingMatchFinishInFlight: boolean = false;
+  private hostTerminalAckedSnapshotSeq: number = 0;
+  private hostTerminalResendCount: number = 0;
+  private lastHostTerminalResendAt: number = 0;
+
+  // Rematch Lobby State (M7.3.11)
+  private lastHostUser: {
+    uid: string;
+    displayName?: string | null;
+    email?: string | null;
+    emailVerified?: boolean;
+    photoURL?: string | null;
+  } | null = null;
+  private lastCreatedRoomHasPassword: boolean = false;
+  private lastCreatedRoomPassword: string = '';
+  private pendingRematchInvite: {
+    nextRoomCode: string;
+    hasPassword: boolean;
+    password?: string;
+    difficulty: 'DEFAULT' | 'EXTREME';
+    hostUid: string;
+    timestamp: number;
+  } | null = null;
+  private rematchInviteResolvers: Array<
+    (
+      invite: {
+        nextRoomCode: string;
+        hasPassword: boolean;
+        password?: string;
+        difficulty: 'DEFAULT' | 'EXTREME';
+        hostUid: string;
+        timestamp: number;
+      } | null
+    ) => void
+  > = [];
+  private isAutoProvisioningRematch: boolean = false;
 
   // Guest Snapshot Application state
   private guestLastAppliedSnapshotSeq: number = 0;
@@ -2532,6 +2579,10 @@ export class CoopOnlineManager {
 
       // Bước 5: Chỉ sau khi xác minh hoàn tất mới công bố mã phòng và trạng thái sẵn sàng
       this.lastCreateRoomDiagnostic = null;
+      this.lastHostUser = user;
+      this.lastCreatedRoomHasPassword = usePassword;
+      this.lastCreatedRoomPassword = normalizedPassword;
+      this.pendingRematchInvite = null;
       this.currentSignaling = verifiedSig;
       this.currentRoom = mergeLobbyAndSignaling(newLobby, verifiedSig);
       this.role = 'HOST';
@@ -2590,7 +2641,7 @@ export class CoopOnlineManager {
       return {
         success: false,
         errorCode: 'INVALID_CODE_FORMAT',
-        message: 'Mã phòng không hợp lệ (cần đúng 6 ký tự chữ và số).',
+        message: 'Mã phòng không hợp lệ (định dạng bắt buộc BTxxxx, gồm BT + 4 ký tự chữ hoặc số).',
       };
     }
 
@@ -3603,6 +3654,10 @@ export class CoopOnlineManager {
 
       // Bước 5: Chỉ sau khi xác minh hoàn tất mới công bố mã phòng và trạng thái sẵn sàng
       this.lastCreateRoomDiagnostic = null;
+      this.lastHostUser = user;
+      this.lastCreatedRoomHasPassword = usePassword;
+      this.lastCreatedRoomPassword = normalizedPassword;
+      this.pendingRematchInvite = null;
       this.currentSignaling = verifiedSig;
       this.currentRoom = mergeLobbyAndSignaling(newLobby, verifiedSig);
       this.role = 'HOST';
@@ -3651,7 +3706,7 @@ export class CoopOnlineManager {
       return {
         success: false,
         errorCode: 'INVALID_CODE_FORMAT',
-        message: 'Mã phòng không hợp lệ (cần đúng 6 ký tự chữ và số).',
+        message: 'Mã phòng không hợp lệ (định dạng bắt buộc BTxxxx, gồm BT + 4 ký tự chữ hoặc số).',
       };
     }
 
@@ -3953,13 +4008,21 @@ export class CoopOnlineManager {
     const currentRole = this.role;
     if (room && (currentRole === 'HOST' || currentRole === 'GUEST') && this.isP2PDataChannelOpen()) {
       const leaveMsg = currentRole === 'HOST' ? 'P1 đã rời trận.' : 'P2 đã rời trận.';
-      this.sendOverDataChannel({
-        type: 'PLAYER_LEFT',
-        role: currentRole,
-        reason: reason || leaveMsg,
-        timestamp: nowMs,
-      });
+      this.sendOverDataChannel(
+        {
+          type: 'PLAYER_LEFT',
+          role: currentRole,
+          reason: reason || leaveMsg,
+          timestamp: nowMs,
+        },
+        true
+      );
     }
+    this.resolveAllRematchWaiters(null);
+    this.lastHostUser = null;
+    this.lastCreatedRoomHasPassword = false;
+    this.lastCreatedRoomPassword = '';
+    this.pendingRematchInvite = null;
     this.cleanupSubscription();
     this.closeWebRTC();
     this.currentRoom = null;
@@ -4211,24 +4274,34 @@ export class CoopOnlineManager {
     state: Readonly<GameCoreState>,
     nowMs: number = Date.now()
   ): Promise<boolean> {
+    const isTerminalState = Boolean(state.isGameOver || state.isStageClear);
+    const needsTerminalBroadcast =
+      isTerminalState &&
+      this.hostTerminalAckedSnapshotSeq === 0 &&
+      this.hostTerminalResendCount < 15;
     if (
       !this.currentRoom ||
       this.role !== 'HOST' ||
       (this.currentRoom.status !== 'PLAYING' &&
-        !(state.isGameOver && !this.hasRecordedMatchFinishInFirestore))
+        !(isTerminalState && !this.hasRecordedMatchFinishInFirestore) &&
+        !needsTerminalBroadcast)
     ) {
       return false;
     }
 
     this.hostSnapshotAccumulatorMs += deltaMs;
 
+    const isStateTransitionToTerminal =
+      isTerminalState && state.matchState !== this.lastBroadcastMatchState;
     const isCriticalTransition =
       state.matchState !== this.lastBroadcastMatchState ||
-      state.currentStageId !== this.lastBroadcastStageId ||
-      state.isGameOver ||
-      state.isStageClear;
+      state.currentStageId !== this.lastBroadcastStageId;
 
-    if (
+    if (isTerminalState && !isStateTransitionToTerminal) {
+      if (!needsTerminalBroadcast || nowMs - this.lastHostTerminalResendAt < 200) {
+        return false;
+      }
+    } else if (
       !isCriticalTransition &&
       this.hostSnapshotAccumulatorMs < COOP_ONLINE_CONFIG.SNAPSHOT_INTERVAL_MS
     ) {
@@ -4244,6 +4317,10 @@ export class CoopOnlineManager {
     this.lastBroadcastMatchState = state.matchState;
     this.lastBroadcastStageId = state.currentStageId;
     this.hostOutgoingSnapshotSeq += 1;
+    if (isTerminalState) {
+      this.hostTerminalResendCount += 1;
+      this.lastHostTerminalResendAt = nowMs;
+    }
 
     const p2St = state.p2State;
     this.isRemoteGuestSpectator = Boolean(
@@ -4254,13 +4331,16 @@ export class CoopOnlineManager {
     }
 
     const snapshot = buildAuthoritativeSnapshot(state, this.hostOutgoingSnapshotSeq, nowMs);
-    const sentOverP2P = this.sendOverDataChannel({
-      type: 'HOST_SNAPSHOT',
-      snapshot,
-    });
+    const sentOverP2P = this.sendOverDataChannel(
+      {
+        type: 'HOST_SNAPSHOT',
+        snapshot,
+      },
+      isTerminalState
+    );
 
     if (
-      state.isGameOver &&
+      isTerminalState &&
       !this.hasRecordedMatchFinishInFirestore &&
       !this.isRecordingMatchFinishInFlight
     ) {
@@ -4288,9 +4368,37 @@ export class CoopOnlineManager {
     this.lastPeerP2PActiveAt = nowMs;
 
     if (msg.type === 'PLAYER_LEFT') {
+      this.resolveAllRematchWaiters(null);
       if (msg.role === 'HOST' || msg.role === 'GUEST') {
         this.recordPeerActiveLeave(msg.role, msg.reason);
       }
+      return;
+    }
+
+    if (msg.type === 'GUEST_TERMINAL_ACK' && this.role === 'HOST') {
+      this.hostTerminalAckedSnapshotSeq = Math.max(
+        this.hostTerminalAckedSnapshotSeq,
+        Number(msg.snapshotSeq) || 1
+      );
+      return;
+    }
+
+    if (msg.type === 'REQUEST_RETURN_TO_LOBBY' && this.role === 'HOST') {
+      void this.handleHostReceivedReturnToLobbyRequest(nowMs);
+      return;
+    }
+
+    if (msg.type === 'RETURN_TO_LOBBY' && this.role === 'GUEST') {
+      const invite = {
+        nextRoomCode: msg.nextRoomCode,
+        hasPassword: Boolean(msg.hasPassword),
+        password: msg.password,
+        difficulty: msg.difficulty,
+        hostUid: msg.hostUid,
+        timestamp: msg.timestamp,
+      };
+      this.pendingRematchInvite = invite;
+      this.resolveAllRematchWaiters(invite);
       return;
     }
 
@@ -4333,16 +4441,29 @@ export class CoopOnlineManager {
         this.guestLastAppliedSnapshotSeq = normalizedSnap.snapshotSeq;
         this.guestLastAppliedStageRunSeq = normalizedSnap.stageRunSeq;
         this.guestLastAppliedTickCount = normalizedSnap.tickCount;
+        if (normalizedSnap.isGameOver || normalizedSnap.isStageClear) {
+          this.sendOverDataChannel(
+            {
+              type: 'GUEST_TERMINAL_ACK',
+              snapshotSeq: normalizedSnap.snapshotSeq,
+              timestamp: nowMs,
+            },
+            true
+          );
+        }
       }
     }
   }
 
-  private sendOverDataChannel(msg: CoopDataChannelMessage): boolean {
+  private sendOverDataChannel(
+    msg: CoopDataChannelMessage,
+    bypassBackpressure: boolean = false
+  ): boolean {
     if (this.customP2PChannel) {
       return this.customP2PChannel.send(msg);
     }
     if (this.dataChannel && this.dataChannel.readyState === 'open') {
-      if (msg.type === 'HOST_SNAPSHOT' && this.dataChannel.bufferedAmount > 65536) {
+      if (!bypassBackpressure && msg.type === 'HOST_SNAPSHOT' && this.dataChannel.bufferedAmount > 65536) {
         return false;
       }
       try {
@@ -4353,6 +4474,387 @@ export class CoopOnlineManager {
       }
     }
     return false;
+  }
+
+  private resolveAllRematchWaiters(
+    invite: {
+      nextRoomCode: string;
+      hasPassword: boolean;
+      password?: string;
+      difficulty: 'DEFAULT' | 'EXTREME';
+      hostUid: string;
+      timestamp: number;
+    } | null
+  ): void {
+    const waiters = this.rematchInviteResolvers.splice(0, this.rematchInviteResolvers.length);
+    waiters.forEach((fn) => fn(invite));
+  }
+
+  private async handleHostReceivedReturnToLobbyRequest(nowMs: number = Date.now()): Promise<void> {
+    if (this.role !== 'HOST' || !this.currentRoom) return;
+    if (this.currentRoom.status === 'WAITING') {
+      this.sendOverDataChannel(
+        {
+          type: 'RETURN_TO_LOBBY',
+          nextRoomCode: this.currentRoom.roomCode,
+          hasPassword: this.lastCreatedRoomHasPassword,
+          password: this.lastCreatedRoomHasPassword ? this.lastCreatedRoomPassword : undefined,
+          difficulty: this.currentRoom.difficulty,
+          hostUid: this.currentRoom.hostUid,
+          timestamp: nowMs,
+        },
+        true
+      );
+      return;
+    }
+    if (this.isAutoProvisioningRematch || !this.lastHostUser) return;
+    this.isAutoProvisioningRematch = true;
+    try {
+      await this.provisionSharedRematchRoom(this.lastHostUser, nowMs);
+    } finally {
+      this.isAutoProvisioningRematch = false;
+    }
+  }
+
+  /**
+   * Host khởi tạo phòng chờ mới (WAITING) cho ván tiếp theo khi đang ở kết thúc trận,
+   * gửi mã phòng + mật khẩu (nếu có) qua WebRTC DataChannel trước khi đóng phiên cũ,
+   * giúp P1 và P2 quay về đúng một Phòng Chờ Co-op Online chung.
+   */
+  public async provisionSharedRematchRoom(
+    user: {
+      uid: string;
+      displayName?: string | null;
+      email?: string | null;
+      emailVerified?: boolean;
+      photoURL?: string | null;
+    } | null,
+    explicitNowMs: number = Date.now()
+  ): Promise<CoopActionResult> {
+    if (!user || !user.uid) {
+      return {
+        success: false,
+        errorCode: 'UNAUTHENTICATED',
+        message: 'Vui lòng đăng nhập lại để quay về phòng chờ.',
+      };
+    }
+
+    if (
+      this.role === 'HOST' &&
+      this.currentRoom &&
+      this.currentRoom.status === 'WAITING' &&
+      this.currentRoom.hostUid === user.uid
+    ) {
+      return { success: true, room: this.currentRoom };
+    }
+
+    const difficulty = this.currentRoom?.difficulty ?? 'DEFAULT';
+    const usePassword = this.lastCreatedRoomHasPassword;
+    const rawPassword = this.lastCreatedRoomPassword;
+    const isPublicQuickJoin = !usePassword;
+
+    const lobbyWriteMs = explicitNowMs;
+    const triedCodes = new Set<string>();
+    const publicSlotCandidates = isPublicQuickJoin
+      ? getPublicQuickJoinSlotCodesForBucket(Math.floor(lobbyWriteMs / (5 * 60 * 1000)))
+      : [];
+    let nextRoomCode =
+      publicSlotCandidates.length > 0 ? publicSlotCandidates[0] : generateRoomCode(triedCodes);
+    let foundAvailableCode = false;
+
+    try {
+      for (
+        let attempt = 0;
+        attempt < COOP_ONLINE_CONFIG.MAX_CODE_GENERATION_ATTEMPTS;
+        attempt++
+      ) {
+        triedCodes.add(nextRoomCode);
+        const existing = await this.adapter.getRoom(nextRoomCode);
+        if (!existing) {
+          foundAvailableCode = true;
+          break;
+        }
+        const nextPublicSlot = publicSlotCandidates.find((c) => !triedCodes.has(c));
+        nextRoomCode = nextPublicSlot ?? generateRoomCode(triedCodes);
+      }
+
+      if (!foundAvailableCode) {
+        return {
+          success: false,
+          errorCode: 'ROOM_FULL',
+          message: 'Không thể cấp phát mã phòng chờ mới. Vui lòng thử tạo phòng lại.',
+        };
+      }
+
+      const safeTtlMs =
+        COOP_ONLINE_CONFIG.ROOM_TTL_MS - COOP_ONLINE_CONFIG.CLOCK_SKEW_BUFFER_MS;
+      const cleanHostName = (getUserDisplayLabel(user) || 'Commander').trim().slice(0, 80);
+      const encodedHostDisplayName = encodeHostDisplayNameWithLock(
+        cleanHostName,
+        nextRoomCode,
+        usePassword,
+        rawPassword
+      );
+
+      const newLobby: CoopRoomLobbyDocument = {
+        roomCode: nextRoomCode,
+        status: 'WAITING',
+        difficulty,
+        hostUid: user.uid,
+        hostDisplayName: encodedHostDisplayName,
+        hostReady: false,
+        hostLastActiveAt: lobbyWriteMs,
+        guestUid: null,
+        guestDisplayName: null,
+        guestReady: false,
+        guestLastActiveAt: null,
+        rtcConnectionState: 'NEW',
+        createdAt: lobbyWriteMs,
+        expiresAt: lobbyWriteMs + safeTtlMs,
+        disconnectReason: null,
+      };
+      await this.adapter.setRoom(nextRoomCode, newLobby);
+
+      const newSignaling: CoopRoomSignalingDocument = {
+        roomCode: nextRoomCode,
+        hostUid: user.uid,
+        guestUid: null,
+        rtcOffer: null,
+        rtcAnswer: null,
+        hostIceCandidates: null,
+        guestIceCandidates: null,
+        finalScore: 0,
+        matchOutcome: null,
+        updatedAt: lobbyWriteMs,
+      };
+      await this.adapter.setSignaling(nextRoomCode, newSignaling);
+      const verifiedSig = await this.adapter.getSignaling(nextRoomCode);
+      if (!verifiedSig || verifiedSig.roomCode !== nextRoomCode) {
+        return {
+          success: false,
+          errorCode: 'NETWORK_ERROR',
+          message: 'Không thể xác minh kênh signaling của phòng chờ mới.',
+        };
+      }
+
+      const oldDcOpen = !this.customP2PChannel && Boolean(this.dataChannel && this.dataChannel.readyState === 'open');
+      if (this.isP2PDataChannelOpen()) {
+        this.sendOverDataChannel(
+          {
+            type: 'RETURN_TO_LOBBY',
+            nextRoomCode,
+            hasPassword: usePassword,
+            password: usePassword ? rawPassword : undefined,
+            difficulty,
+            hostUid: user.uid,
+            timestamp: lobbyWriteMs,
+          },
+          true
+        );
+      }
+
+      if (oldDcOpen) {
+        await new Promise((resolve) => setTimeout(resolve, 120));
+      }
+
+      this.cleanupSubscription();
+      this.closeWebRTC();
+      this.lastHostUser = user;
+      this.pendingRematchInvite = null;
+      this.currentSignaling = verifiedSig;
+      this.currentRoom = mergeLobbyAndSignaling(newLobby, verifiedSig);
+      this.role = 'HOST';
+      this.resetSyncCounters();
+      this.listenToRoom(nextRoomCode);
+      this.notifyListeners();
+
+      return { success: true, room: this.currentRoom };
+    } catch (err: any) {
+      return {
+        success: false,
+        errorCode: 'NETWORK_ERROR',
+        message: err?.message || 'Không thể khởi tạo phòng chờ chung mới.',
+      };
+    }
+  }
+
+  /**
+   * Cả P1 (Host) và P2 (Guest) gọi khi bấm nút "Về phòng chờ" ở màn hình kết thúc trận Co-op Online.
+   */
+  public async returnToLobbyFromMatch(
+    user: {
+      uid: string;
+      displayName?: string | null;
+      email?: string | null;
+      emailVerified?: boolean;
+      photoURL?: string | null;
+    } | null,
+    nowMs: number = Date.now()
+  ): Promise<CoopActionResult> {
+    if (!user || !user.uid) {
+      return {
+        success: false,
+        errorCode: 'UNAUTHENTICATED',
+        message: 'Vui lòng đăng nhập lại để về phòng chờ.',
+      };
+    }
+
+    if (this.role === 'HOST') {
+      return this.provisionSharedRematchRoom(user, nowMs);
+    }
+
+    if (this.role === 'GUEST') {
+      let invite = this.pendingRematchInvite;
+      if (!invite && this.isP2PDataChannelOpen()) {
+        this.sendOverDataChannel({ type: 'REQUEST_RETURN_TO_LOBBY', timestamp: nowMs }, true);
+        invite = await new Promise((resolve) => {
+          let settled = false;
+          const finish = (val: typeof invite) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(val);
+          };
+          const timer = setTimeout(() => {
+            const idx = this.rematchInviteResolvers.indexOf(finish);
+            if (idx >= 0) this.rematchInviteResolvers.splice(idx, 1);
+            finish(this.pendingRematchInvite);
+          }, 5000);
+          this.rematchInviteResolvers.push(finish);
+        });
+      }
+
+      if (!invite) {
+        await this.leaveRoom('Chủ phòng (P1) đã rời hoặc hết thời gian chờ phòng chung.');
+        return {
+          success: false,
+          errorCode: 'ROOM_NOT_FOUND',
+          message: 'Chủ phòng (P1) đã thoát hoặc chưa phản hồi. Bạn có thể tạo phòng mới hoặc tham gia phòng khác.',
+        };
+      }
+
+      this.pendingRematchInvite = null;
+      let joinRes = await this.joinRoom(invite.nextRoomCode, user, Date.now(), {
+        password: invite.password,
+      });
+      if (!joinRes.success && joinRes.errorCode === 'ROOM_NOT_FOUND') {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        joinRes = await this.joinRoom(invite.nextRoomCode, user, Date.now(), {
+          password: invite.password,
+        });
+      }
+      return joinRes;
+    }
+
+    return {
+      success: false,
+      errorCode: 'ROOM_NOT_FOUND',
+      message: 'Không còn phiên phòng Co-op Online trước đó.',
+    };
+  }
+
+  /**
+   * Phiên bản đồng bộ phục vụ kiểm thử tự động luồng Về phòng chờ chung P1/P2.
+   */
+  public returnToLobbyFromMatchSync(
+    storage: InMemoryCoopStorageAdapter,
+    user: {
+      uid: string;
+      displayName?: string | null;
+      email?: string | null;
+      emailVerified?: boolean;
+      photoURL?: string | null;
+    },
+    explicitNextRoomCode?: string,
+    nowMs: number = Date.now()
+  ): CoopActionResult {
+    if (this.role === 'HOST') {
+      if (this.currentRoom?.status === 'WAITING' && this.currentRoom.hostUid === user.uid) {
+        return { success: true, room: this.currentRoom };
+      }
+      const difficulty = this.currentRoom?.difficulty ?? 'DEFAULT';
+      const usePassword = this.lastCreatedRoomHasPassword;
+      const rawPassword = this.lastCreatedRoomPassword;
+      const nextRoomCode = explicitNextRoomCode || generateRoomCode();
+      const safeTtlMs =
+        COOP_ONLINE_CONFIG.ROOM_TTL_MS - COOP_ONLINE_CONFIG.CLOCK_SKEW_BUFFER_MS;
+      const cleanHostName = (getUserDisplayLabel(user) || 'Commander').trim().slice(0, 80);
+      const encodedHostDisplayName = encodeHostDisplayNameWithLock(
+        cleanHostName,
+        nextRoomCode,
+        usePassword,
+        rawPassword
+      );
+      const newLobby: CoopRoomLobbyDocument = {
+        roomCode: nextRoomCode,
+        status: 'WAITING',
+        difficulty,
+        hostUid: user.uid,
+        hostDisplayName: encodedHostDisplayName,
+        hostReady: false,
+        hostLastActiveAt: nowMs,
+        guestUid: null,
+        guestDisplayName: null,
+        guestReady: false,
+        guestLastActiveAt: null,
+        rtcConnectionState: 'NEW',
+        createdAt: nowMs,
+        expiresAt: nowMs + safeTtlMs,
+        disconnectReason: null,
+      };
+      const newSig: CoopRoomSignalingDocument = {
+        roomCode: nextRoomCode,
+        hostUid: user.uid,
+        guestUid: null,
+        rtcOffer: null,
+        rtcAnswer: null,
+        hostIceCandidates: null,
+        guestIceCandidates: null,
+        finalScore: 0,
+        matchOutcome: null,
+        updatedAt: nowMs,
+      };
+      storage.setRoomSync(nextRoomCode, newLobby);
+      storage.setSignalingSync(nextRoomCode, newSig);
+      if (this.isP2PDataChannelOpen()) {
+        this.sendOverDataChannel(
+          {
+            type: 'RETURN_TO_LOBBY',
+            nextRoomCode,
+            hasPassword: usePassword,
+            password: usePassword ? rawPassword : undefined,
+            difficulty,
+            hostUid: user.uid,
+            timestamp: nowMs,
+          },
+          true
+        );
+      }
+      this.cleanupSubscription();
+      this.closeWebRTC();
+      this.lastHostUser = user;
+      this.pendingRematchInvite = null;
+      this.currentSignaling = newSig;
+      this.currentRoom = mergeLobbyAndSignaling(newLobby, newSig);
+      this.role = 'HOST';
+      this.resetSyncCounters();
+      this.listenToRoom(nextRoomCode);
+      this.notifyListeners();
+      return { success: true, room: this.currentRoom };
+    }
+
+    if (this.role === 'GUEST') {
+      if (!this.pendingRematchInvite) {
+        return { success: false, errorCode: 'ROOM_NOT_FOUND', message: 'Chưa nhận được lời mời phòng chờ mới.' };
+      }
+      const invite = this.pendingRematchInvite;
+      this.pendingRematchInvite = null;
+      return this.joinRoomSync(storage, invite.nextRoomCode, user, nowMs, {
+        password: invite.password,
+      });
+    }
+
+    return { success: false, errorCode: 'ROOM_NOT_FOUND' };
   }
 
   /**
@@ -4546,13 +5048,21 @@ export class CoopOnlineManager {
     const currentRole = this.role;
     if (room && (currentRole === 'HOST' || currentRole === 'GUEST') && this.isP2PDataChannelOpen()) {
       const leaveMsg = currentRole === 'HOST' ? 'P1 đã rời trận.' : 'P2 đã rời trận.';
-      this.sendOverDataChannel({
-        type: 'PLAYER_LEFT',
-        role: currentRole,
-        reason: reason || leaveMsg,
-        timestamp: nowMs,
-      });
+      this.sendOverDataChannel(
+        {
+          type: 'PLAYER_LEFT',
+          role: currentRole,
+          reason: reason || leaveMsg,
+          timestamp: nowMs,
+        },
+        true
+      );
     }
+    this.resolveAllRematchWaiters(null);
+    this.lastHostUser = null;
+    this.lastCreatedRoomHasPassword = false;
+    this.lastCreatedRoomPassword = '';
+    this.pendingRematchInvite = null;
     this.cleanupSubscription();
     this.closeWebRTC();
     this.currentRoom = null;
@@ -5084,6 +5594,10 @@ export class CoopOnlineManager {
     this.lastBroadcastMatchState = '';
     this.lastBroadcastStageId = -1;
     this.hasRecordedMatchFinishInFirestore = false;
+    this.isRecordingMatchFinishInFlight = false;
+    this.hostTerminalAckedSnapshotSeq = 0;
+    this.hostTerminalResendCount = 0;
+    this.lastHostTerminalResendAt = 0;
     this.guestLastAppliedSnapshotSeq = 0;
     this.guestLastAppliedStageRunSeq = 0;
     this.guestLastAppliedTickCount = -1;

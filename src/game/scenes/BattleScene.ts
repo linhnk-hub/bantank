@@ -373,12 +373,16 @@ export class BattleScene extends Phaser.Scene {
         if (!res.valid) {
           return false;
         }
+        const nextState = this.engine.getState();
         if (
           snapshot.currentStageId !== prevStageId ||
           snapshot.stageRunSeq !== prevStageRunSeq
         ) {
           this.refreshAllTerrain();
+        } else {
+          this.syncDynamicTerrain(nextState);
         }
+        this.reportHudStateIfNeeded(0, nextState);
         return true;
       }
       return true;
@@ -475,10 +479,11 @@ export class BattleScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    // Check Pause hotkeys (P or ESC)
+    // Check Pause hotkeys (P or ESC) — disabled in TWO_PLAYERS_ONLINE
     if (
-      (this.keyP && Phaser.Input.Keyboard.JustDown(this.keyP)) ||
-      (this.keyEsc && Phaser.Input.Keyboard.JustDown(this.keyEsc))
+      this.engine.getGameMode() !== 'TWO_PLAYERS_ONLINE' &&
+      ((this.keyP && Phaser.Input.Keyboard.JustDown(this.keyP)) ||
+        (this.keyEsc && Phaser.Input.Keyboard.JustDown(this.keyEsc)))
     ) {
       this.onPauseCallback?.();
     }

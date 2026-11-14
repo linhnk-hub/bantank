@@ -28,7 +28,7 @@ import { CoopOnlineManager, type CoopPlayerRole } from '../core/coopOnlineManage
 
 interface M3HudProps {
   state: GameCoreState | null;
-  onReset: () => void;
+  onReset?: () => void;
   onSpawnEnemy: () => void;
   onPause?: () => void;
   isSuperAdmin?: boolean;
@@ -190,13 +190,15 @@ export const M3Hud: React.FC<M3HudProps> = ({
             </button>
           )}
 
-          <button
-            onClick={onReset}
-            className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] font-medium transition-colors"
-          >
-            <RotateCcw className="w-3 h-3" />
-            <span>Đặt lại</span>
-          </button>
+          {onReset && (
+            <button
+              onClick={onReset}
+              className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] font-medium transition-colors"
+            >
+              <RotateCcw className="w-3 h-3" />
+              <span>Đặt lại</span>
+            </button>
+          )}
         </div>
       </div>
 

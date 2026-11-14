@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { RotateCcw, Home, Skull, Trophy, Clock, ShieldAlert } from 'lucide-react';
+import { RotateCcw, Home, Skull, Trophy, Clock, ShieldAlert, Users, Loader2 } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
 import { formatCountdownMMSS } from '../core/constants.ts';
 
@@ -13,6 +13,9 @@ interface GameOverModalProps {
   state: GameCoreState | null;
   onRestart: () => void;
   onQuitToMenu: () => void;
+  onReturnToLobby?: () => void;
+  isReturningToLobby?: boolean;
+  returnToLobbyError?: string | null;
   isTrialMode?: boolean;
 }
 
@@ -21,9 +24,14 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   state,
   onRestart,
   onQuitToMenu,
+  onReturnToLobby,
+  isReturningToLobby = false,
+  returnToLobbyError = null,
   isTrialMode = false,
 }) => {
   if (!isOpen || !state || !state.isGameOver || state.matchState !== 'GAME_OVER') return null;
+
+  const isCoopOnline = state.gameMode === 'TWO_PLAYERS_ONLINE';
 
   const counts = state.defeatedCounts || { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 };
   const totalDefeated = counts.BASIC + counts.FAST + counts.POWER + counts.ARMOR;
@@ -71,7 +79,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             </div>
             <div className="flex items-center justify-center gap-1.5 pt-0.5 text-[11px] sm:text-xs">
               <Trophy className="w-3.5 h-3.5 text-amber-500" />
-              <span className="text-neutral-400">Kỷ lục High XP:</span>
+              <span className="text-neutral-400">Kỷ lục:</span>
               <span className="font-mono font-bold text-neutral-200">{state.highScore.toLocaleString()} XP</span>
               {isNewRecord && (
                 <span className="px-1.5 py-0.2 rounded bg-amber-500 text-black font-extrabold text-[10px] animate-pulse">
@@ -141,9 +149,30 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           </div>
         </div>
 
+        {returnToLobbyError && isCoopOnline && (
+          <div className="mx-4 mb-2 p-2.5 rounded-xl bg-red-950/75 border border-red-500/40 text-red-200 text-[11px] font-medium text-center">
+            {returnToLobbyError}
+          </div>
+        )}
+
         {/* Sticky Action Footer: ALWAYS accessible on short landscape viewports */}
         <div className="p-3 sm:p-4 bg-neutral-950/95 border-t border-neutral-800 flex gap-2.5 shrink-0 safe-area-inset">
-          {!isTrialMode && (
+          {isCoopOnline && onReturnToLobby ? (
+            <button
+              type="button"
+              data-testid="gameover-return-lobby-btn"
+              disabled={isReturningToLobby}
+              onClick={onReturnToLobby}
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-extrabold text-xs transition-all shadow-lg shadow-sky-500/20 active:scale-95 disabled:opacity-60 cursor-pointer"
+            >
+              {isReturningToLobby ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Users className="w-4 h-4" />
+              )}
+              <span>{isReturningToLobby ? 'ĐANG VÀO PHÒNG CHỜ...' : 'VỀ PHÒNG CHỜ'}</span>
+            </button>
+          ) : !isTrialMode ? (
             <button
               type="button"
               onClick={onRestart}
@@ -152,13 +181,14 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               <RotateCcw className="w-4 h-4" />
               <span>CHƠI LẠI</span>
             </button>
-          )}
+          ) : null}
 
           <button
             type="button"
             data-testid={isTrialMode ? 'trial-return-login-btn' : 'gameover-quit-menu-btn'}
+            disabled={isReturningToLobby}
             onClick={onQuitToMenu}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 ${
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl font-bold text-xs transition-all active:scale-95 cursor-pointer ${
               isTrialMode
                 ? 'bg-amber-500 hover:bg-amber-400 text-black font-extrabold shadow-lg shadow-amber-500/20'
                 : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700'

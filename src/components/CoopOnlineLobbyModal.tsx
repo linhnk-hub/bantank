@@ -321,7 +321,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     2. THAM GIA PHÒNG
                   </h3>
                   <p className="text-xs text-neutral-300 leading-relaxed">
-                    Chọn <strong>Vào nhanh</strong> để ghép vào phòng công khai đang chờ, hoặc <strong>Vào bằng mã phòng</strong> 6 ký tự.
+                    Chọn <strong>Vào nhanh</strong> để ghép vào phòng công khai đang chờ, hoặc <strong>Vào bằng mã phòng</strong> định dạng <span className="font-mono text-sky-300 font-bold">BTxxxx</span>.
                   </p>
                 </div>
 
@@ -381,7 +381,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     <Shield className="w-5 h-5 text-amber-400 shrink-0" />
                     <div>
                       <div className="font-black text-xs sm:text-sm">Giải trí</div>
-                      <div className="text-[10px] text-neutral-400">3 mạng • Cân bằng</div>
+                      <div className="text-[10px] text-neutral-400">3 mạng • 120s • Cân bằng</div>
                     </div>
                   </div>
                   {createDifficulty === 'DEFAULT' && (
@@ -404,7 +404,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     <Flame className="w-5 h-5 text-rose-400 shrink-0" />
                     <div>
                       <div className="font-black text-xs sm:text-sm">Thử thách</div>
-                      <div className="text-[10px] text-neutral-400">1 mạng • Áp lực cao</div>
+                      <div className="text-[10px] text-neutral-400">3 mạng • 60s • Áp lực cao</div>
                     </div>
                   </div>
                   {createDifficulty === 'EXTREME' && (
@@ -552,7 +552,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                   ) : (
                     <Zap className="w-4 h-4" />
                   )}
-                  <span>VÀO NGAY</span>
+                  <span>VÀO PHÒNG</span>
                 </button>
               </div>
 
@@ -567,7 +567,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                       <LogIn className="w-5 h-5" />
                     </div>
                     <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-sky-950 text-sky-300 border border-sky-500/30">
-                      Mã phòng 6 ký tự
+                      Định dạng BTxxxx
                     </span>
                   </div>
                   <h3 className="text-base font-black uppercase tracking-wider text-white">
@@ -576,14 +576,16 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
 
                   <div>
                     <label className="block text-[10px] text-neutral-400 mb-1 uppercase font-bold">
-                      Mã phòng (6 ký tự chữ &amp; số):
+                      Mã phòng (BTxxxx — BT + 4 ký tự chữ/số):
                     </label>
                     <input
                       type="text"
                       maxLength={6}
                       value={joinCodeInput}
-                      onChange={(e) => setJoinCodeInput(e.target.value.toUpperCase())}
-                      placeholder="NHẬP MÃ 6 KÝ TỰ"
+                      onChange={(e) =>
+                        setJoinCodeInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))
+                      }
+                      placeholder="VD: BT4829"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-neutral-700 focus:border-sky-400 focus:outline-none text-center font-mono text-sm font-black tracking-[0.25em] text-sky-300 uppercase placeholder:tracking-normal placeholder:font-sans placeholder:text-xs placeholder:text-neutral-600"
                     />
                   </div>
@@ -612,7 +614,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
 
                 <button
                   type="submit"
-                  disabled={isBusy || joinCodeInput.trim().length !== 6}
+                  disabled={isBusy || !/^BT[A-Z0-9]{4}$/.test(joinCodeInput.trim())}
                   className="w-full py-3 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.99] disabled:opacity-50 cursor-pointer"
                 >
                   {isBusy ? (
@@ -721,7 +723,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
         <div className="flex items-center gap-2 bg-neutral-950 border border-sky-500/40 rounded-xl px-3 py-1.5">
           <div>
             <div className="text-[9px] uppercase tracking-wider text-neutral-500 font-bold">
-              Mã phòng (6 ký tự)
+              Mã phòng (BTxxxx)
             </div>
             <div className="font-mono text-base font-black tracking-[0.2em] text-sky-300">
               {room.roomCode}
@@ -765,10 +767,10 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
             )}
             <span>
               {room.rtcConnectionState === 'CONNECTED'
-                ? 'Đã kết nối máy chủ – Sẵn sàng xuất kích!'
+                ? 'Kết nối máy chủ thành công!'
                 : room.rtcConnectionState === 'FAILED'
                   ? coopManager.getWebrtcErrorMessage() ||
-                    'Kết nối máy chủ thất bại. Vui lòng thử kết nối lại hoặc rời phòng.'
+                    'Kết nối máy chủ thất bại. Kết nối lại hoặc rời phòng.'
                   : 'Đang kết nối máy chủ'}
             </span>
           </div>

@@ -269,8 +269,8 @@ async function main(): Promise<void> {
       'Người dùng chưa xác minh email không được tạo phòng Co-op',
       'firestore.rules: isVerifiedPersonalGmail() / match /coop_rooms/{roomCode} allow create',
       () =>
-        setDoc(doc(unverifiedDb, 'coop_rooms', 'RM0001'), {
-          ...baseWaitingLobby('RM0001'),
+        setDoc(doc(unverifiedDb, 'coop_rooms', 'BT0001'), {
+          ...baseWaitingLobby('BT0001'),
           hostUid: 'uid_unverified_4',
         })
     );
@@ -281,7 +281,7 @@ async function main(): Promise<void> {
       'DENY',
       'Không được tạo private/signaling khi phòng cha chưa tồn tại',
       'firestore.rules: match /private/{docId} allow create (parentRoomExists())',
-      () => setDoc(doc(hostDb, 'coop_rooms', 'RM0001', 'private', 'signaling'), baseSignaling('RM0001'))
+      () => setDoc(doc(hostDb, 'coop_rooms', 'BT0001', 'private', 'signaling'), baseSignaling('BT0001'))
     );
 
     await checkRule(
@@ -290,7 +290,7 @@ async function main(): Promise<void> {
       'ALLOW',
       'Host Gmail cá nhân đã xác minh tạo phòng WAITING hợp lệ',
       'firestore.rules: match /coop_rooms/{roomCode} allow create',
-      () => setDoc(doc(hostDb, 'coop_rooms', 'RM0001'), baseWaitingLobby('RM0001'))
+      () => setDoc(doc(hostDb, 'coop_rooms', 'BT0001'), baseWaitingLobby('BT0001'))
     );
 
     await checkRule(
@@ -300,8 +300,8 @@ async function main(): Promise<void> {
       'Người thứ ba không được tạo private/signaling trong phòng của Host',
       'firestore.rules: match /private/{docId} allow create (parentRoom().hostUid == request.auth.uid)',
       () =>
-        setDoc(doc(thirdDb, 'coop_rooms', 'RM0001', 'private', 'signaling'), {
-          ...baseSignaling('RM0001'),
+        setDoc(doc(thirdDb, 'coop_rooms', 'BT0001', 'private', 'signaling'), {
+          ...baseSignaling('BT0001'),
           hostUid: 'uid_third_3',
         })
     );
@@ -312,14 +312,14 @@ async function main(): Promise<void> {
       'ALLOW',
       'Host của phòng cha tạo private/signaling khởi tạo hợp lệ',
       'firestore.rules: match /private/{docId} allow create',
-      () => setDoc(doc(hostDb, 'coop_rooms', 'RM0001', 'private', 'signaling'), baseSignaling('RM0001'))
+      () => setDoc(doc(hostDb, 'coop_rooms', 'BT0001', 'private', 'signaling'), baseSignaling('BT0001'))
     );
 
     // =========================================================================
     // Nhóm 2 & 3: Guest tham gia phòng có signaling hợp lệ & chặn khi thiếu signaling
     // =========================================================================
-    // Tạo phòng RM0002 nhưng KHÔNG tạo private/signaling
-    await setDoc(doc(hostDb, 'coop_rooms', 'RM0002'), baseWaitingLobby('RM0002'));
+    // Tạo phòng BT0002 nhưng KHÔNG tạo private/signaling
+    await setDoc(doc(hostDb, 'coop_rooms', 'BT0002'), baseWaitingLobby('BT0002'));
 
     await checkRule(
       'R03_DENY_GUEST_JOIN_WITHOUT_SIGNALING',
@@ -328,7 +328,7 @@ async function main(): Promise<void> {
       'Guest không được tham gia phòng chờ khi thiếu tài liệu private/signaling',
       'firestore.rules: isCoopGuestJoinAction(roomCode) -> signalingDocExists(roomCode)',
       () =>
-        updateDoc(doc(guestDb, 'coop_rooms', 'RM0002'), {
+        updateDoc(doc(guestDb, 'coop_rooms', 'BT0002'), {
           guestUid: 'uid_guest_2',
           guestDisplayName: 'Guest 2',
           guestReady: false,
@@ -343,7 +343,7 @@ async function main(): Promise<void> {
       'Guest tham gia phòng WAITING đã có private/signaling hợp lệ',
       'firestore.rules: isCoopGuestJoinAction(roomCode)',
       () =>
-        updateDoc(doc(guestDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(guestDb, 'coop_rooms', 'BT0001'), {
           guestUid: 'uid_guest_2',
           guestDisplayName: 'Guest 2',
           guestReady: false,
@@ -361,7 +361,7 @@ async function main(): Promise<void> {
       'Người thứ ba không được ghi đè guestUid khi phòng đã có Guest',
       'firestore.rules: isCoopGuestJoinAction(roomCode) (existing().guestUid == null)',
       () =>
-        updateDoc(doc(thirdDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(thirdDb, 'coop_rooms', 'BT0001'), {
           guestUid: 'uid_third_3',
           guestDisplayName: 'Third 3',
           guestReady: false,
@@ -379,7 +379,7 @@ async function main(): Promise<void> {
       'Guest không được thay đổi rtcConnectionState',
       'firestore.rules: isCoopGuestReadyOrStateAction() (incoming().rtcConnectionState == existing().rtcConnectionState)',
       () =>
-        updateDoc(doc(guestDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(guestDb, 'coop_rooms', 'BT0001'), {
           guestReady: true,
           rtcConnectionState: 'CONNECTED',
           guestLastActiveAt: Date.now(),
@@ -393,7 +393,7 @@ async function main(): Promise<void> {
       'Guest không được tự chuyển status sang PLAYING',
       'firestore.rules: isCoopGuestReadyOrStateAction() (incoming().status == existing().status)',
       () =>
-        updateDoc(doc(guestDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(guestDb, 'coop_rooms', 'BT0001'), {
           status: 'PLAYING',
           guestLastActiveAt: Date.now(),
         })
@@ -406,7 +406,7 @@ async function main(): Promise<void> {
       'Guest được cập nhật guestReady và guestLastActiveAt khi phòng đang WAITING',
       'firestore.rules: isCoopGuestReadyOrStateAction() (WAITING branch)',
       () =>
-        updateDoc(doc(guestDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(guestDb, 'coop_rooms', 'BT0001'), {
           guestReady: true,
           guestLastActiveAt: Date.now(),
         })
@@ -422,7 +422,7 @@ async function main(): Promise<void> {
       'Host không được chuyển WAITING -> PLAYING khi chưa Ready hoặc chưa CONNECTED',
       'firestore.rules: isValidHostStatusTransition(roomCode) branch 2',
       () =>
-        updateDoc(doc(hostDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(hostDb, 'coop_rooms', 'BT0001'), {
           status: 'PLAYING',
           hostLastActiveAt: Date.now(),
         })
@@ -436,7 +436,7 @@ async function main(): Promise<void> {
       'Host cập nhật hostReady = true và rtcConnectionState = CONNECTED',
       'firestore.rules: isCoopHostUpdateAction(roomCode)',
       () =>
-        updateDoc(doc(hostDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(hostDb, 'coop_rooms', 'BT0001'), {
           hostReady: true,
           rtcConnectionState: 'CONNECTED',
           hostLastActiveAt: Date.now(),
@@ -450,7 +450,7 @@ async function main(): Promise<void> {
       'Host chuyển WAITING -> PLAYING khi cả 2 đã Ready, CONNECTED và có signaling',
       'firestore.rules: isValidHostStatusTransition(roomCode) branch 2',
       () =>
-        updateDoc(doc(hostDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(hostDb, 'coop_rooms', 'BT0001'), {
           status: 'PLAYING',
           hostLastActiveAt: Date.now(),
         })
@@ -466,7 +466,7 @@ async function main(): Promise<void> {
       'Guest không được thay đổi guestReady khi phòng đang PLAYING (M7.3.1)',
       'firestore.rules: isCoopGuestReadyOrStateAction() (PLAYING branch: incoming().guestReady == existing().guestReady)',
       () =>
-        updateDoc(doc(guestDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(guestDb, 'coop_rooms', 'BT0001'), {
           guestReady: false,
           guestLastActiveAt: Date.now(),
         })
@@ -479,7 +479,7 @@ async function main(): Promise<void> {
       'Guest được phép cập nhật guestLastActiveAt khi phòng đang PLAYING (phục vụ retry WebRTC)',
       'firestore.rules: isCoopGuestReadyOrStateAction() (PLAYING branch)',
       () =>
-        updateDoc(doc(guestDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(guestDb, 'coop_rooms', 'BT0001'), {
           guestLastActiveAt: Date.now(),
         })
     );
@@ -494,7 +494,7 @@ async function main(): Promise<void> {
       'Guest không được tự chuyển phòng sang FINISHED',
       'firestore.rules: isCoopGuestReadyOrStateAction() / isCoopGuestLeaveAction()',
       () =>
-        updateDoc(doc(guestDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(guestDb, 'coop_rooms', 'BT0001'), {
           status: 'FINISHED',
           guestLastActiveAt: Date.now(),
         })
@@ -507,7 +507,7 @@ async function main(): Promise<void> {
       'Host không được sửa đổi hoặc gia hạn expiresAt sau khi tạo phòng',
       'firestore.rules: isImmutableCoopCoreUnchanged() (incoming().expiresAt == existing().expiresAt)',
       () =>
-        updateDoc(doc(hostDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(hostDb, 'coop_rooms', 'BT0001'), {
           expiresAt: validExpiresAt + 600_000,
           hostLastActiveAt: Date.now(),
         })
@@ -520,8 +520,8 @@ async function main(): Promise<void> {
       'Không được tạo phòng có expiresAt vượt quá 15 phút (900,000 ms) tính từ request.time',
       'firestore.rules: isValidCoopRoomCreationTime(data)',
       () =>
-        setDoc(doc(hostDb, 'coop_rooms', 'RM0099'), {
-          ...baseWaitingLobby('RM0099'),
+        setDoc(doc(hostDb, 'coop_rooms', 'BT0099'), {
+          ...baseWaitingLobby('BT0099'),
           expiresAt: Date.now() + 950_000,
         })
     );
@@ -535,7 +535,7 @@ async function main(): Promise<void> {
       'DENY',
       'Người thứ ba không được đọc tài liệu phòng đã đủ 2 người và đang PLAYING',
       'firestore.rules: match /coop_rooms/{roomCode} allow get',
-      () => getDoc(doc(thirdDb, 'coop_rooms', 'RM0001'))
+      () => getDoc(doc(thirdDb, 'coop_rooms', 'BT0001'))
     );
 
     await checkRule(
@@ -544,7 +544,7 @@ async function main(): Promise<void> {
       'DENY',
       'Người thứ ba không được đọc tài liệu private/signaling',
       'firestore.rules: match /private/{docId} allow get',
-      () => getDoc(doc(thirdDb, 'coop_rooms', 'RM0001', 'private', 'signaling'))
+      () => getDoc(doc(thirdDb, 'coop_rooms', 'BT0001', 'private', 'signaling'))
     );
 
     await checkRule(
@@ -554,7 +554,7 @@ async function main(): Promise<void> {
       'Host cập nhật guestUid, rtcOffer và hostIceCandidates trong private/signaling',
       'firestore.rules: match /private/{docId} allow update (branch 1)',
       () =>
-        updateDoc(doc(hostDb, 'coop_rooms', 'RM0001', 'private', 'signaling'), {
+        updateDoc(doc(hostDb, 'coop_rooms', 'BT0001', 'private', 'signaling'), {
           guestUid: 'uid_guest_2',
           rtcOffer: '{"type":"offer","sdp":"v=0"}',
           hostIceCandidates: '[{"candidate":"1"}]',
@@ -569,7 +569,7 @@ async function main(): Promise<void> {
       'Guest đã vào phòng cập nhật rtcAnswer và guestIceCandidates trong private/signaling',
       'firestore.rules: match /private/{docId} allow update (branch 3)',
       () =>
-        updateDoc(doc(guestDb, 'coop_rooms', 'RM0001', 'private', 'signaling'), {
+        updateDoc(doc(guestDb, 'coop_rooms', 'BT0001', 'private', 'signaling'), {
           guestUid: 'uid_guest_2',
           rtcAnswer: '{"type":"answer","sdp":"v=0"}',
           guestIceCandidates: '[{"candidate":"2"}]',
@@ -584,7 +584,7 @@ async function main(): Promise<void> {
       'Guest không được ghi finalScore hoặc matchOutcome vào private/signaling',
       'firestore.rules: match /private/{docId} allow update (branch 3: incoming().finalScore == existing().finalScore)',
       () =>
-        updateDoc(doc(guestDb, 'coop_rooms', 'RM0001', 'private', 'signaling'), {
+        updateDoc(doc(guestDb, 'coop_rooms', 'BT0001', 'private', 'signaling'), {
           finalScore: 5000,
           matchOutcome: 'VICTORY',
           updatedAt: Date.now(),
@@ -601,7 +601,7 @@ async function main(): Promise<void> {
       'Host bị từ chối chuyển PLAYING -> FINISHED khi private/signaling chưa có kết quả (matchOutcome == null)',
       'firestore.rules: isValidHostStatusTransition(roomCode) branch 6 -> hasValidRecordedMatchResult(roomCode)',
       () =>
-        updateDoc(doc(hostDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(hostDb, 'coop_rooms', 'BT0001'), {
           status: 'FINISHED',
           hostLastActiveAt: Date.now(),
         })
@@ -614,18 +614,18 @@ async function main(): Promise<void> {
       'Từ chối ghi kết quả có finalScore âm hoặc matchOutcome sai định dạng',
       'firestore.rules: isValidCoopSignalingSchema() & allow update branch 2',
       () =>
-        updateDoc(doc(hostDb, 'coop_rooms', 'RM0001', 'private', 'signaling'), {
+        updateDoc(doc(hostDb, 'coop_rooms', 'BT0001', 'private', 'signaling'), {
           finalScore: -50,
           matchOutcome: 'VICTORY',
           updatedAt: Date.now(),
         })
     );
 
-    // Tạo phòng RM0003 ở trạng thái PLAYING với signaling bị lệch guestUid / hostUid / roomCode để kiểm tra chặt hasValidRecordedMatchResult
+    // Tạo phòng BT0003 ở trạng thái PLAYING với signaling bị lệch guestUid / hostUid / roomCode để kiểm tra chặt hasValidRecordedMatchResult
     await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
       const bypassDb = adminCtx.firestore();
-      await setDoc(doc(bypassDb, 'coop_rooms', 'RM0003'), {
-        ...baseWaitingLobby('RM0003'),
+      await setDoc(doc(bypassDb, 'coop_rooms', 'BT0003'), {
+        ...baseWaitingLobby('BT0003'),
         status: 'PLAYING',
         hostReady: true,
         guestUid: 'uid_guest_2',
@@ -634,9 +634,9 @@ async function main(): Promise<void> {
         guestLastActiveAt: Date.now(),
         rtcConnectionState: 'CONNECTED',
       });
-      await setDoc(doc(bypassDb, 'coop_rooms', 'RM0003', 'private', 'signaling'), {
-        ...baseSignaling('RM0003'),
-        roomCode: 'WRONG9', // Sai roomCode
+      await setDoc(doc(bypassDb, 'coop_rooms', 'BT0003', 'private', 'signaling'), {
+        ...baseSignaling('BT0003'),
+        roomCode: 'BTW999', // Sai roomCode
         guestUid: 'uid_guest_2',
         finalScore: 5000,
         matchOutcome: 'VICTORY',
@@ -651,7 +651,7 @@ async function main(): Promise<void> {
       'Từ chối PLAYING -> FINISHED nếu signaling.roomCode không khớp với roomCode',
       'firestore.rules: hasValidRecordedMatchResult(roomCode) (signalingDoc(roomCode).roomCode == roomCode)',
       () =>
-        updateDoc(doc(hostDb, 'coop_rooms', 'RM0003'), {
+        updateDoc(doc(hostDb, 'coop_rooms', 'BT0003'), {
           status: 'FINISHED',
           hostLastActiveAt: Date.now(),
         })
@@ -659,9 +659,9 @@ async function main(): Promise<void> {
 
     await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
       const bypassDb = adminCtx.firestore();
-      await setDoc(doc(bypassDb, 'coop_rooms', 'RM0003', 'private', 'signaling'), {
-        ...baseSignaling('RM0003'),
-        roomCode: 'RM0003',
+      await setDoc(doc(bypassDb, 'coop_rooms', 'BT0003', 'private', 'signaling'), {
+        ...baseSignaling('BT0003'),
+        roomCode: 'BT0003',
         guestUid: 'uid_third_3', // Sai guestUid so với phòng cha
         finalScore: 5000,
         matchOutcome: 'VICTORY',
@@ -676,7 +676,7 @@ async function main(): Promise<void> {
       'Từ chối PLAYING -> FINISHED nếu signaling.guestUid không khớp với existing().guestUid',
       'firestore.rules: hasValidRecordedMatchResult(roomCode) (signalingDoc(roomCode).guestUid == existing().guestUid)',
       () =>
-        updateDoc(doc(hostDb, 'coop_rooms', 'RM0003'), {
+        updateDoc(doc(hostDb, 'coop_rooms', 'BT0003'), {
           status: 'FINISHED',
           hostLastActiveAt: Date.now(),
         })
@@ -689,7 +689,7 @@ async function main(): Promise<void> {
       'Host ghi kết quả hợp lệ (finalScore, matchOutcome) đúng 1 lần khi phòng đang PLAYING',
       'firestore.rules: match /private/{docId} allow update (branch 2)',
       () =>
-        updateDoc(doc(hostDb, 'coop_rooms', 'RM0001', 'private', 'signaling'), {
+        updateDoc(doc(hostDb, 'coop_rooms', 'BT0001', 'private', 'signaling'), {
           finalScore: 6800,
           matchOutcome: 'VICTORY',
           updatedAt: Date.now(),
@@ -703,7 +703,7 @@ async function main(): Promise<void> {
       'Host không được phép ghi đè kết quả trận đấu sau khi đã ghi',
       'firestore.rules: match /private/{docId} allow update (branch 2: existing().matchOutcome == null)',
       () =>
-        updateDoc(doc(hostDb, 'coop_rooms', 'RM0001', 'private', 'signaling'), {
+        updateDoc(doc(hostDb, 'coop_rooms', 'BT0001', 'private', 'signaling'), {
           finalScore: 9999,
           matchOutcome: 'GAME_OVER',
           updatedAt: Date.now(),
@@ -717,7 +717,7 @@ async function main(): Promise<void> {
       'Host chuyển PLAYING -> FINISHED thành công sau khi private/signaling đã có kết quả hợp lệ',
       'firestore.rules: isValidHostStatusTransition(roomCode) branch 6 -> hasValidRecordedMatchResult(roomCode)',
       () =>
-        updateDoc(doc(hostDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(hostDb, 'coop_rooms', 'BT0001'), {
           status: 'FINISHED',
           hostLastActiveAt: Date.now(),
         })
@@ -730,7 +730,7 @@ async function main(): Promise<void> {
       'Host không thể mở lại phòng đã FINISHED về PLAYING hoặc WAITING',
       'firestore.rules: isValidHostStatusTransition(roomCode)',
       () =>
-        updateDoc(doc(hostDb, 'coop_rooms', 'RM0001'), {
+        updateDoc(doc(hostDb, 'coop_rooms', 'BT0001'), {
           status: 'PLAYING',
           hostLastActiveAt: Date.now(),
         })
@@ -2032,10 +2032,10 @@ async function main(): Promise<void> {
       async () => {
         await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
           const bypassDb = adminCtx.firestore();
-          await setDoc(doc(bypassDb, 'coop_rooms', 'SIG530'), baseWaitingLobby('SIG530'));
-          await setDoc(doc(bypassDb, 'coop_rooms', 'SIG530', 'private', 'signaling'), baseSignaling('SIG530'));
+          await setDoc(doc(bypassDb, 'coop_rooms', 'BTS530'), baseWaitingLobby('BTS530'));
+          await setDoc(doc(bypassDb, 'coop_rooms', 'BTS530', 'private', 'signaling'), baseSignaling('BTS530'));
         });
-        await getDoc(doc(thirdDb, 'coop_rooms', 'SIG530', 'private', 'signaling'));
+        await getDoc(doc(thirdDb, 'coop_rooms', 'BTS530', 'private', 'signaling'));
       }
     );
 

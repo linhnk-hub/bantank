@@ -61,6 +61,7 @@ import {
   HelpCircle,
   AlertTriangle,
   Clock,
+  Eye,
 } from 'lucide-react';
 
 export default function App() {
@@ -80,6 +81,8 @@ export default function App() {
   const [logoutSuccessNotice, setLogoutSuccessNotice] = useState<string | null>(null);
   const [isSupportOpen, setIsSupportOpen] = useState<boolean>(false);
   const [onlineDisconnectMsg, setOnlineDisconnectMsg] = useState<string | null>(null);
+  const [isReturningToLobby, setIsReturningToLobby] = useState<boolean>(false);
+  const [returnToLobbyError, setReturnToLobbyError] = useState<string | null>(null);
 
   const isSuperAdmin = useMemo(() => isSuperAdminUser(currentUser), [currentUser]);
 
@@ -159,6 +162,9 @@ export default function App() {
   }, [gameEngine]);
 
   const handlePause = useCallback(() => {
+    if (gameEngine.getState().gameMode === 'TWO_PLAYERS_ONLINE') {
+      return;
+    }
     clearVirtualTouchInputs();
     gameEngine.pause();
     setIsPaused(true);
@@ -242,16 +248,31 @@ export default function App() {
     };
   }, [authManager, sessionManager, handlePause]);
 
-  // Monitor Co-op Online Room for peer disconnection / leave during BATTLE
+  // Monitor Co-op Online Room for peer disconnection / leave / FINISHED fail-safe during BATTLE
   useEffect(() => {
     if (appScreen !== 'BATTLE') return;
     const unsubCoop = coopManager.subscribe((room) => {
-      if (gameEngine.getState().gameMode !== 'TWO_PLAYERS_ONLINE') return;
+      const engState = gameEngine.getState();
+      if (engState.gameMode !== 'TWO_PLAYERS_ONLINE') return;
+      if (engState.isGameOver || engState.isStageClear || engState.matchState === 'MENU') return;
+
       const localRole = coopManager.getLocalRole();
+      if (room && room.status === 'FINISHED') {
+        if (localRole === 'GUEST') {
+          const outcome = room.matchOutcome === 'VICTORY' ? 'VICTORY' : 'GAME_OVER';
+          gameEngine.forceFinishFromOnlineRoom(
+            outcome,
+            typeof room.finalScore === 'number' ? room.finalScore : engState.score
+          );
+          clearVirtualTouchInputs();
+          setGameState({ ...gameEngine.getState() });
+        }
+        return;
+      }
+
       if (!room) {
         if (localRole === 'GUEST') {
           setOnlineDisconnectMsg('P1 đã rời trận.');
-          handlePause();
         }
         return;
       }
@@ -264,34 +285,34 @@ export default function App() {
         } else if (localRole === 'GUEST') {
           gameEngine.handlePeerPlayerLeft('P1');
           setOnlineDisconnectMsg('P1 đã rời trận.');
-          handlePause();
           return;
         }
       }
       const status = coopManager.evaluatePeerConnectionStatus(Date.now());
       if (status.isTimedOut) {
         setOnlineDisconnectMsg(status.warningMessage || 'Đồng đội đã ngắt kết nối.');
-        handlePause();
       }
     });
 
     const unsubPeerLeave = coopManager.subscribePeerLeave((event) => {
-      if (gameEngine.getState().gameMode !== 'TWO_PLAYERS_ONLINE') return;
+      const engState = gameEngine.getState();
+      if (engState.gameMode !== 'TWO_PLAYERS_ONLINE') return;
+      if (engState.isGameOver || engState.isStageClear || engState.matchState === 'MENU') return;
       const leftPlayer = event.role === 'HOST' ? 'P1' : 'P2';
       gameEngine.handlePeerPlayerLeft(leftPlayer);
       setGameState({ ...gameEngine.getState() });
       if (event.role === 'HOST') {
         setOnlineDisconnectMsg(event.message);
-        handlePause();
       }
     });
 
     const heartbeatTimerId = setInterval(() => {
-      if (gameEngine.getState().gameMode !== 'TWO_PLAYERS_ONLINE') return;
+      const engState = gameEngine.getState();
+      if (engState.gameMode !== 'TWO_PLAYERS_ONLINE') return;
+      if (engState.isGameOver || engState.isStageClear || engState.matchState === 'MENU') return;
       const status = coopManager.evaluatePeerConnectionStatus(Date.now());
       if (status.isTimedOut) {
         setOnlineDisconnectMsg(status.warningMessage || 'Đồng đội đã ngắt kết nối.');
-        handlePause();
       }
     }, COOP_ONLINE_CONFIG.HEARTBEAT_INTERVAL_MS);
 
@@ -300,7 +321,7 @@ export default function App() {
       unsubCoop();
       unsubPeerLeave();
     };
-  }, [appScreen, coopManager, gameEngine, handlePause]);
+  }, [appScreen, coopManager, gameEngine, clearVirtualTouchInputs]);
 
   const handleResume = useCallback(() => {
     clearVirtualTouchInputs();
@@ -344,6 +365,8 @@ export default function App() {
     (room: CoopRoomDocument, _role: CoopPlayerRole) => {
       if (sessionSnapshot.status !== 'ACTIVE') return;
       setOnlineDisconnectMsg(null);
+      setIsReturningToLobby(false);
+      setReturnToLobbyError(null);
       setDifficulty(room.difficulty);
       gameEngine.startMatch('TWO_PLAYERS_ONLINE', room.difficulty);
       setIsPaused(false);
@@ -394,12 +417,49 @@ export default function App() {
       void coopManager.leaveRoom();
     }
     setOnlineDisconnectMsg(null);
+    setIsReturningToLobby(false);
+    setReturnToLobbyError(null);
     gameEngine.quitToMenu();
     setIsPaused(false);
     MusicManager.getInstance().pause();
     setGameState({ ...gameEngine.getState() });
     setAppScreen(wasTrial || !authManager.getCurrentUser() ? 'WELCOME' : 'MAIN_MENU');
   }, [authManager, isTrialMode, gameEngine, coopManager]);
+
+  const handleReturnToLobby = useCallback(async () => {
+    if (!currentUser) {
+      setReturnToLobbyError('Vui lòng đăng nhập lại để quay về phòng chờ.');
+      return;
+    }
+    setIsReturningToLobby(true);
+    setReturnToLobbyError(null);
+    try {
+      const res = await coopManager.returnToLobbyFromMatch({
+        uid: currentUser.uid,
+        displayName: currentUser.displayName,
+        email: currentUser.email,
+        emailVerified: currentUser.emailVerified,
+        photoURL: currentUser.photoURL,
+      });
+      if (!res.success) {
+        setReturnToLobbyError(res.message || 'Không thể quay về phòng chờ chung.');
+        return;
+      }
+      setOnlineDisconnectMsg(null);
+      clearVirtualTouchInputs();
+      gameEngine.quitToMenu();
+      setIsPaused(false);
+      MusicManager.getInstance().pause();
+      setGameState({ ...gameEngine.getState() });
+      setSelectedMode('TWO_PLAYERS');
+      setTwoPlayerOption('P2_REAL');
+      setAppScreen('MODE_SELECTION');
+    } catch (err: any) {
+      setReturnToLobbyError(err?.message || 'Lỗi khi quay về phòng chờ chung.');
+    } finally {
+      setIsReturningToLobby(false);
+    }
+  }, [currentUser, coopManager, clearVirtualTouchInputs, gameEngine]);
 
   const handleSignIn = useCallback(async () => {
     setAuthProcessing(true);
@@ -603,6 +663,32 @@ export default function App() {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [appScreen, gameState?.matchState, handleRestart]);
+
+  const isCoopOnlineMatch = gameState?.gameMode === 'TWO_PLAYERS_ONLINE';
+  const localOnlineRole = isCoopOnlineMatch ? coopManager.getLocalRole() : null;
+  const isLocalSpectator = Boolean(
+    gameState &&
+      !gameState.isGameOver &&
+      !gameState.isStageClear &&
+      (gameState.gameMode === 'TWO_PLAYERS_ONLINE' || gameState.gameMode === 'TWO_PLAYERS_AI') &&
+      (gameState.gameMode === 'TWO_PLAYERS_ONLINE' && localOnlineRole === 'GUEST'
+        ? Boolean(
+            gameState.p2State &&
+              (gameState.p2State.isSpectator ||
+                (gameState.p2State.isDead && gameState.p2State.lives <= 0))
+          )
+        : Boolean(
+            gameState.p1State.isSpectator ||
+              (gameState.p1State.isDead && gameState.p1State.lives <= 0)
+          ))
+  );
+
+  // Neutralize touch controls immediately when entering spectator mode
+  useEffect(() => {
+    if (isLocalSpectator) {
+      clearVirtualTouchInputs();
+    }
+  }, [isLocalSpectator, clearVirtualTouchInputs]);
 
   const isGameOverModalOpen = Boolean(
     gameState && gameState.matchState === 'GAME_OVER'
@@ -889,14 +975,16 @@ export default function App() {
               {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
               <QuickAudioToggleButton compact />
 
-              <button
-                type="button"
-                onClick={isPaused ? handleResume : handlePause}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold shadow cursor-pointer"
-              >
-                {isPaused ? <Play className="w-3 h-3 fill-white" /> : <Pause className="w-3 h-3 fill-white" />}
-                <span className="hidden xs:inline">{isPaused ? 'Tiếp tục' : 'Tạm dừng'}</span>
-              </button>
+              {!isCoopOnlineMatch && (
+                <button
+                  type="button"
+                  onClick={isPaused ? handleResume : handlePause}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold shadow cursor-pointer"
+                >
+                  {isPaused ? <Play className="w-3 h-3 fill-white" /> : <Pause className="w-3 h-3 fill-white" />}
+                  <span className="hidden xs:inline">{isPaused ? 'Tiếp tục' : 'Tạm dừng'}</span>
+                </button>
+              )}
 
               <button
                 type="button"
@@ -941,7 +1029,7 @@ export default function App() {
                 size={layout.isTabletOrDesktop ? 130 : 100}
                 knobSize={layout.isTabletOrDesktop ? 46 : 36}
                 deadZone={12}
-                disabled={isPaused}
+                disabled={isPaused || isLocalSpectator}
               />
             </div>
 
@@ -963,6 +1051,16 @@ export default function App() {
                 onPause={handlePause}
                 canvasSizePx={layout.canvasSizePx}
               />
+
+              {isLocalSpectator && (
+                <div
+                  data-testid="mobile-spectator-banner"
+                  className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1 rounded-lg bg-sky-950/90 border border-sky-500/60 text-sky-200 text-[11px] font-bold shadow-lg whitespace-nowrap"
+                >
+                  <Eye className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                  <span>Đã hết mạng — Đang xem đồng đội thi đấu</span>
+                </div>
+              )}
 
               {/* In MENU state: Overlay allowing immediate match start */}
               {gameState?.matchState === 'MENU' && (
@@ -994,7 +1092,9 @@ export default function App() {
                 width: `${layout.rightControlWidthPx}px`,
                 minWidth: '90px',
               }}
-              className="flex-1 self-stretch flex items-center justify-center"
+              className={`flex-1 self-stretch flex items-center justify-center ${
+                isLocalSpectator ? 'pointer-events-none opacity-40' : ''
+              }`}
             >
               <VirtualShootButton
                 isShooting={landscapeShooting}
@@ -1144,20 +1244,33 @@ export default function App() {
               )}
             </main>
 
+            {isLocalSpectator && (
+              <div
+                data-testid="mobile-spectator-banner"
+                className="mt-2 px-3 py-1.5 rounded-lg bg-sky-950/90 border border-sky-500/60 text-sky-200 text-xs font-bold flex items-center gap-2 shadow"
+              >
+                <Eye className="w-4 h-4 text-sky-400 shrink-0" />
+                <span>Bạn đã hết mạng — Đang ở chế độ Xem đồng đội</span>
+              </div>
+            )}
+
             {/* Controls Cluster */}
             <div
               style={{
                 width: `${layout.canvasSizePx}px`,
                 maxWidth: layout.isTabletOrDesktop ? `${Math.max(layout.canvasSizePx, 680)}px` : '440px',
-                marginTop: '28px',
+                marginTop: isLocalSpectator ? '12px' : '28px',
               }}
-              className="w-full shrink-0 mx-auto z-20 flex justify-center"
+              className={`w-full shrink-0 mx-auto z-20 flex justify-center ${
+                isLocalSpectator ? 'pointer-events-none opacity-40' : ''
+              }`}
             >
               <TouchControls
                 onInputChange={handleTouchInput}
                 onPauseClick={isPaused ? handleResume : handlePause}
-                isPaused={isPaused}
+                isPaused={isPaused || isLocalSpectator}
                 controlType="joystick"
+                disablePause={isCoopOnlineMatch}
               />
             </div>
 
@@ -1288,21 +1401,25 @@ export default function App() {
                       <span>Joystick: {showTouchControls ? 'Bật' : 'Tắt'}</span>
                     </button>
 
-                    <button
-                      onClick={isPaused ? handleResume : handlePause}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] font-semibold"
-                    >
-                      <Pause className="w-3 h-3" />
-                      <span>{isPaused ? 'Tiếp tục' : 'Tạm dừng (P)'}</span>
-                    </button>
+                    {!isCoopOnlineMatch && (
+                      <>
+                        <button
+                          onClick={isPaused ? handleResume : handlePause}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] font-semibold"
+                        >
+                          <Pause className="w-3 h-3" />
+                          <span>{isPaused ? 'Tiếp tục' : 'Tạm dừng (P)'}</span>
+                        </button>
 
-                    <button
-                      onClick={handleResetGame}
-                      className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[11px]"
-                    >
-                      <RotateCcw className="w-3 h-3" />
-                      <span>Đặt lại</span>
-                    </button>
+                        <button
+                          onClick={handleResetGame}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[11px]"
+                        >
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Đặt lại</span>
+                        </button>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -1360,12 +1477,15 @@ export default function App() {
               </div>
 
               {showTouchControls && (
-                <TouchControls
-                  onInputChange={handleTouchInput}
-                  onPauseClick={isPaused ? handleResume : handlePause}
-                  isPaused={isPaused}
-                  controlType="joystick"
-                />
+                <div className={isLocalSpectator ? 'pointer-events-none opacity-40' : ''}>
+                  <TouchControls
+                    onInputChange={handleTouchInput}
+                    onPauseClick={isPaused ? handleResume : handlePause}
+                    isPaused={isPaused || isLocalSpectator}
+                    controlType="joystick"
+                    disablePause={isCoopOnlineMatch}
+                  />
+                </div>
               )}
             </section>
 
@@ -1373,11 +1493,11 @@ export default function App() {
             <section className="lg:col-span-4 flex flex-col gap-4">
               <M3Hud
                 state={gameState}
-                onReset={handleResetGame}
+                onReset={isCoopOnlineMatch ? undefined : handleResetGame}
                 onSpawnEnemy={handleSpawnNextEnemy}
-                onPause={handlePause}
+                onPause={isCoopOnlineMatch ? undefined : handlePause}
                 isSuperAdmin={isSuperAdmin}
-                localOnlineRole={coopManager.getLocalRole()}
+                localOnlineRole={localOnlineRole}
               />
 
               {/* Admin Only: Terrain Legend & QA Quick Access Card */}
@@ -1430,7 +1550,7 @@ export default function App() {
           MATCH MODALS (Pause, GameOver, StageClear)
          ========================================================================= */}
       <PauseModal
-        isOpen={isPaused}
+        isOpen={isPaused && !isCoopOnlineMatch}
         onResume={handleResume}
         onRestart={handleRestart}
         onQuitToMenu={handleQuitToMenu}
@@ -1442,6 +1562,9 @@ export default function App() {
         state={gameState}
         onRestart={handleRestart}
         onQuitToMenu={handleQuitToMenu}
+        onReturnToLobby={isCoopOnlineMatch ? handleReturnToLobby : undefined}
+        isReturningToLobby={isReturningToLobby}
+        returnToLobbyError={returnToLobbyError}
         isTrialMode={isTrialMode}
       />
 
@@ -1450,6 +1573,9 @@ export default function App() {
         state={gameState}
         onNextStageOrReplay={handleNextStageOrReplay}
         onQuitToMenu={handleQuitToMenu}
+        onReturnToLobby={isCoopOnlineMatch ? handleReturnToLobby : undefined}
+        isReturningToLobby={isReturningToLobby}
+        returnToLobbyError={returnToLobbyError}
         isTrialMode={isTrialMode}
       />
     </div>
