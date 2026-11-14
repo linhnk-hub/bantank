@@ -102,7 +102,7 @@ export const SessionAlertModal: React.FC<SessionAlertModalProps> = ({
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold transition-all shadow disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
-              <span>{isProcessing ? 'Đang kiểm tra...' : 'Thử xác thực lại'}</span>
+              <span>{isProcessing ? 'Đang kiểm tra...' : 'Xác thực lại'}</span>
             </button>
           )}
 
@@ -113,7 +113,7 @@ export const SessionAlertModal: React.FC<SessionAlertModalProps> = ({
               className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold transition-all shadow disabled:opacity-50"
             >
               <RefreshCw className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
-              <span>{isProcessing ? 'Đang kết nối lại...' : 'Kết nối lại máy chủ'}</span>
+              <span>{isProcessing ? 'Đang kết nối lại...' : 'Kết nối lại'}</span>
             </button>
           )}
 

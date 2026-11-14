@@ -310,7 +310,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
                   onClick={handleRetryAcquire}
                   disabled={isProcessing}
                   className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500 hover:bg-amber-400 text-black transition-all font-bold text-[11px] active:scale-95 disabled:opacity-50"
-                  title="Thử kết nối lại máy chủ"
+                  title="Thử kết nối lại"
                 >
                   <RefreshCw className={`w-3 h-3 ${isProcessing ? 'animate-spin' : ''}`} />
                   <span>Kết nối máy chủ</span>

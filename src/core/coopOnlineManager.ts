@@ -2962,7 +2962,7 @@ export class CoopOnlineManager {
         errorCode: 'WEBRTC_NOT_CONNECTED',
         message:
           this.webrtcErrorMessage ||
-          'Kết nối P2P trực tiếp (WebRTC) chưa sẵn sàng. Vui lòng nhấn "Thử kết nối lại P2P".',
+          'Kết nối gián đoạn. Vui lòng thử lại.',
       };
     }
 

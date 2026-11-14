@@ -62,13 +62,13 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
           <div className="bg-neutral-950/70 border border-neutral-800 rounded-xl p-3.5 space-y-2">
             <div className="flex items-center gap-2 text-amber-400 font-black uppercase tracking-wider">
               <Shield className="w-4 h-4 shrink-0" />
-              <span>1. Luật Chơi &amp; Mục Tiêu Chiến Dịch</span>
+              <span>1. Luật chơi &amp; Mục tiêu chiến dịch</span>
             </div>
             <ul className="space-y-1.5 text-neutral-300 pl-1">
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Bảo vệ Căn cứ Đại Bàng:</strong> Căn cứ nằm ở chính giữa cạnh dưới bản đồ. Nếu Đại Bàng bị trúng đạn của xe địch, trận đấu sẽ kết thúc ngay lập tức (Game Over).
+                  <strong>Bảo vệ căn cứ Đại bàng:</strong> Căn cứ nằm ở chính giữa cạnh dưới bản đồ. Nếu Đại Bàng bị trúng đạn của xe địch, trận đấu sẽ kết thúc ngay lập tức (Game Over).
                 </span>
               </li>
               <li className="flex items-start gap-2">
@@ -98,7 +98,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
               <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1.5">
                 <div className="flex items-center gap-1.5 text-sky-400 font-bold">
                   <Keyboard className="w-3.5 h-3.5 shrink-0" />
-                  <span>Bàn Phím PC</span>
+                  <span>Bàn phím PC</span>
                 </div>
                 <ul className="space-y-1 text-[11px] text-neutral-300">
                   <li>
@@ -123,7 +123,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
               <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1.5">
                 <div className="flex items-center gap-1.5 text-emerald-400 font-bold">
                   <Smartphone className="w-3.5 h-3.5 shrink-0" />
-                  <span>Cảm Ứng Mobile</span>
+                  <span>Cảm ứng Mobile</span>
                 </div>
                 <ul className="space-y-1 text-[11px] text-neutral-300">
                   <li>• <strong>Chế độ Dọc:</strong> Cụm phím ảo Joystick trái + Nút Khai Hỏa phải tách biệt bên dưới bản đồ.</li>
@@ -155,7 +155,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
               <div className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800">
                 <div className="font-bold text-amber-300 flex items-center gap-1.5 mb-1">
                   <Gamepad2 className="w-3.5 h-3.5" />
-                  <span>1. SOLO (1 Người)</span>
+                  <span>SOLO</span>
                 </div>
                 <p className="text-neutral-400">
                   Chiến đấu độc lập điều khiển Chiến xa P1 bảo vệ căn cứ và vượt qua các màn chơi.
@@ -164,16 +164,16 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
               <div className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800">
                 <div className="font-bold text-emerald-300 flex items-center gap-1.5 mb-1">
                   <Bot className="w-3.5 h-3.5" />
-                  <span>2. CO-OP AI</span>
+                  <span>CO-OP AI</span>
                 </div>
                 <p className="text-neutral-400">
-                  Sát cánh cùng đồng đội máy P2 thông minh tự động tìm đường, bọc lót căn cứ và tiêu diệt xe địch.
+                  Sát cánh cùng đồng đội AI thông minh để bảo vệ căn cứ và vượt qua các màn chơi.
                 </p>
               </div>
               <div className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800">
                 <div className="font-bold text-sky-300 flex items-center gap-1.5 mb-1">
                   <Globe className="w-3.5 h-3.5" />
-                  <span>3. CO-OP ONLINE</span>
+                  <span>CO-OP ONLINE</span>
                 </div>
                 <p className="text-neutral-400">
                   Tạo phòng hoặc nhập mã phòng 6 ký tự để phối hợp cùng 1 người chơi thật thứ hai qua Internet.
@@ -186,7 +186,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
           <div className="bg-neutral-950/70 border border-neutral-800 rounded-xl p-3.5 space-y-1.5">
             <div className="flex items-center gap-2 text-amber-400 font-black uppercase tracking-wider">
               <Wifi className="w-4 h-4 shrink-0" />
-              <span>4. Xử Lý Sự Cố Đăng Nhập &amp; Kết Nối</span>
+              <span>4. Xử lý sự cố kết nối</span>
             </div>
             <ul className="space-y-1 text-[11px] text-neutral-300">
               <li>• <strong>Không mở được cửa sổ đăng nhập Google:</strong> Hãy kiểm tra và cho phép trình duyệt mở cửa sổ bật lên (Popup) trên trang <strong>bantank.online</strong>.</li>
