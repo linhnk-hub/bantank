@@ -5,7 +5,7 @@
  * M7.3.11.4 – SIMPLIFIED 3-ROLE RBAC PERMISSION MATRIX, MIGRATION & AUDIT LOG
  *
  * Nguyên tắc bảo mật:
- * 1. Hệ thống chỉ duy trì 3 vai trò: `ADMIN` (Quản trị viên duy nhất `linhnk2013@gmail.com`), `MOD` (Điều hành viên) và `PLAYER` (Người chơi thông thường).
+ * 1. Hệ thống chỉ duy trì 3 vai trò: `ADMIN` (`linhnk2013@gmail.com`), `MOD` (Điều hành viên) và `PLAYER` (Người chơi thông thường).
  * 2. Xóa hoàn toàn cấp `SUPER_ADMIN` và mô hình nhiều `ADMIN` cũ; thu hồi toàn bộ đặc quyền của `linhnk.online@gmail.com`.
  * 3. Mặc định từ chối (Default-Deny / Fail-Closed) nếu vai trò không xác định, không hợp lệ hoặc quyền chưa triển khai.
  * 4. Tuyệt đối không tin tưởng dữ liệu tự sửa trong localStorage hoặc `/users/{uid}`; vai trò được xác thực từ Google Auth + `/admins/{uid}`.

@@ -71,7 +71,7 @@
     },
     "AvatarCatalogItem": {
       "title": "AvatarCatalogItem",
-      "description": "Metadata danh mục avatar dùng chung lưu trên Firebase Storage (M7.3.5), chỉ Admin duy nhất linhnk2013@gmail.com quản lý.",
+      "description": "Metadata danh mục avatar dùng chung lưu trên Firebase Storage (M7.3.5), chỉ Admin quản lý.",
       "type": "object",
       "properties": {
         "avatarId": { "type": "string", "minLength": 1, "maxLength": 64, "pattern": "^[A-Za-z0-9_-]+$" },

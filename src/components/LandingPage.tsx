@@ -985,7 +985,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   Chọn Chơi thử hoặc Đăng nhập
                 </h3>
                 <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
-                  Nhấn <strong>Chơi thử</strong> để vào ngay Màn 1 không cần tài khoản, hoặc nhấn <strong>Chơi ngay</strong> để đăng nhập Google và lưu hồ sơ XP.
+                  Nhấn <strong>Chơi thử</strong> để vào ngay Màn 1 không cần tài khoản, hoặc nhấn <strong>Chơi ngay</strong> và đăng nhập bằng tài khoản Google.
                 </p>
               </div>
 
@@ -1006,10 +1006,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   Bước 04
                 </div>
                 <h3 className="text-base font-bold text-white">
-                  Điều khiển &amp; Bảo vệ Căn cứ
+                  Điều khiển &amp; bảo vệ căn cứ
                 </h3>
                 <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
-                  Di chuyển chiến xa, khai hỏa tiêu diệt toàn bộ 30 xe tăng địch trong màn chơi và giữ an toàn cho Căn cứ Đại Bàng.
+                  Di chuyển chiến xa, khai hỏa tiêu diệt toàn bộ 30 xe tăng địch trong màn chơi và giữ an toàn cho căn cứ Đại bàng.
                 </p>
               </div>
             </div>

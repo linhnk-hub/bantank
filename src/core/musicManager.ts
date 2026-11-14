@@ -2231,7 +2231,7 @@ export class MusicManager {
     if (!this.canManageMusic()) {
       return {
         success: false,
-        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền quản lý nhạc nền.',
+        error: 'Chỉ Admin mới có quyền quản lý nhạc nền.',
       };
     }
 
@@ -3421,7 +3421,7 @@ export class MusicManager {
    */
   public async removeSharedSystemAudio(): Promise<{ success: boolean; error?: string }> {
     if (!this.canManageMusic()) {
-      return { success: false, error: `Chỉ Admin duy nhất (${ADMIN_EMAIL}) mới có quyền xóa cấu hình nhạc nền chung.` };
+      return { success: false, error: `Chỉ Admin (${ADMIN_EMAIL}) mới có quyền xóa cấu hình nhạc nền chung.` };
     }
 
     try {

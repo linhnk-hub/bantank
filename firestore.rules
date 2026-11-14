@@ -70,7 +70,7 @@ service cloud.firestore {
       return isVerifiedPersonalGmail() && request.auth.uid == uid;
     }
 
-    // M7.3.11.5 Section 2.1: Xác thực ADMIN duy nhất (linhnk2013@gmail.com)
+    // M7.3.11.5 Section 2.1: Xác thực ADMIN (linhnk2013@gmail.com)
     // - Email khớp chính xác linhnk2013@gmail.com
     // - email_verified == true
     // - Provider là google.com

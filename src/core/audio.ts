@@ -1094,7 +1094,7 @@ export class SoundManager {
       return {
         ok: false,
         error:
-          'Từ chối truy cập: Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền tải lên hoặc thay thế âm thanh hành động.',
+          'Từ chối truy cập: Chỉ Admin (linhnk2013@gmail.com) mới có quyền tải lên hoặc thay thế âm thanh hành động.',
       };
     }
 

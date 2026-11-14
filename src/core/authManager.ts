@@ -99,8 +99,7 @@ export interface AccountPermissionDiagnostic {
 export type AuthStateListener = (user: User | null) => void;
 
 /**
- * M7.3.11.4 Mục 1: Địa chỉ email ADMIN chính thức và duy nhất của hệ thống Bắn Tank Online.
- * Thay thế hoàn toàn email quản trị cũ `linhnk.online@gmail.com`.
+ * M7.3.11.4 Mục 1: Địa chỉ email ADMIN của hệ thống Bắn Tank Online.
  */
 export const ADMIN_EMAIL = 'linhnk2013@gmail.com';
 export const REVOKED_OLD_ADMIN_EMAIL = 'linhnk.online@gmail.com';

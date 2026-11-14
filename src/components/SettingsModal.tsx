@@ -945,14 +945,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* =========================================================================
-              TAB 2: HÌNH ẢNH (CHỈ DÀNH CHO ADMIN DUY NHẤT linhnk2013@gmail.com)
+              TAB 2: HÌNH ẢNH (CHỈ DÀNH CHO ADMIN)
              ========================================================================= */}
           {activeTab === 'IMAGE_SETTINGS' && isVerifiedSuperAdmin && (
             <section className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/40 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/20 pb-2.5">
                 <div className="flex items-center gap-1.5 font-extrabold text-amber-300 uppercase">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>HÌNH ẢNH • QUẢN LÝ DANH MỤC AVATAR (ADMIN)</span>
+                  <span>HÌNH ẢNH • QUẢN LÝ DANH MỤC AVATAR</span>
                 </div>
                 <span className="text-[10px] text-amber-200/80 font-mono">
                   JPEG / PNG / WebP • ≤ 5 MB • ≤ 2048×2048 px
@@ -989,11 +989,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                     <span>Trạng thái tiến trình: {uploadUiStatusLabel}</span>
                   </div>
-                  {plannedVersionInfo && (
-                    <span className="px-2 py-0.5 rounded bg-black/40 border border-white/15 font-mono text-[10px] text-amber-300">
-                      Phiên bản tiếp theo: v{plannedVersionInfo.nextVersion}
-                    </span>
-                  )}
                 </div>
               )}
 
@@ -1186,9 +1181,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               ) : (
                 <div className="flex items-center justify-between flex-wrap gap-2">
-                  <span className="text-[11px] text-neutral-300">
-                    Tải ảnh đại diện mới lên Firebase Storage để mọi người chơi lựa chọn.
-                  </span>
+
                   <button
                     type="button"
                     disabled={isBusy}
@@ -1199,7 +1192,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
                   >
                     <Upload className="w-3.5 h-3.5" />
-                    <span>THÊM AVATAR VÀO DANH MỤC</span>
+                    <span>THÊM AVATAR</span>
                   </button>
                 </div>
               )}
@@ -1208,7 +1201,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {allCatalog.length > 0 && (
                 <div className="space-y-2 pt-2 border-t border-amber-500/20">
                   <div className="text-[11px] font-bold text-amber-200">
-                    Danh sách toàn bộ Avatar trong Danh mục ({allCatalog.length})
+                    Danh sách Avatar ({allCatalog.length})
                   </div>
                   <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
                     {allCatalog.map((item) => {
@@ -1233,9 +1226,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <div className="min-w-0">
                               <div className="text-xs font-bold text-white truncate">
                                 {item.name}{' '}
-                                <span className="text-[10px] font-mono text-amber-400">
-                                  (v{item.version} • #{item.sortOrder})
-                                </span>
                               </div>
                               <div className="text-[10px] font-mono text-neutral-400 truncate">
                                 {item.storagePath} • {formatFileSize(item.fileSize)}
@@ -1277,9 +1267,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               disabled={isBusy}
                               onClick={() => handleAdminStartReplace(item)}
                               className="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold cursor-pointer"
-                              title="Thay thế ảnh bằng phiên bản mới (v+1)"
+                              title="Upload ảnh mới"
                             >
-                              Thay ảnh (v{item.version + 1})
+                              Upload (v{item.version + 1})
                             </button>
 
                             <button
