@@ -157,15 +157,15 @@ export function runAllM4Tests(): TestCaseM4Result[] {
     const passed =
       state.isGameOver === true &&
       state.matchState === MATCH_STATES.GAME_OVER &&
-      state.gameOverReason !== null;
+      state.terrain.isBaseDestroyed === true;
 
     results.push({
       id: 'TC-M4-04',
       name: 'Game Over Khi Đại Bàng Bị Phá Hủy',
-      description: 'Đại bàng bị trúng đạn lập tức kích hoạt GAME_OVER và ghi nhận lý do',
+      description: 'Đại bàng bị trúng đạn lập tức kích hoạt GAME_OVER',
       passed,
       details: passed
-        ? `Game Over hợp lệ: matchState=GAME_OVER, lý do: "${state.gameOverReason}".`
+        ? 'Game Over hợp lệ: matchState=GAME_OVER, isBaseDestroyed=true.'
         : 'Thất bại: isGameOver không bật hoặc matchState không đồng bộ',
       metrics: {
         isGameOver: state.isGameOver,

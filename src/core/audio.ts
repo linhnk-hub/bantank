@@ -338,6 +338,52 @@ export class SoundManager {
     return nextMuted;
   }
 
+  /**
+   * Top Menu BGM-only mute status & toggle:
+   * Mutes/unmutes only background music (BGM) while keeping gunshots & combat SFX active.
+   */
+  public isBgmMuted(): boolean {
+    return !this.settings.bgmEnabled || this.masterMuted;
+  }
+
+  public setBgmMuted(muted: boolean): void {
+    const nextBgmMuted = Boolean(muted);
+    const restoredSfx =
+      this.masterMuted && !this.settings.sfxEnabled
+        ? this.preMuteChannelState.sfxEnabled || true
+        : this.settings.sfxEnabled;
+
+    this.masterMuted = false;
+    this.settings = {
+      ...this.settings,
+      bgmEnabled: !nextBgmMuted,
+      sfxEnabled: restoredSfx,
+    };
+    this.preMuteChannelState = {
+      bgmEnabled: this.settings.bgmEnabled,
+      sfxEnabled: this.settings.sfxEnabled,
+    };
+
+    if (nextBgmMuted) {
+      if (this.isBgmPlaying) {
+        this.pauseBgm();
+      }
+    } else if (!this.isBgmPlaying && this.isUnlocked && !this.customBgmActive) {
+      this.startBgm();
+    }
+
+    this.saveSettings();
+    this.applyVolume();
+    this.notifyListeners();
+    this.notifyMusicManager();
+  }
+
+  public toggleBgmMute(): boolean {
+    const nextBgmMuted = !this.isBgmMuted();
+    this.setBgmMuted(nextBgmMuted);
+    return nextBgmMuted;
+  }
+
   public updateSettings(partial: Partial<AudioSettings>): void {
     this.settings = { ...this.settings, ...partial };
     if (this.settings.bgmEnabled || this.settings.sfxEnabled) {

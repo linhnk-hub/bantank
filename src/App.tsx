@@ -31,6 +31,7 @@ import { validateStageMap } from './core/mapValidator.ts';
 import { GameEngine } from './core/gameEngine.ts';
 import {
   CoopOnlineManager,
+  COOP_ONLINE_CONFIG,
   type CoopRoomDocument,
   type CoopPlayerRole,
 } from './core/coopOnlineManager.ts';
@@ -285,7 +286,17 @@ export default function App() {
       }
     });
 
+    const heartbeatTimerId = setInterval(() => {
+      if (gameEngine.getState().gameMode !== 'TWO_PLAYERS_ONLINE') return;
+      const status = coopManager.evaluatePeerConnectionStatus(Date.now());
+      if (status.isTimedOut) {
+        setOnlineDisconnectMsg(status.warningMessage || 'Đồng đội đã ngắt kết nối.');
+        handlePause();
+      }
+    }, COOP_ONLINE_CONFIG.HEARTBEAT_INTERVAL_MS);
+
     return () => {
+      clearInterval(heartbeatTimerId);
       unsubCoop();
       unsubPeerLeave();
     };
@@ -304,7 +315,10 @@ export default function App() {
     gameEngine.restartStage();
     setIsPaused(false);
     const st = gameEngine.getState();
-    MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
+    MusicManager.getInstance().syncPlaybackWithContext(
+      st.currentStageId,
+      gameEngine.isCoopMode() ? 'TWO_PLAYER' : 'SOLO'
+    );
     setGameState({ ...st });
   }, [gameEngine, clearVirtualTouchInputs]);
 
@@ -316,7 +330,10 @@ export default function App() {
       gameEngine.startMatch(engineMode, difficulty);
       setIsPaused(false);
       const st = gameEngine.getState();
-      MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
+      MusicManager.getInstance().syncPlaybackWithContext(
+        st.currentStageId,
+        gameEngine.isCoopMode() ? 'TWO_PLAYER' : 'SOLO'
+      );
       setGameState({ ...st });
       setAppScreen('BATTLE');
     },
@@ -331,7 +348,7 @@ export default function App() {
       gameEngine.startMatch('TWO_PLAYERS_ONLINE', room.difficulty);
       setIsPaused(false);
       const st = gameEngine.getState();
-      MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
+      MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'TWO_PLAYER');
       setGameState({ ...st });
       setAppScreen('BATTLE');
     },
@@ -452,7 +469,10 @@ export default function App() {
     }
     setIsPaused(false);
     const st = gameEngine.getState();
-    MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
+    MusicManager.getInstance().syncPlaybackWithContext(
+      st.currentStageId,
+      gameEngine.isCoopMode() ? 'TWO_PLAYER' : 'SOLO'
+    );
     setGameState({ ...st });
   }, [authManager, isTrialMode, handleQuitToMenu, gameEngine]);
 
@@ -460,7 +480,10 @@ export default function App() {
     gameEngine.restartStage();
     setIsPaused(false);
     const st = gameEngine.getState();
-    MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
+    MusicManager.getInstance().syncPlaybackWithContext(
+      st.currentStageId,
+      gameEngine.isCoopMode() ? 'TWO_PLAYER' : 'SOLO'
+    );
     setGameState({ ...st });
   }, [gameEngine]);
 
@@ -487,10 +510,12 @@ export default function App() {
         gameEngine.getState().gameMode === 'TWO_PLAYERS_ONLINE' &&
         coopManager.getLocalRole() === 'GUEST'
       ) {
-        gameEngine.setExternalInputP2(input);
-        const p2In = gameEngine.getExternalInputP2();
+        gameEngine.setVirtualTouchInputP2(input);
+        const p2In = gameEngine.getVirtualTouchInputP2();
+        gameEngine.setExternalInputP2(p2In);
         void coopManager.submitGuestInput(p2In, Date.now());
       } else {
+        gameEngine.setVirtualTouchInput(input);
         gameEngine.setExternalInput(input);
       }
     },
@@ -513,9 +538,12 @@ export default function App() {
         gameEngine.getState().gameMode === 'TWO_PLAYERS_ONLINE' &&
         coopManager.getLocalRole() === 'GUEST'
       ) {
-        gameEngine.setExternalInputP2(dirInput);
-        void coopManager.submitGuestInput(gameEngine.getExternalInputP2(), Date.now());
+        gameEngine.setVirtualTouchInputP2(dirInput);
+        const p2In = gameEngine.getVirtualTouchInputP2();
+        gameEngine.setExternalInputP2(p2In);
+        void coopManager.submitGuestInput(p2In, Date.now());
       } else {
+        gameEngine.setVirtualTouchInput(dirInput);
         gameEngine.setExternalInput(dirInput);
       }
     },
@@ -530,9 +558,14 @@ export default function App() {
         gameEngine.getState().gameMode === 'TWO_PLAYERS_ONLINE' &&
         coopManager.getLocalRole() === 'GUEST'
       ) {
-        gameEngine.setExternalInputP2({ shoot: shooting });
-        void coopManager.submitGuestInput(gameEngine.getExternalInputP2(), Date.now());
+        gameEngine.setVirtualTouchInputP2({ shoot: shooting });
+        const p2In = gameEngine.getVirtualTouchInputP2();
+        gameEngine.setExternalInputP2(p2In);
+        void coopManager.submitGuestInput(p2In, Date.now());
       } else {
+        gameEngine.setVirtualTouchInput({
+          shoot: shooting,
+        });
         gameEngine.setExternalInput({
           shoot: shooting,
         });

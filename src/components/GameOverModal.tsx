@@ -60,9 +60,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-red-950/90 border border-red-700/80 text-[10px] sm:text-[11px] font-mono font-bold text-red-300">
               <span>{causeBadgeLabel}</span>
             </div>
-            <p className="text-[11px] sm:text-xs text-neutral-400 font-mono">
-              {state.gameOverReason || 'Trận chiến kết thúc!'}
-            </p>
+
           </div>
 
           {/* Score & Record Display */}

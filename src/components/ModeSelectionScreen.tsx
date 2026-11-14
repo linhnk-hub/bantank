@@ -339,7 +339,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     <div className="flex items-center justify-between mb-3">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
                         <User className="w-3 h-3 text-amber-400" />
-                        <span>1 NGƯỜI CHƠI</span>
+                        <span>P1</span>
                       </span>
                       <div
                         className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
@@ -358,7 +358,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       </div>
                       <div>
                         <h2 className="text-lg font-black text-white font-mono tracking-wide">
-                          1. SOLO
+                          SOLO
                         </h2>
                         <p className="text-[11px] text-amber-300 font-medium">
                           Chiến dịch 1 người chơi
@@ -367,7 +367,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     <p className="text-xs text-neutral-300 leading-relaxed">
-                      Người chơi P1 độc lập điều khiển Chiến xa vàng tiêu diệt toàn bộ quân địch và bảo vệ Căn cứ Đại Bàng.
+                      Người chơi P1 độc lập tác chiến, tiêu diệt toàn bộ quân địch và bảo vệ Căn cứ Đại bàng.
                     </p>
                   </div>
 
@@ -420,16 +420,16 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       </div>
                       <div>
                         <h2 className="text-lg font-black text-white font-mono tracking-wide">
-                          2. CO-OP AI
+                          CO-OP AI
                         </h2>
                         <p className="text-[11px] text-emerald-300 font-medium">
-                          Phối hợp cùng Đồng đội AI
+                          Phối hợp cùng đồng đội AI
                         </p>
                       </div>
                     </div>
 
                     <p className="text-xs text-neutral-300 leading-relaxed">
-                      Người chơi 1 sát cánh cùng Chiến xa P2 do AI thông minh điều khiển: tìm đường A*, bọc lót căn cứ và khóa bắn nhầm đồng đội.
+                      Người chơi P1 sát cánh cùng đồng đội P2 do AI điều khiển cùng tiêu diệt toàn bộ quân địch và bảo vệ Căn cứ Đại bàng.
                     </p>
                   </div>
 
@@ -482,7 +482,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       </div>
                       <div>
                         <h2 className="text-lg font-black text-white font-mono tracking-wide">
-                          3. CO-OP ONLINE
+                          CO-OP ONLINE
                         </h2>
                         <p className="text-[11px] text-sky-300 font-medium">
                           2 Người chơi qua Internet
@@ -523,13 +523,13 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-900 border border-neutral-700 text-xs font-mono text-amber-300 mb-2">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   <span>
-                    Chế độ đã chọn:{' '}
+                    {' '}
                     <strong>
                       {cardMode === 'SOLO'
-                        ? '1. SOLO (1 Người chơi)'
+                        ? 'SOLO (1 Người chơi)'
                         : cardMode === 'COOP_AI'
-                        ? '2. CO-OP AI (P1 + Đồng đội AI)'
-                        : '3. CO-OP ONLINE (2 Người chơi qua Internet)'}
+                        ? 'CO-OP AI (P1 + Đồng đội AI)'
+                        : 'CO-OP ONLINE (2 Người chơi qua Internet)'}
                     </strong>
                   </span>
                 </div>

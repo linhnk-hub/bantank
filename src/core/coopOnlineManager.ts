@@ -231,9 +231,9 @@ export const COOP_ONLINE_CONFIG = {
   CLOCK_SKEW_BUFFER_MS: 90 * 1000, // 90s buffer (absorbs up to +60s client clock skew + 30s network jitter)
   EFFECTIVE_WAITING_TTL_MS: (15 * 60 - 90) * 1000, // 810,000 ms (13m30s effective waiting room TTL on client)
   MAX_CODE_GENERATION_ATTEMPTS: 5,
-  SNAPSHOT_INTERVAL_MS: 50, // 20 Hz direct P2P WebRTC DataChannel sync (0 Firestore writes!)
-  MIN_INPUT_INTERVAL_MS: 45, // Rate limit: max ~22 input packets/sec over DataChannel
-  INPUT_KEEPALIVE_INTERVAL_MS: 200, // Periodic state convergence over P2P DataChannel (prevents stuck keys on UDP packet loss)
+  SNAPSHOT_INTERVAL_MS: 16, // Up to 60 Hz direct P2P WebRTC DataChannel sync (0 Firestore writes!)
+  MIN_INPUT_INTERVAL_MS: 12, // Rate limit for repeated keepalives (transitions pass at up to ~120Hz)
+  INPUT_KEEPALIVE_INTERVAL_MS: 75, // Frequent state convergence over P2P DataChannel (prevents 250ms TTL expiry on jitter)
   HEARTBEAT_INTERVAL_MS: 2000, // 2s P2P DataChannel ping
   DISCONNECT_WARNING_MS: 15000, // 15s without peer message -> warning
   DISCONNECT_TIMEOUT_MS: 45000, // 45s without peer message -> disconnect timeout
@@ -1959,6 +1959,8 @@ export class CoopOnlineManager {
   private processedPeerLeaveRoles: Set<'HOST' | 'GUEST'> = new Set();
   private lastPeerLeaveNotice: string | null = null;
   private peerLeaveListeners: Set<(event: { role: 'HOST' | 'GUEST'; message: string }) => void> = new Set();
+  private latestPendingGuestSnapshot: CoopAuthoritativeSnapshot | null = null;
+  private webrtcDisconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
 
   public constructor(customAdapter?: CoopStorageAdapter) {
     this.adapter = customAdapter ?? new FirestoreCoopStorageAdapter();
@@ -2091,6 +2093,22 @@ export class CoopOnlineManager {
     listener: (snapshot: CoopAuthoritativeSnapshot) => boolean | void
   ): () => void {
     this.snapshotListeners.add(listener);
+    if (this.role === 'GUEST' && this.latestPendingGuestSnapshot) {
+      const pending = this.latestPendingGuestSnapshot;
+      try {
+        const res = listener(pending);
+        if (res !== false) {
+          this.guestLastAppliedSnapshotSeq = Math.max(
+            this.guestLastAppliedSnapshotSeq,
+            pending.snapshotSeq
+          );
+          this.guestLastAppliedStageRunSeq = pending.stageRunSeq;
+          this.guestLastAppliedTickCount = pending.tickCount;
+        }
+      } catch (e) {
+        console.error('[CoopOnlineManager] pending snapshot replay error:', e);
+      }
+    }
     return () => {
       this.snapshotListeners.delete(listener);
     };
@@ -2950,19 +2968,21 @@ export class CoopOnlineManager {
     }
 
     const sig = `${input.up ? 1 : 0}${input.down ? 1 : 0}${input.left ? 1 : 0}${input.right ? 1 : 0}${input.shoot ? 1 : 0}`;
+    const isInputChanged = sig !== this.lastSentInputSignature;
     const elapsedSinceLast = nowMs - this.lastGuestInputSentAt;
 
-    // Resend periodic input keepalive every 200ms over P2P DataChannel so transient packet loss never sticks keys
+    // Resend periodic input keepalive every 75ms over P2P DataChannel so transient packet loss/jitter never hits 250ms TTL
     if (
       !forceSend &&
-      sig === this.lastSentInputSignature &&
+      !isInputChanged &&
       elapsedSinceLast < COOP_ONLINE_CONFIG.INPUT_KEEPALIVE_INTERVAL_MS
     ) {
       return { success: true };
     }
 
-    // Rate limiting check (45ms minimum interval)
-    if (this.lastGuestInputSentAt > 0 && elapsedSinceLast < COOP_ONLINE_CONFIG.MIN_INPUT_INTERVAL_MS) {
+    // Rate limiting check: never drop genuine input changes at 60-120Hz; only guard abnormal flooding (<6ms)
+    const minIntervalMs = isInputChanged ? 6 : COOP_ONLINE_CONFIG.MIN_INPUT_INTERVAL_MS;
+    if (!forceSend && this.lastGuestInputSentAt > 0 && elapsedSinceLast < minIntervalMs) {
       return {
         success: false,
         errorCode: 'RATE_LIMITED',
@@ -4215,7 +4235,12 @@ export class CoopOnlineManager {
       return false;
     }
 
-    this.hostSnapshotAccumulatorMs = 0;
+    this.hostSnapshotAccumulatorMs = isCriticalTransition
+      ? 0
+      : Math.min(
+          COOP_ONLINE_CONFIG.SNAPSHOT_INTERVAL_MS,
+          Math.max(0, this.hostSnapshotAccumulatorMs - COOP_ONLINE_CONFIG.SNAPSHOT_INTERVAL_MS)
+        );
     this.lastBroadcastMatchState = state.matchState;
     this.lastBroadcastStageId = state.currentStageId;
     this.hostOutgoingSnapshotSeq += 1;
@@ -4287,6 +4312,12 @@ export class CoopOnlineManager {
         p2St && (p2St.isSpectator || p2St.hasLeftMatch || (p2St.isDead && p2St.lives <= 0))
       );
 
+      this.latestPendingGuestSnapshot = normalizedSnap;
+      if (this.snapshotListeners.size === 0) {
+        // BattleScene may still be booting during Lobby -> Battle transition; hold seq until listener mounts & replays
+        return;
+      }
+
       let rejectedByEngineListener = false;
       this.snapshotListeners.forEach((cb) => {
         try {
@@ -4311,6 +4342,9 @@ export class CoopOnlineManager {
       return this.customP2PChannel.send(msg);
     }
     if (this.dataChannel && this.dataChannel.readyState === 'open') {
+      if (msg.type === 'HOST_SNAPSHOT' && this.dataChannel.bufferedAmount > 65536) {
+        return false;
+      }
       try {
         this.dataChannel.send(JSON.stringify(msg));
         return true;
@@ -4873,7 +4907,40 @@ export class CoopOnlineManager {
     pc.onconnectionstatechange = () => {
       if (this.peerConnection !== pc) return;
       const st = pc.connectionState;
-      if (st === 'failed' || st === 'disconnected') {
+      if (st === 'connected') {
+        if (this.webrtcDisconnectGraceTimer) {
+          clearTimeout(this.webrtcDisconnectGraceTimer);
+          this.webrtcDisconnectGraceTimer = null;
+        }
+        return;
+      }
+      if (st === 'disconnected') {
+        if (!this.webrtcDisconnectGraceTimer) {
+          this.webrtcDisconnectGraceTimer = setTimeout(() => {
+            this.webrtcDisconnectGraceTimer = null;
+            if (
+              this.peerConnection === pc &&
+              pc.connectionState !== 'connected' &&
+              !this.isP2PDataChannelOpen()
+            ) {
+              this.markWebRTCConnectionFailed(
+                'Kết nối P2P trực tiếp (WebRTC) đã bị ngắt hoặc không thể vượt tường lửa.'
+              );
+              if (this.role === 'HOST') {
+                void this.adapter
+                  .updateRoom(roomCode, { rtcConnectionState: 'FAILED', hostLastActiveAt: Date.now() })
+                  .catch(() => undefined);
+              }
+            }
+          }, 4000);
+        }
+        return;
+      }
+      if (st === 'failed' || st === 'closed') {
+        if (this.webrtcDisconnectGraceTimer) {
+          clearTimeout(this.webrtcDisconnectGraceTimer);
+          this.webrtcDisconnectGraceTimer = null;
+        }
         this.markWebRTCConnectionFailed(
           'Kết nối P2P trực tiếp (WebRTC) đã bị ngắt hoặc không thể vượt tường lửa.'
         );
@@ -4964,6 +5031,10 @@ export class CoopOnlineManager {
   }
 
   private closeWebRTC(): void {
+    if (this.webrtcDisconnectGraceTimer) {
+      clearTimeout(this.webrtcDisconnectGraceTimer);
+      this.webrtcDisconnectGraceTimer = null;
+    }
     if (this.webrtcConnectTimer) {
       clearTimeout(this.webrtcConnectTimer);
       this.webrtcConnectTimer = null;
@@ -5021,6 +5092,7 @@ export class CoopOnlineManager {
     this.isRemoteGuestSpectator = false;
     this.processedPeerLeaveRoles.clear();
     this.lastPeerLeaveNotice = null;
+    this.latestPendingGuestSnapshot = null;
   }
 
   private cleanupSubscription(): void {

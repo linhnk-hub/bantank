@@ -66,9 +66,9 @@ export const LANDING_PAGE_FEATURES: readonly LandingPageFeatureItem[] = [
   {
     id: 'precision-control',
     numberLabel: '01',
-    title: 'Điều khiển xe tăng 60Hz chuẩn xác',
+    title: 'Điều khiển xe tăng chuẩn xác',
     description:
-      'Hệ thống mô phỏng vòng lặp 60 ticks/giây cố định giúp mọi thao tác di chuyển, xoay nòng và khai hỏa phản hồi tức thì trên cả máy tính lẫn thiết bị di động.',
+      'Hệ thống mô phỏng vòng lặp giúp mọi thao tác di chuyển, xoay nòng và khai hỏa phản hồi tức thì trên cả máy tính lẫn thiết bị di động.',
     highlights: [
       'Bàn phím PC: Cụm phím WASD / Mũi tên và phím Space hoặc J để bắn',
       'Điện thoại & Máy tính bảng: Cần gạt D-Pad cảm ứng và nút Khai Hỏa đa điểm',
@@ -161,7 +161,7 @@ export const LANDING_PAGE_MODES: readonly LandingPageModeItem[] = [
     description:
       'Tạo phòng chờ với mã phòng 6 ký tự để mời bạn bè hoặc bấm Vào nhanh để ghép đội cùng người chơi khác. Hai người chơi điều khiển Chiến xa P1 (Chủ phòng) và Chiến xa P2 (Khách) cùng bảo vệ căn cứ và vượt qua các màn chơi.',
     specs: [
-      'Kết nối thời gian thực qua WebRTC DataChannel tốc độ 60Hz',
+      'Kết nối thời gian thực qua máy chủ',
       'Cơ chế đồng bộ điểm số, mạng sống, hồi sinh và chế độ Khán giả',
       'Hỗ trợ tạo phòng theo độ khó Giải trí hoặc Thử thách',
     ],
@@ -695,14 +695,14 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 Giới thiệu về Bắn Tank Online
               </h2>
               <p className="text-sm sm:text-base text-neutral-300 leading-relaxed">
-                <strong>Bắn Tank Online</strong> là trò chơi hành động – chiến thuật xe tăng 2D góc nhìn từ trên xuống (Top-Down Tactical Tank Action) hoạt động trực tiếp trên trình duyệt web tại địa chỉ chính thức{' '}
+                <strong>Bắn Tank Online</strong> là trò chơi hành động – chiến thuật xe tăng 2D góc nhìn từ trên xuống hoạt động trực tiếp trên trình duyệt web tại địa chỉ chính thức{' '}
                 <a
                   href="https://bantank.online/"
                   className="text-amber-400 hover:underline font-semibold"
                 >
                   https://bantank.online/
                 </a>
-                . Trò chơi tái hiện lối chơi bảo vệ căn cứ kinh điển kết hợp cùng cơ chế mô phỏng 60Hz hiện đại và kết nối nhiều người chơi trực tuyến.
+                . Trò chơi tái hiện lối chơi bảo vệ căn cứ kinh điển kết hợp cùng cơ chế mô phỏng hiện đại và kết nối nhiều người chơi trực tuyến.
               </p>
             </div>
 
@@ -724,7 +724,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   <Layers className="w-5 h-5" />
                 </div>
                 <h3 className="text-lg font-bold text-white">
-                  Địa hình &amp; Tương tác vật lý 60Hz
+                  Địa hình &amp; Tương tác vật lý
                 </h3>
                 <p className="text-sm text-neutral-300 leading-relaxed">
                   Chiến trường lưới 26×26 được cấu tạo từ 5 loại địa hình chiến thuật: <strong>Tường gạch</strong> (có thể bắn vỡ từng phần theo lưới phụ 4×4), <strong>Tường thép</strong> (chặn đạn pháo thông thường), <strong>Rừng cây</strong> (che khuất tầm nhìn), <strong>Sông nước</strong> (ngăn xe tăng đi qua nhưng đạn bay qua được) và <strong>Mặt băng</strong> (tạo quán tính trượt khi chuyển hướng).

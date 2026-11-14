@@ -270,6 +270,20 @@ export class GameEngine {
     right: false,
     shoot: false,
   };
+  private virtualTouchInput: InputState = {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    shoot: false,
+  };
+  private virtualTouchInputP2: InputState = {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    shoot: false,
+  };
   private guestVisualState: GuestVisualInterpolationState = {
     p2RenderX: 144,
     p2RenderY: 192,
@@ -542,6 +556,8 @@ export class GameEngine {
   public clearAllInputs(): void {
     this.externalInput = { ...NEUTRAL_INPUT };
     this.externalInputP2 = { ...NEUTRAL_INPUT };
+    this.virtualTouchInput = { ...NEUTRAL_INPUT };
+    this.virtualTouchInputP2 = { ...NEUTRAL_INPUT };
     this.lastShootState = false;
   }
 
@@ -565,6 +581,51 @@ export class GameEngine {
 
   public getExternalInput(): InputState {
     return { ...this.externalInput };
+  }
+
+  public setVirtualTouchInput(input: Partial<InputState>): void {
+    if (
+      this.isPaused ||
+      this.isForcedSafetyPaused ||
+      this.state.matchState !== MATCH_STATES.PLAYING ||
+      this.state.p1State.isDead ||
+      this.state.p1State.isSpectator ||
+      this.state.p1State.hasLeftMatch
+    ) {
+      this.virtualTouchInput = { ...NEUTRAL_INPUT };
+      return;
+    }
+    this.virtualTouchInput = {
+      ...this.virtualTouchInput,
+      ...input,
+    };
+  }
+
+  public getVirtualTouchInput(): InputState {
+    return { ...this.virtualTouchInput };
+  }
+
+  public setVirtualTouchInputP2(input: Partial<InputState>): void {
+    if (
+      this.isPaused ||
+      this.isForcedSafetyPaused ||
+      this.state.matchState !== MATCH_STATES.PLAYING ||
+      !this.state.p2 ||
+      this.state.p2State?.isDead ||
+      this.state.p2State?.isSpectator ||
+      this.state.p2State?.hasLeftMatch
+    ) {
+      this.virtualTouchInputP2 = { ...NEUTRAL_INPUT };
+      return;
+    }
+    this.virtualTouchInputP2 = {
+      ...this.virtualTouchInputP2,
+      ...input,
+    };
+  }
+
+  public getVirtualTouchInputP2(): InputState {
+    return { ...this.virtualTouchInputP2 };
   }
 
   public setExternalInputP2(input: Partial<InputState>): void {
@@ -1765,6 +1826,7 @@ export class GameEngine {
     this.state.gameOverReason = snapshot.gameOverReason ?? null;
     this.state.peerLeaveNotice = snapshot.peerLeaveNotice ?? this.state.peerLeaveNotice ?? null;
     this.state.matchState = snapshot.matchState;
+    this.isPaused = snapshot.matchState === MATCH_STATES.PAUSED;
     this.matchStateMachine.transitionTo(snapshot.matchState as any, true);
 
     if (isSameStageContinuity) {
@@ -1918,9 +1980,7 @@ export class GameEngine {
         isFreezeRecoveryFrame ||
         this.catchUpTicksRemaining > 1 ||
         totalAvailableTicksInAccumulator > SIMULATION_CONFIG.MAX_TICKS_PER_FRAME ||
-        ((plannedTicksThisFrame > 2 ||
-          (this.gameMode === 'TWO_PLAYERS_ONLINE' && plannedTicksThisFrame > 1)) &&
-          ticksRun < plannedTicksThisFrame - 1);
+        (plannedTicksThisFrame > 2 && ticksRun < plannedTicksThisFrame - 1);
 
       if (this.catchUpTicksRemaining > 0) {
         this.catchUpTicksRemaining -= 1;

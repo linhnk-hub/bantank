@@ -4,7 +4,7 @@
  */
 
 import Phaser from 'phaser';
-import { MAP_DIMENSIONS } from '../../core/constants.ts';
+import { MAP_DIMENSIONS, BULLET_CONFIG } from '../../core/constants.ts';
 import {
   TILE_TYPES,
   SUB_TILE_MASKS,
@@ -52,6 +52,10 @@ export class BattleScene extends Phaser.Scene {
   private fpsFrameCount = 0;
   private unsubOnlineSnapshots?: () => void;
   private unsubPeerLeave?: () => void;
+  private p1VisualPos: { x: number; y: number } | null = null;
+  private p2VisualPos: { x: number; y: number } | null = null;
+  private enemyVisualPositions: Map<string, { x: number; y: number }> = new Map();
+  private bulletVisualPositions: Map<string, { x: number; y: number }> = new Map();
   private lastDispatchMonotonicMs: number = 0;
   private bgTimerId: ReturnType<typeof setInterval> | null = null;
   private visibilityChangeHandler?: () => void;
@@ -148,25 +152,61 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private readCurrentLocalInput(): InputState {
+  private readCurrentLocalInput(isGuest: boolean = false): InputState {
     const state = this.engine.getState();
     const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
     if (state.matchState !== 'PLAYING' || isHidden) {
       this.resetLocalInputState();
       return { ...NEUTRAL_INPUT };
     }
-    const ext = this.engine.getExternalInput();
+    const touch = isGuest
+      ? this.engine.getVirtualTouchInputP2()
+      : this.engine.getVirtualTouchInput();
+    const ext = isGuest ? { ...NEUTRAL_INPUT } : this.engine.getExternalInput();
     return {
-      up: Boolean(this.cursors?.up.isDown || this.wasd?.W.isDown || ext.up),
-      down: Boolean(this.cursors?.down.isDown || this.wasd?.S.isDown || ext.down),
-      left: Boolean(this.cursors?.left.isDown || this.wasd?.A.isDown || ext.left),
-      right: Boolean(this.cursors?.right.isDown || this.wasd?.D.isDown || ext.right),
+      up: Boolean(this.cursors?.up.isDown || this.wasd?.W.isDown || touch.up || ext.up),
+      down: Boolean(this.cursors?.down.isDown || this.wasd?.S.isDown || touch.down || ext.down),
+      left: Boolean(this.cursors?.left.isDown || this.wasd?.A.isDown || touch.left || ext.left),
+      right: Boolean(this.cursors?.right.isDown || this.wasd?.D.isDown || touch.right || ext.right),
       shoot: Boolean(
         this.cursors?.space.isDown ||
           this.wasd?.SPACE.isDown ||
           this.wasd?.J.isDown ||
+          touch.shoot ||
           ext.shoot
       ),
+    };
+  }
+
+  private resetGuestVisualSmoothing(): void {
+    this.p1VisualPos = null;
+    this.p2VisualPos = null;
+    this.enemyVisualPositions.clear();
+    this.bulletVisualPositions.clear();
+  }
+
+  private computeSmoothedPos(
+    prev: { x: number; y: number } | null | undefined,
+    targetX: number,
+    targetY: number,
+    rawDeltaMs: number,
+    ratePerSec: number = 22,
+    snapThresholdPx: number = 16
+  ): { x: number; y: number } {
+    if (!prev) {
+      return { x: targetX, y: targetY };
+    }
+    const dx = targetX - prev.x;
+    const dy = targetY - prev.y;
+    const dist = Math.hypot(dx, dy);
+    if (!Number.isFinite(dist) || dist > snapThresholdPx || dist < 0.05) {
+      return { x: targetX, y: targetY };
+    }
+    const dtSec = Math.min(Math.max(rawDeltaMs, 1), 100) / 1000;
+    const alpha = Math.min(1, 1 - Math.exp(-ratePerSec * dtSec));
+    return {
+      x: prev.x + dx * alpha,
+      y: prev.y + dy * alpha,
     };
   }
 
@@ -209,11 +249,13 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
-    const input = this.readCurrentLocalInput();
+    const coopManager = CoopOnlineManager.getInstance();
+    const isOnlineMode = this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE';
+    const onlineRole = isOnlineMode ? coopManager.getRole() : null;
+    const isOnlineGuest = isOnlineMode && onlineRole === 'GUEST';
+    const input = this.readCurrentLocalInput(isOnlineGuest);
 
-    if (this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE') {
-      const coopManager = CoopOnlineManager.getInstance();
-      const onlineRole = coopManager.getRole();
+    if (isOnlineMode) {
       if (onlineRole === 'HOST') {
         if (coopManager.hasPeerActivelyLeft('GUEST')) {
           this.engine.handlePeerPlayerLeft('P2');
@@ -406,6 +448,7 @@ export class BattleScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.stopBackgroundHostTimer();
       this.resetLocalInputState();
+      this.resetGuestVisualSmoothing();
       if (this.unsubOnlineSnapshots) {
         this.unsubOnlineSnapshots();
         this.unsubOnlineSnapshots = undefined;
@@ -485,7 +528,24 @@ export class BattleScene extends Phaser.Scene {
     // 3. Update P1 Tank & Shield
     if (this.p1Sprite) {
       if (state.p1.isAlive && !state.p1State.isDead) {
-        this.p1Sprite.setPosition(state.p1.x, state.p1.y);
+        let p1X = state.p1.x;
+        let p1Y = state.p1.y;
+        if (isOnlineGuest && state.matchState === 'PLAYING') {
+          this.p1VisualPos = this.computeSmoothedPos(
+            this.p1VisualPos,
+            state.p1.x,
+            state.p1.y,
+            rawDelta,
+            24,
+            16
+          );
+          p1X = this.p1VisualPos.x;
+          p1Y = this.p1VisualPos.y;
+        } else {
+          this.p1VisualPos = null;
+        }
+
+        this.p1Sprite.setPosition(p1X, p1Y);
         this.p1Sprite.setTexture(`tank_p1_${state.p1.direction.toLowerCase()}`);
         this.p1Sprite.setVisible(true);
 
@@ -501,7 +561,7 @@ export class BattleScene extends Phaser.Scene {
           this.p1Sprite.setAlpha(tankAlpha);
 
           if (this.p1ShieldSprite) {
-            this.p1ShieldSprite.setPosition(state.p1.x - 1, state.p1.y - 1);
+            this.p1ShieldSprite.setPosition(p1X - 1, p1Y - 1);
             this.p1ShieldSprite.setVisible(true);
             this.p1ShieldSprite.setAlpha(auraAlpha);
           }
@@ -512,6 +572,7 @@ export class BattleScene extends Phaser.Scene {
           }
         }
       } else {
+        this.p1VisualPos = null;
         this.p1Sprite.setVisible(false);
         this.p1Sprite.setAlpha(1.0);
         if (this.p1ShieldSprite) this.p1ShieldSprite.setVisible(false);
@@ -520,9 +581,26 @@ export class BattleScene extends Phaser.Scene {
 
     // 3b. Update P2 Tank & Shield (if P2 exists in 2-Player mode)
     if (state.p2) {
-      const p2RenderX = guestVisual ? guestVisual.p2RenderX : state.p2.x;
-      const p2RenderY = guestVisual ? guestVisual.p2RenderY : state.p2.y;
+      const targetP2X = guestVisual ? guestVisual.p2RenderX : state.p2.x;
+      const targetP2Y = guestVisual ? guestVisual.p2RenderY : state.p2.y;
       const p2RenderDir = guestVisual ? guestVisual.p2RenderDirection : state.p2.direction;
+
+      let p2RenderX = targetP2X;
+      let p2RenderY = targetP2Y;
+      if (isOnlineGuest && state.matchState === 'PLAYING' && state.p2.isAlive && (!state.p2State || !state.p2State.isDead)) {
+        this.p2VisualPos = this.computeSmoothedPos(
+          this.p2VisualPos,
+          targetP2X,
+          targetP2Y,
+          rawDelta,
+          28,
+          16
+        );
+        p2RenderX = this.p2VisualPos.x;
+        p2RenderY = this.p2VisualPos.y;
+      } else {
+        this.p2VisualPos = null;
+      }
 
       if (!this.p2Sprite) {
         this.p2Sprite = this.add.image(p2RenderX, p2RenderY, `tank_p2_${p2RenderDir.toLowerCase()}`);
@@ -565,11 +643,13 @@ export class BattleScene extends Phaser.Scene {
           }
         }
       } else {
+        this.p2VisualPos = null;
         this.p2Sprite.setVisible(false);
         this.p2Sprite.setAlpha(1.0);
         if (this.p2ShieldSprite) this.p2ShieldSprite.setVisible(false);
       }
     } else {
+      this.p2VisualPos = null;
       if (this.p2Sprite) this.p2Sprite.setVisible(false);
       if (this.p2ShieldSprite) this.p2ShieldSprite.setVisible(false);
     }
@@ -580,17 +660,33 @@ export class BattleScene extends Phaser.Scene {
       if (!enemy.isAlive) continue;
       activeEnemyIds.add(enemy.id);
 
+      let enemyX = enemy.x;
+      let enemyY = enemy.y;
+      if (isOnlineGuest && state.matchState === 'PLAYING') {
+        const smoothedEnemy = this.computeSmoothedPos(
+          this.enemyVisualPositions.get(enemy.id),
+          enemy.x,
+          enemy.y,
+          rawDelta,
+          22,
+          16
+        );
+        this.enemyVisualPositions.set(enemy.id, smoothedEnemy);
+        enemyX = smoothedEnemy.x;
+        enemyY = smoothedEnemy.y;
+      }
+
       let sprite = this.enemySprites.get(enemy.id);
       const textureKey = `tank_${enemy.enemyType.toLowerCase()}_${enemy.direction.toLowerCase()}`;
 
       if (!sprite) {
-        sprite = this.add.image(enemy.x, enemy.y, textureKey);
+        sprite = this.add.image(enemyX, enemyY, textureKey);
         sprite.setOrigin(0, 0);
         sprite.setDisplaySize(16, 16);
         sprite.setDepth(9);
         this.enemySprites.set(enemy.id, sprite);
       } else {
-        sprite.setPosition(enemy.x, enemy.y);
+        sprite.setPosition(enemyX, enemyY);
         if (sprite.texture.key !== textureKey) {
           sprite.setTexture(textureKey);
         }
@@ -606,13 +702,13 @@ export class BattleScene extends Phaser.Scene {
         sprite.setAlpha(tankAlpha);
 
         if (!shield) {
-          shield = this.add.image(enemy.x - 1, enemy.y - 1, 'shield_aura');
+          shield = this.add.image(enemyX - 1, enemyY - 1, 'shield_aura');
           shield.setOrigin(0, 0);
           shield.setDisplaySize(18, 18);
           shield.setDepth(11);
           this.enemyShieldSprites.set(enemy.id, shield);
         } else {
-          shield.setPosition(enemy.x - 1, enemy.y - 1);
+          shield.setPosition(enemyX - 1, enemyY - 1);
           shield.setVisible(true);
         }
         shield.setAlpha(auraAlpha);
@@ -629,6 +725,7 @@ export class BattleScene extends Phaser.Scene {
       if (!activeEnemyIds.has(id)) {
         sprite.destroy();
         this.enemySprites.delete(id);
+        this.enemyVisualPositions.delete(id);
         const shield = this.enemyShieldSprites.get(id);
         if (shield) {
           shield.destroy();
@@ -636,22 +733,64 @@ export class BattleScene extends Phaser.Scene {
         }
       }
     }
+    if (!isOnlineGuest) {
+      this.enemyVisualPositions.clear();
+    }
 
     // 5. Update All Bullets (P1 + Enemies)
     const activeBulletIds = new Set<string>();
     for (const b of state.bullets) {
       activeBulletIds.add(b.id);
+      let bX = b.x;
+      let bY = b.y;
+      if (isOnlineGuest && state.matchState === 'PLAYING') {
+        const prevB = this.bulletVisualPositions.get(b.id);
+        if (!prevB) {
+          this.bulletVisualPositions.set(b.id, { x: b.x, y: b.y });
+        } else {
+          const dtSec = Math.min(Math.max(rawDelta, 0), 50) / 1000;
+          let nextX = prevB.x;
+          let nextY = prevB.y;
+          if (dtSec > 0) {
+            const step = BULLET_CONFIG.SPEED_PX_S * dtSec;
+            if (b.direction === 'UP') nextY -= step;
+            else if (b.direction === 'DOWN') nextY += step;
+            else if (b.direction === 'LEFT') nextX -= step;
+            else if (b.direction === 'RIGHT') nextX += step;
+          }
+          const errDist = Math.hypot(b.x - nextX, b.y - nextY);
+          if (!Number.isFinite(errDist) || errDist > 16) {
+            nextX = b.x;
+            nextY = b.y;
+          } else {
+            const alpha = Math.min(1, 1 - Math.exp(-20 * dtSec));
+            nextX += (b.x - nextX) * alpha;
+            nextY += (b.y - nextY) * alpha;
+            const leadDist = Math.hypot(nextX - b.x, nextY - b.y);
+            if (leadDist > 8) {
+              nextX = b.x + ((nextX - b.x) / leadDist) * 8;
+              nextY = b.y + ((nextY - b.y) / leadDist) * 8;
+            }
+          }
+          nextX = Math.max(0, Math.min(MAP_DIMENSIONS.TOTAL_WIDTH_PX - 4, nextX));
+          nextY = Math.max(0, Math.min(MAP_DIMENSIONS.TOTAL_HEIGHT_PX - 4, nextY));
+          this.bulletVisualPositions.set(b.id, { x: nextX, y: nextY });
+          bX = nextX;
+          bY = nextY;
+        }
+      }
+
       let bSprite = this.bulletSprites.get(b.id);
       const bTex = b.ownerType === 'enemy' ? 'bullet_enemy' : 'bullet';
 
       if (!bSprite) {
-        bSprite = this.add.image(b.x, b.y, bTex);
+        bSprite = this.add.image(bX, bY, bTex);
         bSprite.setOrigin(0, 0);
         bSprite.setDisplaySize(4, 4);
         bSprite.setDepth(15);
         this.bulletSprites.set(b.id, bSprite);
       } else {
-        bSprite.setPosition(b.x, b.y);
+        bSprite.setPosition(bX, bY);
       }
     }
 
@@ -660,7 +799,11 @@ export class BattleScene extends Phaser.Scene {
       if (!activeBulletIds.has(id)) {
         sprite.destroy();
         this.bulletSprites.delete(id);
+        this.bulletVisualPositions.delete(id);
       }
+    }
+    if (!isOnlineGuest) {
+      this.bulletVisualPositions.clear();
     }
 
     // 6. Spawn Visual Effects from Combat Events & Trigger Audio
@@ -773,6 +916,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   public refreshAllTerrain(): void {
+    this.resetGuestVisualSmoothing();
     // Clean up existing visual effects
     for (const eff of this.visualEffects) {
       eff.sprite.destroy();

@@ -9269,6 +9269,197 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     });
   }
 
+  // =========================================================================
+  // M7_3_T65: Top Menu Quick Audio Toggle – Chỉ tắt/bật nhạc nền (BGM), giữ nguyên tiếng súng (SFX)
+  // =========================================================================
+  {
+    const soundMgr = SoundManager.getInstance();
+    const prevSettings = soundMgr.getSettings();
+    const prevMuted = soundMgr.isMuted();
+
+    soundMgr.setMuted(false);
+    soundMgr.updateSettings({
+      bgmEnabled: true,
+      sfxEnabled: true,
+      bgmVolume: 0.7,
+      sfxVolume: 0.85,
+    });
+    soundMgr.setActionSoundAdminRole('ADMIN');
+    soundMgr.uploadActionSoundSync(
+      'P1_SHOOT',
+      { name: 'gunshot_test.wav', type: 'audio/wav', size: 12000 },
+      { autoActivate: true }
+    );
+
+    // 1. Nhấn nút tắt nhạc nền trên thanh menu
+    const mutedAfterFirstToggle = soundMgr.toggleBgmMute();
+    const settingsWhenBgmMuted = soundMgr.getSettings();
+    soundMgr.clearLastPlayedCustomActionId();
+    soundMgr.playP1Shoot();
+    const gunshotStillPlayedWhileBgmMuted =
+      soundMgr.getLastPlayedCustomActionId() === 'P1_SHOOT';
+
+    // 2. Nhấn nút bật lại nhạc nền trên thanh menu -> khôi phục bgmEnabled và giữ nguyên mức âm lượng
+    const mutedAfterSecondToggle = soundMgr.toggleBgmMute();
+    const settingsWhenBgmRestored = soundMgr.getSettings();
+
+    // Dọn dẹp & khôi phục trạng thái âm thanh ban đầu
+    soundMgr.deleteActionSound('P1_SHOOT');
+    soundMgr.setActionSoundAdminRole(null);
+    soundMgr.updateSettings(prevSettings);
+    soundMgr.setMuted(prevMuted);
+
+    const passed =
+      mutedAfterFirstToggle === true &&
+      soundMgr.isBgmMuted() === prevMuted && // restored cleanly
+      settingsWhenBgmMuted.bgmEnabled === false &&
+      settingsWhenBgmMuted.sfxEnabled === true &&
+      gunshotStillPlayedWhileBgmMuted === true &&
+      mutedAfterSecondToggle === false &&
+      settingsWhenBgmRestored.bgmEnabled === true &&
+      settingsWhenBgmRestored.sfxEnabled === true &&
+      settingsWhenBgmRestored.bgmVolume === 0.7 &&
+      settingsWhenBgmRestored.sfxVolume === 0.85;
+
+    results.push({
+      id: 'M7_3_T65',
+      name: 'T65: Nút âm thanh trên thanh menu chỉ tắt/bật nhạc nền (BGM) và luôn giữ âm thanh tiếng súng (SFX)',
+      passed,
+      details: `bgmMuted1=${mutedAfterFirstToggle}, sfxWhileMuted=${settingsWhenBgmMuted.sfxEnabled}, gunshotPlayed=${gunshotStillPlayedWhileBgmMuted}, bgmRestored=${settingsWhenBgmRestored.bgmEnabled}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T66: Co-op Online Sync – Cô lập Virtual Touch P2, chống rớt input 60Hz, không nuốt tick P2 khi catch-up 2 tick & replay snapshot khi BattleScene mount
+  // =========================================================================
+  {
+    const t0 = 1_720_000_000_000;
+    const storage = new InMemoryCoopStorageAdapter();
+    const hostMgr = new CoopOnlineManager(storage);
+    const guestMgr = new CoopOnlineManager(storage);
+    let currentTimeMs = t0;
+    const { hostChannel, guestChannel } = createInMemoryP2PChannelPair(
+      (msg) => hostMgr.handleIncomingDataChannelMessage(msg, currentTimeMs),
+      (msg) => guestMgr.handleIncomingDataChannelMessage(msg, currentTimeMs)
+    );
+
+    const hostUser = {
+      uid: 'uid_host_sync',
+      displayName: 'Host Sync',
+      email: 'host.sync@gmail.com',
+      emailVerified: true,
+    };
+    const guestUser = {
+      uid: 'uid_guest_sync',
+      displayName: 'Guest Sync',
+      email: 'guest.sync@gmail.com',
+      emailVerified: true,
+    };
+
+    hostMgr.createRoomSync(storage, hostUser, 'DEFAULT', t0, 'SYNCO1', { hasPassword: false });
+    guestMgr.joinRoomSync(storage, 'SYNCO1', guestUser, t0 + 100);
+    hostMgr.setPlayerReadySync(storage, true, t0 + 150);
+    guestMgr.setPlayerReadySync(storage, true, t0 + 200);
+    storage.setRoomSync('SYNCO1', {
+      ...storage.getRoomSync('SYNCO1')!,
+      rtcConnectionState: 'CONNECTED',
+    });
+    hostMgr.startOnlineMatchSync(storage, hostUser.uid, undefined, t0 + 250);
+    hostMgr.attachCustomP2PChannel(hostChannel, t0 + 260);
+    guestMgr.attachCustomP2PChannel(guestChannel, t0 + 260);
+
+    // 1. Cô lập virtualTouchInputP2 trên Guest engine & kiểm tra clearAllInputs()
+    const guestEngine = new GameEngine(undefined, undefined, false);
+    guestEngine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+    guestEngine.setVirtualTouchInputP2({ left: true, shoot: true });
+    guestEngine.setExternalInput({ right: true });
+    const touchP2Isolated =
+      guestEngine.getVirtualTouchInputP2().left === true &&
+      guestEngine.getVirtualTouchInputP2().shoot === true &&
+      guestEngine.getVirtualTouchInputP2().right === false &&
+      guestEngine.getVirtualTouchInput().left === false;
+
+    // 2. Chuyển đổi trạng thái phím nhanh (< 45ms, ở nhịp ~16ms) không bị RATE_LIMITED drop & keepalive 75ms giữ input sống dưới TTL 250ms
+    currentTimeMs = t0 + 300;
+    void guestMgr.submitGuestInput(
+      { up: true, down: false, left: false, right: false, shoot: false },
+      currentTimeMs
+    );
+    const seq1 = (guestMgr as any).guestOutgoingSeq;
+    currentTimeMs += 16;
+    void guestMgr.submitGuestInput(
+      { up: false, down: false, left: true, right: false, shoot: false },
+      currentTimeMs
+    );
+    const seq2 = (guestMgr as any).guestOutgoingSeq;
+    const hostAfterTransition = hostMgr.getLatestValidatedGuestInput(currentTimeMs);
+    currentTimeMs += 16;
+    void guestMgr.submitGuestInput(
+      { up: false, down: false, left: true, right: false, shoot: true },
+      currentTimeMs
+    );
+    const seq3 = (guestMgr as any).guestOutgoingSeq;
+    // Keepalive cùng chữ ký ở 80ms (> INPUT_KEEPALIVE_INTERVAL_MS = 75ms) phải được gửi để Host không hết hạn 250ms
+    currentTimeMs += 80;
+    void guestMgr.submitGuestInput(
+      { up: false, down: false, left: true, right: false, shoot: true },
+      currentTimeMs
+    );
+    const seq4 = (guestMgr as any).guestOutgoingSeq;
+    const hostValidatedP2 = hostMgr.getLatestValidatedGuestInput(currentTimeMs + 10);
+    const fastInputAcceptedAndFresh =
+      seq1 === 1 &&
+      seq2 === 2 &&
+      hostAfterTransition.left === true &&
+      seq3 === 3 &&
+      seq4 === 4 &&
+      hostValidatedP2.left === true &&
+      hostValidatedP2.shoot === true;
+
+    // 3. Host advanceTime 33.4ms (plannedTicksThisFrame === 2) trong TWO_PLAYERS_ONLINE không bỏ qua tick đầu tiên của P1 & P2
+    const hostEngine = new GameEngine(undefined, undefined, false);
+    hostEngine.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT');
+    const p1StartY = hostEngine.getState().p1.y;
+    const p2StartY = hostEngine.getState().p2!.y;
+    hostEngine.setExternalInputP2({ up: true, down: false, left: false, right: false, shoot: false });
+    const ticksExecuted = hostEngine.advanceTime(33.4, {
+      up: true,
+      down: false,
+      left: false,
+      right: false,
+      shoot: false,
+    });
+    const p1MovedTwoTicks = Math.abs(p1StartY - hostEngine.getState().p1.y - 2) < 0.01;
+    const p2MovedTwoTicks = Math.abs(p2StartY - hostEngine.getState().p2!.y - 2) < 0.01;
+
+    // 4. Snapshot đến trước khi BattleScene đăng ký subscribeSnapshots() phải được giữ lại và replay ngay khi subscribe
+    const earlySnap = buildAuthoritativeSnapshot(hostEngine.getState(), 1);
+    hostChannel.send({ type: 'HOST_SNAPSHOT', snapshot: earlySnap });
+    let replayedSnapshotSeq = -1;
+    const unsubLate = guestMgr.subscribeSnapshots((snap) => {
+      replayedSnapshotSeq = snap.snapshotSeq;
+      return true;
+    });
+    unsubLate();
+
+    const passed =
+      COOP_ONLINE_CONFIG.SNAPSHOT_INTERVAL_MS <= 20 &&
+      COOP_ONLINE_CONFIG.INPUT_KEEPALIVE_INTERVAL_MS < 120 &&
+      touchP2Isolated &&
+      fastInputAcceptedAndFresh &&
+      ticksExecuted === 2 &&
+      p1MovedTwoTicks &&
+      p2MovedTwoTicks &&
+      replayedSnapshotSeq === 1;
+
+    results.push({
+      id: 'M7_3_T66',
+      name: 'T66: Đồng bộ khung hình Co-op Online 60Hz – Cô lập Touch P2, không rớt chuyển phím <45ms, keepalive 75ms, giữ 2 tick catch-up P1/P2 & replay snapshot đầu',
+      passed,
+      details: `snapMs=${COOP_ONLINE_CONFIG.SNAPSHOT_INTERVAL_MS}, touchP2=${touchP2Isolated}, fastInput=${fastInputAcceptedAndFresh} (seq=${seq1}/${seq2}/${seq3}/${seq4}), ticks2=${ticksExecuted}, p1Moved2=${p1MovedTwoTicks}, p2Moved2=${p2MovedTwoTicks}, replayedSeq=${replayedSnapshotSeq}`,
+    });
+  }
+
   return {
     total: results.length,
     passed: results.filter((r) => r.passed).length,
@@ -9276,6 +9467,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     results,
   };
 }
+
 
 
 

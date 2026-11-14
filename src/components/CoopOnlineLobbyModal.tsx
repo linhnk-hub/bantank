@@ -355,11 +355,9 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                 </div>
                 <div>
                   <h3 className="text-sm sm:text-base font-black uppercase tracking-wider text-white">
-                    CẤU HÌNH TẠO PHÒNG MỚI (CHỦ PHÒNG P1)
+                    CẤU HÌNH PHÒNG
                   </h3>
-                  <p className="text-[11px] text-neutral-400">
-                    Chọn độ khó trận đấu và thiết lập mật khẩu bảo vệ phòng
-                  </p>
+
                 </div>
               </div>
             </div>
@@ -383,7 +381,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     <Shield className="w-5 h-5 text-amber-400 shrink-0" />
                     <div>
                       <div className="font-black text-xs sm:text-sm">Giải trí</div>
-                      <div className="text-[10px] text-neutral-400">3 mạng • Cân bằng cổ điển</div>
+                      <div className="text-[10px] text-neutral-400">3 mạng • Cân bằng</div>
                     </div>
                   </div>
                   {createDifficulty === 'DEFAULT' && (
@@ -437,10 +435,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                   <div className="flex items-center gap-2.5">
                     <Lock className="w-5 h-5 text-sky-400 shrink-0" />
                     <div>
-                      <div className="font-black text-xs sm:text-sm">Có mật khẩu (Mặc định)</div>
-                      <div className="text-[10px] text-neutral-400">
-                        Chỉ người có mã phòng + mật khẩu mới vào được
-                      </div>
+                      <div className="font-black text-xs sm:text-sm">Có mật khẩu</div>
                     </div>
                   </div>
                   {createHasPassword && (
@@ -463,10 +458,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                   <div className="flex items-center gap-2.5">
                     <Unlock className="w-5 h-5 text-emerald-400 shrink-0" />
                     <div>
-                      <div className="font-black text-xs sm:text-sm">Không mật khẩu (Công khai)</div>
-                      <div className="text-[10px] text-neutral-400">
-                        Cho phép người chơi khác Vào nhanh hoặc nhập mã
-                      </div>
+                      <div className="font-black text-xs sm:text-sm">Không mật khẩu</div>
                     </div>
                   </div>
                   {!createHasPassword && (
@@ -488,7 +480,6 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     maxLength={32}
                     value={createPasswordInput}
                     onChange={(e) => setCreatePasswordInput(e.target.value)}
-                    placeholder="Nhập mật khẩu bảo vệ phòng..."
                     className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-900 border border-neutral-700 focus:border-sky-400 focus:outline-none text-xs sm:text-sm font-mono text-white"
                   />
                 </div>
@@ -667,7 +658,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
         ? 'P1 (Chủ phòng) đã Sẵn sàng — Đang chờ P2 bấm Sẵn sàng.'
         : !room.hostReady && room.guestReady
           ? 'P2 (Đồng đội) đã Sẵn sàng — Đang chờ Chủ phòng (P1) bấm Sẵn sàng.'
-          : 'P2 đã vào phòng (2/2)! Hãy nhấn Báo Sẵn Sàng để xuất kích.';
+          : 'P2 đã vào phòng (2/2)! Hãy nhấn sẵn sàng để xuất kích.';
 
   return (
     <div className="p-4 sm:p-5 rounded-2xl bg-neutral-900/95 border border-sky-500/40 space-y-4 shadow-2xl">
@@ -774,7 +765,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
             )}
             <span>
               {room.rtcConnectionState === 'CONNECTED'
-                ? 'Đã kết nối máy chủ – Sẵn sàng vào trận!'
+                ? 'Đã kết nối máy chủ – Sẵn sàng xuất kích!'
                 : room.rtcConnectionState === 'FAILED'
                   ? coopManager.getWebrtcErrorMessage() ||
                     'Kết nối máy chủ thất bại. Vui lòng thử kết nối lại hoặc rời phòng.'
