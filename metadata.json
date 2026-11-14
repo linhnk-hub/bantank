@@ -1,6 +1,6 @@
 {
-  "name": "Bắn Tank Online – Game xe tăng trực tuyến",
-  "description": "Bắn Tank Online là trò chơi bắn xe tăng chiến thuật 2D trực tuyến trên trình duyệt. Điều khiển chiến xa 60Hz, bảo vệ Căn cứ Đại Bàng, chơi đơn Solo, phối hợp Đồng đội AI, chơi 2 người Co-op Online hoặc Chơi thử ngay không cần đăng nhập.",
+  "name": "Bắn Tank Online – Chiến trường huyền thoại",
+  "description": "Bắn Tank Online là trò chơi bắn xe tăng chiến thuật 2D trực tuyến trên trình duyệt. Điều khiển chiến xa, bảo vệ căn cứ Đại bàng, chơi đơn Solo, phối hợp Đồng đội AI, chơi 2 người Co-op Online hoặc Chơi thử ngay không cần đăng nhập.",
   "requestFramePermissions": [],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
