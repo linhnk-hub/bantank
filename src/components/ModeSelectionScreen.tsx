@@ -600,7 +600,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       data-testid="difficulty-note-default"
                       className="text-xs text-neutral-300 leading-relaxed mt-3"
                     >
-                      3 mạng mỗi người chơi, thời gian trận đấu 120 giây (02:00). Nhịp độ cân bằng, phù hợp chơi thư giãn và rèn kỹ năng phòng thủ căn cứ.
+                      Có 3 mạng chơi, thời gian trận đấu 120 giây (02:00). Nhịp độ cân bằng, phù hợp chơi thư giãn và rèn kỹ năng chiến đấu.
                     </p>
                   </div>
 
@@ -648,7 +648,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       data-testid="difficulty-note-extreme"
                       className="text-xs text-neutral-300 leading-relaxed mt-3"
                     >
-                      3 mạng mỗi người chơi, giới hạn 60 giây (01:00). Xe địch phản ứng nhanh và dồn hỏa lực mạnh vào Căn cứ — đòi hỏi phản xạ và chiến thuật cao.
+                      Có 3 mạng chơi, giới hạn trận đấu 60 giây (01:00). Xe địch phản ứng nhanh và dồn hỏa lực mạnh vào căn cứ, đòi hỏi phản xạ và chiến thuật cao.
                     </p>
                   </div>
 
