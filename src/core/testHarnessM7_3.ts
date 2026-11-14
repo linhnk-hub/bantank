@@ -55,10 +55,12 @@ import {
   InMemorySharedMusicCloudAdapter,
   SHARED_SYSTEM_BGM_ID,
   evaluateSystemAudioConfigRule,
+  evaluateSystemMediaConfigRule,
   classifyStorageCloudError,
   formatMusicCloudError,
   validateSafeAudioAssetPath,
   validateSafeAudioOrStoragePath,
+  validateSafeVideoStoragePath,
   buildGitHubPagesAudioUrl,
   normalizeSafeAudioFileName,
   type SystemAudioConfigDocument,
@@ -7007,7 +7009,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       superAdminTabLabels.length === 6 &&
       superAdminTabLabels[0] === 'Thông tin' &&
       superAdminTabLabels[1] === 'Hình ảnh' &&
-      superAdminTabLabels[2] === 'Âm thanh' &&
+      superAdminTabLabels[2] === 'Media' &&
       superAdminTabLabels[3] === 'Chế độ chơi' &&
       superAdminTabLabels[4] === 'Cấp quyền' &&
       superAdminTabLabels[5] === 'Tài khoản';
@@ -9768,6 +9770,161 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T69: Hỗ trợ định dạng .m4a/.aac/.webm, nới kiểm tra lệch đồng hồ upload >60s cho /system_config/audio & chẩn đoán lỗi Storage/Firestore chi tiết',
       passed,
       details: `formatsOk=${formatsOk}, catalogRuleAllowsSkew=${catalogRuleAllowsSkew}, nonAdminDenied=${!nonAdminStillDenied}, diagnosticsOk=${diagnosticsOk}, cleanErrorsOk=${cleanErrorsOk}`,
+    });
+  }
+
+  // =========================================================================
+  // T70: Media Tab, /system_config/media Rules, HOME / 2-AI / 2P / Stage Resolution & MP4 Home Video Validation
+  // =========================================================================
+  {
+    const mm = MusicManager.getInstance();
+    mm.setUserRole('ADMIN');
+    const dummyBuf = {
+      duration: 18,
+      sampleRate: 44100,
+      numberOfChannels: 1,
+      getChannelData: () => new Float32Array(44100),
+    };
+    const tHome = mm.registerDecodedTrack({
+      id: 'media_test_home',
+      displayName: 'Home Theme',
+      fileName: 'home.mp3',
+      mimeType: 'audio/mpeg',
+      sizeBytes: 12000,
+      audioBuffer: dummyBuf,
+    });
+    const tCoopAi = mm.registerDecodedTrack({
+      id: 'media_test_coop_ai',
+      displayName: '2-AI Theme',
+      fileName: 'coop_ai.mp3',
+      mimeType: 'audio/mpeg',
+      sizeBytes: 12000,
+      audioBuffer: dummyBuf,
+    });
+    const tTwoP = mm.registerDecodedTrack({
+      id: 'media_test_2p',
+      displayName: '2P Theme',
+      fileName: 'two_p.mp3',
+      mimeType: 'audio/mpeg',
+      sizeBytes: 12000,
+      audioBuffer: dummyBuf,
+    });
+    const tStage2 = mm.registerDecodedTrack({
+      id: 'media_test_stage2',
+      displayName: 'Stage 2 Theme',
+      fileName: 'stage2.mp3',
+      mimeType: 'audio/mpeg',
+      sizeBytes: 12000,
+      audioBuffer: dummyBuf,
+    });
+
+    mm.assignToHome('media_test_home');
+    mm.assignToMode('COOP_AI', 'media_test_coop_ai');
+    mm.assignToMode('TWO_PLAYER', 'media_test_2p');
+    mm.assignToStage(2, 'media_test_stage2');
+
+    const resHome = mm.resolveEffectiveTrack(0, 'HOME');
+    const resCoopAiStage1 = mm.resolveEffectiveTrack(1, 'COOP_AI');
+    const resTwoPStage1 = mm.resolveEffectiveTrack(1, 'TWO_PLAYER');
+    const resStage2 = mm.resolveEffectiveTrack(2, 'COOP_AI');
+
+    const resolutionOk =
+      Boolean(tHome.success && tCoopAi.success && tTwoP.success && tStage2.success) &&
+      resHome.trackId === 'media_test_home' &&
+      resHome.resolvedScope === 'HOME' &&
+      resCoopAiStage1.trackId === 'media_test_coop_ai' &&
+      resCoopAiStage1.resolvedScope === 'MODE' &&
+      resTwoPStage1.trackId === 'media_test_2p' &&
+      resTwoPStage1.resolvedScope === 'MODE' &&
+      resStage2.trackId === 'media_test_stage2' &&
+      resStage2.resolvedScope === 'STAGE';
+
+    const mp4Valid = MusicManager.validateVideoFileBasic({
+      name: 'intro-bantank.mp4',
+      type: 'video/mp4',
+      size: 5_872_025,
+    });
+    const nonMp4Rejected = MusicManager.validateVideoFileBasic({
+      name: 'clip.webm',
+      type: 'video/webm',
+      size: 500_000,
+    });
+    const pathValid =
+      validateSafeVideoStoragePath('video_catalog/vid_1/v1/intro.mp4').valid &&
+      validateSafeVideoStoragePath('intro-bantank.mp4').valid &&
+      !validateSafeVideoStoragePath('../hack.mp4').valid;
+
+    const validMediaPayload = {
+      homeSoundId: 'snd_home',
+      globalSoundId: null,
+      modeSoundIds: { SOLO: null, COOP_AI: 'snd_ai', TWO_PLAYER: 'snd_2p' },
+      stageSoundIds: { '1': 'snd_st1' },
+      loopConfig: {
+        loop: true,
+        skipSilence: true,
+        seamlessLoop: true,
+        crossfade: true,
+        crossfadeDurationSec: 0.8,
+        silenceThresholdDb: -48,
+      },
+      homeVideo: {
+        videoId: 'vid_1',
+        displayName: 'Intro',
+        fileName: 'intro.mp4',
+        storagePath: 'video_catalog/vid_1/v1/intro.mp4',
+        contentType: 'video/mp4' as const,
+        fileSize: 5_000_000,
+        version: 1,
+        opacity: 0.35,
+        loop: true,
+        isEnabled: true,
+      },
+      updatedAt: Date.now(),
+      updatedBy: ADMIN_EMAIL,
+      version: 1,
+    };
+
+    const mediaRuleOk =
+      evaluateSystemMediaConfigRule({
+        action: 'create',
+        docId: 'media',
+        isVerifiedPersonalGmail: true,
+        authEmail: ADMIN_EMAIL,
+        incoming: validMediaPayload,
+      }) === true &&
+      evaluateSystemMediaConfigRule({
+        action: 'create',
+        docId: 'media',
+        isVerifiedPersonalGmail: true,
+        authEmail: 'player@gmail.com',
+        incoming: validMediaPayload,
+      }) === false &&
+      evaluateSystemMediaConfigRule({
+        action: 'get',
+        docId: 'media',
+        isVerifiedPersonalGmail: true,
+        authEmail: 'player@gmail.com',
+      }) === true;
+
+    mm.resetAllAssignmentsToDefault();
+    mm.deleteTrack('media_test_home');
+    mm.deleteTrack('media_test_coop_ai');
+    mm.deleteTrack('media_test_2p');
+    mm.deleteTrack('media_test_stage2');
+    mm.setUserRole('PLAYER');
+
+    const passed =
+      resolutionOk &&
+      mp4Valid.valid === true &&
+      nonMp4Rejected.valid === false &&
+      pathValid &&
+      mediaRuleOk;
+
+    results.push({
+      id: 'M7_3_T70',
+      name: 'T70: Phân bổ Media Trang chủ / 2 - AI / 2P / Stage, kiểm tra định dạng .mp4 & Firestore Rule /system_config/media',
+      passed,
+      details: `resolutionOk=${resolutionOk}, videoValid=${mp4Valid.valid && !nonMp4Rejected.valid}, pathValid=${pathValid}, mediaRuleOk=${mediaRuleOk}`,
     });
   }
 

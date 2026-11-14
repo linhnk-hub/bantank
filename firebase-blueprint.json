@@ -252,6 +252,56 @@
         "version": { "type": "number" }
       },
       "required": ["updatedAt", "updatedBy", "version"]
+    },
+    "SystemMediaConfig": {
+      "title": "SystemMediaConfig",
+      "description": "Cấu hình Media toàn hệ thống (/system_config/media): chọn nhạc nền Trang chủ, Toàn game, chế độ (SOLO, COOP_AI, TWO_PLAYER), từng Stage, cấu hình vòng lặp liên tục và video nền Trang chủ (.mp4).",
+      "type": "object",
+      "properties": {
+        "homeSoundId": { "type": ["string", "null"] },
+        "globalSoundId": { "type": ["string", "null"] },
+        "modeSoundIds": {
+          "type": "object",
+          "properties": {
+            "SOLO": { "type": ["string", "null"] },
+            "COOP_AI": { "type": ["string", "null"] },
+            "TWO_PLAYER": { "type": ["string", "null"] }
+          },
+          "required": ["SOLO", "COOP_AI", "TWO_PLAYER"]
+        },
+        "stageSoundIds": { "type": "object" },
+        "loopConfig": {
+          "type": "object",
+          "properties": {
+            "loop": { "type": "boolean" },
+            "skipSilence": { "type": "boolean" },
+            "seamlessLoop": { "type": "boolean" },
+            "crossfade": { "type": "boolean" },
+            "crossfadeDurationSec": { "type": "number" },
+            "silenceThresholdDb": { "type": "number" }
+          },
+          "required": ["loop", "skipSilence", "seamlessLoop", "crossfade", "crossfadeDurationSec", "silenceThresholdDb"]
+        },
+        "homeVideo": {
+          "type": ["object", "null"],
+          "properties": {
+            "videoId": { "type": "string" },
+            "displayName": { "type": "string" },
+            "fileName": { "type": "string" },
+            "storagePath": { "type": "string" },
+            "contentType": { "type": "string", "enum": ["video/mp4"] },
+            "fileSize": { "type": "number" },
+            "version": { "type": "number" },
+            "opacity": { "type": "number" },
+            "loop": { "type": "boolean" },
+            "isEnabled": { "type": "boolean" }
+          }
+        },
+        "updatedAt": { "type": "number" },
+        "updatedBy": { "type": "string" },
+        "version": { "type": "number" }
+      },
+      "required": ["homeSoundId", "globalSoundId", "modeSoundIds", "stageSoundIds", "loopConfig", "homeVideo", "updatedAt", "updatedBy", "version"]
     }
   },
   "firestore": {
@@ -285,7 +335,7 @@
     },
     "/system_config/{docId}": {
       "schema": { "$ref": "#/entities/SystemAudioConfig" },
-      "description": "Cấu hình hệ thống (/system_config/audio, /system_config/stages_catalog, /system_config/action_sfx)."
+      "description": "Cấu hình hệ thống (/system_config/audio, /system_config/media, /system_config/stages_catalog, /system_config/action_sfx)."
     }
   }
 }

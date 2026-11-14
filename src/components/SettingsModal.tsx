@@ -128,7 +128,7 @@ export function getAvailableSettingsTabsForRole(
 
   tabs.push({
     id: 'AUDIO_SETTINGS',
-    label: 'Âm thanh',
+    label: 'Media',
     adminOnly: false,
   });
 
@@ -1310,7 +1310,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 flex-wrap gap-2">
                   <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
                     <Music className="w-4 h-4 text-amber-400" />
-                    <span>ÂM THANH</span>
+                    <span>MEDIA</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-neutral-400 font-mono hidden sm:inline">
@@ -1417,18 +1417,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* Toggle Admin Music Management Panel — ONLY visible for Admin */}
+                {/* Toggle Admin Media Management Panel — ONLY visible for Admin */}
                 {canShowAdminMusic && (
                   <div className="pt-3 border-t border-neutral-800 flex items-center justify-between">
                     <span className="text-[11px] text-amber-300 font-bold">
-                      Quản trị Thư viện Nhạc nền Hệ thống (Admin: {SUPER_ADMIN_EMAIL})
+                      Quản trị Thư viện Media &amp; Âm thanh Hệ thống
                     </span>
                     <button
                       type="button"
                       onClick={() => setShowMusicAdmin((v) => !v)}
                       className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-[11px] transition-all cursor-pointer"
                     >
-                      {showMusicAdmin ? 'Thu gọn Quản lý Nhạc' : 'Mở Quản lý Nhạc nền'}
+                      {showMusicAdmin ? 'Thu gọn Quản lý Media' : 'Mở Quản lý Media'}
                     </button>
                   </div>
                 )}

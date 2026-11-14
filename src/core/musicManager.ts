@@ -33,6 +33,8 @@ import {
   ref as storageRef,
   uploadBytes,
   getBytes,
+  getBlob,
+  getDownloadURL,
   deleteObject,
 } from 'firebase/storage';
 import { SoundManager } from './audio.ts';
@@ -47,7 +49,7 @@ import type { User } from 'firebase/auth';
 
 export type SupportedAudioFormat = 'audio/mpeg' | 'audio/ogg' | 'audio/wav' | 'audio/x-wav' | 'audio/mp3';
 export type UserRole = 'PLAYER' | 'MOD' | 'ADMIN';
-export type GameModeScope = 'SOLO' | 'TWO_PLAYER';
+export type GameModeScope = 'HOME' | 'SOLO' | 'COOP_AI' | 'TWO_PLAYER';
 
 export interface LoopPlaybackConfig {
   loop: boolean;
@@ -87,9 +89,39 @@ export interface MusicTrackMetadata {
 }
 
 export interface MusicScopeAssignments {
+  homeTrackId: string | null; // Nhạc nền Trang chủ
   globalTrackId: string | null; // Scope 1: Toàn bộ game
-  modeTracks: Record<GameModeScope, string | null>; // Scope 2: Chế độ chơi (SOLO, TWO_PLAYER)
+  modeTracks: Record<'SOLO' | 'COOP_AI' | 'TWO_PLAYER', string | null>; // Scope 2: Chế độ chơi
   stageTracks: Record<number, string | null>; // Scope 3: Stage cụ thể (1, 2, 3...)
+}
+
+export interface HomeBackgroundVideoConfig {
+  videoId: string;
+  displayName: string;
+  fileName: string;
+  storagePath: string; // "video_catalog/{videoId}/v{version}/{fileName}" or "intro-bantank.mp4"
+  contentType: 'video/mp4';
+  fileSize: number;
+  version: number;
+  opacity: number; // 0.05 to 1.0
+  loop: boolean;
+  isEnabled: boolean;
+}
+
+export interface SystemMediaConfigDocument {
+  homeSoundId: string | null;
+  globalSoundId: string | null;
+  modeSoundIds: {
+    SOLO: string | null;
+    COOP_AI: string | null;
+    TWO_PLAYER: string | null;
+  };
+  stageSoundIds: Record<string, string>;
+  loopConfig: LoopPlaybackConfig;
+  homeVideo: HomeBackgroundVideoConfig | null;
+  updatedAt: number;
+  updatedBy: string;
+  version: number;
 }
 
 export interface ValidationCheckResult {
@@ -186,12 +218,28 @@ export interface SharedMusicCloudAdapter {
     onUpdate: (entries: SoundCatalogEntry[]) => void,
     onError?: (err: Error) => void
   ): () => void;
+  getSystemMediaConfig?(): Promise<SystemMediaConfigDocument | null>;
+  saveSystemMediaConfig?(config: SystemMediaConfigDocument): Promise<void>;
+  deleteSystemMediaConfig?(): Promise<void>;
+  subscribeSystemMediaConfig?(
+    onUpdate: (config: SystemMediaConfigDocument | null) => void,
+    onError?: (err: Error) => void
+  ): () => void;
+  uploadVideoBinary?(
+    storagePath: string,
+    data: ArrayBuffer | Uint8Array,
+    contentType: string
+  ): Promise<{ storagePath: string }>;
+  deleteVideoBinary?(storagePath: string): Promise<void>;
+  fetchVideoPlaybackUrl?(storagePath: string): Promise<string>;
 }
 
 export const SHARED_SYSTEM_BGM_ID = 'shared_system_bgm';
 export const STAGED_LOCAL_PREVIEW_BGM_ID = 'staged_local_preview_bgm';
 export const SAFE_AUDIO_ASSET_DIR_PREFIX = 'audio/';
 export const SOUND_CATALOG_STORAGE_PREFIX = 'sound_catalog/';
+export const VIDEO_CATALOG_STORAGE_PREFIX = 'video_catalog/';
+export const MAX_VIDEO_FILE_SIZE_BYTES = 100 * 1024 * 1024; // 100 MB max for .mp4
 
 const SAFE_AUDIO_FILENAME_REGEX = /^[A-Za-z0-9._-]+\.(mp3|ogg|wav|m4a|aac|webm)$/;
 const SAFE_AUDIO_ASSET_PATH_REGEX = /^audio\/([A-Za-z0-9._-]+\.(mp3|ogg|wav|m4a|aac|webm))$/;
@@ -359,6 +407,162 @@ export function normalizeSafeAudioFileName(
   return `${prefix}${withoutOldPrefix}.${ext}`;
 }
 
+const SAFE_VIDEO_STORAGE_PATH_REGEX =
+  /^video_catalog\/([A-Za-z0-9_-]+)\/v([1-9][0-9]*)\/([A-Za-z0-9._-]+\.mp4)$/;
+
+export function normalizeSafeVideoFileName(rawFileName: string): string {
+  const trimmed = (rawFileName || '').trim();
+  const rawBase = /\.mp4$/i.test(trimmed) ? trimmed.slice(0, -4) : trimmed;
+  const safeSlug =
+    rawBase
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/đ/g, 'd')
+      .replace(/Đ/g, 'D')
+      .replace(/[^A-Za-z0-9._-]+/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^[._-]+|[._-]+$/g, '')
+      .slice(0, 120) || 'home_bg';
+  return `${safeSlug}.mp4`;
+}
+
+export function validateSafeVideoStoragePath(storagePath: unknown): {
+  valid: boolean;
+  normalizedPath?: string;
+  error?: string;
+} {
+  if (typeof storagePath !== 'string' || storagePath.length < 5 || storagePath.length > 300) {
+    return { valid: false, error: 'Đường dẫn video không hợp lệ.' };
+  }
+  if (
+    storagePath.includes('..') ||
+    storagePath.includes('\\') ||
+    storagePath.includes('//') ||
+    storagePath.startsWith('/') ||
+    storagePath.includes(':') ||
+    storagePath.includes('?') ||
+    storagePath.includes('#') ||
+    storagePath.toLowerCase().includes('token=')
+  ) {
+    return { valid: false, error: 'Đường dẫn video chứa ký tự hoặc giao thức bị cấm.' };
+  }
+  if (storagePath === 'intro-bantank.mp4' || SAFE_VIDEO_STORAGE_PATH_REGEX.test(storagePath)) {
+    return { valid: true, normalizedPath: storagePath };
+  }
+  return { valid: false, error: 'Đường dẫn video phải là .mp4 hợp lệ trong video_catalog/.' };
+}
+
+export function evaluateSystemMediaConfigRule(params: {
+  action: 'get' | 'list' | 'create' | 'update' | 'delete';
+  docId: string;
+  isVerifiedPersonalGmail: boolean;
+  authEmail: string | null;
+  existing?: SystemMediaConfigDocument | null;
+  incoming?: Partial<SystemMediaConfigDocument> | Record<string, unknown> | null;
+}): boolean {
+  const { action, docId, isVerifiedPersonalGmail, authEmail, existing = null, incoming } = params;
+  if (!isVerifiedPersonalGmail) return false;
+  if (action === 'list') return false;
+  if (docId !== 'media') return false;
+  if (action === 'get') return true;
+  const isAdmin =
+    isVerifiedPersonalGmail &&
+    typeof authEmail === 'string' &&
+    authEmail.trim().toLowerCase() === ADMIN_EMAIL;
+  if (!isAdmin) return false;
+  if (action === 'delete') return true;
+  if (!incoming || typeof incoming !== 'object') return false;
+
+  const requiredKeys = [
+    'homeSoundId',
+    'globalSoundId',
+    'modeSoundIds',
+    'stageSoundIds',
+    'loopConfig',
+    'homeVideo',
+    'updatedAt',
+    'updatedBy',
+    'version',
+  ];
+  const allowedKeys = new Set(requiredKeys);
+  const keys = Object.keys(incoming);
+  for (const k of requiredKeys) {
+    if (!(k in incoming)) return false;
+  }
+  for (const k of keys) {
+    if (!allowedKeys.has(k)) return false;
+  }
+  const rec = incoming as Record<string, unknown>;
+  const validIdOrNull = (val: unknown) =>
+    val === null || (typeof val === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(val));
+  if (!validIdOrNull(rec.homeSoundId) || !validIdOrNull(rec.globalSoundId)) return false;
+  if (!rec.modeSoundIds || typeof rec.modeSoundIds !== 'object') return false;
+  const m = rec.modeSoundIds as Record<string, unknown>;
+  if (
+    !('SOLO' in m) ||
+    !('COOP_AI' in m) ||
+    !('TWO_PLAYER' in m) ||
+    Object.keys(m).length !== 3 ||
+    !validIdOrNull(m.SOLO) ||
+    !validIdOrNull(m.COOP_AI) ||
+    !validIdOrNull(m.TWO_PLAYER)
+  ) {
+    return false;
+  }
+  if (!rec.stageSoundIds || typeof rec.stageSoundIds !== 'object' || Object.keys(rec.stageSoundIds).length > 50) {
+    return false;
+  }
+  if (!rec.loopConfig || typeof rec.loopConfig !== 'object') return false;
+  const lc = rec.loopConfig as Record<string, unknown>;
+  if (
+    typeof lc.loop !== 'boolean' ||
+    typeof lc.skipSilence !== 'boolean' ||
+    typeof lc.seamlessLoop !== 'boolean' ||
+    typeof lc.crossfade !== 'boolean' ||
+    typeof lc.crossfadeDurationSec !== 'number' ||
+    lc.crossfadeDurationSec < 0.05 ||
+    lc.crossfadeDurationSec > 5.0 ||
+    typeof lc.silenceThresholdDb !== 'number' ||
+    lc.silenceThresholdDb < -96 ||
+    lc.silenceThresholdDb > -10
+  ) {
+    return false;
+  }
+  if (rec.homeVideo !== null) {
+    const hv = rec.homeVideo as Record<string, unknown>;
+    if (
+      !hv ||
+      typeof hv !== 'object' ||
+      typeof hv.videoId !== 'string' ||
+      !/^[a-zA-Z0-9_-]{1,80}$/.test(hv.videoId) ||
+      typeof hv.fileName !== 'string' ||
+      !/^[A-Za-z0-9._-]+\.mp4$/.test(hv.fileName) ||
+      !validateSafeVideoStoragePath(hv.storagePath).valid ||
+      hv.contentType !== 'video/mp4' ||
+      typeof hv.fileSize !== 'number' ||
+      !Number.isInteger(hv.fileSize) ||
+      hv.fileSize <= 0 ||
+      hv.fileSize > MAX_VIDEO_FILE_SIZE_BYTES ||
+      typeof hv.opacity !== 'number' ||
+      hv.opacity < 0.05 ||
+      hv.opacity > 1.0 ||
+      typeof hv.loop !== 'boolean' ||
+      typeof hv.isEnabled !== 'boolean'
+    ) {
+      return false;
+    }
+  }
+  if (typeof rec.updatedAt !== 'number' || !Number.isInteger(rec.updatedAt) || rec.updatedAt <= 0) {
+    return false;
+  }
+  if (rec.updatedBy !== ADMIN_EMAIL) return false;
+  if (typeof rec.version !== 'number' || !Number.isInteger(rec.version) || rec.version < 1) {
+    return false;
+  }
+  if (action === 'update' && existing && rec.version <= existing.version) return false;
+  return true;
+}
+
 /**
  * Tạo URL tương đối tải nhạc từ GitHub Pages kèm tham số cache-busting `?v=<version>` (M7.3.3 Mục 3).
  */
@@ -447,7 +651,8 @@ export function formatMusicCloudError(
     code.includes('storage/unauthenticated') ||
     lower.includes('storage/unauthorized') ||
     lower.includes('firebase storage') ||
-    (targetPath.startsWith('sound_catalog/') && targetPath.includes('/v'));
+    (targetPath.startsWith('sound_catalog/') && targetPath.includes('/v')) ||
+    (targetPath.startsWith('video_catalog/') && targetPath.includes('/v'));
 
   const isPermissionError =
     code.includes('permission') ||
@@ -850,6 +1055,119 @@ export class FirebaseSharedMusicCloudAdapter implements SharedMusicCloudAdapter 
     );
     return unsub;
   }
+
+  public async getSystemMediaConfig(): Promise<SystemMediaConfigDocument | null> {
+    try {
+      const db = getFirebaseDb();
+      const ref = doc(db, 'system_config', 'media');
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return null;
+      return snap.data() as SystemMediaConfigDocument;
+    } catch (err) {
+      handleFirestoreError(err, 'get', 'system_config/media');
+    }
+  }
+
+  public async saveSystemMediaConfig(config: SystemMediaConfigDocument): Promise<void> {
+    try {
+      const db = getFirebaseDb();
+      await setDoc(doc(db, 'system_config', 'media'), config);
+    } catch (err) {
+      handleFirestoreError(err, 'write', 'system_config/media');
+    }
+  }
+
+  public async deleteSystemMediaConfig(): Promise<void> {
+    try {
+      const db = getFirebaseDb();
+      await deleteDoc(doc(db, 'system_config', 'media'));
+    } catch (err) {
+      handleFirestoreError(err, 'delete', 'system_config/media');
+    }
+  }
+
+  public subscribeSystemMediaConfig(
+    onUpdate: (config: SystemMediaConfigDocument | null) => void,
+    onError?: (err: Error) => void
+  ): () => void {
+    const db = getFirebaseDb();
+    const ref = doc(db, 'system_config', 'media');
+    const unsub: Unsubscribe = onSnapshot(
+      ref,
+      (snap) => {
+        onUpdate(snap.exists() ? (snap.data() as SystemMediaConfigDocument) : null);
+      },
+      (err) => {
+        try {
+          handleFirestoreError(err, 'get', 'system_config/media');
+        } catch (wrappedErr) {
+          if (onError) onError(wrappedErr as Error);
+        }
+      }
+    );
+    return unsub;
+  }
+
+  public async uploadVideoBinary(
+    storagePath: string,
+    data: ArrayBuffer | Uint8Array,
+    contentType: string
+  ): Promise<{ storagePath: string }> {
+    const check = validateSafeVideoStoragePath(storagePath);
+    if (!check.valid || !check.normalizedPath || check.normalizedPath === 'intro-bantank.mp4') {
+      throw new Error(check.error || 'Đường dẫn video upload không hợp lệ.');
+    }
+    try {
+      const storage = getFirebaseStorage();
+      const sRef = storageRef(storage, check.normalizedPath);
+      const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+      await uploadBytes(sRef, bytes, { contentType: contentType || 'video/mp4' });
+      return { storagePath: check.normalizedPath };
+    } catch (storageErr) {
+      const wrapped = new Error(
+        formatMusicCloudError(storageErr, 'tải video lên Firebase Storage', check.normalizedPath)
+      );
+      (wrapped as { code?: string }).code = (storageErr as { code?: string } | null)?.code;
+      throw wrapped;
+    }
+  }
+
+  public async deleteVideoBinary(storagePath: string): Promise<void> {
+    const check = validateSafeVideoStoragePath(storagePath);
+    if (check.valid && check.normalizedPath && check.normalizedPath !== 'intro-bantank.mp4') {
+      try {
+        const storage = getFirebaseStorage();
+        await deleteObject(storageRef(storage, check.normalizedPath));
+      } catch {
+        // Ignore missing object
+      }
+    }
+  }
+
+  public async fetchVideoPlaybackUrl(storagePath: string): Promise<string> {
+    const check = validateSafeVideoStoragePath(storagePath);
+    if (!check.valid || !check.normalizedPath) {
+      throw new Error(check.error || 'Đường dẫn video không hợp lệ.');
+    }
+    if (check.normalizedPath === 'intro-bantank.mp4') {
+      return './intro-bantank.mp4';
+    }
+    const storage = getFirebaseStorage();
+    const sRef = storageRef(storage, check.normalizedPath);
+    try {
+      const blob = await getBlob(sRef);
+      return URL.createObjectURL(blob);
+    } catch (blobErr: unknown) {
+      const code = String((blobErr as { code?: string } | null)?.code || '').toLowerCase();
+      if (code.includes('unauthorized') || code.includes('unauthenticated')) {
+        throw new Error(
+          formatMusicCloudError(blobErr, 'tải video nền từ Firebase Storage', check.normalizedPath)
+        );
+      }
+      // Fallback sang getDownloadURL khi bucket chưa bật CORS cho fetch/getBlob
+      return await getDownloadURL(sRef);
+    }
+  }
 }
 
 /**
@@ -861,6 +1179,9 @@ export class InMemorySharedMusicCloudAdapter implements SharedMusicCloudAdapter 
   private subscribers: Set<(config: SystemAudioConfigDocument | null) => void> = new Set();
   private catalogEntries: Map<string, SoundCatalogEntry> = new Map();
   private catalogSubscribers: Set<(entries: SoundCatalogEntry[]) => void> = new Set();
+  private mediaConfigDoc: SystemMediaConfigDocument | null = null;
+  private mediaSubscribers: Set<(config: SystemMediaConfigDocument | null) => void> = new Set();
+  private videoFiles: Map<string, { data: ArrayBuffer; contentType: string }> = new Map();
 
   public failNextStorageUpload: boolean = false;
   public failNextFirestoreWrite: boolean = false;
@@ -1002,8 +1323,67 @@ export class InMemorySharedMusicCloudAdapter implements SharedMusicCloudAdapter 
     };
   }
 
+  public async getSystemMediaConfig(): Promise<SystemMediaConfigDocument | null> {
+    return this.mediaConfigDoc ? JSON.parse(JSON.stringify(this.mediaConfigDoc)) : null;
+  }
+
+  public async saveSystemMediaConfig(config: SystemMediaConfigDocument): Promise<void> {
+    if (this.failNextFirestoreWrite) {
+      this.failNextFirestoreWrite = false;
+      throw new Error('Mô phỏng lỗi ghi /system_config/media trên Firestore.');
+    }
+    this.mediaConfigDoc = JSON.parse(JSON.stringify(config));
+    this.operationLog.push(`MEDIA_SAVE_OK:v${config.version}`);
+    const snap = JSON.parse(JSON.stringify(this.mediaConfigDoc));
+    this.mediaSubscribers.forEach((fn) => fn(snap));
+  }
+
+  public async deleteSystemMediaConfig(): Promise<void> {
+    this.mediaConfigDoc = null;
+    this.mediaSubscribers.forEach((fn) => fn(null));
+  }
+
+  public subscribeSystemMediaConfig(
+    onUpdate: (config: SystemMediaConfigDocument | null) => void
+  ): () => void {
+    this.mediaSubscribers.add(onUpdate);
+    onUpdate(this.mediaConfigDoc ? JSON.parse(JSON.stringify(this.mediaConfigDoc)) : null);
+    return () => {
+      this.mediaSubscribers.delete(onUpdate);
+    };
+  }
+
+  public async uploadVideoBinary(
+    storagePath: string,
+    data: ArrayBuffer | Uint8Array,
+    contentType: string
+  ): Promise<{ storagePath: string }> {
+    if (this.failNextStorageUpload) {
+      this.failNextStorageUpload = false;
+      throw new Error('Mô phỏng lỗi tải video lên Storage.');
+    }
+    const buf: ArrayBuffer =
+      data instanceof Uint8Array ? (data.slice().buffer as ArrayBuffer) : data.slice(0);
+    this.videoFiles.set(storagePath, { data: buf, contentType });
+    this.operationLog.push(`VIDEO_UPLOAD_OK:${storagePath}`);
+    return { storagePath };
+  }
+
+  public async deleteVideoBinary(storagePath: string): Promise<void> {
+    this.videoFiles.delete(storagePath);
+    this.operationLog.push(`VIDEO_DELETE_OK:${storagePath}`);
+  }
+
+  public async fetchVideoPlaybackUrl(storagePath: string): Promise<string> {
+    if (storagePath === 'intro-bantank.mp4') return './intro-bantank.mp4';
+    if (!this.videoFiles.has(storagePath)) {
+      throw new Error(`Không tìm thấy video ${storagePath}.`);
+    }
+    return `blob:inmemory/${storagePath}`;
+  }
+
   public hasStorageFile(path: string): boolean {
-    return this.staticFiles.has(path);
+    return this.staticFiles.has(path) || this.videoFiles.has(path);
   }
 
   public getSubscriberCount(): number {
@@ -1064,9 +1444,11 @@ export class MusicManager {
   private rawBlobs: Map<string, ArrayBuffer> = new Map();
 
   private assignments: MusicScopeAssignments = {
+    homeTrackId: null,
     globalTrackId: null,
     modeTracks: {
       SOLO: null,
+      COOP_AI: null,
       TWO_PLAYER: null,
     },
     stageTracks: {},
@@ -1081,7 +1463,7 @@ export class MusicManager {
     silenceThresholdDb: -48,
   };
 
-  private currentRole: UserRole = 'PLAYER'; // Strict default: PLAYER unless authenticated as Super Admin
+  private currentRole: UserRole = 'PLAYER'; // Strict default: PLAYER unless authenticated as Admin
 
   // Playback runtime state
   private activeContext: { stageId: number; mode: GameModeScope } = { stageId: 1, mode: 'SOLO' };
@@ -1103,6 +1485,7 @@ export class MusicManager {
   // M7.3.3 Shared Static GitHub Pages + Firestore Config Sync State
   private cloudAdapter: SharedMusicCloudAdapter = new FirebaseSharedMusicCloudAdapter();
   private sharedAudioConfig: SystemAudioConfigDocument | null = null;
+  private sharedMediaConfig: SystemMediaConfigDocument | null = null;
   private stagedAudioPackage: StagedAudioPackage | null = null;
   private stagedPackageBinary: ArrayBuffer | null = null;
   private stagedDecodedBuffer: {
@@ -1113,7 +1496,14 @@ export class MusicManager {
   } | null = null;
   private unsubSharedConfig: (() => void) | null = null;
   private unsubSoundCatalog: (() => void) | null = null;
+  private unsubSharedMediaConfig: (() => void) | null = null;
   private soundCatalog: Map<string, SoundCatalogEntry> = new Map();
+  private loadingTrackPromises: Map<string, Promise<boolean>> = new Map();
+  private homeVideoUrl: string | null = null;
+  private homeVideoObjectUrl: string | null = null;
+  private homeVideoLoading: boolean = false;
+  private homeVideoError: string | null = null;
+  private homeVideoFetchToken: number = 0;
   private subscribedSharedUserUid: string | null = null;
   private loadedSharedVersion: number = 0;
   private loadedSharedAssetPath: string = '';
@@ -1163,7 +1553,12 @@ export class MusicManager {
     this.cloudAdapter = adapter;
     this.customBufferDecoder = customDecoder ?? null;
     this.sharedAudioConfig = null;
+    this.sharedMediaConfig = null;
     this.soundCatalog.clear();
+    this.loadingTrackPromises.clear();
+    this.revokeHomeVideoObjectUrl();
+    this.homeVideoUrl = null;
+    this.homeVideoError = null;
     this.stagedAudioPackage = null;
     this.stagedPackageBinary = null;
     this.stagedDecodedBuffer = null;
@@ -1174,6 +1569,10 @@ export class MusicManager {
 
   public getSharedAudioConfig(): SystemAudioConfigDocument | null {
     return this.sharedAudioConfig ? { ...this.sharedAudioConfig } : null;
+  }
+
+  public getSharedMediaConfig(): SystemMediaConfigDocument | null {
+    return this.sharedMediaConfig ? JSON.parse(JSON.stringify(this.sharedMediaConfig)) : null;
   }
 
   public getSoundCatalog(): SoundCatalogEntry[] {
@@ -1315,7 +1714,12 @@ export class MusicManager {
       this.assignments.globalTrackId = null;
     }
     this.sharedAudioConfig = null;
+    this.sharedMediaConfig = null;
     this.soundCatalog.clear();
+    this.loadingTrackPromises.clear();
+    this.revokeHomeVideoObjectUrl();
+    this.homeVideoUrl = null;
+    this.homeVideoError = null;
     this.stagedAudioPackage = null;
     this.stagedPackageBinary = null;
     this.stagedDecodedBuffer = null;
@@ -1360,6 +1764,8 @@ export class MusicManager {
           for (const item of entries) {
             this.soundCatalog.set(item.soundId, item);
           }
+          this.syncCatalogIntoTracks();
+          this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
           this.notify();
         },
         (err) => {
@@ -1367,6 +1773,24 @@ export class MusicManager {
             err,
             'tải danh mục âm thanh hệ thống',
             'sound_catalog'
+          );
+          if (formatted.toLowerCase().includes('từ chối quyền') || formatted.toLowerCase().includes('permission')) {
+            this.sharedSyncError = formatted;
+            this.notify();
+          }
+        }
+      );
+    }
+    if (this.cloudAdapter.subscribeSystemMediaConfig) {
+      this.unsubSharedMediaConfig = this.cloudAdapter.subscribeSystemMediaConfig(
+        (mediaConfig) => {
+          void this.applySharedMediaConfigSnapshot(mediaConfig);
+        },
+        (err) => {
+          const formatted = formatMusicCloudError(
+            err,
+            'đồng bộ cấu hình Media toàn hệ thống',
+            'system_config/media'
           );
           if (formatted.toLowerCase().includes('từ chối quyền') || formatted.toLowerCase().includes('permission')) {
             this.sharedSyncError = formatted;
@@ -1393,6 +1817,14 @@ export class MusicManager {
         // ignore
       }
       this.unsubSoundCatalog = null;
+    }
+    if (this.unsubSharedMediaConfig) {
+      try {
+        this.unsubSharedMediaConfig();
+      } catch {
+        // ignore
+      }
+      this.unsubSharedMediaConfig = null;
     }
     this.subscribedSharedUserUid = null;
   }
@@ -1671,6 +2103,34 @@ export class MusicManager {
 
     const ext = ALLOWED_EXTENSIONS.find((e) => lowerName.endsWith(e))?.replace('.', '').toUpperCase() || 'AUDIO';
     return { valid: true, detectedFormat: ext };
+  }
+
+  public static validateVideoFileBasic(file: {
+    name: string;
+    type: string;
+    size: number;
+  }): ValidationCheckResult {
+    if (!file || !file.name) {
+      return { valid: false, error: 'File video không tồn tại hoặc thiếu tên file.' };
+    }
+    if (file.size <= 0) {
+      return { valid: false, error: 'File video rỗng (0 bytes).' };
+    }
+    if (file.size > MAX_VIDEO_FILE_SIZE_BYTES) {
+      return {
+        valid: false,
+        error: `Dung lượng video vượt quá 100 MB (${(file.size / (1024 * 1024)).toFixed(1)} MB).`,
+      };
+    }
+    const lowerName = file.name.toLowerCase();
+    const mime = (file.type || '').toLowerCase();
+    if (!lowerName.endsWith('.mp4') || (mime && mime !== 'video/mp4')) {
+      return {
+        valid: false,
+        error: `Định dạng video không hợp lệ (${file.name}). Chỉ chấp nhận file .mp4 (video/mp4).`,
+      };
+    }
+    return { valid: true, detectedFormat: 'MP4' };
   }
 
   /**
@@ -2359,7 +2819,8 @@ export class MusicManager {
 
     const nowMs = Math.round(params.nowMs ?? Date.now());
     const nextVersion = Math.max(1, Math.round((previousConfig?.version ?? 0) + 1));
-    const soundId = (params.soundId || `snd_${nowMs}`).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64);
+    const randomSuffix = Math.random().toString(36).slice(2, 7);
+    const soundId = (params.soundId || `snd_${nowMs}_${randomSuffix}`).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64);
     const normalizedFileName = normalizeSafeAudioFileName(params.fileName, nextVersion);
     const storagePath = `${SOUND_CATALOG_STORAGE_PREFIX}${soundId}/v${nextVersion}/${normalizedFileName}`;
 
@@ -2430,6 +2891,7 @@ export class MusicManager {
       } else {
         this.audioBuffers.set(soundId, params.decodedBuffer as unknown as AudioBuffer);
       }
+      this.syncCatalogIntoTracks();
     } catch (catErr: any) {
       this.isCloudSyncInProgress = false;
       const errMsg = formatMusicCloudError(
@@ -2461,7 +2923,86 @@ export class MusicManager {
     return {
       success: true,
       entry,
+      track: this.tracks.get(soundId),
     };
+  }
+
+  /**
+   * Cho phép Admin tải lên nhiều file âm thanh cùng lúc vào thư viện /sound_catalog
+   * để chọn gán cho Trang chủ, Chế độ chơi (Solo, 2 - AI, 2P) và từng Stage.
+   */
+  public async uploadMultipleAudioFiles(
+    files: File[],
+    options?: { autoActivateSingle?: boolean }
+  ): Promise<{
+    uploaded: SoundCatalogEntry[];
+    failed: Array<{ fileName: string; error: string }>;
+  }> {
+    const uploaded: SoundCatalogEntry[] = [];
+    const failed: Array<{ fileName: string; error: string }> = [];
+    if (!this.canManageMusic()) {
+      return {
+        uploaded,
+        failed: files.map((f) => ({
+          fileName: f.name,
+          error: `Chỉ Admin (${ADMIN_EMAIL}) mới có quyền tải lên âm thanh.`,
+        })),
+      };
+    }
+
+    for (const file of files) {
+      const stageRes = await this.stageAudioFileForGitHubPages(file);
+      if (!stageRes.success || !stageRes.stagedPackage) {
+        failed.push({
+          fileName: file.name,
+          error: stageRes.error || 'File âm thanh không hợp lệ.',
+        });
+        continue;
+      }
+
+      if (this.cloudAdapter instanceof InMemorySharedMusicCloudAdapter && this.stagedPackageBinary && this.stagedDecodedBuffer) {
+        const res = await this.uploadAndCatalogAudioBuffer({
+          fileName: stageRes.stagedPackage.normalizedFileName,
+          displayName: stageRes.stagedPackage.displayName,
+          contentType: stageRes.stagedPackage.contentType,
+          fileSize: stageRes.stagedPackage.fileSize,
+          decodedBuffer: this.stagedDecodedBuffer,
+          arrayBuffer: this.stagedPackageBinary,
+          autoActivate: Boolean(options?.autoActivateSingle && files.length === 1),
+        });
+        if (res.success && res.entry) {
+          uploaded.push(res.entry);
+        } else {
+          failed.push({ fileName: file.name, error: res.error || 'Không thể tải lên danh mục.' });
+        }
+      } else if (this.stagedPackageBinary && this.stagedDecodedBuffer) {
+        const res = await this.uploadAndCatalogAudioBuffer({
+          fileName: stageRes.stagedPackage.normalizedFileName,
+          displayName: stageRes.stagedPackage.displayName,
+          contentType: stageRes.stagedPackage.contentType,
+          fileSize: stageRes.stagedPackage.fileSize,
+          decodedBuffer: this.stagedDecodedBuffer,
+          arrayBuffer: this.stagedPackageBinary,
+          autoActivate: Boolean(options?.autoActivateSingle && files.length === 1),
+        });
+        if (res.success && res.entry) {
+          uploaded.push(res.entry);
+        } else {
+          failed.push({ fileName: file.name, error: res.error || 'Không thể tải lên Firebase Storage.' });
+        }
+      }
+    }
+
+    // Dọn gói nháp sau khi upload lô
+    this.tracks.delete(STAGED_LOCAL_PREVIEW_BGM_ID);
+    this.audioBuffers.delete(STAGED_LOCAL_PREVIEW_BGM_ID);
+    this.rawBlobs.delete(STAGED_LOCAL_PREVIEW_BGM_ID);
+    this.stagedAudioPackage = null;
+    this.stagedPackageBinary = null;
+    this.stagedDecodedBuffer = null;
+    this.syncCatalogIntoTracks();
+    this.notify();
+    return { uploaded, failed };
   }
 
   /**
@@ -2628,9 +3169,41 @@ export class MusicManager {
         await this.cloudAdapter.deleteSoundCatalogEntry(soundId);
       }
       this.soundCatalog.delete(soundId);
+      this.tracks.delete(soundId);
+      this.audioBuffers.delete(soundId);
+      this.rawBlobs.delete(soundId);
+
+      // Gỡ khỏi các phạm vi gán nếu đang tham chiếu soundId vừa xóa
+      let assignmentsChanged = false;
+      if (this.assignments.homeTrackId === soundId) {
+        this.assignments.homeTrackId = null;
+        assignmentsChanged = true;
+      }
+      if (this.assignments.globalTrackId === soundId) {
+        this.assignments.globalTrackId = null;
+        assignmentsChanged = true;
+      }
+      (['SOLO', 'COOP_AI', 'TWO_PLAYER'] as const).forEach((m) => {
+        if (this.assignments.modeTracks[m] === soundId) {
+          this.assignments.modeTracks[m] = null;
+          assignmentsChanged = true;
+        }
+      });
+      for (const stKey of Object.keys(this.assignments.stageTracks)) {
+        const stNum = Number(stKey);
+        if (this.assignments.stageTracks[stNum] === soundId) {
+          delete this.assignments.stageTracks[stNum];
+          assignmentsChanged = true;
+        }
+      }
+      if (assignmentsChanged && this.sharedMediaConfig) {
+        await this.saveMediaConfigToCloud().catch(() => {});
+      }
+
       if (this.sharedAudioConfig?.soundId === soundId || (entry && this.sharedAudioConfig?.assetPath === entry.storagePath)) {
         await this.removeSharedSystemAudio();
       }
+      this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
       this.notify();
       return { success: true };
     } catch (err: any) {
@@ -3079,6 +3652,632 @@ export class MusicManager {
   }
 
   /**
+   * Đồng bộ các bài nhạc BGM từ `/sound_catalog` vào `this.tracks` để chọn gán cho Trang chủ,
+   * Chế độ chơi và từng Stage cụ thể.
+   */
+  private syncCatalogIntoTracks(): void {
+    const validCatalogIds = new Set<string>();
+    for (const entry of this.soundCatalog.values()) {
+      if (entry.category && entry.category !== 'BGM') continue;
+      validCatalogIds.add(entry.soundId);
+      const existingMeta = this.tracks.get(entry.soundId);
+      const safeDuration = Number.isFinite(entry.durationSec) && entry.durationSec > 0 ? entry.durationSec : 1;
+      const trimStart = Number.isFinite(entry.trimStartSec) && entry.trimStartSec >= 0 ? entry.trimStartSec : 0;
+      const trimEnd =
+        Number.isFinite(entry.trimEndSec) && entry.trimEndSec > trimStart && entry.trimEndSec <= safeDuration
+          ? entry.trimEndSec
+          : safeDuration;
+      this.tracks.set(entry.soundId, {
+        id: entry.soundId,
+        displayName: entry.displayName || entry.fileName.replace(/\.(mp3|ogg|wav|m4a|aac|webm)$/i, ''),
+        fileName: entry.fileName,
+        mimeType: entry.contentType || 'audio/mpeg',
+        sizeBytes: entry.fileSize,
+        durationSec: safeDuration,
+        uploadedAt: entry.updatedAt,
+        trimBounds: existingMeta?.trimBounds ?? {
+          trimStartSec: trimStart,
+          trimEndSec: trimEnd,
+          effectiveDurationSec: Math.max(0.1, Number((trimEnd - trimStart).toFixed(4))),
+          leadingSilenceDetectedSec: trimStart,
+          trailingSilenceDetectedSec: Math.max(0, Number((safeDuration - trimEnd).toFixed(4))),
+        },
+        storageProvider: 'FIREBASE_STORAGE_READY',
+        storagePathOrUrl: entry.storagePath,
+      });
+    }
+
+    // Dọn các track cũ từng tạo từ soundCatalog nhưng nay đã bị xóa trên Firestore
+    for (const [trackId, meta] of Array.from(this.tracks.entries())) {
+      if (
+        trackId !== SHARED_SYSTEM_BGM_ID &&
+        trackId !== STAGED_LOCAL_PREVIEW_BGM_ID &&
+        meta.storageProvider === 'FIREBASE_STORAGE_READY' &&
+        !validCatalogIds.has(trackId)
+      ) {
+        this.tracks.delete(trackId);
+        this.audioBuffers.delete(trackId);
+        this.rawBlobs.delete(trackId);
+      }
+    }
+  }
+
+  /**
+   * Tải và giải mã bất đồng bộ file âm thanh từ Firebase Storage cho 1 bài trong `/sound_catalog`
+   * khi bài đó được gán vào Trang chủ, Chế độ chơi hoặc Stage.
+   */
+  private async ensureCatalogTrackBufferLoaded(trackId: string): Promise<boolean> {
+    if (this.audioBuffers.has(trackId)) return true;
+    const entry = this.soundCatalog.get(trackId);
+    if (!entry) return false;
+
+    const existingPromise = this.loadingTrackPromises.get(trackId);
+    if (existingPromise) {
+      return await existingPromise;
+    }
+
+    const loadTask = (async () => {
+      try {
+        let arrayBuffer: ArrayBuffer;
+        try {
+          arrayBuffer = await this.cloudAdapter.fetchAudioBinary(entry.storagePath, entry.version);
+        } catch (fetchErr) {
+          if (entry.audioDataUrl && entry.audioDataUrl.startsWith('data:audio/')) {
+            const commaIdx = entry.audioDataUrl.indexOf(',');
+            const b64 = commaIdx >= 0 ? entry.audioDataUrl.slice(commaIdx + 1) : '';
+            const binStr = typeof atob === 'function' ? atob(b64) : Buffer.from(b64, 'base64').toString('binary');
+            const bytes = new Uint8Array(binStr.length);
+            for (let i = 0; i < binStr.length; i++) {
+              bytes[i] = binStr.charCodeAt(i);
+            }
+            arrayBuffer = bytes.buffer;
+          } else {
+            throw fetchErr;
+          }
+        }
+
+        let decodedBuffer: {
+          duration: number;
+          sampleRate: number;
+          numberOfChannels: number;
+          getChannelData: (channel: number) => Float32Array;
+        } | null = null;
+        if (this.customBufferDecoder) {
+          decodedBuffer = await this.customBufferDecoder(arrayBuffer.slice(0));
+        } else {
+          const ctx = SoundManager.getInstance().initContext();
+          if (ctx) {
+            decodedBuffer = await ctx.decodeAudioData(arrayBuffer.slice(0));
+          }
+        }
+        if (!decodedBuffer || decodedBuffer.duration <= 0) {
+          return false;
+        }
+
+        const trimBounds = MusicManager.analyzeSilenceBounds(
+          decodedBuffer,
+          this.loopConfig.silenceThresholdDb
+        );
+        const existingMeta = this.tracks.get(trackId);
+        if (existingMeta) {
+          this.tracks.set(trackId, {
+            ...existingMeta,
+            durationSec: Number(decodedBuffer.duration.toFixed(2)),
+            trimBounds,
+          });
+        }
+        if (typeof AudioBuffer !== 'undefined' && decodedBuffer instanceof AudioBuffer) {
+          this.audioBuffers.set(trackId, decodedBuffer);
+        } else {
+          this.audioBuffers.set(trackId, decodedBuffer as unknown as AudioBuffer);
+        }
+        this.rawBlobs.set(trackId, arrayBuffer);
+        return true;
+      } catch (err) {
+        this.sharedSyncError = formatMusicCloudError(
+          err,
+          `tải nhạc "${entry.displayName}"`,
+          entry.storagePath
+        );
+        this.notify();
+        return false;
+      } finally {
+        this.loadingTrackPromises.delete(trackId);
+      }
+    })();
+
+    this.loadingTrackPromises.set(trackId, loadTask);
+    return await loadTask;
+  }
+
+  private revokeHomeVideoObjectUrl(): void {
+    if (this.homeVideoObjectUrl && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+      try {
+        URL.revokeObjectURL(this.homeVideoObjectUrl);
+      } catch {
+        // ignore
+      }
+    }
+    this.homeVideoObjectUrl = null;
+  }
+
+  private async resolveHomeVideoPlaybackUrl(
+    videoConfig: HomeBackgroundVideoConfig | null
+  ): Promise<void> {
+    const token = ++this.homeVideoFetchToken;
+    if (!videoConfig || !videoConfig.isEnabled || !videoConfig.storagePath) {
+      this.revokeHomeVideoObjectUrl();
+      this.homeVideoUrl = null;
+      this.homeVideoLoading = false;
+      this.homeVideoError = null;
+      this.notify();
+      return;
+    }
+
+    const pathCheck = validateSafeVideoStoragePath(videoConfig.storagePath);
+    if (!pathCheck.valid || !pathCheck.normalizedPath) {
+      this.revokeHomeVideoObjectUrl();
+      this.homeVideoUrl = null;
+      this.homeVideoLoading = false;
+      this.homeVideoError = pathCheck.error || 'Đường dẫn video nền không hợp lệ.';
+      this.notify();
+      return;
+    }
+
+    if (pathCheck.normalizedPath === 'intro-bantank.mp4') {
+      this.revokeHomeVideoObjectUrl();
+      this.homeVideoUrl = './intro-bantank.mp4';
+      this.homeVideoLoading = false;
+      this.homeVideoError = null;
+      this.notify();
+      return;
+    }
+
+    this.homeVideoLoading = true;
+    this.homeVideoError = null;
+    this.notify();
+
+    try {
+      if (!this.cloudAdapter.fetchVideoPlaybackUrl) {
+        throw new Error('Adapter tải video chưa khả dụng.');
+      }
+      const nextUrl = await this.cloudAdapter.fetchVideoPlaybackUrl(pathCheck.normalizedPath);
+      if (token !== this.homeVideoFetchToken) {
+        if (nextUrl.startsWith('blob:') && typeof URL !== 'undefined') {
+          try {
+            URL.revokeObjectURL(nextUrl);
+          } catch {
+            // ignore
+          }
+        }
+        return;
+      }
+      this.revokeHomeVideoObjectUrl();
+      if (nextUrl.startsWith('blob:')) {
+        this.homeVideoObjectUrl = nextUrl;
+      }
+      this.homeVideoUrl = nextUrl;
+      this.homeVideoLoading = false;
+      this.homeVideoError = null;
+      this.notify();
+    } catch (err: unknown) {
+      if (token !== this.homeVideoFetchToken) return;
+      this.homeVideoLoading = false;
+      this.homeVideoError = formatMusicCloudError(
+        err,
+        'tải video nền Trang chủ',
+        pathCheck.normalizedPath
+      );
+      this.notify();
+    }
+  }
+
+  public async applySharedMediaConfigSnapshot(
+    config: SystemMediaConfigDocument | null
+  ): Promise<void> {
+    const previousVideoPath = this.sharedMediaConfig?.homeVideo?.storagePath ?? null;
+    const previousVideoEnabled = this.sharedMediaConfig?.homeVideo?.isEnabled ?? false;
+    this.sharedMediaConfig = config ? JSON.parse(JSON.stringify(config)) : null;
+
+    if (!config) {
+      this.revokeHomeVideoObjectUrl();
+      this.homeVideoUrl = null;
+      this.homeVideoLoading = false;
+      this.homeVideoError = null;
+      this.notify();
+      return;
+    }
+
+    if (config.loopConfig) {
+      this.loopConfig = {
+        ...this.loopConfig,
+        ...config.loopConfig,
+      };
+    }
+
+    const stageMap: Record<number, string | null> = {};
+    if (config.stageSoundIds && typeof config.stageSoundIds === 'object') {
+      for (const [k, v] of Object.entries(config.stageSoundIds)) {
+        const sid = Number(k);
+        if (Number.isInteger(sid) && sid >= 1 && typeof v === 'string' && v.trim()) {
+          stageMap[sid] = v;
+        }
+      }
+    }
+
+    this.assignments = {
+      homeTrackId: config.homeSoundId ?? null,
+      globalTrackId: config.globalSoundId ?? null,
+      modeTracks: {
+        SOLO: config.modeSoundIds?.SOLO ?? null,
+        COOP_AI: config.modeSoundIds?.COOP_AI ?? null,
+        TWO_PLAYER: config.modeSoundIds?.TWO_PLAYER ?? null,
+      },
+      stageTracks: stageMap,
+    };
+
+    const nextVideoPath = config.homeVideo?.storagePath ?? null;
+    const nextVideoEnabled = config.homeVideo?.isEnabled ?? false;
+    if (
+      nextVideoPath !== previousVideoPath ||
+      nextVideoEnabled !== previousVideoEnabled ||
+      (nextVideoEnabled && !this.homeVideoUrl)
+    ) {
+      void this.resolveHomeVideoPlaybackUrl(config.homeVideo ?? null);
+    }
+
+    // Nạp trước các file nhạc đang được gán nếu có trong catalog
+    const preloadIds = new Set<string>();
+    if (this.assignments.homeTrackId) preloadIds.add(this.assignments.homeTrackId);
+    if (this.assignments.globalTrackId) preloadIds.add(this.assignments.globalTrackId);
+    if (this.assignments.modeTracks.SOLO) preloadIds.add(this.assignments.modeTracks.SOLO);
+    if (this.assignments.modeTracks.COOP_AI) preloadIds.add(this.assignments.modeTracks.COOP_AI);
+    if (this.assignments.modeTracks.TWO_PLAYER) preloadIds.add(this.assignments.modeTracks.TWO_PLAYER);
+    Object.values(this.assignments.stageTracks).forEach((id) => {
+      if (id) preloadIds.add(id);
+    });
+    for (const id of preloadIds) {
+      if (this.soundCatalog.has(id) && !this.audioBuffers.has(id)) {
+        void this.ensureCatalogTrackBufferLoaded(id).then((loaded) => {
+          if (loaded && !this.isPaused && this.activeTrackId === id) {
+            this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
+          }
+        });
+      }
+    }
+
+    this.savePersistedState();
+    this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
+    this.notify();
+  }
+
+  public async saveMediaConfigToCloud(
+    nowMs?: number,
+    overrideHomeVideo?: HomeBackgroundVideoConfig | null | undefined
+  ): Promise<{
+    success: boolean;
+    config?: SystemMediaConfigDocument;
+    error?: string;
+  }> {
+    if (!this.canManageMusic()) {
+      return {
+        success: false,
+        error: `Chỉ Admin (${ADMIN_EMAIL}) mới có quyền cập nhật cấu hình Media toàn hệ thống.`,
+      };
+    }
+    if (!this.cloudAdapter.saveSystemMediaConfig) {
+      return {
+        success: false,
+        error: 'Cloud Adapter chưa hỗ trợ lưu cấu hình /system_config/media.',
+      };
+    }
+
+    let remoteExisting: SystemMediaConfigDocument | null = this.sharedMediaConfig;
+    if (!remoteExisting && this.cloudAdapter.getSystemMediaConfig) {
+      try {
+        remoteExisting = await this.cloudAdapter.getSystemMediaConfig();
+      } catch (readErr) {
+        const msg = formatMusicCloudError(
+          readErr,
+          'kiểm tra cấu hình Media hiện tại',
+          'system_config/media'
+        );
+        this.sharedSyncError = msg;
+        this.notify();
+        return { success: false, error: msg };
+      }
+    }
+
+    const nextVersion = Math.max(
+      1,
+      Math.round((remoteExisting?.version ?? this.sharedMediaConfig?.version ?? 0) + 1)
+    );
+    const stageSoundIds: Record<string, string> = {};
+    for (const [k, v] of Object.entries(this.assignments.stageTracks)) {
+      if (typeof v === 'string' && v.trim()) {
+        stageSoundIds[String(k)] = v;
+      }
+    }
+
+    const sanitizeIdOrNull = (val: string | null | undefined): string | null =>
+      typeof val === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(val) ? val : null;
+
+    const cleanLoopConfig: LoopPlaybackConfig = {
+      loop: Boolean(this.loopConfig.loop),
+      skipSilence: Boolean(this.loopConfig.skipSilence),
+      seamlessLoop: Boolean(this.loopConfig.seamlessLoop),
+      crossfade: Boolean(this.loopConfig.crossfade),
+      crossfadeDurationSec: Number(
+        Math.max(0.05, Math.min(5.0, this.loopConfig.crossfadeDurationSec || 0.8)).toFixed(2)
+      ),
+      silenceThresholdDb: Number(
+        Math.max(-96, Math.min(-10, this.loopConfig.silenceThresholdDb || -48))
+      ),
+    };
+
+    const nextHomeVideo =
+      overrideHomeVideo !== undefined
+        ? overrideHomeVideo
+        : (this.sharedMediaConfig?.homeVideo ?? remoteExisting?.homeVideo ?? null);
+
+    const nextConfig: SystemMediaConfigDocument = {
+      homeSoundId: sanitizeIdOrNull(this.assignments.homeTrackId),
+      globalSoundId: sanitizeIdOrNull(this.assignments.globalTrackId),
+      modeSoundIds: {
+        SOLO: sanitizeIdOrNull(this.assignments.modeTracks.SOLO),
+        COOP_AI: sanitizeIdOrNull(this.assignments.modeTracks.COOP_AI),
+        TWO_PLAYER: sanitizeIdOrNull(this.assignments.modeTracks.TWO_PLAYER),
+      },
+      stageSoundIds,
+      loopConfig: cleanLoopConfig,
+      homeVideo: nextHomeVideo ? { ...nextHomeVideo } : null,
+      updatedAt: Math.round(nowMs ?? Date.now()),
+      updatedBy: ADMIN_EMAIL,
+      version: nextVersion,
+    };
+
+    this.isCloudSyncInProgress = true;
+    this.sharedSyncError = null;
+    this.notify();
+
+    try {
+      await this.cloudAdapter.saveSystemMediaConfig(nextConfig);
+      this.sharedMediaConfig = JSON.parse(JSON.stringify(nextConfig));
+      this.isCloudSyncInProgress = false;
+      this.sharedSyncError = null;
+      this.savePersistedState();
+      this.notify();
+      return { success: true, config: nextConfig };
+    } catch (err) {
+      this.isCloudSyncInProgress = false;
+      const errMsg = formatMusicCloudError(
+        err,
+        'lưu cấu hình Media toàn hệ thống',
+        'system_config/media'
+      );
+      this.sharedSyncError = errMsg;
+      this.notify();
+      return { success: false, error: errMsg };
+    }
+  }
+
+  /**
+   * Kích hoạt cấu hình vòng lặp liên tục (áp dụng cho Nhạc nền Trang chủ & Nhạc nền Stage)
+   * và đồng bộ toàn hệ thống qua Firestore `/system_config/media`.
+   */
+  public async activateLoopConfigSystemWide(
+    nowMs?: number
+  ): Promise<{ success: boolean; config?: SystemMediaConfigDocument; error?: string }> {
+    const res = await this.saveMediaConfigToCloud(nowMs);
+    if (res.success && this.activeTrackId && this.isPlaying && !this.isPaused) {
+      this.stopAllCustomSources();
+      this.startTrackBufferPlayback(this.activeTrackId);
+    }
+    return res;
+  }
+
+  /**
+   * Kích hoạt & đồng bộ toàn bộ gán nhạc Trang chủ, Chế độ chơi (Solo, 2 - AI, 2P) và từng Stage
+   * lên Firestore `/system_config/media` cho toàn bộ người chơi.
+   */
+  public async activateMediaAssignmentsSystemWide(
+    nowMs?: number
+  ): Promise<{ success: boolean; config?: SystemMediaConfigDocument; error?: string }> {
+    const res = await this.saveMediaConfigToCloud(nowMs);
+    if (res.success) {
+      this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
+    }
+    return res;
+  }
+
+  public getHomeVideoConfig(): HomeBackgroundVideoConfig | null {
+    return this.sharedMediaConfig?.homeVideo ? { ...this.sharedMediaConfig.homeVideo } : null;
+  }
+
+  public getHomeVideoUrl(): string | null {
+    return this.homeVideoUrl;
+  }
+
+  public isHomeVideoLoading(): boolean {
+    return this.homeVideoLoading;
+  }
+
+  public getHomeVideoError(): string | null {
+    return this.homeVideoError;
+  }
+
+  /**
+   * Upload file video nền Trang chủ (.mp4) lên Firebase Storage (`video_catalog/{videoId}/v{version}/{fileName}`)
+   * và lưu cấu hình opacity + loop lên Firestore `/system_config/media`.
+   */
+  public async uploadHomeBackgroundVideo(
+    file: File,
+    options?: { opacity?: number; loop?: boolean; displayName?: string; nowMs?: number }
+  ): Promise<{
+    success: boolean;
+    homeVideo?: HomeBackgroundVideoConfig;
+    error?: string;
+  }> {
+    if (!this.canManageMusic()) {
+      return {
+        success: false,
+        error: `Chỉ Admin (${ADMIN_EMAIL}) mới có quyền tải lên video nền Trang chủ.`,
+      };
+    }
+    const check = MusicManager.validateVideoFileBasic(file);
+    if (!check.valid) {
+      return { success: false, error: check.error };
+    }
+    if (!this.cloudAdapter.uploadVideoBinary) {
+      return { success: false, error: 'Adapter chưa hỗ trợ tải lên video.' };
+    }
+
+    const prevVideo = this.sharedMediaConfig?.homeVideo ?? null;
+    const nowMs = Math.round(options?.nowMs ?? Date.now());
+    const nextVersion = Math.max(1, Math.round((prevVideo?.version ?? 0) + 1));
+    const randomSuffix = Math.random().toString(36).slice(2, 6);
+    const videoId = `vid_${nowMs}_${randomSuffix}`.slice(0, 64);
+    const safeFileName = normalizeSafeVideoFileName(file.name);
+    const storagePath = `${VIDEO_CATALOG_STORAGE_PREFIX}${videoId}/v${nextVersion}/${safeFileName}`;
+    const displayName =
+      (options?.displayName || file.name.replace(/\.mp4$/i, '')).trim().slice(0, 120) ||
+      'Video Nền Trang Chủ';
+    const opacity = Number(
+      Math.max(0.05, Math.min(1.0, options?.opacity ?? prevVideo?.opacity ?? 0.35)).toFixed(2)
+    );
+    const loop = options?.loop ?? prevVideo?.loop ?? true;
+
+    this.isCloudSyncInProgress = true;
+    this.sharedSyncError = null;
+    this.notify();
+
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      await this.cloudAdapter.uploadVideoBinary(storagePath, arrayBuffer, 'video/mp4');
+
+      const homeVideo: HomeBackgroundVideoConfig = {
+        videoId,
+        displayName,
+        fileName: safeFileName,
+        storagePath,
+        contentType: 'video/mp4',
+        fileSize: Math.round(file.size),
+        version: nextVersion,
+        opacity,
+        loop: Boolean(loop),
+        isEnabled: true,
+      };
+
+      const saveRes = await this.saveMediaConfigToCloud(nowMs, homeVideo);
+      if (!saveRes.success) {
+        if (this.cloudAdapter.deleteVideoBinary) {
+          await this.cloudAdapter.deleteVideoBinary(storagePath).catch(() => {});
+        }
+        return { success: false, error: saveRes.error };
+      }
+
+      if (prevVideo?.storagePath && prevVideo.storagePath !== storagePath && this.cloudAdapter.deleteVideoBinary) {
+        await this.cloudAdapter.deleteVideoBinary(prevVideo.storagePath).catch(() => {});
+      }
+
+      await this.resolveHomeVideoPlaybackUrl(homeVideo);
+      return { success: true, homeVideo };
+    } catch (err) {
+      this.isCloudSyncInProgress = false;
+      const errMsg = formatMusicCloudError(err, 'tải lên video nền .mp4', storagePath);
+      this.sharedSyncError = errMsg;
+      this.notify();
+      return { success: false, error: errMsg };
+    }
+  }
+
+  /**
+   * Kích hoạt video intro tĩnh có sẵn (`./intro-bantank.mp4`) làm video nền Trang chủ.
+   */
+  public async activateStaticIntroVideo(options?: {
+    opacity?: number;
+    loop?: boolean;
+    nowMs?: number;
+  }): Promise<{ success: boolean; homeVideo?: HomeBackgroundVideoConfig; error?: string }> {
+    if (!this.canManageMusic()) {
+      return {
+        success: false,
+        error: `Chỉ Admin (${ADMIN_EMAIL}) mới có quyền kích hoạt video nền Trang chủ.`,
+      };
+    }
+    const prevVideo = this.sharedMediaConfig?.homeVideo ?? null;
+    const nextVersion = Math.max(1, Math.round((prevVideo?.version ?? 0) + 1));
+    const homeVideo: HomeBackgroundVideoConfig = {
+      videoId: 'intro_bantank_static',
+      displayName: 'Video Intro Bắn Tank',
+      fileName: 'intro-bantank.mp4',
+      storagePath: 'intro-bantank.mp4',
+      contentType: 'video/mp4',
+      fileSize: 5872025,
+      version: nextVersion,
+      opacity: Number(Math.max(0.05, Math.min(1.0, options?.opacity ?? prevVideo?.opacity ?? 0.35)).toFixed(2)),
+      loop: options?.loop ?? prevVideo?.loop ?? true,
+      isEnabled: true,
+    };
+    const saveRes = await this.saveMediaConfigToCloud(options?.nowMs, homeVideo);
+    if (!saveRes.success) {
+      return { success: false, error: saveRes.error };
+    }
+    await this.resolveHomeVideoPlaybackUrl(homeVideo);
+    return { success: true, homeVideo };
+  }
+
+  public async updateHomeVideoSettings(
+    partial: { opacity?: number; loop?: boolean; isEnabled?: boolean },
+    nowMs?: number
+  ): Promise<{ success: boolean; homeVideo?: HomeBackgroundVideoConfig; error?: string }> {
+    if (!this.canManageMusic()) {
+      return {
+        success: false,
+        error: `Chỉ Admin (${ADMIN_EMAIL}) mới có quyền cấu hình video nền.`,
+      };
+    }
+    const existing = this.sharedMediaConfig?.homeVideo;
+    if (!existing) {
+      return { success: false, error: 'Chưa có video nền Trang chủ nào được tải lên.' };
+    }
+    const updated: HomeBackgroundVideoConfig = {
+      ...existing,
+      opacity:
+        partial.opacity !== undefined
+          ? Number(Math.max(0.05, Math.min(1.0, partial.opacity)).toFixed(2))
+          : existing.opacity,
+      loop: partial.loop !== undefined ? Boolean(partial.loop) : existing.loop,
+      isEnabled: partial.isEnabled !== undefined ? Boolean(partial.isEnabled) : existing.isEnabled,
+    };
+    const res = await this.saveMediaConfigToCloud(nowMs, updated);
+    if (!res.success) {
+      return { success: false, error: res.error };
+    }
+    await this.resolveHomeVideoPlaybackUrl(updated);
+    return { success: true, homeVideo: updated };
+  }
+
+  public async deleteHomeBackgroundVideo(nowMs?: number): Promise<{ success: boolean; error?: string }> {
+    if (!this.canManageMusic()) {
+      return {
+        success: false,
+        error: `Chỉ Admin (${ADMIN_EMAIL}) mới có quyền xóa video nền.`,
+      };
+    }
+    const existing = this.sharedMediaConfig?.homeVideo ?? null;
+    const res = await this.saveMediaConfigToCloud(nowMs, null);
+    if (!res.success) {
+      return { success: false, error: res.error };
+    }
+    if (existing?.storagePath && this.cloudAdapter.deleteVideoBinary) {
+      await this.cloudAdapter.deleteVideoBinary(existing.storagePath).catch(() => {});
+    }
+    await this.resolveHomeVideoPlaybackUrl(null);
+    return { success: true };
+  }
+
+  /**
    * Deletes a track from the library and cleans up any scope assignments pointing to it.
    */
   public deleteTrack(trackId: string): boolean {
@@ -3090,11 +4289,17 @@ export class MusicManager {
     }
 
     // Clean up assignments referencing this track
+    if (this.assignments.homeTrackId === trackId) {
+      this.assignments.homeTrackId = null;
+    }
     if (this.assignments.globalTrackId === trackId) {
       this.assignments.globalTrackId = null;
     }
     if (this.assignments.modeTracks.SOLO === trackId) {
       this.assignments.modeTracks.SOLO = null;
+    }
+    if (this.assignments.modeTracks.COOP_AI === trackId) {
+      this.assignments.modeTracks.COOP_AI = null;
     }
     if (this.assignments.modeTracks.TWO_PLAYER === trackId) {
       this.assignments.modeTracks.TWO_PLAYER = null;
@@ -3172,10 +4377,22 @@ export class MusicManager {
 
   public getAssignments(): MusicScopeAssignments {
     return {
+      homeTrackId: this.assignments.homeTrackId,
       globalTrackId: this.assignments.globalTrackId,
       modeTracks: { ...this.assignments.modeTracks },
       stageTracks: { ...this.assignments.stageTracks },
     };
+  }
+
+  public assignToHome(trackId: string | null): boolean {
+    if (!this.canManageMusic()) return false;
+    if (trackId !== null && !this.tracks.has(trackId)) return false;
+
+    this.assignments.homeTrackId = trackId;
+    this.savePersistedState();
+    this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
+    this.notify();
+    return true;
   }
 
   public assignToGlobal(trackId: string | null): boolean {
@@ -3191,6 +4408,9 @@ export class MusicManager {
 
   public assignToMode(mode: GameModeScope, trackId: string | null): boolean {
     if (!this.canManageMusic()) return false;
+    if (mode === 'HOME') {
+      return this.assignToHome(trackId);
+    }
     if (trackId !== null && !this.tracks.has(trackId)) return false;
 
     this.assignments.modeTracks[mode] = trackId;
@@ -3218,8 +4438,9 @@ export class MusicManager {
   public resetAllAssignmentsToDefault(): boolean {
     if (!this.canManageMusic()) return false;
     this.assignments = {
+      homeTrackId: null,
       globalTrackId: null,
-      modeTracks: { SOLO: null, TWO_PLAYER: null },
+      modeTracks: { SOLO: null, COOP_AI: null, TWO_PLAYER: null },
       stageTracks: {},
     };
     this.savePersistedState();
@@ -3230,10 +4451,12 @@ export class MusicManager {
 
   /**
    * Resolves which track should play for a given (stageId, mode) according to the strict priority rule:
-   * 1. Stage-specific track (highest priority)
-   * 2. Game Mode track
-   * 3. Global game track
-   * 4. Built-in default procedural BGM (returns trackId: null, source: 'BUILTIN_DEFAULT')
+   * - For HOME: Home-specific track -> Global track -> Built-in
+   * - For battle modes (SOLO, COOP_AI, TWO_PLAYER):
+   *   1. Stage-specific track (highest priority)
+   *   2. Game Mode track
+   *   3. Global game track
+   *   4. Built-in default (returns trackId: null, resolvedScope: 'BUILTIN_DEFAULT')
    */
   public resolveEffectiveTrack(
     stageId: number = this.activeContext.stageId,
@@ -3241,8 +4464,32 @@ export class MusicManager {
   ): {
     trackId: string | null;
     track: MusicTrackMetadata | null;
-    resolvedScope: 'STAGE' | 'MODE' | 'GLOBAL' | 'BUILTIN_DEFAULT';
+    resolvedScope: 'HOME' | 'STAGE' | 'MODE' | 'GLOBAL' | 'BUILTIN_DEFAULT';
   } {
+    if (mode === 'HOME') {
+      const homeTrackId = this.assignments.homeTrackId;
+      if (homeTrackId && this.tracks.has(homeTrackId)) {
+        return {
+          trackId: homeTrackId,
+          track: this.tracks.get(homeTrackId)!,
+          resolvedScope: 'HOME',
+        };
+      }
+      const globalTrackId = this.assignments.globalTrackId;
+      if (globalTrackId && this.tracks.has(globalTrackId)) {
+        return {
+          trackId: globalTrackId,
+          track: this.tracks.get(globalTrackId)!,
+          resolvedScope: 'GLOBAL',
+        };
+      }
+      return {
+        trackId: null,
+        track: null,
+        resolvedScope: 'BUILTIN_DEFAULT',
+      };
+    }
+
     // 1. Check Stage-specific assignment
     const stageTrackId = this.assignments.stageTracks[stageId];
     if (stageTrackId && this.tracks.has(stageTrackId)) {
@@ -3286,14 +4533,20 @@ export class MusicManager {
    */
   public getTrackUsageLabels(trackId: string): string[] {
     const labels: string[] = [];
+    if (this.assignments.homeTrackId === trackId) {
+      labels.push('Nhạc nền Trang chủ');
+    }
     if (this.assignments.globalTrackId === trackId) {
-      labels.push('Mặc định Toàn Game');
+      labels.push('Toàn Game');
     }
     if (this.assignments.modeTracks.SOLO === trackId) {
-      labels.push('Chế độ Solo (1P)');
+      labels.push('Solo (1P)');
+    }
+    if (this.assignments.modeTracks.COOP_AI === trackId) {
+      labels.push('2 - AI');
     }
     if (this.assignments.modeTracks.TWO_PLAYER === trackId) {
-      labels.push('Chế độ 2 Người Chơi');
+      labels.push('2P');
     }
     for (const [stageStr, assignedId] of Object.entries(this.assignments.stageTracks)) {
       if (assignedId === trackId) {
@@ -3340,6 +4593,11 @@ export class MusicManager {
     window.addEventListener('touchstart', handleFirstInteraction, { once: true, passive: true });
   }
 
+  public syncMenuPlayback(): void {
+    this.isPaused = false;
+    this.syncPlaybackWithContext(0, 'HOME');
+  }
+
   /**
    * Synchronizes BGM playback when transitioning stages or changing modes.
    * Guarantees zero overlapping BGM instances (M7.3.7 Section IV).
@@ -3374,8 +4632,26 @@ export class MusicManager {
       soundManager.stopBgm();
       this.isPlaying = true;
       this.startTrackBufferPlayback(resolved.trackId);
+    } else if (resolved.trackId && this.soundCatalog.has(resolved.trackId)) {
+      const targetId = resolved.trackId;
+      soundManager.setCustomBgmActive(true);
+      soundManager.stopBgm();
+      this.isPlaying = false;
+      void this.ensureCatalogTrackBufferLoaded(targetId).then((loaded) => {
+        if (
+          loaded &&
+          !this.isPaused &&
+          !this.previewTrackId &&
+          this.activeTrackId === targetId &&
+          SoundManager.getInstance().getSettings().bgmEnabled
+        ) {
+          this.isPlaying = true;
+          this.startTrackBufferPlayback(targetId);
+          this.notify();
+        }
+      });
     } else {
-      // M7.3.9 Requirement 8: Built-in 8-bit procedural BGM is disabled; stay silent when no custom track is active
+      // Built-in 8-bit procedural BGM is disabled; stay silent when no custom track is active
       soundManager.setCustomBgmActive(false);
       soundManager.stopBgm();
       this.isPlaying = false;
@@ -3594,6 +4870,14 @@ export class MusicManager {
     if (this.audioBuffers.has(trackId)) {
       this.isPlaying = true;
       this.startTrackBufferPlayback(trackId, false);
+    } else if (this.soundCatalog.has(trackId)) {
+      void this.ensureCatalogTrackBufferLoaded(trackId).then((loaded) => {
+        if (loaded && this.previewTrackId === trackId) {
+          this.isPlaying = true;
+          this.startTrackBufferPlayback(trackId, false);
+          this.notify();
+        }
+      });
     }
     this.notify();
     return true;
@@ -3657,9 +4941,11 @@ export class MusicManager {
       if (assignStr) {
         const parsed = JSON.parse(assignStr);
         this.assignments = {
+          homeTrackId: parsed.homeTrackId ?? null,
           globalTrackId: parsed.globalTrackId ?? null,
           modeTracks: {
             SOLO: parsed.modeTracks?.SOLO ?? null,
+            COOP_AI: parsed.modeTracks?.COOP_AI ?? null,
             TWO_PLAYER: parsed.modeTracks?.TWO_PLAYER ?? null,
           },
           stageTracks: parsed.stageTracks ?? {},

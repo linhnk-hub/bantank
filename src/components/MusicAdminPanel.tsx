@@ -12,8 +12,6 @@ import {
   Trash2,
   Edit3,
   Check,
-  RefreshCw,
-  ShieldCheck,
   Lock,
   Sliders,
   Layers,
@@ -21,26 +19,24 @@ import {
   CheckCircle2,
   FileAudio,
   RotateCcw,
-  Download,
-  FolderGit2,
   Rocket,
-  XCircle,
+  Film,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import {
   MusicManager,
-  PIXABAY_TARGET_TRACK_SPEC,
+  SHARED_SYSTEM_BGM_ID,
   STAGED_LOCAL_PREVIEW_BGM_ID,
-  buildGitHubPagesAudioUrl,
   type MusicTrackMetadata,
   type LoopPlaybackConfig,
   type MusicScopeAssignments,
-  type SystemAudioConfigDocument,
-  type StagedAudioPackage,
+  type SystemMediaConfigDocument,
+  type HomeBackgroundVideoConfig,
   type SoundCatalogEntry,
   type UserRole,
   type GameModeScope,
 } from '../core/musicManager.ts';
-import { ADMIN_EMAIL } from '../core/authManager.ts';
 import {
   SoundManager,
   GAME_ACTION_SOUND_SLOTS,
@@ -61,11 +57,18 @@ export const MusicAdminPanel: React.FC = () => {
   const [loopConfig, setLoopConfig] = useState<LoopPlaybackConfig>(() => musicManager.getLoopConfig());
   const [assignments, setAssignments] = useState<MusicScopeAssignments>(() => musicManager.getAssignments());
   const [previewId, setPreviewId] = useState<string | null>(() => musicManager.getPreviewTrackId());
-  const [sharedConfig, setSharedConfig] = useState<SystemAudioConfigDocument | null>(() =>
-    musicManager.getSharedAudioConfig()
+  const [sharedMediaConfig, setSharedMediaConfig] = useState<SystemMediaConfigDocument | null>(() =>
+    musicManager.getSharedMediaConfig()
   );
-  const [stagedPkg, setStagedPkg] = useState<StagedAudioPackage | null>(() =>
-    musicManager.getStagedAudioPackage()
+  const [homeVideoConfig, setHomeVideoConfig] = useState<HomeBackgroundVideoConfig | null>(() =>
+    musicManager.getHomeVideoConfig()
+  );
+  const [homeVideoUrl, setHomeVideoUrl] = useState<string | null>(() => musicManager.getHomeVideoUrl());
+  const [isHomeVideoLoading, setIsHomeVideoLoading] = useState<boolean>(() =>
+    musicManager.isHomeVideoLoading()
+  );
+  const [homeVideoError, setHomeVideoError] = useState<string | null>(() =>
+    musicManager.getHomeVideoError()
   );
   const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(() =>
     musicManager.isCloudSyncing()
@@ -77,15 +80,24 @@ export const MusicAdminPanel: React.FC = () => {
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState<string>('');
-  const [selectedStageForAssign, setSelectedStageForAssign] = useState<number>(1);
-  const [manualFileName, setManualFileName] = useState<string>('');
-  const [manualDisplayName, setManualDisplayName] = useState<string>('');
+  const [isLoopDirty, setIsLoopDirty] = useState<boolean>(false);
+  const [isAssignmentsDirty, setIsAssignmentsDirty] = useState<boolean>(false);
 
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const directUploadInputRef = useRef<HTMLInputElement | null>(null);
-  const replaceInputRef = useRef<HTMLInputElement | null>(null);
+  // Draft local values for Home Video opacity/loop/enabled before clicking Kích hoạt
+  const [videoOpacityDraft, setVideoOpacityDraft] = useState<number>(
+    () => musicManager.getHomeVideoConfig()?.opacity ?? 0.35
+  );
+  const [videoLoopDraft, setVideoLoopDraft] = useState<boolean>(
+    () => musicManager.getHomeVideoConfig()?.loop ?? true
+  );
+  const [videoEnabledDraft, setVideoEnabledDraft] = useState<boolean>(
+    () => musicManager.getHomeVideoConfig()?.isEnabled ?? true
+  );
+  const [isVideoDirty, setIsVideoDirty] = useState<boolean>(false);
+
+  const multiUploadInputRef = useRef<HTMLInputElement | null>(null);
+  const videoUploadInputRef = useRef<HTMLInputElement | null>(null);
   const actionSfxInputRef = useRef<HTMLInputElement | null>(null);
-  const [replacingTrackId, setReplacingTrackId] = useState<string | null>(null);
   const [targetActionSfxId, setTargetActionSfxId] = useState<GameActionSoundId | null>(null);
   const [actionSfxTracks, setActionSfxTracks] = useState<
     Record<GameActionSoundId, CustomActionSoundTrack | null>
@@ -96,6 +108,8 @@ export const MusicAdminPanel: React.FC = () => {
   const [managedStages, setManagedStages] = useState<ManagedStageRecord[]>(() =>
     StageManager.getInstance().getManagedStages()
   );
+  const [isUploadingBatch, setIsUploadingBatch] = useState<boolean>(false);
+  const [isUploadingVideo, setIsUploadingVideo] = useState<boolean>(false);
   const [isUploadingActionSfx, setIsUploadingActionSfx] = useState<boolean>(false);
 
   useEffect(() => {
@@ -107,8 +121,17 @@ export const MusicAdminPanel: React.FC = () => {
       setLoopConfig(musicManager.getLoopConfig());
       setAssignments(musicManager.getAssignments());
       setPreviewId(musicManager.getPreviewTrackId());
-      setSharedConfig(musicManager.getSharedAudioConfig());
-      setStagedPkg(musicManager.getStagedAudioPackage());
+      setSharedMediaConfig(musicManager.getSharedMediaConfig());
+      const nextHv = musicManager.getHomeVideoConfig();
+      setHomeVideoConfig(nextHv);
+      if (nextHv && !isVideoDirty) {
+        setVideoOpacityDraft(nextHv.opacity);
+        setVideoLoopDraft(nextHv.loop);
+        setVideoEnabledDraft(nextHv.isEnabled);
+      }
+      setHomeVideoUrl(musicManager.getHomeVideoUrl());
+      setIsHomeVideoLoading(musicManager.isHomeVideoLoading());
+      setHomeVideoError(musicManager.getHomeVideoError());
       setIsCloudSyncing(musicManager.isCloudSyncing());
       setSharedSyncError(musicManager.getSharedSyncError());
     });
@@ -124,13 +147,243 @@ export const MusicAdminPanel: React.FC = () => {
       unsubSound();
       unsubStages();
     };
-  }, [musicManager, soundManager]);
+  }, [musicManager, soundManager, isVideoDirty]);
 
   const isAdmin = role === 'ADMIN';
-
   if (!isAdmin) {
     return null;
   }
+
+  // Danh sách file âm thanh duy nhất để hiển thị & chọn gán
+  const selectableTracks: MusicTrackMetadata[] = tracks.filter((t) => {
+    if (t.id === STAGED_LOCAL_PREVIEW_BGM_ID) return false;
+    if (t.id === SHARED_SYSTEM_BGM_ID && soundCatalog.some((c) => c.storagePath === t.storagePathOrUrl)) {
+      return false;
+    }
+    return true;
+  });
+
+  const sortedStages: ManagedStageRecord[] =
+    managedStages.length > 0
+      ? [...managedStages].sort((a, b) => a.orderIndex - b.orderIndex)
+      : [];
+
+  const handleMultiAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (!fileList || fileList.length === 0) return;
+    const files = Array.from(fileList);
+    e.target.value = '';
+
+    setStatusMsg(null);
+    musicManager.clearSharedSyncError();
+    soundManager.unlock();
+    setIsUploadingBatch(true);
+
+    try {
+      const res = await musicManager.uploadMultipleAudioFiles(files, {
+        autoActivateSingle: false,
+      });
+      setSoundCatalog(musicManager.getSoundCatalog());
+      setTracks(musicManager.getTracks());
+
+      if (res.uploaded.length > 0 && res.failed.length === 0) {
+        setStatusMsg({
+          type: 'success',
+          text: `Đã tải lên thành công ${res.uploaded.length} file âm thanh vào thư viện Media. Hãy chọn file áp dụng cho Nhạc nền / Stage bên dưới rồi bấm "Kích hoạt".`,
+        });
+      } else if (res.uploaded.length > 0 && res.failed.length > 0) {
+        setStatusMsg({
+          type: 'info',
+          text: `Đã tải lên ${res.uploaded.length} file. ${res.failed.length} file lỗi: ${res.failed
+            .map((f) => `${f.fileName} (${f.error})`)
+            .join('; ')}`,
+        });
+      } else if (res.failed.length > 0) {
+        setStatusMsg({
+          type: 'error',
+          text: res.failed.map((f) => `${f.fileName}: ${f.error}`).join(' | '),
+        });
+      }
+    } finally {
+      setIsUploadingBatch(false);
+    }
+  };
+
+  const handleDeleteTrackOrCatalog = async (track: MusicTrackMetadata) => {
+    setStatusMsg(null);
+    const inCatalog = soundCatalog.some((c) => c.soundId === track.id);
+    if (inCatalog) {
+      const res = await musicManager.deleteCatalogSound(track.id);
+      if (res.success) {
+        setSoundCatalog(musicManager.getSoundCatalog());
+        setTracks(musicManager.getTracks());
+        setStatusMsg({
+          type: 'info',
+          text: `Đã xóa "${track.displayName}" khỏi thư viện âm thanh.`,
+        });
+      } else {
+        setStatusMsg({
+          type: 'error',
+          text: res.error || 'Không thể xóa file âm thanh.',
+        });
+      }
+    } else if (musicManager.deleteTrack(track.id)) {
+      setTracks(musicManager.getTracks());
+      setStatusMsg({
+        type: 'info',
+        text: `Đã gỡ "${track.displayName}" khỏi thư viện.`,
+      });
+    }
+  };
+
+  const handleStartRename = (track: MusicTrackMetadata) => {
+    setEditingId(track.id);
+    setEditingName(track.displayName);
+  };
+
+  const handleConfirmRename = (trackId: string) => {
+    if (musicManager.renameTrack(trackId, editingName)) {
+      setStatusMsg({ type: 'success', text: 'Đã cập nhật tên hiển thị file âm thanh.' });
+    }
+    setEditingId(null);
+  };
+
+  const handleUpdateLoopField = (partial: Partial<LoopPlaybackConfig>) => {
+    musicManager.updateLoopConfig(partial);
+    setIsLoopDirty(true);
+  };
+
+  const handleActivateLoopConfig = async () => {
+    setStatusMsg(null);
+    const res = await musicManager.activateLoopConfigSystemWide();
+    if (res.success) {
+      setIsLoopDirty(false);
+      setStatusMsg({
+        type: 'success',
+        text: 'Đã kích hoạt cấu hình vòng lặp liên tục (áp dụng cho Nhạc nền Trang chủ và Nhạc nền Stage) trên toàn hệ thống!',
+      });
+    } else {
+      setStatusMsg({
+        type: 'error',
+        text: res.error || 'Không thể kích hoạt cấu hình vòng lặp lên hệ thống.',
+      });
+    }
+  };
+
+  const handleActivateAssignments = async () => {
+    setStatusMsg(null);
+    const res = await musicManager.activateMediaAssignmentsSystemWide();
+    if (res.success) {
+      setIsAssignmentsDirty(false);
+      setStatusMsg({
+        type: 'success',
+        text: 'Đã kích hoạt & đồng bộ phân bổ Nhạc nền (Trang chủ, Toàn Game, Solo, 2 - AI, 2P và từng Stage) cho tất cả người chơi!',
+      });
+    } else {
+      setStatusMsg({
+        type: 'error',
+        text: res.error || 'Không thể lưu cấu hình phạm vi âm thanh lên Firestore.',
+      });
+    }
+  };
+
+  const handleUploadHomeVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setStatusMsg(null);
+    setIsUploadingVideo(true);
+    try {
+      const res = await musicManager.uploadHomeBackgroundVideo(file, {
+        opacity: videoOpacityDraft,
+        loop: videoLoopDraft,
+      });
+      if (res.success && res.homeVideo) {
+        setIsVideoDirty(false);
+        setVideoOpacityDraft(res.homeVideo.opacity);
+        setVideoLoopDraft(res.homeVideo.loop);
+        setVideoEnabledDraft(res.homeVideo.isEnabled);
+        setStatusMsg({
+          type: 'success',
+          text: `Đã tải lên & kích hoạt video nền "${res.homeVideo.displayName}" cho Trang chủ!`,
+        });
+      } else {
+        setStatusMsg({
+          type: 'error',
+          text: res.error || 'Không thể tải lên video nền .mp4.',
+        });
+      }
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
+  const handleActivateStaticIntroVideo = async () => {
+    setStatusMsg(null);
+    setIsUploadingVideo(true);
+    try {
+      const res = await musicManager.activateStaticIntroVideo({
+        opacity: videoOpacityDraft,
+        loop: videoLoopDraft,
+      });
+      if (res.success && res.homeVideo) {
+        setIsVideoDirty(false);
+        setVideoOpacityDraft(res.homeVideo.opacity);
+        setVideoLoopDraft(res.homeVideo.loop);
+        setVideoEnabledDraft(res.homeVideo.isEnabled);
+        setStatusMsg({
+          type: 'success',
+          text: 'Đã kích hoạt video nền mặc định (intro-bantank.mp4) cho Trang chủ!',
+        });
+      } else {
+        setStatusMsg({
+          type: 'error',
+          text: res.error || 'Không thể kích hoạt video nền mặc định.',
+        });
+      }
+    } finally {
+      setIsUploadingVideo(false);
+    }
+  };
+
+  const handleActivateHomeVideoSettings = async () => {
+    setStatusMsg(null);
+    const res = await musicManager.updateHomeVideoSettings({
+      opacity: videoOpacityDraft,
+      loop: videoLoopDraft,
+      isEnabled: videoEnabledDraft,
+    });
+    if (res.success) {
+      setIsVideoDirty(false);
+      setStatusMsg({
+        type: 'success',
+        text: 'Đã kích hoạt & đồng bộ cấu hình Video nền Trang chủ (độ mờ, lặp lại, bật/tắt) toàn hệ thống!',
+      });
+    } else {
+      setStatusMsg({
+        type: 'error',
+        text: res.error || 'Không thể cập nhật cấu hình video nền.',
+      });
+    }
+  };
+
+  const handleDeleteHomeVideo = async () => {
+    setStatusMsg(null);
+    const res = await musicManager.deleteHomeBackgroundVideo();
+    if (res.success) {
+      setIsVideoDirty(false);
+      setStatusMsg({
+        type: 'info',
+        text: 'Đã gỡ video nền Trang chủ.',
+      });
+    } else {
+      setStatusMsg({
+        type: 'error',
+        text: res.error || 'Không thể xóa video nền Trang chủ.',
+      });
+    }
+  };
 
   const handleActionSfxFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -208,218 +461,6 @@ export const MusicAdminPanel: React.FC = () => {
     }
   };
 
-  const handleDirectUploadAndActivate = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    setStatusMsg(null);
-    musicManager.clearSharedSyncError();
-    soundManager.unlock();
-    const res = await musicManager.uploadTrack(file, manualDisplayName.trim() || undefined);
-    if (res.success && res.catalogEntry) {
-      setSoundCatalog(musicManager.getSoundCatalog());
-      setStatusMsg({
-        type: 'success',
-        text: `Đã tải lên "${res.catalogEntry.displayName}" (v${res.catalogEntry.version}) và kích hoạt thành công trên /system_config/audio! Tất cả người chơi đang trực tuyến đã nhận được bản nhạc mới.`,
-      });
-    } else if (res.success && res.stagedPackage) {
-      setManualFileName(res.stagedPackage.normalizedFileName);
-      setManualDisplayName(res.stagedPackage.displayName);
-      setStatusMsg({
-        type: 'info',
-        text: `Đã kiểm tra file "${res.stagedPackage.originalFileName}". Bạn có thể bấm Kích hoạt ngay trong Danh mục Âm thanh bên dưới.`,
-      });
-    } else {
-      setStatusMsg({
-        type: 'error',
-        text: res.error || 'Không thể tải lên và kích hoạt file âm thanh.',
-      });
-    }
-  };
-
-  const handleActivateCatalogEntry = async (entry: SoundCatalogEntry) => {
-    setStatusMsg(null);
-    soundManager.unlock();
-    const res = await musicManager.activateCatalogSound(entry.soundId);
-    if (res.success && res.config) {
-      setSoundCatalog(musicManager.getSoundCatalog());
-      setStatusMsg({
-        type: 'success',
-        text: `Đã kích hoạt "${entry.displayName}" (v${res.config.version}) làm nhạc nền hệ thống. Tất cả người chơi sẽ tự động đồng bộ!`,
-      });
-    } else {
-      setStatusMsg({
-        type: 'error',
-        text: res.error || 'Không thể kích hoạt bản nhạc này.',
-      });
-    }
-  };
-
-  const handleDeleteCatalogEntry = async (entry: SoundCatalogEntry) => {
-    setStatusMsg(null);
-    const res = await musicManager.deleteCatalogSound(entry.soundId);
-    if (res.success) {
-      setSoundCatalog(musicManager.getSoundCatalog());
-      setStatusMsg({
-        type: 'info',
-        text: `Đã xóa "${entry.displayName}" khỏi Danh mục Âm thanh.`,
-      });
-    } else {
-      setStatusMsg({
-        type: 'error',
-        text: res.error || 'Không thể xóa bản nhạc khỏi danh mục.',
-      });
-    }
-  };
-
-  const handleSelectAudioFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const res = await musicManager.stageAudioFileForGitHubPages(file);
-    if (res.success && res.stagedPackage) {
-      setManualFileName(res.stagedPackage.normalizedFileName);
-      setManualDisplayName(res.stagedPackage.displayName);
-      setStatusMsg({
-        type: 'info',
-        text: `Đã kiểm tra hợp lệ file "${res.stagedPackage.originalFileName}" (${res.stagedPackage.detectedFormat}, ${(res.stagedPackage.fileSize / (1024 * 1024)).toFixed(2)} MB). Bạn có thể bấm "Nghe thử" hoặc "Kích Hoạt Ngay" bên dưới.`,
-      });
-    } else {
-      setStatusMsg({
-        type: 'error',
-        text: res.error || 'File nhạc không hợp lệ.',
-      });
-    }
-
-    e.target.value = '';
-  };
-
-  const handleDownloadStagedFile = () => {
-    const downloadInfo = musicManager.getStagedAudioDownloadBlob();
-    if (!downloadInfo) {
-      setStatusMsg({
-        type: 'error',
-        text: 'Không tìm thấy gói file nhạc đã chuẩn bị để tải xuống.',
-      });
-      return;
-    }
-    const url = URL.createObjectURL(downloadInfo.blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = downloadInfo.fileName;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    window.setTimeout(() => URL.revokeObjectURL(url), 3000);
-  };
-
-  const handleVerifyAndActivateStaged = async () => {
-    setStatusMsg(null);
-    soundManager.unlock();
-    const res = await musicManager.verifyAndActivateStagedAudioOnGitHubPages();
-    if (res.success && res.config) {
-      setSoundCatalog(musicManager.getSoundCatalog());
-      setStatusMsg({
-        type: 'success',
-        text: `Đã kích hoạt "${res.config.displayName || res.config.fileName}" (v${res.config.version}) trên Firestore (/system_config/audio) thành công! Toàn bộ người chơi sẽ tự động tải và phát phiên bản v${res.config.version}.`,
-      });
-    } else {
-      setStatusMsg({
-        type: 'error',
-        text:
-          res.error ||
-          'Chưa thể kích hoạt file âm thanh.',
-      });
-    }
-  };
-
-  const handleVerifyAndActivateManualAsset = async () => {
-    const cleanFile = manualFileName.trim();
-    if (!cleanFile) {
-      setStatusMsg({
-        type: 'error',
-        text: 'Vui lòng nhập tên file đã đặt trong thư mục public/audio/ (ví dụ: bgm_v1_bantank.mp3).',
-      });
-      return;
-    }
-    setStatusMsg(null);
-    const res = await musicManager.verifyAndActivateGitHubPagesAsset({
-      fileName: cleanFile,
-      displayName: manualDisplayName.trim() || undefined,
-    });
-    if (res.success && res.config) {
-      setStatusMsg({
-        type: 'success',
-        text: `Đã xác minh file ./${res.config.assetPath}?v=${res.config.version} và cập nhật /system_config/audio thành công!`,
-      });
-    } else {
-      setStatusMsg({
-        type: 'error',
-        text:
-          res.error ||
-          `Không tìm thấy hoặc không thể giải mã file public/audio/${cleanFile}.`,
-      });
-    }
-  };
-
-  const handleToggleSharedEnabled = async () => {
-    if (!sharedConfig) return;
-    const nextState = !sharedConfig.isEnabled;
-    const res = await musicManager.setSharedSystemAudioEnabled(nextState);
-    if (res.success) {
-      setStatusMsg({
-        type: 'success',
-        text: nextState
-          ? 'Đã BẬT nhạc nền chung toàn hệ thống (/system_config/audio).'
-          : 'Đã TẮT nhạc nền chung toàn hệ thống.',
-      });
-    } else {
-      setStatusMsg({ type: 'error', text: res.error || 'Không thể cập nhật trạng thái nhạc nền chung.' });
-    }
-  };
-
-  const handleReplaceFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !replacingTrackId) return;
-
-    const res = await musicManager.replaceTrackFile(replacingTrackId, file);
-    if (res.success) {
-      setSoundCatalog(musicManager.getSoundCatalog());
-      setStatusMsg({
-        type: 'success',
-        text: `Đã cập nhật và kích hoạt phiên bản mới cho "${res.track?.displayName}".`,
-      });
-    } else {
-      setStatusMsg({ type: 'error', text: res.error || 'Lỗi thay thế file.' });
-    }
-
-    setReplacingTrackId(null);
-    e.target.value = '';
-  };
-
-  const handleStartRename = (track: MusicTrackMetadata) => {
-    setEditingId(track.id);
-    setEditingName(track.displayName);
-  };
-
-  const handleConfirmRename = (trackId: string) => {
-    if (musicManager.renameTrack(trackId, editingName)) {
-      setStatusMsg({ type: 'success', text: 'Đã đổi tên hiển thị bài nhạc.' });
-    }
-    setEditingId(null);
-  };
-
-  const handleDelete = (track: MusicTrackMetadata) => {
-    if (musicManager.deleteTrack(track.id)) {
-      setSoundCatalog(musicManager.getSoundCatalog());
-      setStatusMsg({
-        type: 'success',
-        text: `Đã gỡ cấu hình bài "${track.displayName}".`,
-      });
-    }
-  };
-
   const formatBytes = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -432,33 +473,41 @@ export const MusicAdminPanel: React.FC = () => {
     return `${mins}:${secs < 10 ? '0' : ''}${secs} (${sec.toFixed(1)}s)`;
   };
 
-  const effectiveStage1 = musicManager.resolveEffectiveTrack(1, 'SOLO');
+  const trackLabelForId = (id: string | null | undefined) => {
+    if (!id) return 'Chưa gán';
+    return selectableTracks.find((t) => t.id === id)?.displayName || 'Đã chọn';
+  };
 
   return (
     <div className="space-y-4 text-xs select-none">
-      {/* Top Banner & Role Indicator */}
+      {/* Top Banner */}
       <div className="p-3.5 rounded-xl bg-neutral-950 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="space-y-1">
           <div className="flex items-center gap-2 flex-wrap">
             <Music className="w-4 h-4 text-amber-400" />
             <h3 className="font-extrabold text-sm text-white">
-              Quản Lý Âm Thanh &amp; Nhạc Nền Hệ Thống (Đồng Bộ Thời Gian Thực)
+              Quản Lý Media, Nhạc Nền &amp; Video Hệ Thống
             </h3>
             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              Firebase Storage + Firestore Realtime
+              Đồng Bộ Thời Gian Thực
             </span>
           </div>
           <p className="text-[11px] text-neutral-400">
-            Tải lên &amp; kích hoạt nhạc nền (MP3, OGG, WAV, M4A tối đa 25 MB) • Đồng bộ tức thời tới toàn bộ người chơi qua <code className="text-amber-300 font-mono">/system_config/audio</code> và <code className="text-amber-300 font-mono">/sound_catalog</code>
+            Tải lên nhiều file âm thanh (MP3, OGG, WAV, M4A ≤ 25 MB) và video nền (.mp4 ≤ 100 MB) để gán cho Trang chủ, Chế độ chơi &amp; từng Stage.
           </p>
         </div>
+        {sharedMediaConfig && (
+          <div className="text-[10px] font-mono text-neutral-400 shrink-0">
+            Cập nhật lúc: {new Date(sharedMediaConfig.updatedAt).toLocaleString('vi-VN')}
+          </div>
+        )}
       </div>
 
       {/* Status Alert */}
-      {(statusMsg || sharedSyncError || actionSfxError) && (
+      {(statusMsg || sharedSyncError || actionSfxError || homeVideoError) && (
         <div
           className={`p-2.5 rounded-lg border flex items-center justify-between gap-2 text-[11px] ${
-            sharedSyncError || actionSfxError || statusMsg?.type === 'error'
+            sharedSyncError || actionSfxError || homeVideoError || statusMsg?.type === 'error'
               ? 'bg-rose-950/70 border-rose-700/60 text-rose-200'
               : statusMsg?.type === 'info'
                 ? 'bg-sky-950/70 border-sky-700/60 text-sky-200'
@@ -466,12 +515,14 @@ export const MusicAdminPanel: React.FC = () => {
           }`}
         >
           <div className="flex items-center gap-2">
-            {sharedSyncError || actionSfxError || statusMsg?.type === 'error' ? (
+            {sharedSyncError || actionSfxError || homeVideoError || statusMsg?.type === 'error' ? (
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
             ) : (
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             )}
-            <span className="break-words">{sharedSyncError || actionSfxError || statusMsg?.text}</span>
+            <span className="break-words">
+              {sharedSyncError || actionSfxError || homeVideoError || statusMsg?.text}
+            </span>
           </div>
           <button
             type="button"
@@ -487,365 +538,65 @@ export const MusicAdminPanel: React.FC = () => {
         </div>
       )}
 
-      {/* Shared System Audio Status Card */}
-      <div className="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="space-y-0.5">
-          <div className="flex items-center gap-2 text-amber-300 font-bold">
-            <FileAudio className="w-3.5 h-3.5" />
-            <span>
-              Cấu hình Nhạc Nền Chung Đang Kích Hoạt (/system_config/audio):{' '}
-              {isCloudSyncing
-                ? 'Đang kiểm tra & đồng bộ...'
-                : sharedConfig
-                  ? `${sharedConfig.displayName || sharedConfig.fileName} (v${sharedConfig.version})`
-                  : 'Chưa cấu hình nhạc nền Admin'}
-            </span>
-          </div>
-          <p className="text-[11px] text-neutral-400">
-            {sharedConfig ? (
-              <>
-                Nguồn phát:{' '}
-                <strong className="text-neutral-200 font-mono">
-                  {sharedConfig.storagePath || buildGitHubPagesAudioUrl(sharedConfig.assetPath, sharedConfig.version)}
-                </strong>{' '}
-                ({formatBytes(sharedConfig.fileSize)}) • Cập nhật bởi:{' '}
-                <strong className="text-emerald-400">{sharedConfig.updatedBy}</strong> • Lúc:{' '}
-                <strong className="text-neutral-300 font-mono">
-                  {new Date(sharedConfig.updatedAt).toLocaleString('vi-VN')}
-                </strong>{' '}
-                • Trạng thái:{' '}
-                <strong className={sharedConfig.isEnabled ? 'text-emerald-400' : 'text-amber-400'}>
-                  {sharedConfig.isEnabled ? 'ĐANG SỬ DỤNG (ĐỒNG BỘ TẤT CẢ NGƯỜI CHƠI)' : 'KHÔNG KÍCH HOẠT'}
-                </strong>
-              </>
-            ) : (
-              <>
-                Chưa kích hoạt file nhạc hệ thống • Tải lên file âm thanh bên dưới để kích hoạt và đồng bộ cho toàn bộ người chơi.
-              </>
-            )}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          {sharedConfig && isAdmin && (
-            <button
-              type="button"
-              onClick={() => void handleToggleSharedEnabled()}
-              className={`px-2.5 py-1 rounded text-[10px] font-extrabold border transition-all cursor-pointer ${
-                sharedConfig.isEnabled
-                  ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 hover:bg-emerald-500/30'
-                  : 'bg-neutral-900 border-neutral-700 text-neutral-300 hover:bg-neutral-800'
-              }`}
-            >
-              {sharedConfig.isEnabled ? 'Tạm Tắt Nhạc Chung' : 'Bật Nhạc Chung'}
-            </button>
-          )}
-          <div className="text-[10px] font-mono px-2.5 py-1 rounded bg-neutral-900 border border-neutral-800 text-neutral-300">
-            Đang phát Stage 1:{' '}
-            <strong className="text-emerald-400">
-              {effectiveStage1.track ? effectiveStage1.track.displayName : 'Chưa phát (Chờ nhạc Admin)'}
-            </strong>{' '}
-            ({effectiveStage1.resolvedScope})
-          </div>
-        </div>
-      </div>
-
-      {/* SECTION 1: UPLOAD, ACTIVATE & MANAGE SYSTEM SOUND CATALOG */}
+      {/* SECTION 1: MULTI-FILE AUDIO UPLOAD & LIBRARY */}
       <div className="p-3.5 rounded-xl bg-neutral-950/70 border border-neutral-800 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 font-bold text-neutral-200">
-            <FolderGit2 className="w-4 h-4 text-amber-400" />
-            <span>
-              1. Tải Lên &amp; Kích Hoạt Nhạc Nền Hệ Thống (/sound_catalog &amp; /system_config/audio)
-            </span>
+            <FileAudio className="w-4 h-4 text-amber-400" />
+            <span>1. Thư Viện File Âm Thanh ({selectableTracks.length} file)</span>
           </div>
 
           {isAdmin ? (
-            <div className="flex flex-wrap items-center gap-2">
+            <div>
               <input
-                ref={directUploadInputRef}
+                ref={multiUploadInputRef}
                 type="file"
+                multiple
                 accept=".mp3,.ogg,.wav,.m4a,.aac,.webm,audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac,audio/webm"
-                onChange={handleDirectUploadAndActivate}
-                className="hidden"
-              />
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".mp3,.ogg,.wav,.m4a,.aac,.webm,audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac,audio/webm"
-                onChange={handleSelectAudioFile}
-                className="hidden"
-              />
-              <input
-                ref={replaceInputRef}
-                type="file"
-                accept=".mp3,.ogg,.wav,.m4a,.aac,.webm,audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac,audio/webm"
-                onChange={handleReplaceFile}
+                onChange={handleMultiAudioUpload}
                 className="hidden"
               />
               <button
                 type="button"
-                disabled={isCloudSyncing}
-                onClick={() => directUploadInputRef.current?.click()}
+                data-testid="media-multi-upload-btn"
+                disabled={isCloudSyncing || isUploadingBatch}
+                onClick={() => multiUploadInputRef.current?.click()}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs shadow active:scale-95 transition-all cursor-pointer"
               >
                 <Upload className="w-3.5 h-3.5" />
-                <span>{isCloudSyncing ? 'Đang tải lên & đồng bộ...' : 'Tải Lên & Kích Hoạt Ngay (MP3 / OGG / WAV ≤ 25 MB)'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-extrabold text-xs transition-all cursor-pointer"
-              >
-                <FileAudio className="w-3.5 h-3.5" />
-                <span>Kiểm Tra &amp; Nghe Thử Trước</span>
+                <span>
+                  {isUploadingBatch || isCloudSyncing
+                    ? 'Đang tải lên thư viện...'
+                    : 'Tải Lên Nhiều File Âm Thanh (MP3 / OGG / WAV / M4A)'}
+                </span>
               </button>
             </div>
           ) : (
             <span className="text-[11px] text-rose-400 font-semibold flex items-center gap-1">
-              <Lock className="w-3.5 h-3.5" /> Chỉ Admin được quản lý nhạc nền
+              <Lock className="w-3.5 h-3.5" /> Chỉ Admin được quản lý Media
             </span>
           )}
         </div>
 
-        {/* Sound Catalog Entries List (with Active/Inactive Status, Version, Timestamp & One-Click Activate) */}
-        {soundCatalog.length > 0 && (
-          <div className="p-3 rounded-xl bg-neutral-900/90 border border-emerald-500/30 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="font-extrabold text-emerald-300 text-xs">
-                Danh Mục Âm Thanh Hệ Thống Đã Tải Lên ({soundCatalog.length})
-              </span>
-              <span className="text-[10px] font-mono text-neutral-400">
-                Chọn &quot;Kích hoạt&quot; để phát đồng bộ cho toàn bộ người chơi
-              </span>
-            </div>
-            <div className="space-y-2">
-              {soundCatalog.map((entry) => {
-                const isCurrentlyActive =
-                  Boolean(
-                    sharedConfig?.isEnabled &&
-                      (sharedConfig.soundId === entry.soundId ||
-                        sharedConfig.storagePath === entry.storagePath ||
-                        sharedConfig.assetPath === entry.storagePath)
-                  ) || entry.isActive;
-
-                return (
-                  <div
-                    key={entry.soundId}
-                    className={`p-2.5 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
-                      isCurrentlyActive
-                        ? 'bg-emerald-950/30 border-emerald-500/60'
-                        : 'bg-neutral-950/80 border-neutral-800'
-                    }`}
-                  >
-                    <div className="space-y-1 min-w-0">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-extrabold text-white text-xs">{entry.displayName}</span>
-                        <span className="px-1.5 py-0.5 rounded bg-neutral-800 text-amber-300 font-mono text-[10px] font-bold">
-                          v{entry.version}
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded text-[10px] font-extrabold border ${
-                            isCurrentlyActive
-                              ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50'
-                              : 'bg-neutral-800 text-neutral-400 border-neutral-700'
-                          }`}
-                        >
-                          {isCurrentlyActive ? 'Đang sử dụng' : 'Không kích hoạt'}
-                        </span>
-                      </div>
-                      <div className="text-[10px] font-mono text-neutral-400 flex flex-wrap items-center gap-2">
-                        <span>File: {entry.fileName}</span>
-                        <span>•</span>
-                        <span>{formatBytes(entry.fileSize)}</span>
-                        <span>•</span>
-                        <span>Cập nhật: {new Date(entry.updatedAt).toLocaleString('vi-VN')}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        type="button"
-                        disabled={isCloudSyncing || isCurrentlyActive}
-                        onClick={() => void handleActivateCatalogEntry(entry)}
-                        className={`px-2.5 py-1 rounded text-[11px] font-extrabold flex items-center gap-1 transition-all cursor-pointer ${
-                          isCurrentlyActive
-                            ? 'bg-emerald-500 text-black opacity-90 cursor-default'
-                            : 'bg-amber-500 hover:bg-amber-400 text-black shadow'
-                        }`}
-                      >
-                        <Rocket className="w-3 h-3" />
-                        <span>{isCurrentlyActive ? 'Đang kích hoạt' : 'Kích hoạt'}</span>
-                      </button>
-                      <button
-                        type="button"
-                        disabled={isCloudSyncing}
-                        onClick={() => void handleDeleteCatalogEntry(entry)}
-                        className="p-1.5 rounded bg-neutral-800 hover:bg-rose-900/60 text-rose-400 cursor-pointer"
-                        title="Xóa khỏi danh mục"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Staged Audio Package Card (when Admin selects a local file) */}
-        {stagedPkg && (
-          <div className="p-3.5 rounded-xl bg-amber-950/20 border border-amber-500/40 space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <div className="flex items-center gap-2">
-                <span className="px-2 py-0.5 rounded bg-amber-500 text-black font-extrabold text-[10px]">
-                  GÓI NHẠC ĐÃ KIỂM TRA (SẴN SÀNG KÍCH HOẠT)
-                </span>
-                <span className="font-extrabold text-white text-xs">
-                  {stagedPkg.displayName} (Phiên bản dự kiến: v{stagedPkg.targetVersion})
-                </span>
-              </div>
-              <button
-                type="button"
-                onClick={() => musicManager.clearStagedAudioPackage()}
-                className="flex items-center gap-1 text-[11px] text-neutral-400 hover:text-rose-400"
-              >
-                <XCircle className="w-3.5 h-3.5" />
-                <span>Hủy gói nháp</span>
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono bg-neutral-950/90 p-2.5 rounded-lg border border-neutral-800">
-              <div>
-                <span className="text-neutral-400">Tên file gốc:</span>{' '}
-                <strong className="text-neutral-200">{stagedPkg.originalFileName}</strong>
-              </div>
-              <div>
-                <span className="text-neutral-400">Định dạng & Dung lượng:</span>{' '}
-                <strong className="text-emerald-400">
-                  {stagedPkg.detectedFormat} • {formatBytes(stagedPkg.fileSize)} • {formatDuration(stagedPkg.durationSec)}
-                </strong>
-              </div>
-              <div>
-                <span className="text-neutral-400">Đường dẫn mã nguồn (GitHub):</span>{' '}
-                <strong className="text-amber-300">{stagedPkg.repositoryPath}</strong>
-              </div>
-              <div>
-                <span className="text-neutral-400">Đường dẫn sau khi build:</span>{' '}
-                <strong className="text-sky-300">{stagedPkg.distPath}</strong>
-              </div>
-              <div className="sm:col-span-2">
-                <span className="text-neutral-400">URL phát hành:</span>{' '}
-                <strong className="text-emerald-300">{stagedPkg.runtimeUrl}</strong>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() =>
-                  previewId === STAGED_LOCAL_PREVIEW_BGM_ID
-                    ? musicManager.stopPreview()
-                    : musicManager.previewTrack(STAGED_LOCAL_PREVIEW_BGM_ID)
-                }
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-extrabold transition-all cursor-pointer ${
-                  previewId === STAGED_LOCAL_PREVIEW_BGM_ID
-                    ? 'bg-amber-500 text-black'
-                    : 'bg-neutral-800 hover:bg-neutral-700 text-white'
-                }`}
-              >
-                {previewId === STAGED_LOCAL_PREVIEW_BGM_ID ? (
-                  <>
-                    <Square className="w-3.5 h-3.5 fill-black" />
-                    <span>Dừng nghe thử</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-3.5 h-3.5 fill-current" />
-                    <span>Nghe thử bản nháp</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={handleDownloadStagedFile}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-sky-500/40 text-sky-200 font-extrabold text-xs transition-all cursor-pointer"
-              >
-                <Download className="w-3.5 h-3.5" />
-                <span>Tải File Chuẩn Hóa ({stagedPkg.normalizedFileName})</span>
-              </button>
-
-              <button
-                type="button"
-                disabled={isCloudSyncing}
-                onClick={() => void handleVerifyAndActivateStaged()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs shadow transition-all cursor-pointer"
-              >
-                <Rocket className="w-3.5 h-3.5" />
-                <span>
-                  {isCloudSyncing
-                    ? 'Đang kích hoạt & đồng bộ...'
-                    : `Kích Hoạt & Đồng Bộ Toàn Hệ Thống (v${stagedPkg.targetVersion})`}
-                </span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Direct Activation of Existing File in public/audio/ */}
-        <div className="p-3 rounded-lg bg-neutral-900/70 border border-neutral-800 space-y-2">
-          <div className="font-bold text-neutral-200 text-[11px]">
-            Hoặc kích hoạt trực tiếp file nhạc tĩnh trong <code className="text-amber-300 font-mono">public/audio/</code>:
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <input
-              type="text"
-              value={manualFileName}
-              onChange={(e) => setManualFileName(e.target.value)}
-              placeholder="Tên file trong public/audio/ (vd: bgm_v1_bantank.mp3)"
-              className="px-2.5 py-1.5 rounded bg-neutral-950 border border-neutral-700 text-neutral-200 text-xs font-mono"
-            />
-            <input
-              type="text"
-              value={manualDisplayName}
-              onChange={(e) => setManualDisplayName(e.target.value)}
-              placeholder="Tên hiển thị bài nhạc (tùy chọn)"
-              className="px-2.5 py-1.5 rounded bg-neutral-950 border border-neutral-700 text-neutral-200 text-xs"
-            />
-            <button
-              type="button"
-              disabled={isCloudSyncing}
-              onClick={() => void handleVerifyAndActivateManualAsset()}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-extrabold text-xs transition-all cursor-pointer"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Kiểm Tra ./audio/&lt;file&gt; &amp; Kích Hoạt</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Active Library List */}
-        {tracks.length === 0 ? (
+        {selectableTracks.length === 0 ? (
           <div className="p-4 rounded-lg bg-neutral-900/60 border border-neutral-800/80 text-center text-neutral-400 space-y-1">
-            <p className="font-semibold text-neutral-300">Chưa có file nhạc nền tùy chỉnh nào trong thư viện.</p>
+            <p className="font-semibold text-neutral-300">Chưa có file âm thanh nào trong thư viện.</p>
             <p className="text-[11px]">
-              Nhấn <strong>&quot;Tải Lên &amp; Kích Hoạt Ngay&quot;</strong> để tải file MP3/OGG/WAV lên hệ thống và phát đồng bộ cho toàn bộ người chơi.
+              Nhấn <strong>&quot;Tải Lên Nhiều File Âm Thanh&quot;</strong> để chọn một hoặc nhiều bài nhạc, sau đó gán cho Trang chủ, Chế độ chơi và từng Stage bên dưới.
             </p>
           </div>
         ) : (
-          <div className="space-y-2">
-            {tracks.map((track) => {
+          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+            {selectableTracks.map((track) => {
               const usageLabels = musicManager.getTrackUsageLabels(track.id);
               const isPreviewing = previewId === track.id;
 
               return (
                 <div
                   key={track.id}
-                  className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                  className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
                 >
-                  <div className="space-y-1 flex-1">
+                  <div className="space-y-1 flex-1 min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       {editingId === track.id ? (
                         <div className="flex items-center gap-1.5">
@@ -858,7 +609,7 @@ export const MusicAdminPanel: React.FC = () => {
                           <button
                             type="button"
                             onClick={() => handleConfirmRename(track.id)}
-                            className="p-1 rounded bg-emerald-500 text-black"
+                            className="p-1 rounded bg-emerald-500 text-black cursor-pointer"
                             title="Lưu tên"
                           >
                             <Check className="w-3 h-3" />
@@ -868,7 +619,7 @@ export const MusicAdminPanel: React.FC = () => {
                         <span className="font-extrabold text-white text-xs">{track.displayName}</span>
                       )}
 
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300">
+                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 truncate max-w-[200px]">
                         {track.fileName}
                       </span>
 
@@ -878,12 +629,12 @@ export const MusicAdminPanel: React.FC = () => {
                             key={lbl}
                             className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
                           >
-                            Đang gán: {lbl}
+                            {lbl}
                           </span>
                         ))
                       ) : (
                         <span className="px-2 py-0.5 rounded text-[10px] bg-neutral-800 text-neutral-400">
-                          Trong thư viện (Chưa gán)
+                          Sẵn sàng gán
                         </span>
                       )}
                     </div>
@@ -891,13 +642,9 @@ export const MusicAdminPanel: React.FC = () => {
                     <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-400 font-mono">
                       <span>Thời lượng: {formatDuration(track.durationSec)}</span>
                       <span>Dung lượng: {formatBytes(track.sizeBytes)}</span>
-                      <span>
-                        Skip Silence: cắt đầu {track.trimBounds.leadingSilenceDetectedSec}s / cuối {track.trimBounds.trailingSilenceDetectedSec}s
-                      </span>
                     </div>
                   </div>
 
-                  {/* Track Action Buttons */}
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       type="button"
@@ -906,7 +653,7 @@ export const MusicAdminPanel: React.FC = () => {
                           ? musicManager.stopPreview()
                           : musicManager.previewTrack(track.id)
                       }
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-bold transition-all ${
+                      className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
                         isPreviewing
                           ? 'bg-amber-500 text-black'
                           : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
@@ -925,39 +672,24 @@ export const MusicAdminPanel: React.FC = () => {
                       )}
                     </button>
 
-                    {isAdmin && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => handleStartRename(track)}
-                          className="p-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300"
-                          title="Đổi tên hiển thị"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
+                    <button
+                      type="button"
+                      onClick={() => handleStartRename(track)}
+                      className="p-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 cursor-pointer"
+                      title="Đổi tên hiển thị"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
 
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setReplacingTrackId(track.id);
-                            replaceInputRef.current?.click();
-                          }}
-                          className="p-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-sky-400"
-                          title="Thay thế file nhạc"
-                        >
-                          <RefreshCw className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(track)}
-                          className="p-1.5 rounded bg-neutral-800 hover:bg-rose-900/60 text-rose-400"
-                          title="Gỡ bài nhạc"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </>
-                    )}
+                    <button
+                      type="button"
+                      disabled={isCloudSyncing}
+                      onClick={() => void handleDeleteTrackOrCatalog(track)}
+                      className="p-1.5 rounded bg-neutral-800 hover:bg-rose-900/60 text-rose-400 cursor-pointer disabled:opacity-50"
+                      title="Xóa khỏi thư viện"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
               );
@@ -966,22 +698,45 @@ export const MusicAdminPanel: React.FC = () => {
         )}
       </div>
 
-      {/* SECTION 2: LOOP, SKIP SILENCE & CROSSFADE */}
+      {/* SECTION 2: LOOP, SKIP SILENCE & CROSSFADE (WITH SYSTEM-WIDE ACTIVATE BUTTON) */}
       <div className="p-3.5 rounded-xl bg-neutral-950/70 border border-neutral-800 space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 font-bold text-neutral-200">
-            <Sliders className="w-4 h-4 text-emerald-400" />
-            <span>2. Cấu Hình Vòng Lặp Liên Tục – Skip Silence & Crossfade</span>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2 font-bold text-neutral-200">
+              <Sliders className="w-4 h-4 text-emerald-400" />
+              <span>2. Cấu Hình Vòng Lặp Liên Tục – Skip Silence &amp; Crossfade</span>
+            </div>
+            <p className="text-[11px] text-neutral-400 mt-0.5">
+              Áp dụng cho âm thanh <strong className="text-neutral-200">Nhạc nền Trang chủ</strong> và{' '}
+              <strong className="text-neutral-200">Nhạc nền Stage</strong> trên toàn hệ thống.
+            </p>
           </div>
-        
+
+          <div className="flex items-center gap-2 shrink-0">
+            {isLoopDirty && (
+              <span className="text-[10px] font-semibold text-amber-300">
+                Chưa đồng bộ toàn hệ thống
+              </span>
+            )}
+            <button
+              type="button"
+              data-testid="loop-activate-btn"
+              disabled={isCloudSyncing}
+              onClick={() => void handleActivateLoopConfig()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs shadow active:scale-95 transition-all cursor-pointer"
+            >
+              <Rocket className="w-3.5 h-3.5" />
+              <span>Kích hoạt</span>
+            </button>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           <button
             type="button"
             disabled={!isAdmin}
-            onClick={() => musicManager.updateLoopConfig({ loop: !loopConfig.loop })}
-            className={`p-2.5 rounded-lg border text-left transition-all ${
+            onClick={() => handleUpdateLoopField({ loop: !loopConfig.loop })}
+            className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
               loopConfig.loop
                 ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
                 : 'bg-neutral-900 border-neutral-800 text-neutral-400'
@@ -997,8 +752,8 @@ export const MusicAdminPanel: React.FC = () => {
           <button
             type="button"
             disabled={!isAdmin}
-            onClick={() => musicManager.updateLoopConfig({ skipSilence: !loopConfig.skipSilence })}
-            className={`p-2.5 rounded-lg border text-left transition-all ${
+            onClick={() => handleUpdateLoopField({ skipSilence: !loopConfig.skipSilence })}
+            className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
               loopConfig.skipSilence
                 ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
                 : 'bg-neutral-900 border-neutral-800 text-neutral-400'
@@ -1008,14 +763,14 @@ export const MusicAdminPanel: React.FC = () => {
               <span>Skip Silence</span>
               <span>{loopConfig.skipSilence ? 'BẬT' : 'TẮT'}</span>
             </div>
-            <p className="text-[10px] text-neutral-400 mt-0.5">Bỏ qua khoảng lặng thực sự (&lt; -48dB)</p>
+            <p className="text-[10px] text-neutral-400 mt-0.5">Bỏ qua khoảng lặng (&lt; -48dB)</p>
           </button>
 
           <button
             type="button"
             disabled={!isAdmin}
-            onClick={() => musicManager.updateLoopConfig({ seamlessLoop: !loopConfig.seamlessLoop })}
-            className={`p-2.5 rounded-lg border text-left transition-all ${
+            onClick={() => handleUpdateLoopField({ seamlessLoop: !loopConfig.seamlessLoop })}
+            className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
               loopConfig.seamlessLoop
                 ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
                 : 'bg-neutral-900 border-neutral-800 text-neutral-400'
@@ -1025,14 +780,14 @@ export const MusicAdminPanel: React.FC = () => {
               <span>Seamless Loop</span>
               <span>{loopConfig.seamlessLoop ? 'BẬT' : 'TẮT'}</span>
             </div>
-            <p className="text-[10px] text-neutral-400 mt-0.5">Chu kỳ lặp liền mạch không ngắt quãng</p>
+            <p className="text-[10px] text-neutral-400 mt-0.5">Chu kỳ lặp liền mạch</p>
           </button>
 
           <button
             type="button"
             disabled={!isAdmin}
-            onClick={() => musicManager.updateLoopConfig({ crossfade: !loopConfig.crossfade })}
-            className={`p-2.5 rounded-lg border text-left transition-all ${
+            onClick={() => handleUpdateLoopField({ crossfade: !loopConfig.crossfade })}
+            className={`p-2.5 rounded-lg border text-left transition-all cursor-pointer ${
               loopConfig.crossfade
                 ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
                 : 'bg-neutral-900 border-neutral-800 text-neutral-400'
@@ -1042,7 +797,7 @@ export const MusicAdminPanel: React.FC = () => {
               <span>Crossfade</span>
               <span>{loopConfig.crossfade ? 'BẬT' : 'TẮT'}</span>
             </div>
-            <p className="text-[10px] text-neutral-400 mt-0.5">Chồng mượt cuối & đầu bài tránh tiếng click</p>
+            <p className="text-[10px] text-neutral-400 mt-0.5">Chồng mượt cuối &amp; đầu bài</p>
           </button>
         </div>
 
@@ -1059,7 +814,7 @@ export const MusicAdminPanel: React.FC = () => {
             disabled={!isAdmin || !loopConfig.crossfade}
             value={loopConfig.crossfadeDurationSec}
             onChange={(e) =>
-              musicManager.updateLoopConfig({ crossfadeDurationSec: parseFloat(e.target.value) })
+              handleUpdateLoopField({ crossfadeDurationSec: parseFloat(e.target.value) })
             }
             className="flex-1 accent-emerald-500 cursor-pointer h-1.5 bg-neutral-800 rounded"
           />
@@ -1069,127 +824,420 @@ export const MusicAdminPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* SECTION 3: SCOPE ASSIGNMENT & PRIORITY HIERARCHY */}
+      {/* SECTION 3: SCOPE ASSIGNMENT (NHẠC NỀN TRANG CHỦ, TOÀN GAME, SOLO, 2 - AI, 2P, TẤT CẢ STAGE) */}
       <div className="p-3.5 rounded-xl bg-neutral-950/70 border border-neutral-800 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2 font-bold text-neutral-200">
-            <Layers className="w-4 h-4 text-sky-400" />
-            <span>3. Phạm Vi Áp Dụng & Thứ Tự Ưu Tiên (Stage Riêng → Chế Độ Chơi → Toàn Game)</span>
+          <div>
+            <div className="flex items-center gap-2 font-bold text-neutral-200">
+              <Layers className="w-4 h-4 text-sky-400" />
+              <span>3. Phạm Vi Áp Dụng Âm Thanh</span>
+            </div>
+            <p className="text-[11px] text-neutral-400 mt-0.5">
+              Chọn file cho Nhạc nền Trang chủ, Toàn Game, từng chế độ (Solo, 2 - AI, 2P) và từng Stage đang có, sau đó bấm <strong>Kích hoạt</strong>.
+            </p>
           </div>
 
-          {isAdmin && (
+          <div className="flex flex-wrap items-center gap-2">
+            {isAssignmentsDirty && (
+              <span className="text-[10px] font-semibold text-amber-300">
+                Có thay đổi chưa kích hoạt
+              </span>
+            )}
             <button
               type="button"
-              onClick={() => musicManager.resetAllAssignmentsToDefault()}
-              className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[10px] font-semibold"
+              onClick={() => {
+                musicManager.resetAllAssignmentsToDefault();
+                setIsAssignmentsDirty(true);
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[11px] font-semibold cursor-pointer"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>Khôi phục Mặc định Toàn bộ</span>
+              <span>Đặt lại mặc định</span>
             </button>
-          )}
+            <button
+              type="button"
+              data-testid="media-assignments-activate-btn"
+              disabled={isCloudSyncing}
+              onClick={() => void handleActivateAssignments()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs shadow active:scale-95 transition-all cursor-pointer"
+            >
+              <Rocket className="w-3.5 h-3.5" />
+              <span>Kích hoạt</span>
+            </button>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Scope 1: Global All Game */}
+        {/* 3A. Nhạc nền Trang chủ & Toàn Bộ Game */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1.5">
             <div className="font-bold text-neutral-200 flex items-center justify-between">
-              <span>1. Toàn Bộ Game</span>
-              <span className="text-[10px] text-neutral-400 font-mono">Ưu tiên #3</span>
+              <span>Nhạc nền &gt; Trang chủ</span>
+              <span className="text-[10px] text-amber-300 font-mono">
+                {trackLabelForId(assignments.homeTrackId)}
+              </span>
             </div>
             <select
+              data-testid="assign-home-select"
+              disabled={!isAdmin}
+              value={assignments.homeTrackId ?? ''}
+              onChange={(e) => {
+                musicManager.assignToHome(e.target.value ? e.target.value : null);
+                setIsAssignmentsDirty(true);
+              }}
+              className="w-full p-1.5 rounded bg-neutral-950 border border-neutral-700 text-neutral-200 text-xs"
+            >
+              <option value="">-- Theo Nhạc nền Toàn Game / Tắt --</option>
+              {selectableTracks.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.displayName} ({t.fileName})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1.5">
+            <div className="font-bold text-neutral-200 flex items-center justify-between">
+              <span>Nhạc nền &gt; Toàn Bộ Game</span>
+              <span className="text-[10px] text-neutral-400 font-mono">
+                {trackLabelForId(assignments.globalTrackId)}
+              </span>
+            </div>
+            <select
+              data-testid="assign-global-select"
               disabled={!isAdmin}
               value={assignments.globalTrackId ?? ''}
-              onChange={(e) =>
-                musicManager.assignToGlobal(e.target.value ? e.target.value : null)
-              }
+              onChange={(e) => {
+                musicManager.assignToGlobal(e.target.value ? e.target.value : null);
+                setIsAssignmentsDirty(true);
+              }}
               className="w-full p-1.5 rounded bg-neutral-950 border border-neutral-700 text-neutral-200 text-xs"
             >
-              <option value="">-- Nhạc 8-Bit Mặc Định Tích Hợp --</option>
-              {tracks.map((t) => (
+              <option value="">-- Tắt / Chưa chọn file --</option>
+              {selectableTracks.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.displayName}
+                  {t.displayName} ({t.fileName})
                 </option>
               ))}
             </select>
           </div>
+        </div>
 
-          {/* Scope 2: Game Mode */}
+        {/* 3B. Chế độ chơi: Solo (1P), 2 - AI, 2P */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1.5">
             <div className="font-bold text-neutral-200 flex items-center justify-between">
-              <span>2. Chế Độ Chơi (Solo 1P)</span>
-              <span className="text-[10px] text-sky-400 font-mono">Ưu tiên #2</span>
+              <span>Chế độ: Solo (1P)</span>
+              <span className="text-[10px] text-sky-400 font-mono">
+                {assignments.modeTracks.SOLO ? 'Riêng' : 'Kế thừa'}
+              </span>
             </div>
             <select
+              data-testid="assign-mode-solo-select"
               disabled={!isAdmin}
               value={assignments.modeTracks.SOLO ?? ''}
-              onChange={(e) =>
-                musicManager.assignToMode('SOLO' as GameModeScope, e.target.value ? e.target.value : null)
-              }
+              onChange={(e) => {
+                musicManager.assignToMode('SOLO' as GameModeScope, e.target.value ? e.target.value : null);
+                setIsAssignmentsDirty(true);
+              }}
               className="w-full p-1.5 rounded bg-neutral-950 border border-neutral-700 text-neutral-200 text-xs"
             >
-              <option value="">-- Kế thừa từ Toàn Bộ Game --</option>
-              {tracks.map((t) => (
+              <option value="">-- Kế thừa Toàn Game --</option>
+              {selectableTracks.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.displayName}
+                  {t.displayName} ({t.fileName})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* Scope 3: Specific Stage */}
           <div className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1.5">
             <div className="font-bold text-neutral-200 flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <span>3. Stage Cụ Thể:</span>
+              <span>Chế độ: 2 - AI</span>
+              <span className="text-[10px] text-sky-400 font-mono">
+                {assignments.modeTracks.COOP_AI ? 'Riêng' : 'Kế thừa'}
+              </span>
+            </div>
+            <select
+              data-testid="assign-mode-coop-ai-select"
+              disabled={!isAdmin}
+              value={assignments.modeTracks.COOP_AI ?? ''}
+              onChange={(e) => {
+                musicManager.assignToMode('COOP_AI' as GameModeScope, e.target.value ? e.target.value : null);
+                setIsAssignmentsDirty(true);
+              }}
+              className="w-full p-1.5 rounded bg-neutral-950 border border-neutral-700 text-neutral-200 text-xs"
+            >
+              <option value="">-- Kế thừa Toàn Game --</option>
+              {selectableTracks.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.displayName} ({t.fileName})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1.5">
+            <div className="font-bold text-neutral-200 flex items-center justify-between">
+              <span>Chế độ: 2P</span>
+              <span className="text-[10px] text-sky-400 font-mono">
+                {assignments.modeTracks.TWO_PLAYER ? 'Riêng' : 'Kế thừa'}
+              </span>
+            </div>
+            <select
+              data-testid="assign-mode-two-player-select"
+              disabled={!isAdmin}
+              value={assignments.modeTracks.TWO_PLAYER ?? ''}
+              onChange={(e) => {
+                musicManager.assignToMode('TWO_PLAYER' as GameModeScope, e.target.value ? e.target.value : null);
+                setIsAssignmentsDirty(true);
+              }}
+              className="w-full p-1.5 rounded bg-neutral-950 border border-neutral-700 text-neutral-200 text-xs"
+            >
+              <option value="">-- Kế thừa Toàn Game --</option>
+              {selectableTracks.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.displayName} ({t.fileName})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {/* 3C. Nhạc Stage — Hiển thị danh sách toàn bộ Stage đang có */}
+        <div className="p-3 rounded-lg bg-neutral-900/90 border border-neutral-800 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="font-bold text-amber-300 text-xs">
+              Nhạc Stage &gt; Danh Sách Stage Đang Có ({sortedStages.length > 0 ? sortedStages.length : 1})
+            </span>
+            <span className="text-[10px] text-neutral-400 font-mono">
+              Ưu tiên cao nhất khi vào từng màn chơi
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-h-64 overflow-y-auto pr-1">
+            {(sortedStages.length > 0
+              ? sortedStages
+              : [{ id: 1, name: 'Stage 1 (Chính thức)', orderIndex: 1, status: 'ACTIVE' as const }]
+            ).map((stage) => (
+              <div
+                key={stage.id}
+                className="p-2 rounded-lg bg-neutral-950 border border-neutral-800 flex flex-col gap-1.5"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-bold text-neutral-100 text-[11px] truncate">
+                    Stage {stage.orderIndex}: {stage.name}
+                  </span>
+                  <span
+                    className={`px-1.5 py-0.5 rounded text-[9px] font-bold shrink-0 ${
+                      stage.status === 'ACTIVE'
+                        ? 'bg-emerald-500/15 text-emerald-300'
+                        : 'bg-neutral-800 text-neutral-400'
+                    }`}
+                  >
+                    {stage.status === 'ACTIVE' ? 'Đang mở' : 'Bản nháp'}
+                  </span>
+                </div>
                 <select
-                  value={selectedStageForAssign}
-                  onChange={(e) => setSelectedStageForAssign(Number(e.target.value))}
-                  className="bg-neutral-950 border border-neutral-700 rounded px-1.5 py-0.5 text-amber-400 font-mono text-[11px]"
+                  data-testid={`assign-stage-${stage.id}-select`}
+                  disabled={!isAdmin}
+                  value={assignments.stageTracks[stage.id] ?? ''}
+                  onChange={(e) => {
+                    musicManager.assignToStage(stage.id, e.target.value ? e.target.value : null);
+                    setIsAssignmentsDirty(true);
+                  }}
+                  className="w-full p-1.5 rounded bg-neutral-900 border border-neutral-700 text-neutral-200 text-xs"
                 >
-                  {(managedStages.length > 0
-                    ? managedStages.map((s) => s.id)
-                    : [1, 2, 3]
-                  ).map((sid) => (
-                    <option key={sid} value={sid}>
-                      Stage {sid}
+                  <option value="">-- Kế thừa từ Chế độ chơi / Toàn Game --</option>
+                  {selectableTracks.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.displayName} ({t.fileName})
                     </option>
                   ))}
                 </select>
               </div>
-              <span className="text-[10px] text-amber-400 font-mono font-bold">Ưu tiên #1 (Cao nhất)</span>
-            </div>
-            <select
-              disabled={!isAdmin}
-              value={assignments.stageTracks[selectedStageForAssign] ?? ''}
-              onChange={(e) =>
-                musicManager.assignToStage(
-                  selectedStageForAssign,
-                  e.target.value ? e.target.value : null
-                )
-              }
-              className="w-full p-1.5 rounded bg-neutral-950 border border-neutral-700 text-neutral-200 text-xs"
-            >
-              <option value="">-- Kế thừa từ Chế Độ Chơi --</option>
-              {tracks.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.displayName}
-                </option>
-              ))}
-            </select>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* SECTION 5 (M7.3.10 Section 4): QUẢN LÝ & UPLOAD ÂM THANH HÀNH ĐỘNG (ACTION SFX) */}
+      {/* SECTION 4: HOME BACKGROUND VIDEO (.mp4) WITH OPACITY & LOOP */}
+      <div className="p-3.5 rounded-xl bg-neutral-950/70 border border-neutral-800 space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <div className="flex items-center gap-2 font-bold text-neutral-200">
+              <Film className="w-4 h-4 text-amber-400" />
+              <span>4. Video Chạy Nền Trang Chủ (.mp4)</span>
+            </div>
+            <p className="text-[11px] text-neutral-400 mt-0.5">
+              Tải lên video định dạng <code className="text-amber-300 font-mono">.mp4</code> (tối đa 100 MB) để chạy nền Trang chủ với độ mờ và vòng lặp liên tục.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              ref={videoUploadInputRef}
+              type="file"
+              accept=".mp4,video/mp4"
+              onChange={handleUploadHomeVideo}
+              className="hidden"
+            />
+            <button
+              type="button"
+              data-testid="upload-home-video-btn"
+              disabled={isCloudSyncing || isUploadingVideo}
+              onClick={() => videoUploadInputRef.current?.click()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-extrabold text-xs shadow transition-all cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5" />
+              <span>{isUploadingVideo ? 'Đang tải video...' : 'Upload Video (.mp4)'}</span>
+            </button>
+            <button
+              type="button"
+              data-testid="use-default-intro-video-btn"
+              disabled={isCloudSyncing || isUploadingVideo}
+              onClick={() => void handleActivateStaticIntroVideo()}
+              className="px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 font-bold text-[11px] transition-all cursor-pointer disabled:opacity-50"
+            >
+              Dùng video có sẵn
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 items-start">
+          {/* Controls */}
+          <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-3">
+            <div className="text-[11px] text-neutral-300 flex items-center justify-between gap-2">
+              <span>File hiện tại:</span>
+              <strong className="text-amber-300 font-mono truncate max-w-[220px]">
+                {homeVideoConfig ? `${homeVideoConfig.fileName} (${formatBytes(homeVideoConfig.fileSize)})` : 'Chưa cài đặt'}
+              </strong>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={!homeVideoConfig}
+                onClick={() => {
+                  setVideoEnabledDraft((v) => !v);
+                  setIsVideoDirty(true);
+                }}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer disabled:opacity-40 ${
+                  videoEnabledDraft
+                    ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
+                    : 'bg-neutral-950 border-neutral-800 text-neutral-400'
+                }`}
+              >
+                <div className="font-extrabold text-[11px] flex items-center justify-between">
+                  <span className="flex items-center gap-1">
+                    {videoEnabledDraft ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                    Hiển thị
+                  </span>
+                  <span>{videoEnabledDraft ? 'BẬT' : 'TẮT'}</span>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                disabled={!homeVideoConfig}
+                onClick={() => {
+                  setVideoLoopDraft((v) => !v);
+                  setIsVideoDirty(true);
+                }}
+                className={`p-2 rounded-lg border text-left transition-all cursor-pointer disabled:opacity-40 ${
+                  videoLoopDraft
+                    ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
+                    : 'bg-neutral-950 border-neutral-800 text-neutral-400'
+                }`}
+              >
+                <div className="font-extrabold text-[11px] flex items-center justify-between">
+                  <span>Lặp lại (Loop)</span>
+                  <span>{videoLoopDraft ? 'BẬT' : 'TẮT'}</span>
+                </div>
+              </button>
+            </div>
+
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-neutral-300 font-semibold">Độ mờ video nền (Opacity):</span>
+                <span className="font-mono font-bold text-amber-300">
+                  {Math.round(videoOpacityDraft * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min="0.05"
+                max="1.0"
+                step="0.05"
+                disabled={!homeVideoConfig}
+                value={videoOpacityDraft}
+                onChange={(e) => {
+                  setVideoOpacityDraft(parseFloat(e.target.value));
+                  setIsVideoDirty(true);
+                }}
+                className="w-full accent-amber-500 cursor-pointer h-1.5 bg-neutral-800 rounded disabled:opacity-40"
+              />
+            </div>
+
+            {homeVideoConfig && (
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <button
+                  type="button"
+                  data-testid="activate-home-video-btn"
+                  disabled={isCloudSyncing}
+                  onClick={() => void handleActivateHomeVideoSettings()}
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs shadow cursor-pointer"
+                >
+                  <Rocket className="w-3.5 h-3.5" />
+                  <span>{isVideoDirty ? 'Kích hoạt thay đổi' : 'Kích hoạt'}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={isCloudSyncing}
+                  onClick={() => void handleDeleteHomeVideo()}
+                  className="px-2.5 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-700/50 font-bold text-xs flex items-center gap-1 cursor-pointer"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>Xóa</span>
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Preview Card */}
+          <div className="relative h-36 rounded-lg border border-neutral-800 bg-neutral-950 overflow-hidden flex items-center justify-center">
+            {isHomeVideoLoading ? (
+              <span className="text-[11px] text-neutral-400 font-mono">Đang tải video xem trước...</span>
+            ) : homeVideoUrl && videoEnabledDraft ? (
+              <>
+                <video
+                  src={homeVideoUrl}
+                  autoPlay
+                  muted
+                  playsInline
+                  loop={videoLoopDraft}
+                  style={{ opacity: videoOpacityDraft }}
+                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                />
+                <div className="relative z-10 px-3 py-1 rounded bg-neutral-950/75 border border-neutral-700 text-[10px] font-mono text-amber-300">
+                  Xem trước độ mờ {Math.round(videoOpacityDraft * 100)}% • {videoLoopDraft ? 'Loop' : '1 lần'}
+                </div>
+              </>
+            ) : (
+              <span className="text-[11px] text-neutral-500">
+                {homeVideoConfig ? 'Video nền đang tạm tắt' : 'Chưa có video nền Trang chủ'}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* SECTION 5: ACTION SFX */}
       <div className="p-3.5 rounded-xl bg-neutral-950 border border-amber-500/30 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 font-bold text-amber-300">
             <FileAudio className="w-4 h-4 text-amber-400" />
-            <span>Quản Lý &amp; Upload Âm Thanh Hành Động (Action SFX)</span>
+            <span>5. Âm thanh hành động (Action SFX)</span>
           </div>
-          <span className="px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 font-mono text-[10px] font-bold">
-            ADMIN ONLY
-          </span>
         </div>
 
         <p className="text-[11px] text-neutral-400 leading-relaxed">
@@ -1281,10 +1329,10 @@ export const MusicAdminPanel: React.FC = () => {
                       data-testid={`admin-action-sfx-deactivate-${slot.id}`}
                       onClick={() => handleDeactivateActionSfx(slot.id, slot.label)}
                       className="px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                      title="Tạm tắt file tùy chỉnh (quay về 8-Bit mặc định)"
+                      title="Dùng file 8-Bit mặc định"
                     >
                       <Square className="w-3 h-3" />
-                      <span>Tạm tắt</span>
+                      <span>Mặc định</span>
                     </button>
                   )}
 
@@ -1296,10 +1344,10 @@ export const MusicAdminPanel: React.FC = () => {
                       actionSfxInputRef.current?.click();
                     }}
                     className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
-                    title={customTrack ? 'Thay thế file âm thanh' : 'Tải lên file âm thanh'}
+                    title="Upload file âm thanh"
                   >
                     <Upload className="w-3 h-3" />
-                    <span>{customTrack ? 'Thay thế' : 'Upload'}</span>
+                    <span>Upload</span>
                   </button>
 
                   {customTrack && (

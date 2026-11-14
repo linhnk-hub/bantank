@@ -1426,14 +1426,135 @@ service cloud.firestore {
         && data.version >= 1;
     }
 
+    function isValidHomeVideoConfig(v) {
+      return v is map
+        && v.keys().hasAll([
+          'videoId',
+          'displayName',
+          'fileName',
+          'storagePath',
+          'contentType',
+          'fileSize',
+          'version',
+          'opacity',
+          'loop',
+          'isEnabled'
+        ])
+        && v.keys().hasOnly([
+          'videoId',
+          'displayName',
+          'fileName',
+          'storagePath',
+          'contentType',
+          'fileSize',
+          'version',
+          'opacity',
+          'loop',
+          'isEnabled'
+        ])
+        && isValidId(v.videoId)
+        && v.displayName is string
+        && v.displayName.size() >= 1
+        && v.displayName.size() <= 120
+        && v.fileName is string
+        && v.fileName.size() >= 5
+        && v.fileName.size() <= 180
+        && v.fileName.matches('^[A-Za-z0-9._-]+\\.mp4$')
+        && v.storagePath is string
+        && (
+          v.storagePath.matches('^video_catalog/[A-Za-z0-9_-]+/v[1-9][0-9]*/[A-Za-z0-9._-]+\\.mp4$')
+          || v.storagePath == 'intro-bantank.mp4'
+        )
+        && v.contentType == 'video/mp4'
+        && v.fileSize is int
+        && v.fileSize > 0
+        && v.fileSize <= 104857600
+        && v.version is int
+        && v.version >= 1
+        && (v.opacity is int || v.opacity is float)
+        && v.opacity >= 0.05
+        && v.opacity <= 1.0
+        && v.loop is bool
+        && v.isEnabled is bool;
+    }
+
+    function isValidSystemMediaConfig(data) {
+      return data.keys().hasAll([
+          'homeSoundId',
+          'globalSoundId',
+          'modeSoundIds',
+          'stageSoundIds',
+          'loopConfig',
+          'homeVideo',
+          'updatedAt',
+          'updatedBy',
+          'version'
+        ])
+        && data.keys().hasOnly([
+          'homeSoundId',
+          'globalSoundId',
+          'modeSoundIds',
+          'stageSoundIds',
+          'loopConfig',
+          'homeVideo',
+          'updatedAt',
+          'updatedBy',
+          'version'
+        ])
+        && (data.homeSoundId == null || isValidId(data.homeSoundId))
+        && (data.globalSoundId == null || isValidId(data.globalSoundId))
+        && data.modeSoundIds is map
+        && data.modeSoundIds.keys().hasAll(['SOLO', 'COOP_AI', 'TWO_PLAYER'])
+        && data.modeSoundIds.keys().hasOnly(['SOLO', 'COOP_AI', 'TWO_PLAYER'])
+        && (data.modeSoundIds.SOLO == null || isValidId(data.modeSoundIds.SOLO))
+        && (data.modeSoundIds.COOP_AI == null || isValidId(data.modeSoundIds.COOP_AI))
+        && (data.modeSoundIds.TWO_PLAYER == null || isValidId(data.modeSoundIds.TWO_PLAYER))
+        && data.stageSoundIds is map
+        && data.stageSoundIds.size() <= 50
+        && data.loopConfig is map
+        && data.loopConfig.keys().hasAll([
+          'loop',
+          'skipSilence',
+          'seamlessLoop',
+          'crossfade',
+          'crossfadeDurationSec',
+          'silenceThresholdDb'
+        ])
+        && data.loopConfig.keys().hasOnly([
+          'loop',
+          'skipSilence',
+          'seamlessLoop',
+          'crossfade',
+          'crossfadeDurationSec',
+          'silenceThresholdDb'
+        ])
+        && data.loopConfig.loop is bool
+        && data.loopConfig.skipSilence is bool
+        && data.loopConfig.seamlessLoop is bool
+        && data.loopConfig.crossfade is bool
+        && (data.loopConfig.crossfadeDurationSec is int || data.loopConfig.crossfadeDurationSec is float)
+        && data.loopConfig.crossfadeDurationSec >= 0.05
+        && data.loopConfig.crossfadeDurationSec <= 5.0
+        && (data.loopConfig.silenceThresholdDb is int || data.loopConfig.silenceThresholdDb is float)
+        && data.loopConfig.silenceThresholdDb >= -96
+        && data.loopConfig.silenceThresholdDb <= -10
+        && (data.homeVideo == null || isValidHomeVideoConfig(data.homeVideo))
+        && data.updatedAt is int
+        && data.updatedAt > 0
+        && data.updatedBy == 'linhnk2013@gmail.com'
+        && data.version is int
+        && data.version >= 1;
+    }
+
     match /system_config/{docId} {
-      allow get: if isVerifiedPersonalGmail() && (docId == 'audio' || docId == 'stages_catalog' || docId == 'action_sfx');
+      allow get: if isVerifiedPersonalGmail() && (docId == 'audio' || docId == 'stages_catalog' || docId == 'action_sfx' || docId == 'media');
       allow list: if false;
       allow create: if isAdmin()
         && (
           (docId == 'audio' && isValidSystemAudioConfig(incoming()))
           || (docId == 'stages_catalog' && isValidSystemStagesCatalogConfig(incoming()))
           || (docId == 'action_sfx' && isValidSystemActionSfxConfig(incoming()))
+          || (docId == 'media' && isValidSystemMediaConfig(incoming()))
         );
       allow update: if isAdmin()
         && incoming().version > existing().version
@@ -1441,8 +1562,9 @@ service cloud.firestore {
           (docId == 'audio' && isValidSystemAudioConfig(incoming()))
           || (docId == 'stages_catalog' && isValidSystemStagesCatalogConfig(incoming()))
           || (docId == 'action_sfx' && isValidSystemActionSfxConfig(incoming()))
+          || (docId == 'media' && isValidSystemMediaConfig(incoming()))
         );
-      allow delete: if isAdmin() && (docId == 'audio' || docId == 'action_sfx');
+      allow delete: if isAdmin() && (docId == 'audio' || docId == 'action_sfx' || docId == 'media');
     }
 
     // =========================================================================

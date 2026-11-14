@@ -1474,14 +1474,124 @@ async function verifyM7311StageAudioUploadAsyncSuite() {
   console.log('[M7.3.11 Stage Audio Upload Diagnostics & E2E Verification] 4/4 MANDATORY CASES PASS');
 }
 
+async function verifyMediaAndVideoUpgradeAsyncSuite() {
+  const fsMod = await import('node:fs');
+  const pathMod = await import('node:path');
+
+  const musicAdminSrc = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/components/MusicAdminPanel.tsx'),
+    'utf-8'
+  );
+  const mainMenuSrc = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/components/MainMenuScreen.tsx'),
+    'utf-8'
+  );
+  const settingsModalSrc = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/components/SettingsModal.tsx'),
+    'utf-8'
+  );
+
+  // 1. UI checks: tab renamed to 'Media', no v1/v2 or 'Admin duy nhất' in MusicAdminPanel, 2 - AI & 2P present, Loop Kích hoạt & MP4 upload present
+  if (
+    !settingsModalSrc.includes("label: 'Media'") ||
+    musicAdminSrc.includes('Admin duy nhất') ||
+    musicAdminSrc.includes('v${') ||
+    musicAdminSrc.includes('?v=') ||
+    !musicAdminSrc.includes('2 - AI') ||
+    !musicAdminSrc.includes('2P') ||
+    !musicAdminSrc.includes('data-testid="loop-activate-btn"') ||
+    !musicAdminSrc.includes('data-testid="upload-home-video-btn"') ||
+    !mainMenuSrc.includes('<video')
+  ) {
+    throw new Error('Media UI requirements check failed in SettingsModal / MusicAdminPanel / MainMenuScreen');
+  }
+
+  // 2. Multi-file audio upload + assignments (Home, 2 - AI, 2P, Stage) + Loop cloud activation + Home MP4 video
+  const mm = MusicManager.getInstance();
+  const cloud = new InMemorySharedMusicCloudAdapter();
+  const synthBuffer = {
+    duration: 24,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    getChannelData: () => new Float32Array(44100),
+  };
+  mm.setCloudAdapter(cloud, async () => synthBuffer);
+  mm.setUserRole('ADMIN');
+  mm.ensureSharedConfigSubscription('uid_admin_media');
+
+  const sampleAudio = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00]).buffer;
+  const audioFiles = [
+    { name: 'home_theme.mp3', type: 'audio/mpeg', size: 64_000, arrayBuffer: async () => sampleAudio.slice(0) },
+    { name: 'stage1_theme.ogg', type: 'audio/ogg', size: 96_000, arrayBuffer: async () => sampleAudio.slice(0) },
+  ] as unknown as File[];
+
+  const batchRes = await mm.uploadMultipleAudioFiles(audioFiles);
+  if (batchRes.uploaded.length !== 2 || batchRes.failed.length !== 0) {
+    throw new Error('Multi-file audio upload failed');
+  }
+
+  const [homeEntry, stage1Entry] = batchRes.uploaded;
+  mm.assignToHome(homeEntry.soundId);
+  mm.assignToMode('COOP_AI', stage1Entry.soundId);
+  mm.assignToMode('TWO_PLAYER', homeEntry.soundId);
+  mm.assignToStage(1, stage1Entry.soundId);
+  mm.updateLoopConfig({ loop: true, crossfadeDurationSec: 1.5 });
+
+  const loopActRes = await mm.activateLoopConfigSystemWide(1_731_000_000_000);
+  const assignActRes = await mm.activateMediaAssignmentsSystemWide(1_731_000_001_000);
+  if (
+    !loopActRes.success ||
+    !assignActRes.success ||
+    assignActRes.config?.homeSoundId !== homeEntry.soundId ||
+    assignActRes.config?.modeSoundIds.COOP_AI !== stage1Entry.soundId ||
+    assignActRes.config?.modeSoundIds.TWO_PLAYER !== homeEntry.soundId ||
+    assignActRes.config?.stageSoundIds['1'] !== stage1Entry.soundId ||
+    assignActRes.config?.loopConfig.crossfadeDurationSec !== 1.5
+  ) {
+    throw new Error('Failed to activate loop config or multi-scope media assignments system-wide');
+  }
+
+  // 3. Home MP4 Video Upload + Opacity & Loop update
+  const fakeVideoFile = {
+    name: 'home_bg.mp4',
+    type: 'video/mp4',
+    size: 1_200_000,
+    arrayBuffer: async () => new Uint8Array([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]).buffer,
+  } as unknown as File;
+
+  const vidRes = await mm.uploadHomeBackgroundVideo(fakeVideoFile, {
+    opacity: 0.4,
+    loop: true,
+    nowMs: 1_731_000_002_000,
+  });
+  if (!vidRes.success || !vidRes.homeVideo || vidRes.homeVideo.opacity !== 0.4 || !mm.getHomeVideoUrl()) {
+    throw new Error('Home MP4 video upload & URL resolution failed');
+  }
+
+  const vidUpdateRes = await mm.updateHomeVideoSettings({ opacity: 0.65, loop: false }, 1_731_000_003_000);
+  if (!vidUpdateRes.success || vidUpdateRes.homeVideo?.opacity !== 0.65 || vidUpdateRes.homeVideo?.loop !== false) {
+    throw new Error('Home video opacity/loop update failed');
+  }
+
+  const vidDelRes = await mm.deleteHomeBackgroundVideo(1_731_000_004_000);
+  if (!vidDelRes.success || mm.getHomeVideoConfig() !== null) {
+    throw new Error('Home video deletion failed');
+  }
+
+  mm.resetAllAssignmentsToDefault();
+  mm.syncRoleFromAuthUser(null);
+  console.log('[Media Upgrade (Multi-Audio, 2-AI/2P/Stages, Loop Activation, Home MP4 Video) E2E] 3/3 MANDATORY CASES PASS');
+}
+
 async function runAllAsyncVerifications() {
   await verifyM733AsyncWorkflow();
   await verifyM735SharedAvatarCatalogAsyncSuite();
   await verifyM7311StageAudioUploadAsyncSuite();
-  const asyncCasesCount = 10 + 23 + 4;
+  await verifyMediaAndVideoUpgradeAsyncSuite();
+  const asyncCasesCount = 10 + 23 + 4 + 3;
   console.log('============================================');
   console.log(`SYNC UNIT TESTS  : ${totalPassed}/${totalTests} PASS (M2-M5: 75 | M6: 136 | M7.1: 35 | M7.2: 10 | M7.3: ${m73Results.length})`);
-  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4)`);
+  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Upgrade: 3)`);
   console.log(`GRAND TOTAL SUITE: ${totalPassed + asyncCasesCount}/${totalTests + asyncCasesCount} PASS (0 FAILED, 0 DUPLICATED)`);
   console.log('============================================');
   process.exit(0);

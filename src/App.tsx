@@ -20,7 +20,7 @@ import { DevToolsDrawer } from './components/DevToolsDrawer.tsx';
 import { SettingsModal, type SettingsTabId } from './components/SettingsModal.tsx';
 import { SupportModal } from './components/SupportModal.tsx';
 import { SoundManager } from './core/audio.ts';
-import { MusicManager } from './core/musicManager.ts';
+import { MusicManager, type GameModeScope } from './core/musicManager.ts';
 import {
   MATCH_TIMER_CONFIG,
   STAGE_1_MAP,
@@ -113,6 +113,18 @@ export default function App() {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Sync Home BGM when entering MAIN_MENU / MODE_SELECTION, and pause on WELCOME
+  useEffect(() => {
+    const mm = MusicManager.getInstance();
+    if (appScreen === 'MAIN_MENU' || appScreen === 'MODE_SELECTION') {
+      if (currentUser) {
+        mm.syncMenuPlayback();
+      }
+    } else if (appScreen === 'WELCOME') {
+      mm.pause();
+    }
+  }, [appScreen, currentUser]);
 
   // Safe browser autoplay unlock for Web Audio API
   useEffect(() => {
@@ -331,6 +343,13 @@ export default function App() {
     setGameState({ ...gameEngine.getState() });
   }, [gameEngine, clearVirtualTouchInputs]);
 
+  const getMusicModeFromEngine = useCallback((eng: GameEngine): GameModeScope => {
+    const gm = eng.getState().gameMode;
+    if (gm === 'TWO_PLAYERS_AI') return 'COOP_AI';
+    if (gm === 'TWO_PLAYERS_ONLINE') return 'TWO_PLAYER';
+    return 'SOLO';
+  }, []);
+
   const handleRestart = useCallback(() => {
     clearVirtualTouchInputs();
     gameEngine.restartStage();
@@ -338,10 +357,10 @@ export default function App() {
     const st = gameEngine.getState();
     MusicManager.getInstance().syncPlaybackWithContext(
       st.currentStageId,
-      gameEngine.isCoopMode() ? 'TWO_PLAYER' : 'SOLO'
+      getMusicModeFromEngine(gameEngine)
     );
     setGameState({ ...st });
-  }, [gameEngine, clearVirtualTouchInputs]);
+  }, [gameEngine, clearVirtualTouchInputs, getMusicModeFromEngine]);
 
   const handleStartMatch = useCallback(
     (mode: 'SOLO' | 'TWO_PLAYERS' = 'SOLO', twoPlayerOption?: 'P2_AI' | 'P2_REAL') => {
@@ -353,12 +372,12 @@ export default function App() {
       const st = gameEngine.getState();
       MusicManager.getInstance().syncPlaybackWithContext(
         st.currentStageId,
-        gameEngine.isCoopMode() ? 'TWO_PLAYER' : 'SOLO'
+        getMusicModeFromEngine(gameEngine)
       );
       setGameState({ ...st });
       setAppScreen('BATTLE');
     },
-    [sessionSnapshot.status, gameEngine, difficulty]
+    [sessionSnapshot.status, gameEngine, difficulty, getMusicModeFromEngine]
   );
 
   const handleStartOnlineMatch = useCallback(
@@ -421,9 +440,14 @@ export default function App() {
     setReturnToLobbyError(null);
     gameEngine.quitToMenu();
     setIsPaused(false);
-    MusicManager.getInstance().pause();
+    const targetScreen = wasTrial || !authManager.getCurrentUser() ? 'WELCOME' : 'MAIN_MENU';
+    if (targetScreen === 'MAIN_MENU') {
+      MusicManager.getInstance().syncMenuPlayback();
+    } else {
+      MusicManager.getInstance().pause();
+    }
     setGameState({ ...gameEngine.getState() });
-    setAppScreen(wasTrial || !authManager.getCurrentUser() ? 'WELCOME' : 'MAIN_MENU');
+    setAppScreen(targetScreen);
   }, [authManager, isTrialMode, gameEngine, coopManager]);
 
   const handleReturnToLobby = useCallback(async () => {
@@ -449,7 +473,7 @@ export default function App() {
       clearVirtualTouchInputs();
       gameEngine.quitToMenu();
       setIsPaused(false);
-      MusicManager.getInstance().pause();
+      MusicManager.getInstance().syncMenuPlayback();
       setGameState({ ...gameEngine.getState() });
       setSelectedMode('TWO_PLAYERS');
       setTwoPlayerOption('P2_REAL');
@@ -531,10 +555,10 @@ export default function App() {
     const st = gameEngine.getState();
     MusicManager.getInstance().syncPlaybackWithContext(
       st.currentStageId,
-      gameEngine.isCoopMode() ? 'TWO_PLAYER' : 'SOLO'
+      getMusicModeFromEngine(gameEngine)
     );
     setGameState({ ...st });
-  }, [authManager, isTrialMode, handleQuitToMenu, gameEngine]);
+  }, [authManager, isTrialMode, handleQuitToMenu, gameEngine, getMusicModeFromEngine]);
 
   const handleResetGame = useCallback(() => {
     gameEngine.restartStage();
@@ -542,10 +566,10 @@ export default function App() {
     const st = gameEngine.getState();
     MusicManager.getInstance().syncPlaybackWithContext(
       st.currentStageId,
-      gameEngine.isCoopMode() ? 'TWO_PLAYER' : 'SOLO'
+      getMusicModeFromEngine(gameEngine)
     );
     setGameState({ ...st });
-  }, [gameEngine]);
+  }, [gameEngine, getMusicModeFromEngine]);
 
   const handleSpawnNextEnemy = useCallback(() => {
     if (!isSuperAdmin) return;
@@ -1310,7 +1334,7 @@ export default function App() {
                       setIsSettingsOpen(true);
                     }}
                     className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
-                    title="Cài đặt Tài khoản & Âm thanh"
+                    title="Cài đặt Tài khoản & Media"
                   >
                     <Settings className="w-3.5 h-3.5 text-amber-400" />
                     <span className="hidden sm:inline">Cài đặt</span>

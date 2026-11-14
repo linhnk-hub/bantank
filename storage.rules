@@ -128,6 +128,43 @@ service firebase.storage {
         && request.resource == null;
     }
 
+    function isValidVideoId(videoId) {
+      return videoId is string
+        && videoId.size() >= 1
+        && videoId.size() <= 80
+        && videoId.matches('^[A-Za-z0-9_-]+$');
+    }
+
+    function isValidVideoFileName(fileName) {
+      return fileName is string
+        && fileName.size() >= 5
+        && fileName.size() <= 180
+        && fileName.matches('^[A-Za-z0-9._-]+\\.mp4$');
+    }
+
+    function isValidVideoCatalogPath(videoId, versionSegment, fileName) {
+      return isValidVideoId(videoId)
+        && versionSegment is string
+        && versionSegment.matches('^v[1-9][0-9]*$')
+        && isValidVideoFileName(fileName);
+    }
+
+    function isValidVideoCatalogCreate(videoId, versionSegment, fileName) {
+      return isValidVideoCatalogPath(videoId, versionSegment, fileName)
+        && resource == null
+        && request.resource != null
+        && request.resource.size >= 1
+        && request.resource.size <= 100 * 1024 * 1024
+        && request.resource.contentType is string
+        && request.resource.contentType == 'video/mp4';
+    }
+
+    function isValidVideoCatalogDelete(videoId, versionSegment, fileName) {
+      return isValidVideoCatalogPath(videoId, versionSegment, fileName)
+        && resource != null
+        && request.resource == null;
+    }
+
     // ------------------------------------------------------------------------
     // DANH MỤC AVATAR CHUNG: avatar_catalog/{avatarId}/{versionSegment}/{fileName}
     // ------------------------------------------------------------------------
@@ -172,6 +209,20 @@ service firebase.storage {
       // 5. Xóa: chỉ Admin duy nhất (linhnk2013@gmail.com)
       allow delete: if isAdmin()
                     && isValidSoundCatalogDelete(soundId, versionSegment, fileName);
+    }
+
+    // ------------------------------------------------------------------------
+    // VIDEO NỀN TRANG CHỦ: video_catalog/{videoId}/{versionSegment}/{fileName}
+    // ------------------------------------------------------------------------
+    match /video_catalog/{videoId}/{versionSegment}/{fileName} {
+      allow get: if isVerifiedPersonalGmail()
+                 && isValidVideoCatalogPath(videoId, versionSegment, fileName);
+      allow list: if false;
+      allow create: if isAdmin()
+                    && isValidVideoCatalogCreate(videoId, versionSegment, fileName);
+      allow update: if false;
+      allow delete: if isAdmin()
+                    && isValidVideoCatalogDelete(videoId, versionSegment, fileName);
     }
 
     // ------------------------------------------------------------------------

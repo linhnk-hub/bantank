@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { GameLogo } from './GameLogo.tsx';
 import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
+import { MusicManager, type HomeBackgroundVideoConfig } from '../core/musicManager.ts';
 
 export interface MainMenuScreenProps {
   user: {
@@ -61,8 +62,23 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
 }) => {
   const isSessionActive = session.status === 'ACTIVE';
   const avatarManager = AvatarManager.getInstance();
+  const musicManager = MusicManager.getInstance();
   const [avatarError, setAvatarError] = useState(false);
   const [, setAvatarTick] = useState(0);
+  const [homeVideoConfig, setHomeVideoConfig] = useState<HomeBackgroundVideoConfig | null>(() =>
+    musicManager.getHomeVideoConfig()
+  );
+  const [homeVideoUrl, setHomeVideoUrl] = useState<string | null>(() =>
+    musicManager.getHomeVideoUrl()
+  );
+
+  useEffect(() => {
+    const unsubMusic = musicManager.subscribe(() => {
+      setHomeVideoConfig(musicManager.getHomeVideoConfig());
+      setHomeVideoUrl(musicManager.getHomeVideoUrl());
+    });
+    return unsubMusic;
+  }, [musicManager]);
 
   useEffect(() => {
     avatarManager.observeCatalog();
@@ -117,8 +133,25 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
 
   return (
     <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+      {/* Home Background Video (.mp4 with configurable opacity & loop) */}
+      {homeVideoConfig?.isEnabled && homeVideoUrl && (
+        <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+          <video
+            key={homeVideoUrl}
+            src={homeVideoUrl}
+            autoPlay
+            muted
+            playsInline
+            loop={homeVideoConfig.loop !== false}
+            style={{ opacity: homeVideoConfig.opacity }}
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/60 via-neutral-950/30 to-neutral-950/80" />
+        </div>
+      )}
+
       {/* Background Ambience */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.18),rgba(255,255,255,0))] pointer-events-none" />
+      <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.18),rgba(255,255,255,0))] pointer-events-none" />
 
       {/* Top Header Bar — M7.3.10: Sticky Top Menu with Safe Area, Quick Audio Mute/Unmute, and mobile overflow protection */}
       <header className="sticky top-0 z-40 w-full border-b border-neutral-800 bg-neutral-900/95 backdrop-blur-md px-2.5 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 shrink-0 shadow-md">
@@ -154,7 +187,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 type="button"
                 onClick={onOpenSettings}
                 className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow cursor-pointer"
-                title="Cài đặt Tài khoản & Âm thanh"
+                title="Cài đặt Tài khoản & Media"
               >
                 <Settings className="w-3.5 h-3.5 text-amber-400" />
                 <span className="hidden sm:inline">Cài đặt</span>

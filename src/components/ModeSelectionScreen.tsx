@@ -325,7 +325,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               type="button"
               onClick={onOpenSettings}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow cursor-pointer shrink-0"
-              title="Cài đặt Tài khoản & Âm thanh"
+              title="Cài đặt Tài khoản & Media"
             >
               <Settings className="w-3.5 h-3.5 text-amber-400" />
               <span className="hidden sm:inline">Cài đặt</span>
