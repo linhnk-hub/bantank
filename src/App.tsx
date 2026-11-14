@@ -382,7 +382,7 @@ export default function App() {
 
   const handleStartOnlineMatch = useCallback(
     (room: CoopRoomDocument, _role: CoopPlayerRole) => {
-      if (sessionSnapshot.status !== 'ACTIVE') return;
+      if (sessionManager.getSnapshot().status !== 'ACTIVE') return;
       setOnlineDisconnectMsg(null);
       setIsReturningToLobby(false);
       setReturnToLobbyError(null);
@@ -394,7 +394,7 @@ export default function App() {
       setGameState({ ...st });
       setAppScreen('BATTLE');
     },
-    [sessionSnapshot.status, gameEngine]
+    [sessionManager, gameEngine]
   );
 
   const handleStartTrialMode = useCallback(() => {

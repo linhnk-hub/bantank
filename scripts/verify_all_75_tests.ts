@@ -96,6 +96,7 @@ import {
   SHARED_SYSTEM_BGM_ID,
   STAGED_LOCAL_PREVIEW_BGM_ID,
   buildGitHubPagesAudioUrl,
+  shouldFallbackToAudioStream,
   type SharedMusicCloudAdapter,
   type SoundCatalogEntry,
   type SystemAudioConfigDocument,
@@ -1583,15 +1584,102 @@ async function verifyMediaAndVideoUpgradeAsyncSuite() {
   console.log('[Media Upgrade (Multi-Audio, 2-AI/2P/Stages, Loop Activation, Home MP4 Video) E2E] 3/3 MANDATORY CASES PASS');
 }
 
+async function verifyM7312FixesAsyncSuite() {
+  // 1. MusicManager catalog BGM: storage/retry-limit-exceeded on getBytes falls back to fetchAudioStreamUrl without sharedSyncError
+  const mm = MusicManager.getInstance();
+  const cloud = new InMemorySharedMusicCloudAdapter();
+  mm.setCloudAdapter(cloud, async () => ({
+    duration: 24,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    getChannelData: () => new Float32Array(44100),
+  }));
+  const adminUser = {
+    uid: 'admin_m7312',
+    email: 'linhnk2013@gmail.com',
+    emailVerified: true,
+    providerIds: ['google.com'],
+  };
+  mm.syncRoleFromAuthUser(adminUser);
+
+  const stageStoragePath = 'sound_catalog/snd_stage_cors/v1/bgm_v1_bgm-stage.mp3';
+  const rawAudio = new Uint8Array([0x49, 0x44, 0x33, 0x03, 0x00, 0x01, 0x02, 0x03]).buffer;
+  cloud.deployStaticAudioFileToGitHubPages(stageStoragePath, rawAudio, 'audio/mpeg');
+  await cloud.saveSoundCatalogEntry({
+    soundId: 'snd_stage_cors',
+    displayName: 'bgm-stage',
+    fileName: 'bgm_v1_bgm-stage.mp3',
+    storagePath: stageStoragePath,
+    contentType: 'audio/mpeg',
+    fileSize: rawAudio.byteLength,
+    category: 'BGM',
+    durationSec: 24,
+    trimStartSec: 0,
+    trimEndSec: 24,
+    version: 1,
+    isActive: true,
+    updatedAt: 1_756_000_000_000,
+    updatedBy: 'linhnk2013@gmail.com',
+  });
+
+  // Mô phỏng bucket chưa cấu hình CORS gây retry-limit-exceeded khi gọi fetchAudioBinary
+  cloud.failNextAudioFetchWithRetryLimit = true;
+  mm.assignToStage(1, 'snd_stage_cors');
+  mm.syncPlaybackWithContext(1, 'SOLO');
+  await new Promise((r) => setTimeout(r, 30));
+
+  if (mm.getSharedSyncError() !== null) {
+    throw new Error(`Expected null sharedSyncError on retry-limit stream fallback, got: ${mm.getSharedSyncError()}`);
+  }
+  if (!cloud.operationLog.some((e) => e.startsWith('AUDIO_STREAM_URL_OK:'))) {
+    throw new Error('Expected fetchAudioStreamUrl fallback to be invoked on storage/retry-limit-exceeded');
+  }
+  if (mm.getActiveSourceCount() !== 1) {
+    throw new Error(`Expected active streaming source count === 1, got ${mm.getActiveSourceCount()}`);
+  }
+
+  // Kiểm tra dừng nhạc & xóa sạch
+  mm.pause();
+  if (mm.getActiveSourceCount() !== 0) {
+    throw new Error('Expected active source count === 0 after pause()');
+  }
+
+  // 2. Real permission error (storage/unauthorized) must NOT be masked by stream fallback
+  if (shouldFallbackToAudioStream({ code: 'storage/unauthorized', message: 'User does not have permission' })) {
+    throw new Error('shouldFallbackToAudioStream must return false for storage/unauthorized');
+  }
+  if (!shouldFallbackToAudioStream({ code: 'storage/retry-limit-exceeded', message: 'Max retry time exceeded' })) {
+    throw new Error('shouldFallbackToAudioStream must return true for storage/retry-limit-exceeded');
+  }
+
+  // 3. UI checks: SessionAlertModal has Đăng xuất tài khoản (no Đăng nhập lại) & MainMenuScreen has home-video-loading-banner above footer
+  const fs = await import('fs');
+  const sessionAlertCode = fs.readFileSync('src/components/SessionAlertModal.tsx', 'utf8');
+  if (!sessionAlertCode.includes('Đăng xuất tài khoản') || sessionAlertCode.includes('Đăng nhập lại')) {
+    throw new Error('SessionAlertModal.tsx missing Đăng xuất tài khoản or still contains Đăng nhập lại');
+  }
+  const mainMenuCode = fs.readFileSync('src/components/MainMenuScreen.tsx', 'utf8');
+  const bannerIdx = mainMenuCode.indexOf('home-video-loading-banner');
+  const footerIdx = mainMenuCode.indexOf('<footer');
+  if (bannerIdx === -1 || footerIdx === -1 || bannerIdx > footerIdx) {
+    throw new Error('MainMenuScreen.tsx missing home-video-loading-banner directly above <footer>');
+  }
+
+  mm.resetAllAssignmentsToDefault();
+  mm.syncRoleFromAuthUser(null);
+  console.log('[M7.3.12 Fixes (Rematch Sync, BT0-9, Logout Button, Storage Stream Fallback, Video Banner) E2E] 4/4 PASS');
+}
+
 async function runAllAsyncVerifications() {
   await verifyM733AsyncWorkflow();
   await verifyM735SharedAvatarCatalogAsyncSuite();
   await verifyM7311StageAudioUploadAsyncSuite();
   await verifyMediaAndVideoUpgradeAsyncSuite();
-  const asyncCasesCount = 10 + 23 + 4 + 3;
+  await verifyM7312FixesAsyncSuite();
+  const asyncCasesCount = 10 + 23 + 4 + 3 + 4;
   console.log('============================================');
   console.log(`SYNC UNIT TESTS  : ${totalPassed}/${totalTests} PASS (M2-M5: 75 | M6: 136 | M7.1: 35 | M7.2: 10 | M7.3: ${m73Results.length})`);
-  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Upgrade: 3)`);
+  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Upgrade: 3 | M7.3.12 Fixes: 4)`);
   console.log(`GRAND TOTAL SUITE: ${totalPassed + asyncCasesCount}/${totalTests + asyncCasesCount} PASS (0 FAILED, 0 DUPLICATED)`);
   console.log('============================================');
   process.exit(0);

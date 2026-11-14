@@ -689,7 +689,7 @@ service cloud.firestore {
           'expiresAt',
           'disconnectReason'
         ])
-        && roomCode.matches('^BT[A-Z0-9]{4}$')
+        && roomCode.matches('^BT[0-9]{4}$')
         && data.roomCode == roomCode
         && data.status in ['WAITING', 'PLAYING', 'FINISHED', 'ABANDONED', 'EXPIRED']
         && data.difficulty in ['DEFAULT', 'EXTREME']
@@ -996,7 +996,7 @@ service cloud.firestore {
           'matchOutcome',
           'updatedAt'
         ])
-        && roomCode.matches('^BT[A-Z0-9]{4}$')
+        && roomCode.matches('^BT[0-9]{4}$')
         && data.roomCode == roomCode
         && isValidId(data.hostUid)
         && (data.guestUid == null || (isValidId(data.guestUid) && data.guestUid != data.hostUid))
@@ -1024,7 +1024,7 @@ service cloud.firestore {
       // - Khi phòng đã đủ 2 người (guestUid != null) hoặc đã bắt đầu/kết thúc, người thứ 3 hoàn toàn không thể đọc được!
       // - Tài liệu này chỉ chứa metadata tối thiểu (không chứa WebRTC Offer/Answer/ICE, ảnh đại diện hay kết quả riêng).
       allow get: if isVerifiedPersonalGmail()
-        && roomCode.matches('^BT[A-Z0-9]{4}$')
+        && roomCode.matches('^BT[0-9]{4}$')
         && (
           resource == null
           || isAdmin()
@@ -1102,7 +1102,7 @@ service cloud.firestore {
         }
 
         allow get: if isVerifiedPersonalGmail()
-          && roomCode.matches('^BT[A-Z0-9]{4}$')
+          && roomCode.matches('^BT[0-9]{4}$')
           && docId == 'signaling'
           && (isRoomHost() || isJoinedRoomGuest());
 

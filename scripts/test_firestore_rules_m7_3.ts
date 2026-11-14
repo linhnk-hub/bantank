@@ -636,7 +636,7 @@ async function main(): Promise<void> {
       });
       await setDoc(doc(bypassDb, 'coop_rooms', 'BT0003', 'private', 'signaling'), {
         ...baseSignaling('BT0003'),
-        roomCode: 'BTW999', // Sai roomCode
+        roomCode: 'BT9999', // Sai roomCode
         guestUid: 'uid_guest_2',
         finalScore: 5000,
         matchOutcome: 'VICTORY',
@@ -2032,10 +2032,10 @@ async function main(): Promise<void> {
       async () => {
         await testEnv.withSecurityRulesDisabled(async (adminCtx) => {
           const bypassDb = adminCtx.firestore();
-          await setDoc(doc(bypassDb, 'coop_rooms', 'BTS530'), baseWaitingLobby('BTS530'));
-          await setDoc(doc(bypassDb, 'coop_rooms', 'BTS530', 'private', 'signaling'), baseSignaling('BTS530'));
+          await setDoc(doc(bypassDb, 'coop_rooms', 'BT5530'), baseWaitingLobby('BT5530'));
+          await setDoc(doc(bypassDb, 'coop_rooms', 'BT5530', 'private', 'signaling'), baseSignaling('BT5530'));
         });
-        await getDoc(doc(thirdDb, 'coop_rooms', 'BTS530', 'private', 'signaling'));
+        await getDoc(doc(thirdDb, 'coop_rooms', 'BT5530', 'private', 'signaling'));
       }
     );
 

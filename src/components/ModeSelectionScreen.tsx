@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import type { User as FirebaseUser } from 'firebase/auth';
 import type { SessionStateSnapshot } from '../core/sessionManager.ts';
 import {
@@ -256,6 +256,13 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   };
 
   const [onlineLobbySubView, setOnlineLobbySubView] = useState<CoopLobbySubView>('MAIN');
+
+  const handleOnlineMatchStartedProp = useCallback(
+    (room: CoopRoomDocument, role: 'HOST' | 'GUEST') => {
+      onStartOnlineMatch?.(room, role);
+    },
+    [onStartOnlineMatch]
+  );
 
   const handleTopBack = () => {
     if (flowStep === 'COOP_ONLINE_LOBBY') {
@@ -692,11 +699,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 subView={onlineLobbySubView}
                 onSubViewChange={setOnlineLobbySubView}
                 onBackToDifficulty={() => setFlowStep('SELECT_MODE')}
-                onOnlineMatchStarted={(room, role) => {
-                  if (onStartOnlineMatch) {
-                    onStartOnlineMatch(room, role);
-                  }
-                }}
+                onOnlineMatchStarted={handleOnlineMatchStartedProp}
               />
             </div>
           )}

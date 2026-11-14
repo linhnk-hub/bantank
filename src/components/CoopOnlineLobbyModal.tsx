@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Globe,
   PlusCircle,
@@ -86,11 +86,43 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   const [copied, setCopied] = useState(false);
   const [, setRoleTick] = useState(0);
 
+  const onOnlineMatchStartedRef = useRef(onOnlineMatchStarted);
+  const onDifficultyChangeRef = useRef(onDifficultyChange);
+  const launchedMatchKeyRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    onOnlineMatchStartedRef.current = onOnlineMatchStarted;
+  }, [onOnlineMatchStarted]);
+
+  useEffect(() => {
+    onDifficultyChangeRef.current = onDifficultyChange;
+  }, [onDifficultyChange]);
+
   useEffect(() => {
     setCreateDifficulty(difficulty);
   }, [difficulty]);
 
   useEffect(() => {
+    const handleRoomTransition = (
+      updatedRoom: CoopRoomDocument | null,
+      updatedRole: CoopPlayerRole
+    ) => {
+      if (
+        updatedRoom &&
+        updatedRoom.status === 'PLAYING' &&
+        (updatedRole === 'HOST' || updatedRole === 'GUEST')
+      ) {
+        const matchKey = `${updatedRoom.roomCode}:${updatedRoom.createdAt}`;
+        if (launchedMatchKeyRef.current !== matchKey) {
+          launchedMatchKeyRef.current = matchKey;
+          onDifficultyChangeRef.current?.(updatedRoom.difficulty);
+          onOnlineMatchStartedRef.current(updatedRoom, updatedRole);
+        }
+      } else {
+        launchedMatchKeyRef.current = null;
+      }
+    };
+
     const unsub = coopManager.subscribe((updatedRoom, updatedRole) => {
       setRoom(updatedRoom);
       setRole(updatedRole);
@@ -106,17 +138,30 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
           });
         }
       }
-      if (
-        updatedRoom &&
-        updatedRoom.status === 'PLAYING' &&
-        (updatedRole === 'HOST' || updatedRole === 'GUEST')
-      ) {
-        onDifficultyChange?.(updatedRoom.difficulty);
-        onOnlineMatchStarted(updatedRoom, updatedRole);
-      }
+      handleRoomTransition(updatedRoom, updatedRole);
     });
+
+    handleRoomTransition(coopManager.getCurrentRoom(), coopManager.getRole());
+
     return unsub;
-  }, [coopManager, avatarManager, onOnlineMatchStarted, onDifficultyChange]);
+  }, [coopManager, avatarManager]);
+
+  // Fail-safe cho Guest (P2) khi cả hai đã Sẵn sàng: chủ động đồng bộ trạng thái phòng từ máy chủ đề phòng snapshot/P2P bị trễ
+  useEffect(() => {
+    if (
+      !room ||
+      room.status !== 'WAITING' ||
+      role !== 'GUEST' ||
+      !room.hostReady ||
+      !room.guestReady
+    ) {
+      return;
+    }
+    const pollTimer = setInterval(() => {
+      void coopManager.refreshRoomFromCloud(true);
+    }, 1200);
+    return () => clearInterval(pollTimer);
+  }, [coopManager, role, room?.roomCode, room?.status, room?.hostReady, room?.guestReady]);
 
   const handleConfirmCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -576,15 +621,26 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
 
                   <div>
                     <label className="block text-[10px] text-neutral-400 mb-1 uppercase font-bold">
-                      Mã phòng (BTxxxx — BT + 4 ký tự chữ/số):
+                      Mã phòng (BTxxxx — BT + 4 chữ số từ 0-9):
                     </label>
                     <input
                       type="text"
                       maxLength={6}
                       value={joinCodeInput}
-                      onChange={(e) =>
-                        setJoinCodeInput(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6))
-                      }
+                      onChange={(e) => {
+                        const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                        if (raw.length === 0) {
+                          setJoinCodeInput('');
+                          return;
+                        }
+                        if (raw === 'B') {
+                          setJoinCodeInput('B');
+                          return;
+                        }
+                        const body = raw.startsWith('BT') ? raw.slice(2) : raw.replace(/^B/, '');
+                        const digits = body.replace(/[^0-9]/g, '').slice(0, 4);
+                        setJoinCodeInput(`BT${digits}`);
+                      }}
                       placeholder="VD: BT4829"
                       className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-neutral-700 focus:border-sky-400 focus:outline-none text-center font-mono text-sm font-black tracking-[0.25em] text-sky-300 uppercase placeholder:tracking-normal placeholder:font-sans placeholder:text-xs placeholder:text-neutral-600"
                     />
@@ -614,7 +670,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
 
                 <button
                   type="submit"
-                  disabled={isBusy || !/^BT[A-Z0-9]{4}$/.test(joinCodeInput.trim())}
+                  disabled={isBusy || !/^BT[0-9]{4}$/.test(joinCodeInput.trim())}
                   className="w-full py-3 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.99] disabled:opacity-50 cursor-pointer"
                 >
                   {isBusy ? (

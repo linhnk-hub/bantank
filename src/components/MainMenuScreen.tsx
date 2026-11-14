@@ -21,6 +21,7 @@ import {
   UserCheck,
   AlertCircle,
   HelpCircle,
+  Loader2,
 } from 'lucide-react';
 import { GameLogo } from './GameLogo.tsx';
 import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
@@ -71,11 +72,29 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   const [homeVideoUrl, setHomeVideoUrl] = useState<string | null>(() =>
     musicManager.getHomeVideoUrl()
   );
+  const [isHomeVideoLoading, setIsHomeVideoLoading] = useState<boolean>(() =>
+    musicManager.isHomeVideoLoading()
+  );
+  const [homeVideoError, setHomeVideoError] = useState<string | null>(() =>
+    musicManager.getHomeVideoError()
+  );
+  const [isVideoBuffering, setIsVideoBuffering] = useState<boolean>(false);
 
   useEffect(() => {
     const unsubMusic = musicManager.subscribe(() => {
-      setHomeVideoConfig(musicManager.getHomeVideoConfig());
-      setHomeVideoUrl(musicManager.getHomeVideoUrl());
+      const nextConfig = musicManager.getHomeVideoConfig();
+      const nextUrl = musicManager.getHomeVideoUrl();
+      setHomeVideoConfig(nextConfig);
+      setHomeVideoUrl((prevUrl) => {
+        if (nextUrl && nextUrl !== prevUrl) {
+          setIsVideoBuffering(true);
+        } else if (!nextUrl) {
+          setIsVideoBuffering(false);
+        }
+        return nextUrl;
+      });
+      setIsHomeVideoLoading(musicManager.isHomeVideoLoading());
+      setHomeVideoError(musicManager.getHomeVideoError());
     });
     return unsubMusic;
   }, [musicManager]);
@@ -145,6 +164,11 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             loop={homeVideoConfig.loop !== false}
             style={{ opacity: homeVideoConfig.opacity }}
             className="w-full h-full object-cover"
+            onLoadStart={() => setIsVideoBuffering(true)}
+            onLoadedData={() => setIsVideoBuffering(false)}
+            onCanPlay={() => setIsVideoBuffering(false)}
+            onPlaying={() => setIsVideoBuffering(false)}
+            onError={() => setIsVideoBuffering(false)}
           />
           <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/60 via-neutral-950/30 to-neutral-950/80" />
         </div>
@@ -293,6 +317,23 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
           </div>
         </div>
       </main>
+
+      {/* Trạng thái đang tải Video Intro Trang Chủ (hiển thị ngay phía trên thanh footer) */}
+      {homeVideoConfig?.isEnabled &&
+        !homeVideoError &&
+        (isHomeVideoLoading || (Boolean(homeVideoUrl) && isVideoBuffering)) && (
+          <div
+            data-testid="home-video-loading-banner"
+            role="status"
+            aria-live="polite"
+            className="relative z-10 w-full border-t border-amber-500/25 bg-neutral-900/90 backdrop-blur-sm px-4 py-2 text-xs text-amber-200 flex items-center justify-center gap-2 shrink-0"
+          >
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
+            <span>
+              Đang tải video intro{homeVideoConfig.fileName ? ` (${homeVideoConfig.fileName})` : ''}...
+            </span>
+          </div>
+        )}
 
       {/* Footer */}
       <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">

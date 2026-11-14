@@ -360,7 +360,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   }
 
   // =========================================================================
-  // M7_3_T05: Mã phòng Co-op Online định dạng BTxxxx (Generate & Validate Format)
+  // M7_3_T05: Mã phòng Co-op Online định dạng BTxxxx (BT + 4 chữ số 0-9)
   // =========================================================================
   {
     const generatedCodes = Array.from({ length: 25 }, () => generateRoomCode());
@@ -368,33 +368,37 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       (c) =>
         c.length === 6 &&
         c.startsWith('BT') &&
-        validateRoomCodeFormat(c).valid &&
-        !/[IO01]/.test(c.slice(2))
+        /^BT[0-9]{4}$/.test(c) &&
+        validateRoomCodeFormat(c).valid
     );
     const quickJoinSlots = getPublicQuickJoinSlotCodesForBucket(123456);
     const allSlotsValidBt =
       quickJoinSlots.length === 5 &&
-      quickJoinSlots.every((c) => /^BT[A-Z0-9]{4}$/.test(c) && validateRoomCodeFormat(c).valid);
-    const invalidMissingPrefix = validateRoomCodeFormat('AB23CD').valid;
+      quickJoinSlots.every((c) => /^BT[0-9]{4}$/.test(c) && validateRoomCodeFormat(c).valid);
+    const invalidMissingPrefix = validateRoomCodeFormat('AB1234').valid;
+    const invalidLetters = validateRoomCodeFormat('BT23CD').valid;
     const invalidShort = validateRoomCodeFormat('BT123').valid;
     const invalidLong = validateRoomCodeFormat('BT12345').valid;
     const invalidSpecial = validateRoomCodeFormat('BT$123').valid;
-    const normalizedTrim = validateRoomCodeFormat('  bt23cd ').normalized;
+    const validZeroOne = validateRoomCodeFormat('BT0109').valid;
+    const normalizedTrim = validateRoomCodeFormat('  bt4829 ').normalized;
 
     const passed =
       allValidBtCodes === true &&
       allSlotsValidBt === true &&
       invalidMissingPrefix === false &&
+      invalidLetters === false &&
       invalidShort === false &&
       invalidLong === false &&
       invalidSpecial === false &&
-      normalizedTrim === 'BT23CD';
+      validZeroOne === true &&
+      normalizedTrim === 'BT4829';
 
     results.push({
       id: 'M7_3_T05',
-      name: 'Tạo và kiểm tra định dạng mã phòng Co-op Online chuẩn BTxxxx (6 ký tự bắt đầu bằng BT)',
+      name: 'Tạo và kiểm tra định dạng mã phòng Co-op Online chuẩn BTxxxx (BT + 4 chữ số từ 0-9)',
       passed,
-      details: `sample=${generatedCodes[0]}, all25Valid=${allValidBtCodes}, quickSlotsOk=${allSlotsValidBt}, noPrefix=${invalidMissingPrefix}, short=${invalidShort}, long=${invalidLong}, special=${invalidSpecial}, normalized=${normalizedTrim}`,
+      details: `sample=${generatedCodes[0]}, all25Valid=${allValidBtCodes}, quickSlotsOk=${allSlotsValidBt}, noLetters=${!invalidLetters}, zeroOne=${validZeroOne}, normalized=${normalizedTrim}`,
     });
   }
 
@@ -425,7 +429,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       disconnectReason: null,
     };
 
-    const notFoundCheck = evaluateJoinRoomCandidate(null, 'BTZZZZ', guestUser, t0 + 1000);
+    const notFoundCheck = evaluateJoinRoomCandidate(null, 'BT0999', guestUser, t0 + 1000);
     const badFormatCheck = evaluateJoinRoomCandidate(baseRoom, '123', guestUser, t0 + 1000);
     const selfJoinCheck = evaluateJoinRoomCandidate(baseRoom, 'BT9922', hostUser, t0 + 1000);
     const expiredCheck = evaluateJoinRoomCandidate(
@@ -1122,7 +1126,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
 
     const t0 = 1_700_000_000_000;
     const initialRoom: CoopRoomDocument = {
-      roomCode: 'BTP299',
+      roomCode: 'BT2299',
       status: 'PLAYING',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host_p1',
@@ -1226,7 +1230,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   {
     const t0 = 1_700_000_000_000;
     const parentWaitingEmpty: CoopRoomLobbyDocument = {
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       status: 'WAITING',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host_1',
@@ -1244,7 +1248,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     };
 
     const validInitialSignaling: CoopRoomSignalingDocument = {
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       hostUid: 'uid_host_1',
       guestUid: null,
       rtcOffer: null,
@@ -1261,7 +1265,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 200,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: parentWaitingEmpty,
       existingSignaling: null,
       incoming: validInitialSignaling,
@@ -1272,7 +1276,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_guest_2',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 200,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: parentWaitingEmpty,
       existingSignaling: null,
       incoming: { ...validInitialSignaling, hostUid: 'uid_guest_2' },
@@ -1283,7 +1287,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 200,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: null,
       existingSignaling: null,
       incoming: validInitialSignaling,
@@ -1294,7 +1298,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + COOP_ONLINE_CONFIG.ROOM_TTL_MS + 1000,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: parentWaitingEmpty,
       existingSignaling: null,
       incoming: {
@@ -1308,7 +1312,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_attacker_3',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: null,
       existingSignaling: null,
       incoming: { ...validInitialSignaling, hostUid: 'uid_attacker_3' },
@@ -1317,7 +1321,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_attacker_3',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 100,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: parentWaitingEmpty,
       existingSignaling: null,
       incoming: { ...validInitialSignaling, hostUid: 'uid_attacker_3' },
@@ -1342,7 +1346,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 1000,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: parentWithGuest,
       existing: validInitialSignaling,
       incoming: sigAfterHostOffer,
@@ -1353,7 +1357,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_other_host',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 1000,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: parentWithGuest,
       existing: validInitialSignaling,
       incoming: sigAfterHostOffer,
@@ -1370,7 +1374,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_guest_2',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 2000,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: parentWithGuest,
       existing: sigAfterHostOffer,
       incoming: sigAfterGuestAnswer,
@@ -1381,7 +1385,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_guest_2',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 2500,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: parentWithGuest,
       existing: sigAfterGuestAnswer,
       incoming: {
@@ -1396,7 +1400,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_guest_2',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 2600,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: parentWithGuest,
       existing: sigAfterGuestAnswer,
       incoming: {
@@ -1409,7 +1413,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_guest_2',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 2600,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: { ...parentWithGuest, status: 'PLAYING' },
       existing: sigAfterGuestAnswer,
       incoming: {
@@ -1447,7 +1451,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 5000,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: parentPlaying,
       existing: sigAfterGuestAnswer,
       incoming: sigWithResult1,
@@ -1456,7 +1460,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 6000,
-      roomCode: 'BTS777',
+      roomCode: 'BT7771',
       parentRoom: parentPlaying,
       existing: sigWithResult1,
       incoming: {
@@ -1497,7 +1501,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   {
     const t0 = 1_700_000_000_000;
     const baseWaiting: CoopRoomLobbyDocument = {
-      roomCode: 'BTS888',
+      roomCode: 'BT8881',
       status: 'WAITING',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host',
@@ -1796,7 +1800,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   {
     const t0 = 1_700_000_000_000;
     const openWaitingRoom: CoopRoomLobbyDocument = {
-      roomCode: 'BTF101',
+      roomCode: 'BT1101',
       status: 'WAITING',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host_1',
@@ -1954,7 +1958,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const pastExpiryMs = expiresAt + 60_000; // Đã vượt quá 15 phút (phút thứ 16)
 
     const waitingRoomOpen: CoopRoomLobbyDocument = {
-      roomCode: 'BTF202',
+      roomCode: 'BT1202',
       status: 'WAITING',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host_1',
@@ -1974,7 +1978,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     // 1. WAITING quá hạn -> Guest Join DENY (cả client candidate lẫn Firestore Rules)
     const expiredJoinCandidate = evaluateJoinRoomCandidate(
       waitingRoomOpen,
-      'BTF202',
+      'BT1202',
       { uid: 'uid_guest_2', displayName: 'Guest 2' },
       pastExpiryMs,
       true
@@ -2028,7 +2032,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       hostLastActiveAt: t0 + 600_000,
     };
     const activeSignaling: CoopRoomSignalingDocument = {
-      roomCode: 'BTF202',
+      roomCode: 'BT1202',
       hostUid: 'uid_host_1',
       guestUid: 'uid_guest_2',
       rtcOffer: '{"type":"offer"}',
@@ -2043,7 +2047,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: pastExpiryMs,
-      roomCode: 'BTF202',
+      roomCode: 'BT1202',
       parentRoom: playingRoomPastWaitingExpiry,
       existing: activeSignaling,
       incoming: {
@@ -2083,7 +2087,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: pastExpiryMs + 1000,
-      roomCode: 'BTF202',
+      roomCode: 'BT1202',
       parentRoom: finishedParentRoom,
       existing: {
         ...activeSignaling,
@@ -2168,11 +2172,11 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       { uid: 'uid_host_1', displayName: 'Host 1', email: 'host1@gmail.com' },
       'DEFAULT',
       t0,
-      'BT301A'
+      'BT3011'
     );
     const hostSignalingReadyAfterSuccess = hostManager.isRoomSignalingReady();
     const bothDocsCreated =
-      storage.getRoomSync('BT301A') !== null && storage.getSignalingSync('BT301A') !== null;
+      storage.getRoomSync('BT3011') !== null && storage.getSignalingSync('BT3011') !== null;
 
     // 1b. Nếu tạo lobby thành công nhưng tạo private/signaling thất bại -> đóng phòng ABANDONED, không báo thành công, không lộ mã phòng
     const failManager = new CoopOnlineManager(storage);
@@ -2182,9 +2186,9 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       { uid: 'uid_host_1', displayName: 'Host 1', email: 'host1@gmail.com' },
       'DEFAULT',
       t0 + 500,
-      'BT302A'
+      'BT3021'
     );
-    const rolledBackLobby = storage.getRoomSync('BT302A');
+    const rolledBackLobby = storage.getRoomSync('BT3021');
     const rollbackOk =
       createFailRes.success === false &&
       failManager.getCurrentRoom() === null &&
@@ -2193,7 +2197,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
 
     // 2. Guest join khi private/signaling chưa tồn tại -> DENY (cả Rules và joinRoomSync)
     const lobbyWithoutSignaling: CoopRoomLobbyDocument = {
-      roomCode: 'BTNS01',
+      roomCode: 'BT9001',
       status: 'WAITING',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host_1',
@@ -2209,7 +2213,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       expiresAt: t0 + COOP_ONLINE_CONFIG.ROOM_TTL_MS,
       disconnectReason: null,
     };
-    storage.setRoomSync('BTNS01', lobbyWithoutSignaling);
+    storage.setRoomSync('BT9001', lobbyWithoutSignaling);
 
     const joinRuleWithoutSigEval = evaluateCoopRoomRuleUpdate({
       authUid: 'uid_guest_2',
@@ -2227,19 +2231,19 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     });
     const joinSyncWithoutSigRes = guestManager.joinRoomSync(
       storage,
-      'BTNS01',
+      'BT9001',
       { uid: 'uid_guest_2', displayName: 'Guest 2', email: 'guest2@gmail.com' },
       t0 + 1000
     );
 
-    // 3. Guest join khi private/signaling đã tồn tại (phòng BT301A) -> ALLOW
+    // 3. Guest join khi private/signaling đã tồn tại (phòng BT3011) -> ALLOW
     const joinRuleWithSigEval = evaluateCoopRoomRuleUpdate({
       authUid: 'uid_guest_2',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 1200,
-      existing: storage.getRoomSync('BT301A')!,
+      existing: storage.getRoomSync('BT3011')!,
       incoming: {
-        ...storage.getRoomSync('BT301A')!,
+        ...storage.getRoomSync('BT3011')!,
         guestUid: 'uid_guest_2',
         guestDisplayName: 'Guest 2',
         guestReady: false,
@@ -2249,7 +2253,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     });
     const joinSyncWithSigRes = guestManager.joinRoomSync(
       storage,
-      'BT301A',
+      'BT3011',
       { uid: 'uid_guest_2', displayName: 'Guest 2', email: 'guest2@gmail.com' },
       t0 + 1200
     );
@@ -2259,11 +2263,11 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_third_3',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 1500,
-      roomCode: 'BTNS01',
+      roomCode: 'BT9001',
       parentRoom: lobbyWithoutSignaling,
       existingSignaling: null,
       incoming: {
-        roomCode: 'BTNS01',
+        roomCode: 'BT9001',
         hostUid: 'uid_third_3',
         guestUid: null,
         rtcOffer: null,
@@ -2332,7 +2336,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   {
     const serverTimeMs = 1_700_000_000_000;
     const validRoomCreate: CoopRoomLobbyDocument = {
-      roomCode: 'BT401A',
+      roomCode: 'BT4011',
       status: 'WAITING',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host_1',
@@ -2354,7 +2358,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: serverTimeMs,
-      roomCode: 'BT401A',
+      roomCode: 'BT4011',
       incoming: validRoomCreate,
     });
 
@@ -2363,7 +2367,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: serverTimeMs,
-      roomCode: 'BT401A',
+      roomCode: 'BT4011',
       incoming: {
         ...validRoomCreate,
         createdAt: serverTimeMs + 30_000,
@@ -2377,7 +2381,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: serverTimeMs,
-      roomCode: 'BT401A',
+      roomCode: 'BT4011',
       incoming: {
         ...validRoomCreate,
         createdAt: serverTimeMs - 65_000,
@@ -2389,7 +2393,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: serverTimeMs,
-      roomCode: 'BT401A',
+      roomCode: 'BT4011',
       incoming: {
         ...validRoomCreate,
         createdAt: serverTimeMs + 65_000,
@@ -2476,24 +2480,24 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       (guestManager as any).role = 'GUEST';
     };
 
-    // 1. Host ghi kết quả lần đầu trên phòng BT501A -> ALLOW
-    setupPlayingRoom('BT501A');
+    // 1. Host ghi kết quả lần đầu trên phòng BT5011 -> ALLOW
+    setupPlayingRoom('BT5011');
     const firstWriteRes = hostManager.recordMatchFinishSync(storage, 4800, 'VICTORY', t0 + 10_000);
-    const sig501 = storage.getSignalingSync('BT501A');
-    const room501 = storage.getRoomSync('BT501A');
+    const sig501 = storage.getSignalingSync('BT5011');
+    const room501 = storage.getRoomSync('BT5011');
     const case1FirstWriteOk =
       firstWriteRes.success === true &&
       sig501?.finalScore === 4800 &&
       sig501?.matchOutcome === 'VICTORY' &&
       room501?.status === 'FINISHED';
 
-    // 2. Lỗi mạng xảy ra sau khi ghi private/signaling nhưng trước khi chuyển phòng cha sang FINISHED (phòng BT502A)
+    // 2. Lỗi mạng xảy ra sau khi ghi private/signaling nhưng trước khi chuyển phòng cha sang FINISHED (phòng BT5021)
     //    -> khi thử lại với cùng kết quả, không ghi lại private/signaling và hoàn tất chuyển phòng cha sang FINISHED -> ALLOW
-    setupPlayingRoom('BT502A');
+    setupPlayingRoom('BT5021');
     storage.setFailNextUpdateRoom(true);
     const interruptedRes = hostManager.recordMatchFinishSync(storage, 6400, 'VICTORY', t0 + 20_000);
-    const sigAfterInterrupt = storage.getSignalingSync('BT502A');
-    const roomAfterInterrupt = storage.getRoomSync('BT502A');
+    const sigAfterInterrupt = storage.getSignalingSync('BT5021');
+    const roomAfterInterrupt = storage.getRoomSync('BT5021');
     const statePreservedOnInterrupt =
       interruptedRes.success === false &&
       interruptedRes.errorCode === 'NETWORK_ERROR' &&
@@ -2512,7 +2516,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const writesAfterRetry = storage.getWriteCount();
     // Trong lần retry với cùng kết quả: chỉ thực hiện 1 lượt ghi updateRoom(status='FINISHED'), 0 lượt ghi lại private/signaling
     const retryWritesDelta = writesAfterRetry - writesBeforeRetry;
-    const roomAfterRetry = storage.getRoomSync('BT502A');
+    const roomAfterRetry = storage.getRoomSync('BT5021');
     const case2RetryIdempotentOk =
       statePreservedOnInterrupt === true &&
       retrySameResultRes.success === true &&
@@ -2520,7 +2524,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       roomAfterRetry?.status === 'FINISHED';
 
     // 3. Host cố ghi lại với kết quả khác (khi signaling đã có 6400/VICTORY) -> DENY
-    setupPlayingRoom('BT503A');
+    setupPlayingRoom('BT5031');
     storage.setFailNextUpdateRoom(true);
     hostManager.recordMatchFinishSync(storage, 6400, 'VICTORY', t0 + 30_000);
     const conflictRetryRes = hostManager.recordMatchFinishSync(
@@ -2529,7 +2533,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       'GAME_OVER',
       t0 + 31_000
     );
-    const sigAfterConflict = storage.getSignalingSync('BT503A');
+    const sigAfterConflict = storage.getSignalingSync('BT5031');
     const case3ConflictDenied =
       conflictRetryRes.success === false &&
       conflictRetryRes.errorCode === 'INVALID_PACKET' &&
@@ -2537,7 +2541,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       sigAfterConflict?.matchOutcome === 'VICTORY';
 
     // 4. Guest cố sửa kết quả -> DENY (cả recordMatchFinishSync lẫn Firestore Rules)
-    setupPlayingRoom('BT504A');
+    setupPlayingRoom('BT5041');
     const guestRecordRes = guestManager.recordMatchFinishSync(
       storage,
       5000,
@@ -2548,11 +2552,11 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_guest_2',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 40_000,
-      roomCode: 'BT504A',
-      parentRoom: storage.getRoomSync('BT504A'),
-      existing: storage.getSignalingSync('BT504A')!,
+      roomCode: 'BT5041',
+      parentRoom: storage.getRoomSync('BT5041'),
+      existing: storage.getSignalingSync('BT5041')!,
       incoming: {
-        ...storage.getSignalingSync('BT504A')!,
+        ...storage.getSignalingSync('BT5041')!,
         finalScore: 5000,
         matchOutcome: 'VICTORY',
         updatedAt: t0 + 40_000,
@@ -2583,7 +2587,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   {
     const t0 = 1_700_000_000_000;
     const playingRoom: CoopRoomLobbyDocument = {
-      roomCode: 'BT601A',
+      roomCode: 'BT6011',
       status: 'PLAYING',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host_1',
@@ -2600,7 +2604,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       disconnectReason: null,
     };
     const baseSignaling: CoopRoomSignalingDocument = {
-      roomCode: 'BT601A',
+      roomCode: 'BT6011',
       hostUid: 'uid_host_1',
       guestUid: 'uid_guest_2',
       rtcOffer: '{"type":"offer"}',
@@ -2715,11 +2719,11 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
 
     // Kiểm tra trực tiếp trên InMemoryCoopStorageAdapter (enforce hasValidRecordedMatchResultModel)
     const storage = new InMemoryCoopStorageAdapter();
-    storage.setRoomSync('BT601A', playingRoom);
-    storage.setSignalingSync('BT601A', baseSignaling);
+    storage.setRoomSync('BT6011', playingRoom);
+    storage.setSignalingSync('BT6011', baseSignaling);
     let directUpdateWithoutResultThrew = false;
     try {
-      storage.updateRoomSync('BT601A', { status: 'FINISHED', hostLastActiveAt: t0 + 5000 });
+      storage.updateRoomSync('BT6011', { status: 'FINISHED', hostLastActiveAt: t0 + 5000 });
     } catch {
       directUpdateWithoutResultThrew = true;
     }
@@ -2747,7 +2751,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   {
     const t0 = 1_700_000_000_000;
     const playingRoom: CoopRoomLobbyDocument = {
-      roomCode: 'BT602A',
+      roomCode: 'BT6021',
       status: 'PLAYING',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host_1',
@@ -2764,7 +2768,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       disconnectReason: null,
     };
     const validSig: CoopRoomSignalingDocument = {
-      roomCode: 'BT602A',
+      roomCode: 'BT6021',
       hostUid: 'uid_host_1',
       guestUid: 'uid_guest_2',
       rtcOffer: '{"type":"offer"}',
@@ -2789,7 +2793,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       },
       signalingDoc: {
         ...validSig,
-        roomCode: 'BT999X',
+        roomCode: 'BT9998',
       },
     });
 
@@ -2847,7 +2851,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     });
 
     // 4. Kết quả không hợp lệ (matchOutcome ngoài VICTORY/GAME_OVER) -> DENY
-    const invalidOutcomeHelperDeny = hasValidRecordedMatchResultModel('BT602A', playingRoom, {
+    const invalidOutcomeHelperDeny = hasValidRecordedMatchResultModel('BT6021', playingRoom, {
       ...validSig,
       matchOutcome: 'DRAW' as any,
     });
@@ -2876,7 +2880,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const hostManager = new CoopOnlineManager(storage);
 
     const lobby: CoopRoomLobbyDocument = {
-      roomCode: 'BT701A',
+      roomCode: 'BT7011',
       status: 'PLAYING',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host_1',
@@ -2893,7 +2897,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       disconnectReason: null,
     };
     const sig: CoopRoomSignalingDocument = {
-      roomCode: 'BT701A',
+      roomCode: 'BT7011',
       hostUid: 'uid_host_1',
       guestUid: 'uid_guest_2',
       rtcOffer: '{"type":"offer"}',
@@ -2904,8 +2908,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       matchOutcome: null,
       updatedAt: t0,
     };
-    storage.setRoomSync('BT701A', lobby);
-    storage.setSignalingSync('BT701A', sig);
+    storage.setRoomSync('BT7011', lobby);
+    storage.setSignalingSync('BT7011', sig);
     (hostManager as any).currentRoom = { ...lobby, ...sig };
     (hostManager as any).currentSignaling = sig;
     (hostManager as any).role = 'HOST';
@@ -2914,8 +2918,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     // Bước 1: Ghi private/signaling thành công, nhưng lỗi mạng trước khi cập nhật FINISHED
     storage.setFailNextUpdateRoom(true);
     const attempt1 = hostManager.recordMatchFinishSync(storage, 7200, 'VICTORY', t0 + 10_000);
-    const sigAfterAttempt1 = storage.getSignalingSync('BT701A');
-    const roomAfterAttempt1 = storage.getRoomSync('BT701A');
+    const sigAfterAttempt1 = storage.getSignalingSync('BT7011');
+    const roomAfterAttempt1 = storage.getRoomSync('BT7011');
     const step1InterruptedProperly =
       attempt1.success === false &&
       attempt1.errorCode === 'NETWORK_ERROR' &&
@@ -2932,7 +2936,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const writesAfterAttempt2 = storage.getWriteCount();
     storage.setFailNextUpdateSignaling(false);
 
-    const roomAfterAttempt2 = storage.getRoomSync('BT701A');
+    const roomAfterAttempt2 = storage.getRoomSync('BT7011');
     const step2CompletedWithoutSignalingRewrite =
       attempt2.success === true &&
       writesAfterAttempt2 - writesBeforeAttempt2 === 1 &&
@@ -2958,7 +2962,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const hostManager = new CoopOnlineManager(storage);
 
     const lobby: CoopRoomLobbyDocument = {
-      roomCode: 'BT702A',
+      roomCode: 'BT7021',
       status: 'PLAYING',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host_1',
@@ -2975,7 +2979,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       disconnectReason: null,
     };
     const sig: CoopRoomSignalingDocument = {
-      roomCode: 'BT702A',
+      roomCode: 'BT7021',
       hostUid: 'uid_host_1',
       guestUid: 'uid_guest_2',
       rtcOffer: '{"type":"offer"}',
@@ -2986,8 +2990,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       matchOutcome: null,
       updatedAt: t0,
     };
-    storage.setRoomSync('BT702A', lobby);
-    storage.setSignalingSync('BT702A', sig);
+    storage.setRoomSync('BT7021', lobby);
+    storage.setSignalingSync('BT7021', sig);
     (hostManager as any).currentRoom = { ...lobby, ...sig };
     (hostManager as any).currentSignaling = sig;
     (hostManager as any).role = 'HOST';
@@ -2996,8 +3000,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     // Lần 1: Ghi kết quả thành công và server ĐÃ commit status = 'FINISHED', nhưng ứng dụng mất phản hồi ACK
     storage.setCommitUpdateRoomThenLoseResponse(true);
     const attempt1 = hostManager.recordMatchFinishSync(storage, 8400, 'VICTORY', t0 + 15_000);
-    const serverRoomAfterLostAck = storage.getRoomSync('BT702A');
-    const serverSigAfterLostAck = storage.getSignalingSync('BT702A');
+    const serverRoomAfterLostAck = storage.getRoomSync('BT7021');
+    const serverSigAfterLostAck = storage.getSignalingSync('BT7021');
 
     // Trên server đã là FINISHED + 8400/VICTORY, nhưng local state của client vẫn nghĩ là PLAYING và hasRecordedMatchFinish === false
     const lostAckSimulatedOk =
@@ -3043,7 +3047,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const hostManager = new CoopOnlineManager(storage);
 
     const finishedLobby: CoopRoomLobbyDocument = {
-      roomCode: 'BT703E',
+      roomCode: 'BT7035',
       status: 'FINISHED',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host_1',
@@ -3060,7 +3064,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       disconnectReason: null,
     };
     const recordedSig: CoopRoomSignalingDocument = {
-      roomCode: 'BT703E',
+      roomCode: 'BT7035',
       hostUid: 'uid_host_1',
       guestUid: 'uid_guest_2',
       rtcOffer: '{"type":"offer"}',
@@ -3071,8 +3075,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       matchOutcome: 'VICTORY',
       updatedAt: t0 + 5000,
     };
-    storage.setRoomSync('BT703E', finishedLobby);
-    storage.setSignalingSync('BT703E', recordedSig);
+    storage.setRoomSync('BT7035', finishedLobby);
+    storage.setSignalingSync('BT7035', recordedSig);
     (hostManager as any).currentRoom = { ...finishedLobby, status: 'PLAYING', finalScore: 0, matchOutcome: null };
     (hostManager as any).currentSignaling = { ...recordedSig, finalScore: 0, matchOutcome: null };
     (hostManager as any).role = 'HOST';
@@ -3087,7 +3091,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       t0 + 6000
     );
     const writesAfter1 = storage.getWriteCount();
-    const sigUnchangedAfterConflict = storage.getSignalingSync('BT703E');
+    const sigUnchangedAfterConflict = storage.getSignalingSync('BT7035');
     const case1ConflictOnFinishedRejected =
       conflictFinishedRes.success === false &&
       conflictFinishedRes.errorCode === 'INVALID_PACKET' &&
@@ -3097,7 +3101,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       sigUnchangedAfterConflict?.matchOutcome === 'VICTORY';
 
     // 2. Phòng cha FINISHED nhưng private/signaling thiếu kết quả (matchOutcome == null)
-    storage.setSignalingSync('BT703E', {
+    storage.setSignalingSync('BT7035', {
       ...recordedSig,
       finalScore: 0,
       matchOutcome: null,
@@ -3114,11 +3118,11 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       hostManager.hasRecordedMatchFinish() === false;
 
     // 3. Phòng cha ở trạng thái ABANDONED hoặc EXPIRED -> dừng và báo lỗi ROOM_EXPIRED, không đặt cờ hoàn tất
-    storage.setRoomSync('BT703E', {
+    storage.setRoomSync('BT7035', {
       ...finishedLobby,
       status: 'ABANDONED',
     });
-    storage.setSignalingSync('BT703E', {
+    storage.setSignalingSync('BT7035', {
       ...recordedSig,
       finalScore: 0,
       matchOutcome: null,
@@ -3135,7 +3139,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       hostManager.hasRecordedMatchFinish() === false;
 
     // 4. Lỗi mạng khi đọc/xác nhận trạng thái từ server -> giữ hasRecordedMatchFinish = false để thử lại
-    storage.setRoomSync('BT703E', {
+    storage.setRoomSync('BT7035', {
       ...finishedLobby,
       status: 'PLAYING',
     });
@@ -3171,7 +3175,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   {
     const t0 = 1_700_000_000_000;
     const waitingLobby: CoopRoomLobbyDocument = {
-      roomCode: 'BT801R',
+      roomCode: 'BT8019',
       status: 'WAITING',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host_1',
@@ -3193,7 +3197,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       rtcConnectionState: 'CONNECTED',
     };
     const baseSig: CoopRoomSignalingDocument = {
-      roomCode: 'BT801R',
+      roomCode: 'BT8019',
       hostUid: 'uid_host_1',
       guestUid: 'uid_guest_2',
       rtcOffer: '{"type":"offer"}',
@@ -3223,7 +3227,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_guest_2',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 2000,
-      roomCode: 'BT801R',
+      roomCode: 'BT8019',
       parentRoom: playingLobby,
       existing: baseSig,
       incoming: {
@@ -3245,7 +3249,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: t0 + 3000,
-      roomCode: 'BT801R',
+      roomCode: 'BT8019',
       parentRoom: playingLobby,
       existing: recordedSig,
       incoming: {
@@ -3276,7 +3280,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authUid: 'uid_host_1',
       isVerifiedPersonalGmail: true,
       requestTimeMs: pastExpiry,
-      roomCode: 'BT801R',
+      roomCode: 'BT8019',
       parentRoom: playingLobby,
       existing: baseSig,
       incoming: {
@@ -3352,7 +3356,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   {
     const t0 = 1_700_000_000_000;
     const waitingRoom: CoopRoomLobbyDocument = {
-      roomCode: 'BT901G',
+      roomCode: 'BT9017',
       status: 'WAITING',
       difficulty: 'DEFAULT',
       hostUid: 'uid_host_1',
@@ -3479,11 +3483,11 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       },
       'DEFAULT',
       clientSkewedTimeMs,
-      'BT732F'
+      'BT7326'
     );
 
-    const createdLobby = storage.getRoomSync('BT732F');
-    const createdSig = storage.getSignalingSync('BT732F');
+    const createdLobby = storage.getRoomSync('BT7326');
+    const createdSig = storage.getSignalingSync('BT7326');
 
     // Kiểm tra tài liệu vừa tạo vượt qua 100% Firestore Security Rules tại thời điểm serverTimeMs
     const ruleRoomCreateOk =
@@ -3492,7 +3496,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
         authUid: 'uid_host_1',
         isVerifiedPersonalGmail: true,
         requestTimeMs: serverTimeMs,
-        roomCode: 'BT732F',
+        roomCode: 'BT7326',
         incoming: createdLobby,
       });
 
@@ -3503,7 +3507,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
         authUid: 'uid_host_1',
         isVerifiedPersonalGmail: true,
         requestTimeMs: serverTimeMs,
-        roomCode: 'BT732F',
+        roomCode: 'BT7326',
         parentRoom: createdLobby,
         existingSignaling: null,
         incoming: createdSig,
@@ -3538,7 +3542,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const guestManager = new CoopOnlineManager(storage);
     const joinRes = guestManager.joinRoomSync(
       storage,
-      'BT732F',
+      'BT7326',
       {
         uid: 'uid_guest_2',
         displayName: 'Guest 2',
@@ -3723,9 +3727,9 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       validUser,
       'DEFAULT',
       maxSkewClientMs,
-      'BT90SW'
+      'BT9059'
     );
-    const maxSkewRoom = maxSkewStorage.getRoomSync('BT90SW');
+    const maxSkewRoom = maxSkewStorage.getRoomSync('BT9059');
     const maxSkewPassesRule =
       maxSkewRoom !== null &&
       maxSkewRoom.expiresAt - maxSkewRoom.createdAt === 810_000 &&
@@ -3733,7 +3737,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
         authUid: validUser.uid,
         isVerifiedPersonalGmail: true,
         requestTimeMs: serverTimeMs,
-        roomCode: 'BT90SW',
+        roomCode: 'BT9059',
         incoming: maxSkewRoom,
       });
 
@@ -5165,9 +5169,9 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       },
       'DEFAULT',
       nowMs,
-      'BTVF73'
+      'BT8473'
     );
-    const abandonedAfterVerifyFail = verifyFailStorage.getRoomSync('BTVF73');
+    const abandonedAfterVerifyFail = verifyFailStorage.getRoomSync('BT8473');
     const step4VerifyAndRollbackOk =
       verifyFailRes.success === false &&
       verifyFailRes.failedStep === 'VERIFY_SIGNALING_DOC' &&
@@ -5195,7 +5199,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       },
       'EXTREME',
       nowMs,
-      'BTPF73'
+      'BT8573'
     );
     const step2ClassifyOk =
       parentFailRes.success === false &&
@@ -5448,7 +5452,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       hostUserA,
       'DEFAULT',
       nowMs,
-      'BTPE01',
+      'BT8601',
       { hasPassword: true, password: '   ' }
     );
     const passwordValidationOk =
@@ -5470,17 +5474,17 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       hostUserA,
       'EXTREME',
       nowMs + 200,
-      'BT88LK',
+      'BT8815',
       { hasPassword: true, password: 'tank2026' }
     );
-    const rawLockedLobby = storage.getRoomSync('BT88LK');
+    const rawLockedLobby = storage.getRoomSync('BT8815');
     // Kiểm tra mật khẩu không lưu cleartext trên Firestore và hoàn toàn tương thích với evaluateCoopRoomRuleCreate:
     const lockedRuleCheck = rawLockedLobby
       ? evaluateCoopRoomRuleCreate({
           authUid: hostUserA.uid,
           isVerifiedPersonalGmail: true,
           requestTimeMs: nowMs + 200,
-          roomCode: 'BT88LK',
+          roomCode: 'BT8815',
           incoming: rawLockedLobby,
         })
       : false;
@@ -5502,20 +5506,20 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     // Case 9 & 10: Vào bằng mã phòng có mật khẩu -> nhập thiếu hoặc sai mật khẩu bị từ chối; nhập đúng mật khẩu vào thành công
     const joinProtectedMissingPw = guest1.joinRoomSync(
       storage,
-      'BT88LK',
+      'BT8815',
       guestUser1,
       nowMs + 400
     );
     const joinProtectedWrongPw = guest1.joinRoomSync(
       storage,
-      'BT88LK',
+      'BT8815',
       guestUser1,
       nowMs + 450,
       { password: 'wrong999' }
     );
     const joinProtectedRightPw = guest1.joinRoomSync(
       storage,
-      'BT88LK',
+      'BT8815',
       guestUser1,
       nowMs + 500,
       { password: 'tank2026' }
@@ -5602,7 +5606,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       p1User,
       'EXTREME',
       nowMs,
-      'BTC019',
+      'BT3019',
       { hasPassword: false }
     );
     const p1AfterTc01 = p1Manager.getCurrentRoom();
@@ -5625,10 +5629,10 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
 
     // TC-03: P2 tham gia phòng -> guestUid == P2.uid (KHÔNG bị ghi đè thành null bởi signaling.guestUid!),
     //        cả hai màn hình không còn hiển thị "Đang chờ người chơi 2 nhập mã phòng"
-    const tc03Res = p2Manager.joinRoomSync(storage, 'BTC019', p2User, nowMs + 200);
+    const tc03Res = p2Manager.joinRoomSync(storage, 'BT3019', p2User, nowMs + 200);
     const p1AfterTc03 = p1Manager.getCurrentRoom();
     const p2AfterTc03 = p2Manager.getCurrentRoom();
-    const sigDocAfterJoin = storage.getSignalingSync('BTC019');
+    const sigDocAfterJoin = storage.getSignalingSync('BT3019');
     const tc03Pass =
       tc03Res.success === true &&
       p1AfterTc03?.guestUid === p2User.uid &&
@@ -5641,7 +5645,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
 
     // TC-04: P2 bấm Sẵn sàng sau khi vào phòng -> guestReady == true trên Firestore, cả P1 và P2 đều thấy P2 đã Sẵn sàng
     const tc04Res = p2Manager.setPlayerReadySync(storage, true, nowMs + 300);
-    const rawLobbyAfterP2Ready = storage.getRoomSync('BTC019');
+    const rawLobbyAfterP2Ready = storage.getRoomSync('BT3019');
     const p1AfterTc04 = p1Manager.getCurrentRoom();
     const p2AfterTc04 = p2Manager.getCurrentRoom();
     const tc04Pass =
@@ -5693,8 +5697,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       p1AfterTc12?.guestReady === true;
 
     // TC-07: Cả P1 và P2 đều Sẵn sàng -> Chuyển sang kết nối/bắt đầu trận và vào màn chơi thành công
-    const lobbyBeforeStart = storage.getRoomSync('BTC019')!;
-    storage.setRoomSync('BTC019', {
+    const lobbyBeforeStart = storage.getRoomSync('BT3019')!;
+    storage.setRoomSync('BT3019', {
       ...lobbyBeforeStart,
       rtcConnectionState: 'CONNECTED',
       hostLastActiveAt: nowMs + 450,
@@ -5715,7 +5719,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       p2AfterTc07?.difficulty === 'EXTREME';
 
     // TC-08: Người chơi thứ 3 cố bấm Sẵn sàng hoặc sửa guestReady của phòng không thuộc về mình -> Bị từ chối bởi Firestore Rules
-    const currentLobbyForTc08 = storage.getRoomSync('BTC019')!;
+    const currentLobbyForTc08 = storage.getRoomSync('BT3019')!;
     const tc08RuleEval = evaluateCoopRoomRuleUpdate({
       authUid: 'uid_attacker_tc08',
       isVerifiedPersonalGmail: true,
@@ -6895,12 +6899,12 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       email: 'guest.p2@gmail.com',
     };
 
-    hostMgr.createRoomSync(storage, hostUser, 'DEFAULT', nowMs, 'BTCE01', { hasPassword: false });
-    guestMgr.joinRoomSync(storage, 'BTCE01', guestUser, nowMs + 100);
+    hostMgr.createRoomSync(storage, hostUser, 'DEFAULT', nowMs, 'BT4101', { hasPassword: false });
+    guestMgr.joinRoomSync(storage, 'BT4101', guestUser, nowMs + 100);
     hostMgr.setPlayerReadySync(storage, true, nowMs + 200);
     guestMgr.setPlayerReadySync(storage, true, nowMs + 250);
-    const lobbyBefore = storage.getRoomSync('BTCE01')!;
-    storage.setRoomSync('BTCE01', { ...lobbyBefore, rtcConnectionState: 'CONNECTED' });
+    const lobbyBefore = storage.getRoomSync('BT4101')!;
+    storage.setRoomSync('BT4101', { ...lobbyBefore, rtcConnectionState: 'CONNECTED' });
     hostMgr.startOnlineMatchSync(storage, hostUser.uid, undefined, nowMs + 300);
 
     hostMgr.attachCustomP2PChannel(hostChannel, nowMs + 310);
@@ -6950,12 +6954,12 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       (msg) => hostMgr2.handleIncomingDataChannelMessage(msg, nowMs + 600),
       (msg) => guestMgr2.handleIncomingDataChannelMessage(msg, nowMs + 600)
     );
-    hostMgr2.createRoomSync(storage2, hostUser, 'DEFAULT', nowMs, 'BTCE02', { hasPassword: false });
-    guestMgr2.joinRoomSync(storage2, 'BTCE02', guestUser, nowMs + 100);
+    hostMgr2.createRoomSync(storage2, hostUser, 'DEFAULT', nowMs, 'BT4102', { hasPassword: false });
+    guestMgr2.joinRoomSync(storage2, 'BT4102', guestUser, nowMs + 100);
     hostMgr2.setPlayerReadySync(storage2, true, nowMs + 200);
     guestMgr2.setPlayerReadySync(storage2, true, nowMs + 250);
-    storage2.setRoomSync('BTCE02', {
-      ...storage2.getRoomSync('BTCE02')!,
+    storage2.setRoomSync('BT4102', {
+      ...storage2.getRoomSync('BT4102')!,
       rtcConnectionState: 'CONNECTED',
     });
     hostMgr2.startOnlineMatchSync(storage2, hostUser.uid, undefined, nowMs + 300);
@@ -9370,12 +9374,12 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       emailVerified: true,
     };
 
-    hostMgr.createRoomSync(storage, hostUser, 'DEFAULT', t0, 'BTSYN1', { hasPassword: false });
-    guestMgr.joinRoomSync(storage, 'BTSYN1', guestUser, t0 + 100);
+    hostMgr.createRoomSync(storage, hostUser, 'DEFAULT', t0, 'BT7101', { hasPassword: false });
+    guestMgr.joinRoomSync(storage, 'BT7101', guestUser, t0 + 100);
     hostMgr.setPlayerReadySync(storage, true, t0 + 150);
     guestMgr.setPlayerReadySync(storage, true, t0 + 200);
-    storage.setRoomSync('BTSYN1', {
-      ...storage.getRoomSync('BTSYN1')!,
+    storage.setRoomSync('BT7101', {
+      ...storage.getRoomSync('BT7101')!,
       rtcConnectionState: 'CONNECTED',
     });
     hostMgr.startOnlineMatchSync(storage, hostUser.uid, undefined, t0 + 250);
@@ -9566,12 +9570,12 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       emailVerified: true,
     };
 
-    hostMgr.createRoomSync(storage, hostUser, 'EXTREME', t0, 'BTEND1', { hasPassword: false });
-    guestMgr.joinRoomSync(storage, 'BTEND1', guestUser, t0 + 100);
+    hostMgr.createRoomSync(storage, hostUser, 'EXTREME', t0, 'BT8101', { hasPassword: false });
+    guestMgr.joinRoomSync(storage, 'BT8101', guestUser, t0 + 100);
     hostMgr.setPlayerReadySync(storage, true, t0 + 150);
     guestMgr.setPlayerReadySync(storage, true, t0 + 200);
-    storage.setRoomSync('BTEND1', {
-      ...storage.getRoomSync('BTEND1')!,
+    storage.setRoomSync('BT8101', {
+      ...storage.getRoomSync('BT8101')!,
       rtcConnectionState: 'CONNECTED',
     });
     hostMgr.startOnlineMatchSync(storage, hostUser.uid, undefined, t0 + 250);
@@ -9619,21 +9623,21 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     unsubGuestSnap();
 
     // Cả Host và Guest bấm "Về phòng chờ" -> quay lại chung 1 phòng WAITING (BTxxxx, 2/2 người chơi)
-    const hostBackRes = hostMgr.returnToLobbyFromMatchSync(storage, hostUser, 'BTREM1', nowMs + 100);
+    const hostBackRes = hostMgr.returnToLobbyFromMatchSync(storage, hostUser, 'BT9101', nowMs + 100);
     const guestBackRes = guestMgr.returnToLobbyFromMatchSync(storage, guestUser, undefined, nowMs + 200);
-    const sharedRoom = storage.getRoomSync('BTREM1');
+    const sharedRoom = storage.getRoomSync('BT9101');
 
     const sharedLobbyJoinedOk =
       hostBackRes.success === true &&
       guestBackRes.success === true &&
       sharedRoom !== null &&
-      /^BT[A-Z0-9]{4}$/.test(sharedRoom.roomCode) &&
+      /^BT[0-9]{4}$/.test(sharedRoom.roomCode) &&
       sharedRoom.status === 'WAITING' &&
       sharedRoom.difficulty === 'EXTREME' &&
       sharedRoom.hostUid === hostUser.uid &&
       sharedRoom.guestUid === guestUser.uid &&
-      hostMgr.getCurrentRoom()?.roomCode === 'BTREM1' &&
-      guestMgr.getCurrentRoom()?.roomCode === 'BTREM1';
+      hostMgr.getCurrentRoom()?.roomCode === 'BT9101' &&
+      guestMgr.getCurrentRoom()?.roomCode === 'BT9101';
 
     const passed = bothGameOverSimultaneous && sharedLobbyJoinedOk;
 
@@ -9925,6 +9929,83 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T70: Phân bổ Media Trang chủ / 2 - AI / 2P / Stage, kiểm tra định dạng .mp4 & Firestore Rule /system_config/media',
       passed,
       details: `resolutionOk=${resolutionOk}, videoValid=${mp4Valid.valid && !nonMp4Rejected.valid}, pathValid=${pathValid}, mediaRuleOk=${mediaRuleOk}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T71: Đồng bộ vào trận lại (Rematch) cho Guest P2 qua P2P DataChannel khi Firestore snapshot bị trễ
+  // =========================================================================
+  {
+    const storage = new InMemoryCoopStorageAdapter();
+    const hostMgr = new CoopOnlineManager(storage);
+    const guestMgr = new CoopOnlineManager(storage);
+    const t0 = 1_755_000_000_000;
+    const { hostChannel, guestChannel } = createInMemoryP2PChannelPair(
+      (msg) => hostMgr.handleIncomingDataChannelMessage(msg, t0 + 500),
+      (msg) => guestMgr.handleIncomingDataChannelMessage(msg, t0 + 500)
+    );
+    const hostUser = { uid: 'uid_rematch_h', displayName: 'Host Rematch', email: 'h.rem@gmail.com', emailVerified: true };
+    const guestUser = { uid: 'uid_rematch_g', displayName: 'Guest Rematch', email: 'g.rem@gmail.com', emailVerified: true };
+
+    hostMgr.createRoomSync(storage, hostUser, 'DEFAULT', t0, 'BT6201', { hasPassword: false });
+    guestMgr.joinRoomSync(storage, 'BT6201', guestUser, t0 + 50);
+    hostMgr.setPlayerReadySync(storage, true, t0 + 80);
+    guestMgr.setPlayerReadySync(storage, true, t0 + 100);
+    storage.setRoomSync('BT6201', { ...storage.getRoomSync('BT6201')!, rtcConnectionState: 'CONNECTED' });
+    hostMgr.attachCustomP2PChannel(hostChannel, t0 + 120);
+    guestMgr.attachCustomP2PChannel(guestChannel, t0 + 120);
+    hostMgr.startOnlineMatchSync(storage, hostUser.uid, undefined, t0 + 150);
+
+    // Sau khi nổ căn cứ, cả 2 bấm "Về phòng chờ" để tạo lại phòng chung
+    hostMgr.returnToLobbyFromMatchSync(storage, hostUser, 'BT6202', t0 + 300);
+    guestMgr.returnToLobbyFromMatchSync(storage, guestUser, undefined, t0 + 350);
+    hostMgr.setPlayerReadySync(storage, true, t0 + 400);
+    guestMgr.setPlayerReadySync(storage, true, t0 + 420);
+    storage.setRoomSync('BT6202', { ...storage.getRoomSync('BT6202')!, rtcConnectionState: 'CONNECTED' });
+
+    // Gắn kênh P2P mới cho phòng BT6202 và mô phỏng Firestore listener của Guest bị trễ (Guest vẫn đang giữ WAITING)
+    const { hostChannel: rematchHostCh, guestChannel: rematchGuestCh } = createInMemoryP2PChannelPair(
+      (msg) => hostMgr.handleIncomingDataChannelMessage(msg, t0 + 500),
+      (msg) => guestMgr.handleIncomingDataChannelMessage(msg, t0 + 500)
+    );
+    hostMgr.attachCustomP2PChannel(rematchHostCh, t0 + 450);
+    guestMgr.attachCustomP2PChannel(rematchGuestCh, t0 + 450);
+    let guestTransitionCount = 0;
+    const unsubGuest = guestMgr.subscribe((r: CoopRoomDocument | null) => {
+      if (r && r.roomCode === 'BT6202' && r.status === 'PLAYING') {
+        guestTransitionCount += 1;
+      }
+    });
+
+    // P1 bấm Bắt đầu trận mới -> phát P2P MATCH_STARTED tới P2
+    const rematchStartRes = hostMgr.startOnlineMatchSync(storage, hostUser.uid, undefined, t0 + 500);
+    const guestImmediateOk =
+      rematchStartRes.success === true &&
+      guestTransitionCount >= 1 &&
+      guestMgr.getCurrentRoom()?.status === 'PLAYING';
+    unsubGuest();
+
+    // Trường hợp 2: ngay cả khi MATCH_STARTED bị rớt, HOST_SNAPSHOT đầu tiên cũng kích hoạt Guest WAITING -> PLAYING
+    const storage2 = new InMemoryCoopStorageAdapter();
+    const h2 = new CoopOnlineManager(storage2);
+    const g2 = new CoopOnlineManager(storage2);
+    h2.createRoomSync(storage2, hostUser, 'EXTREME', t0, 'BT6203', { hasPassword: false });
+    g2.joinRoomSync(storage2, 'BT6203', guestUser, t0 + 50);
+    h2.setPlayerReadySync(storage2, true, t0 + 80);
+    g2.setPlayerReadySync(storage2, true, t0 + 100);
+    storage2.setRoomSync('BT6203', { ...storage2.getRoomSync('BT6203')!, rtcConnectionState: 'CONNECTED' });
+    const eng2 = new GameEngine(undefined, undefined, false);
+    eng2.startMatch('TWO_PLAYERS_ONLINE', 'EXTREME');
+    const mockSnap = buildAuthoritativeSnapshot(eng2.getState(), 1);
+    g2.handleIncomingDataChannelMessage({ type: 'HOST_SNAPSHOT', snapshot: mockSnap }, t0 + 620);
+    const snapshotPromotesGuestOk = g2.getCurrentRoom()?.status === 'PLAYING';
+
+    const passed = guestImmediateOk && snapshotPromotesGuestOk;
+    results.push({
+      id: 'M7_3_T71',
+      name: 'T71: Đồng bộ Guest P2 vào trận lại sau Về phòng chờ qua P2P MATCH_STARTED & HOST_SNAPSHOT',
+      passed,
+      details: `guestImmediateOk=${guestImmediateOk}, snapshotPromotesGuestOk=${snapshotPromotesGuestOk}`,
     });
   }
 

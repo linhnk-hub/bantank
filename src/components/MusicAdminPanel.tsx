@@ -319,34 +319,6 @@ export const MusicAdminPanel: React.FC = () => {
     }
   };
 
-  const handleActivateStaticIntroVideo = async () => {
-    setStatusMsg(null);
-    setIsUploadingVideo(true);
-    try {
-      const res = await musicManager.activateStaticIntroVideo({
-        opacity: videoOpacityDraft,
-        loop: videoLoopDraft,
-      });
-      if (res.success && res.homeVideo) {
-        setIsVideoDirty(false);
-        setVideoOpacityDraft(res.homeVideo.opacity);
-        setVideoLoopDraft(res.homeVideo.loop);
-        setVideoEnabledDraft(res.homeVideo.isEnabled);
-        setStatusMsg({
-          type: 'success',
-          text: 'Đã kích hoạt video nền mặc định (intro-bantank.mp4) cho Trang chủ!',
-        });
-      } else {
-        setStatusMsg({
-          type: 'error',
-          text: res.error || 'Không thể kích hoạt video nền mặc định.',
-        });
-      }
-    } finally {
-      setIsUploadingVideo(false);
-    }
-  };
-
   const handleActivateHomeVideoSettings = async () => {
     setStatusMsg(null);
     const res = await musicManager.updateHomeVideoSettings({
@@ -1090,15 +1062,6 @@ export const MusicAdminPanel: React.FC = () => {
             >
               <Upload className="w-3.5 h-3.5" />
               <span>{isUploadingVideo ? 'Đang tải video...' : 'Upload Video (.mp4)'}</span>
-            </button>
-            <button
-              type="button"
-              data-testid="use-default-intro-video-btn"
-              disabled={isCloudSyncing || isUploadingVideo}
-              onClick={() => void handleActivateStaticIntroVideo()}
-              className="px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 font-bold text-[11px] transition-all cursor-pointer disabled:opacity-50"
-            >
-              Dùng video có sẵn
             </button>
           </div>
         </div>

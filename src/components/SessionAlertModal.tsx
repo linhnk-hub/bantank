@@ -6,13 +6,13 @@
 import React from 'react';
 import { SessionManager, type SessionStateSnapshot } from '../core/sessionManager.ts';
 import { formatAccountStatusMessage } from './AuthSessionBanner.tsx';
-import { ShieldAlert, WifiOff, RefreshCw, LogIn, Clock, Play } from 'lucide-react';
+import { ShieldAlert, WifiOff, RefreshCw, LogOut, Clock, Play } from 'lucide-react';
 
 export interface SessionAlertModalProps {
   session: SessionStateSnapshot;
   isProcessing: boolean;
   onReauth: () => Promise<void>;
-  onSignIn: () => Promise<void>;
+  onSignIn?: () => Promise<void>;
   onSignOut: () => Promise<void>;
   onContinueSession?: () => void;
 }
@@ -21,7 +21,6 @@ export const SessionAlertModal: React.FC<SessionAlertModalProps> = ({
   session,
   isProcessing,
   onReauth,
-  onSignIn,
   onSignOut,
   onContinueSession,
 }) => {
@@ -117,23 +116,15 @@ export const SessionAlertModal: React.FC<SessionAlertModalProps> = ({
             </button>
           )}
 
-          {!isIdleWarning && session.status !== 'ACTIVE' && (
-            <button
-              onClick={onSignIn}
-              disabled={isProcessing}
-              className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold transition-all border border-neutral-700"
-            >
-              <LogIn className="w-4 h-4" />
-              <span>Đăng nhập lại</span>
-            </button>
-          )}
-
           <button
+            type="button"
+            data-testid="session-alert-signout-btn"
             onClick={onSignOut}
             disabled={isProcessing}
-            className="w-full py-2 rounded-xl text-neutral-400 hover:text-neutral-200 text-xs transition-all"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold transition-all border border-neutral-700 disabled:opacity-50 cursor-pointer"
           >
-            Đăng xuất tài khoản
+            <LogOut className="w-4 h-4 text-rose-400" />
+            <span>Đăng xuất tài khoản</span>
           </button>
         </div>
       </div>

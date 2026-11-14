@@ -89,6 +89,7 @@ export interface CoopAuthoritativeSnapshot {
 export type CoopDataChannelMessage =
   | { type: 'GUEST_INPUT'; packet: SequencedInputPacket }
   | { type: 'HOST_SNAPSHOT'; snapshot: CoopAuthoritativeSnapshot }
+  | { type: 'MATCH_STARTED'; roomCode: string; difficulty: 'DEFAULT' | 'EXTREME'; timestamp: number }
   | { type: 'GUEST_TERMINAL_ACK'; snapshotSeq: number; timestamp: number }
   | { type: 'REQUEST_RETURN_TO_LOBBY'; timestamp: number }
   | {
@@ -329,10 +330,10 @@ export function buildCreateRoomStepErrorMessage(
   return `Lỗi kết nối mạng khi ${stepLabel} (NETWORK_ERROR). Vui lòng kiểm tra kết nối Internet và thử lại.`;
 }
 
-const ROOM_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const ROOM_CODE_ALPHABET = '0123456789';
 
 /**
- * Sinh mã phòng ngẫu nhiên theo định dạng BTxxxx (bắt đầu bằng "BT" + 4 ký tự chữ in hoa/số, loại bỏ O/0/I/1 dễ nhầm lẫn).
+ * Sinh mã phòng ngẫu nhiên theo định dạng BTxxxx (bắt đầu bằng "BT" + 4 chữ số ngẫu nhiên 0-9).
  */
 export function generateRoomCode(existingCodes?: Set<string>): string {
   const randomSuffixLength = Math.max(1, COOP_ONLINE_CONFIG.ROOM_CODE_LENGTH - 2);
@@ -350,11 +351,11 @@ export function generateRoomCode(existingCodes?: Set<string>): string {
 }
 
 /**
- * Chuẩn hóa và kiểm tra định dạng mã phòng BTxxxx (bắt buộc "BT" + 4 ký tự chữ/số).
+ * Chuẩn hóa và kiểm tra định dạng mã phòng BTxxxx (bắt buộc "BT" + 4 chữ số 0-9).
  */
 export function validateRoomCodeFormat(rawCode: string): { valid: boolean; normalized: string } {
   const normalized = (rawCode || '').trim().toUpperCase();
-  const valid = /^BT[A-Z0-9]{4}$/.test(normalized);
+  const valid = /^BT[0-9]{4}$/.test(normalized);
   return { valid, normalized };
 }
 
@@ -470,13 +471,9 @@ export function verifyRoomPassword(
  * đồng thời không tái sử dụng mã phòng cũ để luôn thỏa mãn `allow create`.
  */
 export function getPublicQuickJoinSlotCodesForBucket(bucketIndex: number): string[] {
-  const base36 = Math.max(0, Math.floor(bucketIndex))
-    .toString(36)
-    .toUpperCase()
-    .padStart(3, '2')
-    .slice(-3);
-  const slotChars = ['2', '3', '4', '5', '6'];
-  return slotChars.map((s) => `BT${base36}${s}`);
+  const threeDigits = String(Math.abs(Math.floor(bucketIndex)) % 1000).padStart(3, '0');
+  const slotChars = ['0', '1', '2', '3', '4'];
+  return slotChars.map((s) => `BT${threeDigits}${s}`);
 }
 
 export function getPublicQuickJoinCandidateCodes(nowMs: number = Date.now()): string[] {
@@ -662,7 +659,7 @@ export function evaluateJoinRoomCandidate(
     return {
       success: false,
       errorCode: 'INVALID_CODE_FORMAT',
-      message: 'Mã phòng không hợp lệ (định dạng bắt buộc BTxxxx, gồm BT + 4 ký tự chữ hoặc số).',
+      message: 'Mã phòng không hợp lệ (định dạng bắt buộc BTxxxx, gồm BT + 4 chữ số từ 0-9).',
     };
   }
 
@@ -828,7 +825,7 @@ export function evaluateCoopRoomRuleCreate(params: {
 }): boolean {
   const { authUid, isVerifiedPersonalGmail, requestTimeMs, roomCode, incoming } = params;
   if (!authUid || !isVerifiedPersonalGmail) return false;
-  if (!/^BT[A-Z0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) return false;
+  if (!/^BT[0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) return false;
   if (incoming.hostUid !== authUid) return false;
   if (incoming.status !== 'WAITING') return false;
   if (incoming.difficulty !== 'DEFAULT' && incoming.difficulty !== 'EXTREME') return false;
@@ -943,7 +940,7 @@ export function evaluateCoopRoomRuleUpdate(params: {
   // Immutable core fields & schema check (expiresAt cannot be extended or modified on update)
   if (
     incoming.roomCode !== existing.roomCode ||
-    !/^BT[A-Z0-9]{4}$/.test(incoming.roomCode) ||
+    !/^BT[0-9]{4}$/.test(incoming.roomCode) ||
     incoming.hostUid !== existing.hostUid ||
     incoming.hostDisplayName !== existing.hostDisplayName ||
     incoming.difficulty !== existing.difficulty ||
@@ -1169,7 +1166,7 @@ export function evaluateCoopSignalingRuleCreate(params: {
   if (!authUid || !isVerifiedPersonalGmail) return false;
   if (existingSignaling !== null) return false; // Document already exists -> create denied
   if (!parentRoom) return false; // Parent room must exist
-  if (!/^BT[A-Z0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) return false;
+  if (!/^BT[0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) return false;
   if (parentRoom.hostUid !== authUid) return false;
   if (parentRoom.status !== 'WAITING') return false;
   if (requestTimeMs >= parentRoom.expiresAt) return false;
@@ -1206,7 +1203,7 @@ export function evaluateCoopSignalingRuleUpdate(params: {
   if (!authUid || !isVerifiedPersonalGmail || !parentRoom) {
     return { allowed: false, matchedBranch: null };
   }
-  if (!/^BT[A-Z0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) {
+  if (!/^BT[0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) {
     return { allowed: false, matchedBranch: null };
   }
 
@@ -2641,7 +2638,7 @@ export class CoopOnlineManager {
       return {
         success: false,
         errorCode: 'INVALID_CODE_FORMAT',
-        message: 'Mã phòng không hợp lệ (định dạng bắt buộc BTxxxx, gồm BT + 4 ký tự chữ hoặc số).',
+        message: 'Mã phòng không hợp lệ (định dạng bắt buộc BTxxxx, gồm BT + 4 chữ số từ 0-9).',
       };
     }
 
@@ -2979,6 +2976,18 @@ export class CoopOnlineManager {
       await this.adapter.updateRoom(this.currentRoom.roomCode, partial);
       this.currentRoom = { ...this.currentRoom, ...partial };
 
+      if (this.isP2PDataChannelOpen()) {
+        this.sendOverDataChannel(
+          {
+            type: 'MATCH_STARTED',
+            roomCode: this.currentRoom.roomCode,
+            difficulty: this.currentRoom.difficulty,
+            timestamp: nowMs,
+          },
+          true
+        );
+      }
+
       // Send initial snapshot over P2P DataChannel if open (ZERO Firestore snapshot payload!)
       if (initialGameState && this.isP2PDataChannelOpen()) {
         this.hostOutgoingSnapshotSeq = 1;
@@ -2994,6 +3003,33 @@ export class CoopOnlineManager {
         errorCode: 'NETWORK_ERROR',
         message: err?.message || 'Không thể bắt đầu trận đấu do lỗi mạng.',
       };
+    }
+  }
+
+  /**
+   * Đồng bộ lại trạng thái phòng hiện tại từ Firestore (dùng làm fail-safe khi Guest đang chờ vào trận).
+   */
+  public async refreshRoomFromCloud(useServer: boolean = true): Promise<CoopRoomDocument | null> {
+    const code = this.currentRoom?.roomCode;
+    if (!code) return null;
+    try {
+      const latest = useServer
+        ? await this.adapter.getRoomFromServer(code)
+        : await this.adapter.getRoom(code);
+      if (!latest) return this.currentRoom;
+      if (
+        this.currentRoom &&
+        latest.status === 'WAITING' &&
+        this.currentRoom.status === 'PLAYING'
+      ) {
+        return this.currentRoom;
+      }
+      this.currentRoom = mergeLobbyAndSignaling(latest, this.currentSignaling);
+      this.coordinateWebRTCSignaling();
+      this.notifyListeners();
+      return this.currentRoom;
+    } catch {
+      return this.currentRoom;
     }
   }
 
@@ -3706,7 +3742,7 @@ export class CoopOnlineManager {
       return {
         success: false,
         errorCode: 'INVALID_CODE_FORMAT',
-        message: 'Mã phòng không hợp lệ (định dạng bắt buộc BTxxxx, gồm BT + 4 ký tự chữ hoặc số).',
+        message: 'Mã phòng không hợp lệ (định dạng bắt buộc BTxxxx, gồm BT + 4 chữ số từ 0-9).',
       };
     }
 
@@ -3977,6 +4013,18 @@ export class CoopOnlineManager {
       const updatedLobby = storage.getRoomSync(this.currentRoom.roomCode);
       if (updatedLobby) {
         this.currentRoom = mergeLobbyAndSignaling(updatedLobby, this.currentSignaling);
+      }
+
+      if (this.isP2PDataChannelOpen()) {
+        this.sendOverDataChannel(
+          {
+            type: 'MATCH_STARTED',
+            roomCode: this.currentRoom.roomCode,
+            difficulty: this.currentRoom.difficulty,
+            timestamp: nowMs,
+          },
+          true
+        );
       }
 
       if (initialGameState && this.isP2PDataChannelOpen()) {
@@ -4402,6 +4450,23 @@ export class CoopOnlineManager {
       return;
     }
 
+    if (msg.type === 'MATCH_STARTED' && this.role === 'GUEST') {
+      if (
+        this.currentRoom &&
+        this.currentRoom.roomCode === msg.roomCode &&
+        this.currentRoom.status === 'WAITING'
+      ) {
+        this.currentRoom = {
+          ...this.currentRoom,
+          status: 'PLAYING',
+          difficulty: msg.difficulty,
+          disconnectReason: null,
+        };
+        this.notifyListeners();
+      }
+      return;
+    }
+
     if (msg.type === 'GUEST_INPUT' && this.role === 'HOST') {
       this.processIncomingGuestInput(msg.packet, nowMs);
     } else if (msg.type === 'HOST_SNAPSHOT' && this.role === 'GUEST') {
@@ -4419,6 +4484,18 @@ export class CoopOnlineManager {
       this.isLocalGuestSpectator = Boolean(
         p2St && (p2St.isSpectator || p2St.hasLeftMatch || (p2St.isDead && p2St.lives <= 0))
       );
+
+      // Fail-safe: nếu P1 đã vào trận và đang gửi HOST_SNAPSHOT qua WebRTC trong khi P2 vẫn đang kẹt ở phòng chờ WAITING,
+      // lập tức kích hoạt chuyển P2 sang PLAYING để mở BattleScene đồng bộ cùng P1.
+      if (this.currentRoom && this.currentRoom.status === 'WAITING') {
+        this.currentRoom = {
+          ...this.currentRoom,
+          status: 'PLAYING',
+          difficulty: normalizedSnap.difficulty ?? this.currentRoom.difficulty,
+          disconnectReason: null,
+        };
+        this.notifyListeners();
+      }
 
       this.latestPendingGuestSnapshot = normalizedSnap;
       if (this.snapshotListeners.size === 0) {
@@ -5105,36 +5182,58 @@ export class CoopOnlineManager {
   }
 
   private listenToRoom(roomCode: string): void {
-    this.unsubRoom = this.adapter.subscribeRoom(roomCode, (updatedLobby) => {
-      if (!updatedLobby) {
-        this.currentRoom = null;
-      } else {
-        if (updatedLobby.status === 'ABANDONED' && this.role) {
-          const peerRole = this.role === 'HOST' ? 'GUEST' : 'HOST';
-          this.recordPeerActiveLeave(peerRole, updatedLobby.disconnectReason || undefined);
+    this.unsubRoom = this.adapter.subscribeRoom(
+      roomCode,
+      (updatedLobby) => {
+        if (!updatedLobby) {
+          this.currentRoom = null;
+        } else {
+          if (updatedLobby.status === 'ABANDONED' && this.role) {
+            const peerRole = this.role === 'HOST' ? 'GUEST' : 'HOST';
+            this.recordPeerActiveLeave(peerRole, updatedLobby.disconnectReason || undefined);
+          }
+          // Không cho phép snapshot cache cũ kéo trạng thái PLAYING quay ngược về WAITING khi P2P đã vào trận
+          const merged = mergeLobbyAndSignaling(updatedLobby, this.currentSignaling);
+          if (
+            this.currentRoom &&
+            this.currentRoom.roomCode === merged.roomCode &&
+            this.currentRoom.status === 'PLAYING' &&
+            merged.status === 'WAITING'
+          ) {
+            merged.status = 'PLAYING';
+          }
+          this.currentRoom = merged;
+          this.coordinateWebRTCSignaling();
         }
-        this.currentRoom = mergeLobbyAndSignaling(updatedLobby, this.currentSignaling);
-        this.coordinateWebRTCSignaling();
+        this.notifyListeners();
+      },
+      (err) => {
+        console.warn('[CoopOnlineManager] room snapshot warning:', err?.message || err);
       }
-      this.notifyListeners();
-    });
+    );
 
-    this.unsubSignaling = this.adapter.subscribeSignaling(roomCode, (updatedSig) => {
-      this.currentSignaling = updatedSig;
-      if (this.currentRoom && updatedSig) {
-        this.currentRoom = {
-          ...this.currentRoom,
-          rtcOffer: updatedSig.rtcOffer,
-          rtcAnswer: updatedSig.rtcAnswer,
-          hostIceCandidates: updatedSig.hostIceCandidates,
-          guestIceCandidates: updatedSig.guestIceCandidates,
-          finalScore: updatedSig.finalScore,
-          matchOutcome: updatedSig.matchOutcome,
-        };
-        this.coordinateWebRTCSignaling();
+    this.unsubSignaling = this.adapter.subscribeSignaling(
+      roomCode,
+      (updatedSig) => {
+        this.currentSignaling = updatedSig;
+        if (this.currentRoom && updatedSig) {
+          this.currentRoom = {
+            ...this.currentRoom,
+            rtcOffer: updatedSig.rtcOffer,
+            rtcAnswer: updatedSig.rtcAnswer,
+            hostIceCandidates: updatedSig.hostIceCandidates,
+            guestIceCandidates: updatedSig.guestIceCandidates,
+            finalScore: updatedSig.finalScore,
+            matchOutcome: updatedSig.matchOutcome,
+          };
+          this.coordinateWebRTCSignaling();
+        }
+        this.notifyListeners();
+      },
+      (err) => {
+        console.warn('[CoopOnlineManager] signaling snapshot warning:', err?.message || err);
       }
-      this.notifyListeners();
-    });
+    );
   }
 
   /**

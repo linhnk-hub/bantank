@@ -204,6 +204,7 @@ export interface SharedMusicCloudAdapter {
   ): Promise<{ assetPath: string }>;
   deleteAudioBinary(assetPath: string): Promise<void>;
   fetchAudioBinary(assetPath: string, version: number): Promise<ArrayBuffer>;
+  fetchAudioStreamUrl?(assetPath: string, version: number): Promise<string>;
   getSystemAudioConfig(): Promise<SystemAudioConfigDocument | null>;
   saveSystemAudioConfig(config: SystemAudioConfigDocument): Promise<void>;
   deleteSystemAudioConfig(): Promise<void>;
@@ -671,7 +672,54 @@ export function formatMusicCloudError(
     return `Từ chối quyền Firestore tại "/${targetPath.replace(/^\/+/, '')}" (${parsed?.operationType || 'write'}) khi ${stepLabel}${authEmail}: ${underlyingMsg}. Vui lòng đảm bảo đã đăng nhập Google đúng tài khoản Admin (${ADMIN_EMAIL}) và Publish Firestore Rules mới nhất.`;
   }
 
+  if (
+    (code.includes('storage/retry-limit-exceeded') || lower.includes('retry-limit-exceeded')) &&
+    !isPermissionError
+  ) {
+    return `Kết nối tải file âm thanh từ Firebase Storage tại "${targetPath}" khi ${stepLabel} vượt thời gian chờ (storage/retry-limit-exceeded).`;
+  }
+
   return `${stepLabel} thất bại tại "${targetPath}": ${underlyingMsg}`;
+}
+
+export function shouldFallbackToAudioStream(err: unknown): boolean {
+  const rawMsg =
+    typeof err === 'string'
+      ? err
+      : err instanceof Error
+      ? err.message
+      : String((err as { message?: string } | null)?.message || '');
+  const code = String((err as { code?: string } | null)?.code || '').toLowerCase();
+  const lower = rawMsg.toLowerCase();
+
+  const isPerm =
+    code.includes('permission') ||
+    code.includes('unauthorized') ||
+    code.includes('unauthenticated') ||
+    lower.includes('missing or insufficient permissions') ||
+    lower.includes('permission-denied') ||
+    lower.includes('từ chối quyền') ||
+    lower.includes('storage/unauthorized') ||
+    lower.includes('storage/unauthenticated');
+  if (isPerm) return false;
+
+  const isMissingOrInvalid =
+    code.includes('object-not-found') ||
+    lower.includes('http 404') ||
+    lower.includes('not found') ||
+    lower.includes('không an toàn') ||
+    lower.includes('không hợp lệ');
+  if (isMissingOrInvalid) return false;
+
+  return (
+    code.includes('retry-limit-exceeded') ||
+    lower.includes('retry-limit-exceeded') ||
+    lower.includes('failed to fetch') ||
+    lower.includes('network') ||
+    lower.includes('cors') ||
+    lower.includes('timeout') ||
+    lower.includes('vượt thời gian chờ')
+  );
 }
 
 /**
@@ -900,15 +948,31 @@ export class FirebaseSharedMusicCloudAdapter implements SharedMusicCloudAdapter 
       try {
         const storage = getFirebaseStorage();
         const sRef = storageRef(storage, normalizedPath);
-        const buf = await getBytes(sRef, 25 * 1024 * 1024);
+        let timeoutHandle: ReturnType<typeof setTimeout> | null = null;
+        const buf = await Promise.race([
+          getBytes(sRef, 25 * 1024 * 1024).finally(() => {
+            if (timeoutHandle !== null) clearTimeout(timeoutHandle);
+          }),
+          new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(() => {
+              const timeoutErr = new Error(
+                `Firebase Storage: Max retry time for operation exceeded at "${normalizedPath}" (storage/retry-limit-exceeded).`
+              ) as Error & { code?: string };
+              timeoutErr.code = 'storage/retry-limit-exceeded';
+              reject(timeoutErr);
+            }, 8000);
+          }),
+        ]);
         if (buf.byteLength <= 0) {
           throw new Error(`File âm thanh ${normalizedPath} trên Firebase Storage bị rỗng (0 bytes).`);
         }
         return buf;
       } catch (storageErr) {
-        throw new Error(
+        const wrapped = new Error(
           formatMusicCloudError(storageErr, 'tải file âm thanh từ Firebase Storage', normalizedPath)
-        );
+        ) as Error & { code?: string };
+        wrapped.code = (storageErr as { code?: string } | null)?.code;
+        throw wrapped;
       }
     }
 
@@ -933,6 +997,31 @@ export class FirebaseSharedMusicCloudAdapter implements SharedMusicCloudAdapter 
       throw new Error(`File nhạc ${normalizedPath} trên máy chủ bị rỗng (0 bytes).`);
     }
     return buf;
+  }
+
+  public async fetchAudioStreamUrl(
+    assetPath: string,
+    version: number
+  ): Promise<string> {
+    const check = validateSafeAudioOrStoragePath(assetPath);
+    if (!check.valid || !check.normalizedAssetPath) {
+      throw new Error(check.error || 'Đường dẫn nhạc không an toàn.');
+    }
+    const normalizedPath = check.normalizedAssetPath;
+    if (check.isStorageCatalogPath) {
+      try {
+        const storage = getFirebaseStorage();
+        const sRef = storageRef(storage, normalizedPath);
+        return await getDownloadURL(sRef);
+      } catch (storageErr) {
+        const wrapped = new Error(
+          formatMusicCloudError(storageErr, 'lấy liên kết phát trực tuyến từ Firebase Storage', normalizedPath)
+        ) as Error & { code?: string };
+        wrapped.code = (storageErr as { code?: string } | null)?.code;
+        throw wrapped;
+      }
+    }
+    return buildGitHubPagesAudioUrl(normalizedPath, version);
   }
 
   public async getSystemAudioConfig(): Promise<SystemAudioConfigDocument | null> {
@@ -1186,6 +1275,7 @@ export class InMemorySharedMusicCloudAdapter implements SharedMusicCloudAdapter 
   public failNextStorageUpload: boolean = false;
   public failNextFirestoreWrite: boolean = false;
   public failNextAudioFetch: boolean = false;
+  public failNextAudioFetchWithRetryLimit: boolean = false;
   public operationLog: string[] = [];
   public fetchedUrlsWithCacheBust: string[] = [];
 
@@ -1240,6 +1330,16 @@ export class InMemorySharedMusicCloudAdapter implements SharedMusicCloudAdapter 
       : buildGitHubPagesAudioUrl(check.normalizedAssetPath, version);
     this.fetchedUrlsWithCacheBust.push(url);
 
+    if (this.failNextAudioFetchWithRetryLimit) {
+      this.failNextAudioFetchWithRetryLimit = false;
+      this.operationLog.push(`STORAGE_FETCH_RETRY_LIMIT:${check.normalizedAssetPath}`);
+      const retryErr = new Error(
+        `Firebase Storage: Max retry time for operation exceeded, please try again. (storage/retry-limit-exceeded)`
+      ) as Error & { code?: string };
+      retryErr.code = 'storage/retry-limit-exceeded';
+      throw retryErr;
+    }
+
     if (this.failNextAudioFetch) {
       this.failNextAudioFetch = false;
       this.operationLog.push(`GITHUB_PAGES_FETCH_FAIL:${url}`);
@@ -1256,6 +1356,27 @@ export class InMemorySharedMusicCloudAdapter implements SharedMusicCloudAdapter 
 
     this.operationLog.push(`GITHUB_PAGES_FETCH_OK:${url}`);
     return entry.data.slice(0);
+  }
+
+  public async fetchAudioStreamUrl(
+    assetPath: string,
+    version: number
+  ): Promise<string> {
+    const check = validateSafeAudioOrStoragePath(assetPath);
+    if (!check.valid || !check.normalizedAssetPath) {
+      throw new Error(check.error || 'Đường dẫn nhạc không an toàn.');
+    }
+    if (this.failNextAudioFetch) {
+      this.failNextAudioFetch = false;
+      throw new Error(`Mô phỏng lỗi lấy stream URL (${check.normalizedAssetPath}).`);
+    }
+    if (!this.staticFiles.has(check.normalizedAssetPath)) {
+      throw new Error(
+        `HTTP 404 (Not Found): File nhạc ./${check.normalizedAssetPath} chưa tồn tại.`
+      );
+    }
+    this.operationLog.push(`AUDIO_STREAM_URL_OK:${check.normalizedAssetPath}:v${version}`);
+    return `blob:inmemory/${check.normalizedAssetPath}?v=${version}`;
   }
 
   public async getSystemAudioConfig(): Promise<SystemAudioConfigDocument | null> {
@@ -1442,6 +1563,7 @@ export class MusicManager {
   private tracks: Map<string, MusicTrackMetadata> = new Map();
   private audioBuffers: Map<string, AudioBuffer> = new Map();
   private rawBlobs: Map<string, ArrayBuffer> = new Map();
+  private streamUrls: Map<string, string> = new Map();
 
   private assignments: MusicScopeAssignments = {
     homeTrackId: null,
@@ -1472,9 +1594,10 @@ export class MusicManager {
   private isPaused: boolean = false;
   private previewTrackId: string | null = null;
 
-  // Web Audio nodes for custom track playback & crossfading
+  // Web Audio / HTMLAudioElement nodes for custom track playback & crossfading
   private currentSource: AudioBufferSourceNode | null = null;
   private currentGain: GainNode | null = null;
+  private currentAudioElement: HTMLAudioElement | null = null;
   private nextCrossfadeTimer: ReturnType<typeof setTimeout> | null = null;
   private activeSources: Set<{ stop: () => void; disconnect: () => void; onended?: ((...args: any[]) => any) | null }> = new Set();
   private playbackGenerationId: number = 0;
@@ -1556,6 +1679,7 @@ export class MusicManager {
     this.sharedMediaConfig = null;
     this.soundCatalog.clear();
     this.loadingTrackPromises.clear();
+    this.streamUrls.clear();
     this.revokeHomeVideoObjectUrl();
     this.homeVideoUrl = null;
     this.homeVideoError = null;
@@ -1707,9 +1831,11 @@ export class MusicManager {
     this.tracks.delete(SHARED_SYSTEM_BGM_ID);
     this.audioBuffers.delete(SHARED_SYSTEM_BGM_ID);
     this.rawBlobs.delete(SHARED_SYSTEM_BGM_ID);
+    this.streamUrls.delete(SHARED_SYSTEM_BGM_ID);
     this.tracks.delete(STAGED_LOCAL_PREVIEW_BGM_ID);
     this.audioBuffers.delete(STAGED_LOCAL_PREVIEW_BGM_ID);
     this.rawBlobs.delete(STAGED_LOCAL_PREVIEW_BGM_ID);
+    this.streamUrls.delete(STAGED_LOCAL_PREVIEW_BGM_ID);
     if (this.assignments.globalTrackId === SHARED_SYSTEM_BGM_ID) {
       this.assignments.globalTrackId = null;
     }
@@ -1717,6 +1843,7 @@ export class MusicManager {
     this.sharedMediaConfig = null;
     this.soundCatalog.clear();
     this.loadingTrackPromises.clear();
+    this.streamUrls.clear();
     this.revokeHomeVideoObjectUrl();
     this.homeVideoUrl = null;
     this.homeVideoError = null;
@@ -1908,7 +2035,8 @@ export class MusicManager {
     this.notify();
 
     try {
-      let arrayBuffer: ArrayBuffer;
+      let arrayBuffer: ArrayBuffer | null = null;
+      let fallbackStreamUrl: string | null = null;
       try {
         arrayBuffer = await this.cloudAdapter.fetchAudioBinary(
           safeAssetPath,
@@ -1924,6 +2052,14 @@ export class MusicManager {
             bytes[i] = binStr.charCodeAt(i);
           }
           arrayBuffer = bytes.buffer;
+        } else if (
+          shouldFallbackToAudioStream(primaryFetchErr) &&
+          this.cloudAdapter.fetchAudioStreamUrl
+        ) {
+          fallbackStreamUrl = await this.cloudAdapter.fetchAudioStreamUrl(
+            safeAssetPath,
+            config.version
+          );
         } else {
           throw primaryFetchErr;
         }
@@ -1931,6 +2067,62 @@ export class MusicManager {
 
       if (requestToken !== this.snapshotRequestToken) {
         return;
+      }
+
+      if (fallbackStreamUrl && !arrayBuffer) {
+        const approxDur =
+          typeof config.durationSec === 'number' && config.durationSec > 0
+            ? config.durationSec
+            : 1;
+        const tStart =
+          typeof config.trimStartSec === 'number' && config.trimStartSec >= 0
+            ? config.trimStartSec
+            : 0;
+        const tEnd =
+          typeof config.trimEndSec === 'number' && config.trimEndSec > tStart
+            ? config.trimEndSec
+            : approxDur;
+        const streamMeta: MusicTrackMetadata = {
+          id: SHARED_SYSTEM_BGM_ID,
+          displayName:
+            config.displayName?.trim() ||
+            config.fileName.replace(/\.(mp3|ogg|wav|m4a|aac|webm)$/i, '') ||
+            'Nhạc Nền Hệ Thống',
+          fileName: config.fileName,
+          mimeType: config.contentType || 'audio/mpeg',
+          sizeBytes: config.fileSize,
+          durationSec: Number(approxDur.toFixed(2)),
+          uploadedAt: config.updatedAt,
+          trimBounds: {
+            trimStartSec: tStart,
+            trimEndSec: tEnd,
+            effectiveDurationSec: Math.max(0.1, Number((tEnd - tStart).toFixed(4))),
+            leadingSilenceDetectedSec: tStart,
+            trailingSilenceDetectedSec: Math.max(0, Number((approxDur - tEnd).toFixed(4))),
+          },
+          storageProvider: pathValidation.isStorageCatalogPath
+            ? 'FIREBASE_STORAGE_READY'
+            : 'GITHUB_PAGES_STATIC',
+          storagePathOrUrl: safeAssetPath,
+        };
+        this.previewTrackId = null;
+        this.stopAllCustomSources();
+        this.audioBuffers.delete(SHARED_SYSTEM_BGM_ID);
+        this.rawBlobs.delete(SHARED_SYSTEM_BGM_ID);
+        this.streamUrls.set(SHARED_SYSTEM_BGM_ID, fallbackStreamUrl);
+        this.tracks.set(SHARED_SYSTEM_BGM_ID, streamMeta);
+        this.loadedSharedVersion = config.version;
+        this.loadedSharedAssetPath = safeAssetPath;
+        this.assignments.globalTrackId = SHARED_SYSTEM_BGM_ID;
+        this.isCloudSyncInProgress = false;
+        this.sharedSyncError = null;
+        this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
+        this.notify();
+        return;
+      }
+
+      if (!arrayBuffer) {
+        throw new Error('Không thể tải dữ liệu âm thanh.');
       }
 
       let decodedBuffer: {
@@ -2002,6 +2194,7 @@ export class MusicManager {
       this.previewTrackId = null;
       this.stopAllCustomSources();
       this.tracks.set(SHARED_SYSTEM_BGM_ID, sharedMeta);
+      this.streamUrls.delete(SHARED_SYSTEM_BGM_ID);
       if (typeof AudioBuffer !== 'undefined' && decodedBuffer instanceof AudioBuffer) {
         this.audioBuffers.set(SHARED_SYSTEM_BGM_ID, decodedBuffer);
       } else {
@@ -2029,6 +2222,7 @@ export class MusicManager {
         this.tracks.delete(SHARED_SYSTEM_BGM_ID);
         this.audioBuffers.delete(SHARED_SYSTEM_BGM_ID);
         this.rawBlobs.delete(SHARED_SYSTEM_BGM_ID);
+        this.streamUrls.delete(SHARED_SYSTEM_BGM_ID);
       }
       if (this.assignments.globalTrackId === SHARED_SYSTEM_BGM_ID) {
         this.assignments.globalTrackId = null;
@@ -2162,7 +2356,11 @@ export class MusicManager {
 
     // Convert dB threshold to linear amplitude (e.g. -48dB -> ~0.00398)
     const linearThreshold = Math.pow(10, thresholdDb / 20);
-    const totalSamples = buffer.getChannelData(0).length;
+    const channels: Float32Array[] = [];
+    for (let ch = 0; ch < numChannels; ch++) {
+      channels.push(buffer.getChannelData(ch));
+    }
+    const totalSamples = channels[0].length;
 
     let firstActiveSample = 0;
     let lastActiveSample = totalSamples - 1;
@@ -2170,7 +2368,7 @@ export class MusicManager {
     // Scan from start
     outerStart: for (let i = 0; i < totalSamples; i++) {
       for (let ch = 0; ch < numChannels; ch++) {
-        if (Math.abs(buffer.getChannelData(ch)[i]) > linearThreshold) {
+        if (Math.abs(channels[ch][i]) > linearThreshold) {
           firstActiveSample = i;
           break outerStart;
         }
@@ -2180,7 +2378,7 @@ export class MusicManager {
     // Scan from end
     outerEnd: for (let i = totalSamples - 1; i >= firstActiveSample; i--) {
       for (let ch = 0; ch < numChannels; ch++) {
-        if (Math.abs(buffer.getChannelData(ch)[i]) > linearThreshold) {
+        if (Math.abs(channels[ch][i]) > linearThreshold) {
           lastActiveSample = i;
           break outerEnd;
         }
@@ -3698,6 +3896,7 @@ export class MusicManager {
         this.tracks.delete(trackId);
         this.audioBuffers.delete(trackId);
         this.rawBlobs.delete(trackId);
+        this.streamUrls.delete(trackId);
       }
     }
   }
@@ -3705,9 +3904,11 @@ export class MusicManager {
   /**
    * Tải và giải mã bất đồng bộ file âm thanh từ Firebase Storage cho 1 bài trong `/sound_catalog`
    * khi bài đó được gán vào Trang chủ, Chế độ chơi hoặc Stage.
+   * Khi tải nhị phân (getBytes) bị nghẽn/retry-limit-exceeded (vd: chưa cấu hình CORS bucket),
+   * tự động fallback sang URL phát trực tuyến (getDownloadURL) để phát bằng HTMLAudioElement.
    */
   private async ensureCatalogTrackBufferLoaded(trackId: string): Promise<boolean> {
-    if (this.audioBuffers.has(trackId)) return true;
+    if (this.audioBuffers.has(trackId) || this.streamUrls.has(trackId)) return true;
     const entry = this.soundCatalog.get(trackId);
     if (!entry) return false;
 
@@ -3718,7 +3919,7 @@ export class MusicManager {
 
     const loadTask = (async () => {
       try {
-        let arrayBuffer: ArrayBuffer;
+        let arrayBuffer: ArrayBuffer | null = null;
         try {
           arrayBuffer = await this.cloudAdapter.fetchAudioBinary(entry.storagePath, entry.version);
         } catch (fetchErr) {
@@ -3731,9 +3932,25 @@ export class MusicManager {
               bytes[i] = binStr.charCodeAt(i);
             }
             arrayBuffer = bytes.buffer;
+          } else if (
+            shouldFallbackToAudioStream(fetchErr) &&
+            this.cloudAdapter.fetchAudioStreamUrl
+          ) {
+            const streamUrl = await this.cloudAdapter.fetchAudioStreamUrl(
+              entry.storagePath,
+              entry.version
+            );
+            this.streamUrls.set(trackId, streamUrl);
+            this.sharedSyncError = null;
+            this.notify();
+            return true;
           } else {
             throw fetchErr;
           }
+        }
+
+        if (!arrayBuffer) {
+          return false;
         }
 
         let decodedBuffer: {
@@ -3766,12 +3983,14 @@ export class MusicManager {
             trimBounds,
           });
         }
+        this.streamUrls.delete(trackId);
         if (typeof AudioBuffer !== 'undefined' && decodedBuffer instanceof AudioBuffer) {
           this.audioBuffers.set(trackId, decodedBuffer);
         } else {
           this.audioBuffers.set(trackId, decodedBuffer as unknown as AudioBuffer);
         }
         this.rawBlobs.set(trackId, arrayBuffer);
+        this.sharedSyncError = null;
         return true;
       } catch (err) {
         this.sharedSyncError = formatMusicCloudError(
@@ -3937,7 +4156,7 @@ export class MusicManager {
       if (id) preloadIds.add(id);
     });
     for (const id of preloadIds) {
-      if (this.soundCatalog.has(id) && !this.audioBuffers.has(id)) {
+      if (this.soundCatalog.has(id) && !this.audioBuffers.has(id) && !this.streamUrls.has(id)) {
         void this.ensureCatalogTrackBufferLoaded(id).then((loaded) => {
           if (loaded && !this.isPaused && this.activeTrackId === id) {
             this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
@@ -4318,6 +4537,7 @@ export class MusicManager {
     this.tracks.delete(trackId);
     this.audioBuffers.delete(trackId);
     this.rawBlobs.delete(trackId);
+    this.streamUrls.delete(trackId);
 
     // If deleted track was actively playing, resolve fallback immediately
     if (this.activeTrackId === trackId) {
@@ -4625,8 +4845,11 @@ export class MusicManager {
       return;
     }
 
-    // If a custom track is resolved AND we have its decoded AudioBuffer
-    if (resolved.trackId && this.audioBuffers.has(resolved.trackId)) {
+    // If a custom track is resolved AND we have its decoded AudioBuffer or stream URL
+    if (
+      resolved.trackId &&
+      (this.audioBuffers.has(resolved.trackId) || this.streamUrls.has(resolved.trackId))
+    ) {
       // Lock procedural BGM off so two BGM tracks can never overlap even on pointerdown/keydown unlock()
       soundManager.setCustomBgmActive(true);
       soundManager.stopBgm();
@@ -4660,17 +4883,114 @@ export class MusicManager {
     this.notify();
   }
 
+  private startTrackStreamPlayback(streamUrl: string): void {
+    const soundManager = SoundManager.getInstance();
+    soundManager.setCustomBgmActive(true);
+    soundManager.stopBgm();
+
+    if (typeof Audio === 'undefined') {
+      const virtualSource = {
+        stop: () => {
+          this.activeSources.delete(virtualSource);
+        },
+        disconnect: () => {
+          this.activeSources.delete(virtualSource);
+        },
+        onended: null as (() => void) | null,
+      };
+      this.activeSources.add(virtualSource);
+      return;
+    }
+
+    try {
+      const audio = new Audio(streamUrl);
+      audio.preload = 'auto';
+      audio.loop = this.loopConfig.loop;
+      const targetVol = soundManager.getSettings().bgmEnabled
+        ? soundManager.getSettings().bgmVolume
+        : 0;
+      audio.volume = Math.max(0, Math.min(1, targetVol));
+      this.currentAudioElement = audio;
+
+      const handle = {
+        stop: () => {
+          try {
+            audio.pause();
+            audio.currentTime = 0;
+          } catch {
+            // ignore
+          }
+          if (this.currentAudioElement === audio) {
+            this.currentAudioElement = null;
+          }
+          this.activeSources.delete(handle);
+        },
+        disconnect: () => {
+          try {
+            audio.removeAttribute('src');
+            audio.load();
+          } catch {
+            // ignore
+          }
+          if (this.currentAudioElement === audio) {
+            this.currentAudioElement = null;
+          }
+          this.activeSources.delete(handle);
+        },
+        onended: null as ((...args: any[]) => any) | null,
+      };
+
+      audio.onended = () => {
+        if (!audio.loop) {
+          this.activeSources.delete(handle);
+          if (this.currentAudioElement === audio) {
+            this.currentAudioElement = null;
+          }
+        }
+      };
+
+      this.activeSources.add(handle);
+      const playPromise = audio.play();
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch((playErr: unknown) => {
+          const errName = String((playErr as { name?: string } | null)?.name || '');
+          if (errName === 'NotAllowedError') {
+            this.ensureAutoplayInteractionUnlock();
+          }
+        });
+      }
+    } catch {
+      this.stopAllCustomSources();
+      soundManager.setCustomBgmActive(false);
+      soundManager.stopBgm();
+      this.isPlaying = false;
+    }
+  }
+
   private startTrackBufferPlayback(trackId: string, withFadeIn: boolean = false): void {
     // Ensure any previous source is completely stopped before starting a new source
     this.stopAllCustomSources();
     const myGenId = ++this.playbackGenerationId;
 
     const buffer = this.audioBuffers.get(trackId);
+    const streamUrl = this.streamUrls.get(trackId);
     const meta = this.tracks.get(trackId);
     const soundManager = SoundManager.getInstance();
     const ctx = soundManager.initContext();
 
-    if (!buffer || !meta) {
+    if (!meta) {
+      soundManager.setCustomBgmActive(false);
+      soundManager.stopBgm();
+      this.isPlaying = false;
+      return;
+    }
+
+    if (!buffer && streamUrl) {
+      this.startTrackStreamPlayback(streamUrl);
+      return;
+    }
+
+    if (!buffer) {
       soundManager.setCustomBgmActive(false);
       soundManager.stopBgm();
       this.isPlaying = false;
@@ -4814,6 +5134,7 @@ export class MusicManager {
     }
     this.currentSource = null;
     this.currentGain = null;
+    this.currentAudioElement = null;
   }
 
   public pause(): void {
@@ -4845,6 +5166,8 @@ export class MusicManager {
       if (ctx) {
         this.currentGain.gain.setValueAtTime(settings.bgmVolume, ctx.currentTime);
       }
+    } else if (this.currentAudioElement) {
+      this.currentAudioElement.volume = Math.max(0, Math.min(1, settings.bgmVolume));
     } else if (!this.isPaused) {
       if (this.previewTrackId && this.tracks.has(this.previewTrackId)) {
         this.previewTrack(this.previewTrackId);
@@ -4867,7 +5190,7 @@ export class MusicManager {
     this.stopAllCustomSources();
 
     this.previewTrackId = trackId;
-    if (this.audioBuffers.has(trackId)) {
+    if (this.audioBuffers.has(trackId) || this.streamUrls.has(trackId)) {
       this.isPlaying = true;
       this.startTrackBufferPlayback(trackId, false);
     } else if (this.soundCatalog.has(trackId)) {
