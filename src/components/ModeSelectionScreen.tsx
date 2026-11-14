@@ -465,7 +465,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     <p className="text-xs text-neutral-300 leading-relaxed">
-                      Người chơi P1 và đồng đội P2 (do AI điều khiển) cùng nhau tiêu diệt toàn bộ quân địch và bảo vệ Căn cứ Đại bàng.
+                      Người chơi P1 và đồng đội P2 (do AI điều khiển) cùng nhau tiêu diệt toàn bộ quân địch và bảo vệ căn cứ Đại bàng.
                     </p>
                   </div>
 
