@@ -35,11 +35,8 @@ export const PauseModal: React.FC<PauseModalProps> = ({
                 <span className="font-mono font-black text-lg sm:text-xl">||</span>
               </div>
               <h3 className="text-base sm:text-lg font-black tracking-wide text-white uppercase">
-                Tạm Dừng Trận Đấu
+                Tạm dừng chiến đấu
               </h3>
-              <p className="text-[11px] sm:text-xs text-neutral-400 mt-1">
-                Toàn bộ vật lý, đạn và AI đã được đóng băng an toàn.
-              </p>
             </div>
 
             <div className="space-y-2 sm:space-y-2.5">
