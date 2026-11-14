@@ -1416,39 +1416,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* M7.3.11.6 Section 4.2: HƯỚNG DẪN SỬ DỤNG NGAY DƯỚI KHUNG CÀI ĐẶT ÂM THANH */}
-                <div
-                  data-testid="audio-settings-user-guide"
-                  className="p-3.5 rounded-xl bg-neutral-900/90 border border-amber-500/30 space-y-2 text-[11px] text-neutral-300"
-                >
-                  <div className="font-extrabold text-amber-300 uppercase tracking-wide flex items-center gap-1.5">
-                    <Volume2 className="w-3.5 h-3.5 text-amber-400" />
-                    <span>HƯỚNG DẪN SỬ DỤNG CÀI ĐẶT ÂM THANH</span>
-                  </div>
-                  <ul className="list-disc list-inside space-y-1 leading-relaxed text-neutral-300">
-                    <li>
-                      <strong className="text-white">Cách bật/tắt âm thanh:</strong> Nhấn nút{' '}
-                      <span className="text-amber-300 font-bold">ĐANG BẬT / ĐANG TẮT</span> ở mục{' '}
-                      <strong>Nhạc nền (BGM)</strong> hoặc <strong>Âm thanh hiệu ứng (SFX)</strong>, hoặc bấm biểu tượng Loa trên thanh công cụ.
-                    </li>
-                    <li>
-                      <strong className="text-white">Cách điều chỉnh âm lượng nhạc nền:</strong> Kéo thanh trượt{' '}
-                      <strong>Âm lượng nhạc nền</strong> từ <code>0%</code> đến <code>100%</code> để tăng hoặc giảm nhạc nền trận đấu.
-                    </li>
-                    <li>
-                      <strong className="text-white">Cách điều chỉnh âm lượng hiệu ứng:</strong> Kéo thanh trượt{' '}
-                      <strong>Âm lượng hiệu ứng</strong> từ <code>0%</code> đến <code>100%</code> để chỉnh độ lớn tiếng bắn đạn, tiếng nổ và hiệu ứng chiến đấu.
-                    </li>
-                    <li>
-                      <strong className="text-white">Cách chọn âm thanh:</strong> Hệ thống tự động phát bản nhạc nền chung đang kích hoạt cho mọi người chơi. Quản trị viên (<code>Admin</code>) có thể tải lên và bấm <strong>Kích hoạt</strong> bản nhạc trong danh mục bên dưới để phát đồng bộ toàn hệ thống.
-                    </li>
-                    <li>
-                      <strong className="text-white">Cách khôi phục cài đặt âm thanh mặc định:</strong> Nhấn nút{' '}
-                      <span className="text-amber-300 font-bold">Khôi phục mặc định</span> ở góc trên bên phải để đưa Nhạc nền (<code>35%</code>) và Hiệu ứng (<code>50%</code>) về chuẩn ban đầu.
-                    </li>
-                  </ul>
-                </div>
-
                 {/* Toggle Admin Music Management Panel — ONLY visible for Admin */}
                 {canShowAdminMusic && (
                   <div className="pt-3 border-t border-neutral-800 flex items-center justify-between">
@@ -1502,7 +1469,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     >
                       <div className="font-extrabold text-xs">1. GIẢI TRÍ (MẶC ĐỊNH)</div>
                       <div className="text-[11px] text-neutral-400 mt-1">
-                        3 mạng khởi đầu • Nhịp độ cân bằng chuẩn cổ điển.
+                        3 mạng khởi đầu • Nhịp độ cân bằng.
                       </div>
                     </button>
                     <button
@@ -1539,10 +1506,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2.5 flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-extrabold text-emerald-300 uppercase tracking-wider">
                   <Shield className="w-4 h-4 text-emerald-400" />
-                  <span>MA TRẬN PHÂN QUYỀN HỆ THỐNG 3 VAI TRÒ (ADMIN / MOD / NGƯỜI CHƠI)</span>
+                  <span>MA TRẬN PHÂN QUYỀN HỆ THỐNG 3 VAI TRÒ (ADMIN / MOD / USER)</span>
                 </div>
                 <span className="text-[10px] font-mono text-emerald-200/80">
-                  Admin: {SUPER_ADMIN_EMAIL}
+                  Admin
                 </span>
               </div>
 
@@ -1562,7 +1529,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         Mod
                       </th>
                       <th className="py-2.5 px-3 font-extrabold text-center text-neutral-300 whitespace-nowrap">
-                        Người chơi
+                        User
                       </th>
                     </tr>
                   </thead>
@@ -1648,15 +1615,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div className="p-2 rounded-xl bg-neutral-900 border-2 border-emerald-500 flex items-center justify-between">
-                    <span className="font-extrabold text-white text-[11px]">Admin ({SUPER_ADMIN_EMAIL})</span>
+                    <span className="font-extrabold text-white text-[11px]">Admin</span>
                     <span className="text-[10px] font-mono text-emerald-300 font-bold">Xanh lá</span>
                   </div>
                   <div className="p-2 rounded-xl bg-neutral-900 border-2 border-sky-500 flex items-center justify-between">
-                    <span className="font-extrabold text-white text-[11px]">Mod (Điều hành viên)</span>
+                    <span className="font-extrabold text-white text-[11px]">Mod</span>
                     <span className="text-[10px] font-mono text-sky-300 font-bold">Xanh dương</span>
                   </div>
                   <div className="p-2 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
-                    <span className="font-extrabold text-white text-[11px]">Người chơi</span>
+                    <span className="font-extrabold text-white text-[11px]">User</span>
                     <span className="text-[10px] font-mono text-neutral-400 font-bold">Mặc định</span>
                   </div>
                 </div>
@@ -1713,11 +1680,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-extrabold text-red-300 uppercase tracking-wider">
                   <Users className="w-4 h-4 text-red-400" />
-                  <span>DANH SÁCH TÀI KHOẢN ĐÃ ĐĂNG NHẬP GOOGLE</span>
+                  <span>DANH SÁCH TÀI KHOẢN</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-mono text-neutral-400">
-                    Phân trang: {USER_ACCOUNTS_PAGE_SIZE} tài khoản / trang
+                    {USER_ACCOUNTS_PAGE_SIZE} tài khoản / trang
                   </span>
                   <button
                     type="button"
@@ -1824,7 +1791,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </th>
                         <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">Trạng thái</th>
                         <th className="py-2.5 px-2.5 font-bold text-right whitespace-nowrap">
-                          Thao tác
+                          Cấp quyền
                         </th>
                       </tr>
                     </thead>

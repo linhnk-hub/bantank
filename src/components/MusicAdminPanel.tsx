@@ -438,15 +438,6 @@ export const MusicAdminPanel: React.FC = () => {
             Tải lên &amp; kích hoạt nhạc nền (MP3, OGG, WAV, M4A tối đa 25 MB) • Đồng bộ tức thời tới toàn bộ người chơi qua <code className="text-amber-300 font-mono">/system_config/audio</code> và <code className="text-amber-300 font-mono">/sound_catalog</code>
           </p>
         </div>
-
-        {/* Role Indicator (3-Role Model: ADMIN / MOD / PLAYER) */}
-        <div className="flex items-center gap-1.5 bg-neutral-900 px-2.5 py-1 rounded-lg border border-neutral-800 shrink-0 text-[10px] font-bold">
-          <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-          <span className="text-neutral-300">Vai trò:</span>
-          <span className={isAdmin ? 'text-emerald-400 font-extrabold' : 'text-sky-400'}>
-            {isAdmin ? `Admin (${ADMIN_EMAIL})` : 'Người chơi'}
-          </span>
-        </div>
       </div>
 
       {/* Status Alert */}
@@ -964,9 +955,7 @@ export const MusicAdminPanel: React.FC = () => {
             <Sliders className="w-4 h-4 text-emerald-400" />
             <span>2. Cấu Hình Vòng Lặp Liên Tục – Skip Silence & Crossfade</span>
           </div>
-          <span className="text-[10px] text-neutral-400 font-mono">
-            Bảo toàn nhịp trống & nhạc cụ đầu/cuối
-          </span>
+        
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
