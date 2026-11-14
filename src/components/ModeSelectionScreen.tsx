@@ -403,7 +403,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     <p className="text-xs text-neutral-300 leading-relaxed">
-                      Người chơi P1 độc lập tác chiến, tiêu diệt toàn bộ quân địch và bảo vệ Căn cứ Đại bàng.
+                      Người chơi P1 độc lập tác chiến, tiêu diệt toàn bộ quân địch và bảo vệ căn cứ Đại bàng.
                     </p>
                   </div>
 
@@ -465,7 +465,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     <p className="text-xs text-neutral-300 leading-relaxed">
-                      Người chơi P1 sát cánh cùng đồng đội P2 do AI điều khiển cùng tiêu diệt toàn bộ quân địch và bảo vệ Căn cứ Đại bàng.
+                      Người chơi P1 và đồng đội P2 (do AI điều khiển) cùng nhau tiêu diệt toàn bộ quân địch và bảo vệ Căn cứ Đại bàng.
                     </p>
                   </div>
 
@@ -498,7 +498,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     <div className="flex items-center justify-between mb-3">
                       <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40">
                         <Globe className="w-3 h-3 text-sky-400" />
-                        <span>2 NGƯỜI CHƠI THẬT</span>
+                        <span>2 NGƯỜI CHƠI</span>
                       </span>
                       <div
                         className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
