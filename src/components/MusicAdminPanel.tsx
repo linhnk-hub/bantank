@@ -47,6 +47,7 @@ import {
   type GameActionSoundId,
   type CustomActionSoundTrack,
 } from '../core/audio.ts';
+import { StageManager, type ManagedStageRecord } from '../core/stageManager.ts';
 
 export const MusicAdminPanel: React.FC = () => {
   const musicManager = MusicManager.getInstance();
@@ -89,9 +90,16 @@ export const MusicAdminPanel: React.FC = () => {
   const [actionSfxTracks, setActionSfxTracks] = useState<
     Record<GameActionSoundId, CustomActionSoundTrack | null>
   >(() => soundManager.getAllActionSoundTracks());
+  const [actionSfxError, setActionSfxError] = useState<string | null>(() =>
+    soundManager.getCloudActionSfxError()
+  );
+  const [managedStages, setManagedStages] = useState<ManagedStageRecord[]>(() =>
+    StageManager.getInstance().getManagedStages()
+  );
   const [isUploadingActionSfx, setIsUploadingActionSfx] = useState<boolean>(false);
 
   useEffect(() => {
+    const stageManager = StageManager.getInstance();
     const unsubMusic = musicManager.subscribe(() => {
       setRole(musicManager.getUserRole());
       setTracks(musicManager.getTracks());
@@ -106,10 +114,15 @@ export const MusicAdminPanel: React.FC = () => {
     });
     const unsubSound = soundManager.subscribe(() => {
       setActionSfxTracks(soundManager.getAllActionSoundTracks());
+      setActionSfxError(soundManager.getCloudActionSfxError());
+    });
+    const unsubStages = stageManager.subscribe(() => {
+      setManagedStages(stageManager.getManagedStages());
     });
     return () => {
       unsubMusic();
       unsubSound();
+      unsubStages();
     };
   }, [musicManager, soundManager]);
 
@@ -201,6 +214,7 @@ export const MusicAdminPanel: React.FC = () => {
     if (!file) return;
 
     setStatusMsg(null);
+    musicManager.clearSharedSyncError();
     soundManager.unlock();
     const res = await musicManager.uploadTrack(file, manualDisplayName.trim() || undefined);
     if (res.success && res.catalogEntry) {
@@ -441,10 +455,10 @@ export const MusicAdminPanel: React.FC = () => {
       </div>
 
       {/* Status Alert */}
-      {(statusMsg || sharedSyncError) && (
+      {(statusMsg || sharedSyncError || actionSfxError) && (
         <div
           className={`p-2.5 rounded-lg border flex items-center justify-between gap-2 text-[11px] ${
-            sharedSyncError || statusMsg?.type === 'error'
+            sharedSyncError || actionSfxError || statusMsg?.type === 'error'
               ? 'bg-rose-950/70 border-rose-700/60 text-rose-200'
               : statusMsg?.type === 'info'
                 ? 'bg-sky-950/70 border-sky-700/60 text-sky-200'
@@ -452,17 +466,21 @@ export const MusicAdminPanel: React.FC = () => {
           }`}
         >
           <div className="flex items-center gap-2">
-            {sharedSyncError || statusMsg?.type === 'error' ? (
+            {sharedSyncError || actionSfxError || statusMsg?.type === 'error' ? (
               <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
             ) : (
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             )}
-            <span>{sharedSyncError || statusMsg?.text}</span>
+            <span className="break-words">{sharedSyncError || actionSfxError || statusMsg?.text}</span>
           </div>
           <button
             type="button"
-            onClick={() => setStatusMsg(null)}
-            className="text-[10px] underline opacity-75 hover:opacity-100 shrink-0"
+            onClick={() => {
+              setStatusMsg(null);
+              musicManager.clearSharedSyncError();
+              soundManager.clearCloudActionSfxError();
+            }}
+            className="text-[10px] underline opacity-75 hover:opacity-100 shrink-0 cursor-pointer"
           >
             Đóng
           </button>
@@ -554,14 +572,14 @@ export const MusicAdminPanel: React.FC = () => {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".mp3,.ogg,.wav,.m4a,audio/mpeg,audio/ogg,audio/wav,audio/mp4"
+                accept=".mp3,.ogg,.wav,.m4a,.aac,.webm,audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac,audio/webm"
                 onChange={handleSelectAudioFile}
                 className="hidden"
               />
               <input
                 ref={replaceInputRef}
                 type="file"
-                accept=".mp3,.ogg,.wav,.m4a,audio/mpeg,audio/ogg,audio/wav,audio/mp4"
+                accept=".mp3,.ogg,.wav,.m4a,.aac,.webm,audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac,audio/webm"
                 onChange={handleReplaceFile}
                 className="hidden"
               />
@@ -1128,9 +1146,14 @@ export const MusicAdminPanel: React.FC = () => {
                   onChange={(e) => setSelectedStageForAssign(Number(e.target.value))}
                   className="bg-neutral-950 border border-neutral-700 rounded px-1.5 py-0.5 text-amber-400 font-mono text-[11px]"
                 >
-                  <option value={1}>Stage 1</option>
-                  <option value={2}>Stage 2</option>
-                  <option value={3}>Stage 3</option>
+                  {(managedStages.length > 0
+                    ? managedStages.map((s) => s.id)
+                    : [1, 2, 3]
+                  ).map((sid) => (
+                    <option key={sid} value={sid}>
+                      Stage {sid}
+                    </option>
+                  ))}
                 </select>
               </div>
               <span className="text-[10px] text-amber-400 font-mono font-bold">Ưu tiên #1 (Cao nhất)</span>

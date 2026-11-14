@@ -56,6 +56,7 @@ import {
   SHARED_SYSTEM_BGM_ID,
   evaluateSystemAudioConfigRule,
   classifyStorageCloudError,
+  formatMusicCloudError,
   validateSafeAudioAssetPath,
   validateSafeAudioOrStoragePath,
   buildGitHubPagesAudioUrl,
@@ -9639,6 +9640,134 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T68: Nổ căn cứ đồng bộ Game Over tức thì cho cả P1/P2 & quay về chung 1 Phòng Chờ Co-op Online',
       passed,
       details: `bothGameOver=${bothGameOverSimultaneous}, sharedLobbyOk=${sharedLobbyJoinedOk} (room=${sharedRoom?.roomCode}, status=${sharedRoom?.status})`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T69: Stage BGM Upload Validation (.m4a/.aac/.webm), Timestamp Skew (>60s) & Cloud Error Diagnostics
+  // =========================================================================
+  {
+    const m4aCheck = MusicManager.validateAudioFileBasic({
+      name: 'stage_theme.m4a',
+      type: 'audio/mp4',
+      size: 512_000,
+    });
+    const aacCheck = MusicManager.validateAudioFileBasic({
+      name: 'stage_theme.aac',
+      type: 'audio/aac',
+      size: 256_000,
+    });
+    const webmCheck = MusicManager.validateAudioFileBasic({
+      name: 'stage_theme.webm',
+      type: 'audio/webm',
+      size: 128_000,
+    });
+    const invalidExtCheck = MusicManager.validateAudioFileBasic({
+      name: 'payload.exe',
+      type: 'application/octet-stream',
+      size: 1024,
+    });
+    const oversizeCheck = MusicManager.validateAudioFileBasic({
+      name: 'huge.mp3',
+      type: 'audio/mpeg',
+      size: 26 * 1024 * 1024,
+    });
+    const normalizedM4a = normalizeSafeAudioFileName('Nhạc Nền Màn 2.m4a', 3);
+    const formatsOk =
+      m4aCheck.valid === true &&
+      aacCheck.valid === true &&
+      webmCheck.valid === true &&
+      invalidExtCheck.valid === false &&
+      oversizeCheck.valid === false &&
+      normalizedM4a === 'bgm_v3_Nhac_Nen_Man_2.m4a';
+
+    const requestTimeMs = 1_730_000_000_000;
+    const skewedUpdatedAtMs = requestTimeMs + 120_000; // > 60s skew/slow upload latency
+    const catalogRuleAllowsSkew = evaluateSystemAudioConfigRule({
+      action: 'create',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: ADMIN_EMAIL,
+      requestTimeMs,
+      incoming: {
+        assetPath: 'sound_catalog/snd_stage2/v1/bgm_v1_stage2.m4a',
+        storagePath: 'sound_catalog/snd_stage2/v1/bgm_v1_stage2.m4a',
+        soundId: 'snd_stage2',
+        fileName: 'bgm_v1_stage2.m4a',
+        contentType: 'audio/mp4',
+        fileSize: 512_000,
+        updatedAt: skewedUpdatedAtMs,
+        updatedBy: ADMIN_EMAIL,
+        version: 1,
+        isEnabled: true,
+        displayName: 'Stage 2 BGM',
+        durationSec: 45,
+      },
+    });
+    const nonAdminStillDenied = evaluateSystemAudioConfigRule({
+      action: 'create',
+      docId: 'audio',
+      isVerifiedPersonalGmail: true,
+      authEmail: 'player@gmail.com',
+      requestTimeMs,
+      incoming: {
+        assetPath: 'sound_catalog/snd_stage2/v1/bgm_v1_stage2.m4a',
+        storagePath: 'sound_catalog/snd_stage2/v1/bgm_v1_stage2.m4a',
+        soundId: 'snd_stage2',
+        fileName: 'bgm_v1_stage2.m4a',
+        contentType: 'audio/mp4',
+        fileSize: 512_000,
+        updatedAt: skewedUpdatedAtMs,
+        updatedBy: ADMIN_EMAIL,
+        version: 1,
+        isEnabled: true,
+      },
+    });
+
+    const storageErrMsg = formatMusicCloudError(
+      { code: 'storage/unauthorized', message: 'Firebase Storage: User does not have permission to access sound_catalog/snd_1/v1/a.mp3.' },
+      'tải file âm thanh lên Firebase Storage',
+      'sound_catalog/snd_1/v1/a.mp3'
+    );
+    const firestoreErrMsg = formatMusicCloudError(
+      new Error(
+        JSON.stringify({
+          error: 'Missing or insufficient permissions.',
+          operationType: 'write',
+          path: 'system_config/audio',
+          authInfo: { email: ADMIN_EMAIL, emailVerified: true },
+        })
+      ),
+      'lưu cấu hình kích hoạt nhạc nền',
+      'system_config/audio'
+    );
+    const diagnosticsOk =
+      storageErrMsg.includes('Firebase Storage') &&
+      storageErrMsg.includes('storage.rules') &&
+      storageErrMsg.includes('bantank-bd525.firebasestorage.app') &&
+      firestoreErrMsg.includes('Firestore') &&
+      firestoreErrMsg.includes('/system_config/audio') &&
+      firestoreErrMsg.includes(ADMIN_EMAIL);
+
+    const mm = MusicManager.getInstance();
+    mm.clearSharedSyncError();
+    const sfxMgr = SoundManager.getInstance();
+    sfxMgr.clearCloudActionSfxError();
+    const cleanErrorsOk =
+      mm.getSharedSyncError() === null && sfxMgr.getCloudActionSfxError() === null;
+
+    const passed =
+      formatsOk &&
+      catalogRuleAllowsSkew === true &&
+      nonAdminStillDenied === false &&
+      diagnosticsOk &&
+      cleanErrorsOk;
+
+    results.push({
+      id: 'M7_3_T69',
+      name: 'T69: Hỗ trợ định dạng .m4a/.aac/.webm, nới kiểm tra lệch đồng hồ upload >60s cho /system_config/audio & chẩn đoán lỗi Storage/Firestore chi tiết',
+      passed,
+      details: `formatsOk=${formatsOk}, catalogRuleAllowsSkew=${catalogRuleAllowsSkew}, nonAdminDenied=${!nonAdminStillDenied}, diagnosticsOk=${diagnosticsOk}, cleanErrorsOk=${cleanErrorsOk}`,
     });
   }
 

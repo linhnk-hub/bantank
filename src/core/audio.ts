@@ -18,8 +18,8 @@ export interface AudioSettings {
 
 import { ScoreManager } from './scoreManager.ts';
 import { ADMIN_EMAIL, AuthManager, isAdminUser } from './authManager.ts';
-import { doc, onSnapshot, setDoc } from 'firebase/firestore';
-import { getFirebaseDb } from './firebaseConfig.ts';
+import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
+import { getFirebaseDb, handleFirestoreError } from './firebaseConfig.ts';
 
 export const DEFAULT_AUDIO_SETTINGS: Readonly<AudioSettings> = {
   bgmEnabled: true,
@@ -153,6 +153,7 @@ export class SoundManager {
   private adminRoleOverride: 'ADMIN' | 'MOD' | 'PLAYER' | null = null;
   private unsubCloudActionSfx: (() => void) | null = null;
   private lastCloudActionSfxVersion: number = 0;
+  private cloudActionSfxError: string | null = null;
 
   private constructor() {
     this.loadSettings();
@@ -1053,6 +1054,17 @@ export class SoundManager {
     this.lastPlayedCustomActionId = null;
   }
 
+  public getCloudActionSfxError(): string | null {
+    return this.cloudActionSfxError;
+  }
+
+  public clearCloudActionSfxError(): void {
+    if (this.cloudActionSfxError !== null) {
+      this.cloudActionSfxError = null;
+      this.notifyListeners();
+    }
+  }
+
   public getActionSoundTrack(actionId: GameActionSoundId): CustomActionSoundTrack | null {
     return this.customActionTracks.get(actionId) ?? null;
   }
@@ -1140,7 +1152,7 @@ export class SoundManager {
       updatedAtMs: Date.now(),
       updatedByEmail: currentUser?.email || ADMIN_EMAIL,
       isActive: options?.autoActivate ?? true,
-      dataUrl: file.dataUrl,
+      ...(file.dataUrl ? { dataUrl: file.dataUrl } : {}),
     };
 
     this.customActionTracks.set(actionId, track);
@@ -1200,12 +1212,12 @@ export class SoundManager {
         updatedAtMs: Date.now(),
         updatedByEmail: currentUser?.email || ADMIN_EMAIL,
         isActive: options?.autoActivate ?? false,
-        dataUrl,
+        ...(dataUrl ? { dataUrl } : {}),
       };
 
       this.customActionTracks.set(actionId, track);
       this.saveCustomActionTracksToStorage();
-      void this.syncCustomActionTracksToCloud();
+      await this.syncCustomActionTracksToCloud();
       this.notifyListeners();
 
       return { ok: true, track };
@@ -1425,8 +1437,16 @@ export class SoundManager {
             void this.hydrateCustomActionBuffers();
             this.notifyListeners();
           },
-          () => {
-            // Ignore transient snapshot errors
+          (err) => {
+            try {
+              handleFirestoreError(err, 'get', 'system_config/action_sfx');
+            } catch (wrappedErr: any) {
+              const msg = String(wrappedErr?.message || '');
+              if (msg.toLowerCase().includes('permission')) {
+                this.cloudActionSfxError = `Từ chối quyền đọc /system_config/action_sfx: ${msg}`;
+                this.notifyListeners();
+              }
+            }
           }
         );
       } catch {
@@ -1439,21 +1459,55 @@ export class SoundManager {
     if (typeof window === 'undefined' || !this.canManageActionSounds()) return;
     try {
       const db = getFirebaseDb();
+      const ref = doc(db, 'system_config', 'action_sfx');
+      if (this.lastCloudActionSfxVersion === 0) {
+        try {
+          const existingSnap = await getDoc(ref);
+          if (existingSnap.exists()) {
+            const v = existingSnap.data()?.version;
+            if (typeof v === 'number' && Number.isFinite(v)) {
+              this.lastCloudActionSfxVersion = v;
+            }
+          }
+        } catch {
+          // Ignore pre-read failure if rule check will handle write
+        }
+      }
       const tracksObj: Record<string, CustomActionSoundTrack> = {};
       for (const [id, track] of this.customActionTracks.entries()) {
-        tracksObj[id] = track;
+        const sanitized: CustomActionSoundTrack = {
+          actionId: track.actionId,
+          fileName: track.fileName,
+          mimeType: track.mimeType,
+          fileSizeBytes: track.fileSizeBytes,
+          durationSec: track.durationSec,
+          updatedAtMs: track.updatedAtMs,
+          updatedByEmail: track.updatedByEmail,
+          isActive: track.isActive !== false,
+          ...(track.dataUrl ? { dataUrl: track.dataUrl } : {}),
+        };
+        tracksObj[id] = sanitized;
       }
       const nowMs = Date.now();
       const nextVersion = Math.max(nowMs, this.lastCloudActionSfxVersion + 1);
       this.lastCloudActionSfxVersion = nextVersion;
-      await setDoc(doc(db, 'system_config', 'action_sfx'), {
-        tracks: tracksObj,
-        version: nextVersion,
-        updatedAt: nowMs,
-        updatedBy: ADMIN_EMAIL,
-      });
-    } catch {
-      // Fallback to localStorage if cloud write fails
+      this.cloudActionSfxError = null;
+      try {
+        await setDoc(ref, {
+          tracks: tracksObj,
+          version: nextVersion,
+          updatedAt: nowMs,
+          updatedBy: ADMIN_EMAIL,
+        });
+      } catch (writeErr) {
+        handleFirestoreError(writeErr, 'write', 'system_config/action_sfx');
+      }
+    } catch (err: any) {
+      const msg = String(err?.message || '');
+      if (msg) {
+        this.cloudActionSfxError = `Không thể đồng bộ Action SFX lên Firestore (/system_config/action_sfx): ${msg}`;
+        this.notifyListeners();
+      }
     }
   }
 

@@ -38,13 +38,11 @@ import {
 import { SoundManager } from './audio.ts';
 import {
   ADMIN_EMAIL,
-  SUPER_ADMIN_EMAIL,
   isAdminUser,
-  isSuperAdminUser,
   validatePersonalGmailUser,
   type ValidatedUserAccount,
 } from './authManager.ts';
-import { getFirebaseDb, getFirebaseStorage } from './firebaseConfig.ts';
+import { getFirebaseDb, getFirebaseStorage, handleFirestoreError } from './firebaseConfig.ts';
 import type { User } from 'firebase/auth';
 
 export type SupportedAudioFormat = 'audio/mpeg' | 'audio/ogg' | 'audio/wav' | 'audio/x-wav' | 'audio/mp3';
@@ -195,8 +193,8 @@ export const STAGED_LOCAL_PREVIEW_BGM_ID = 'staged_local_preview_bgm';
 export const SAFE_AUDIO_ASSET_DIR_PREFIX = 'audio/';
 export const SOUND_CATALOG_STORAGE_PREFIX = 'sound_catalog/';
 
-const SAFE_AUDIO_FILENAME_REGEX = /^[A-Za-z0-9._-]+\.(mp3|ogg|wav)$/;
-const SAFE_AUDIO_ASSET_PATH_REGEX = /^audio\/([A-Za-z0-9._-]+\.(mp3|ogg|wav))$/;
+const SAFE_AUDIO_FILENAME_REGEX = /^[A-Za-z0-9._-]+\.(mp3|ogg|wav|m4a|aac|webm)$/;
+const SAFE_AUDIO_ASSET_PATH_REGEX = /^audio\/([A-Za-z0-9._-]+\.(mp3|ogg|wav|m4a|aac|webm))$/;
 
 /**
  * Kiểm tra đường dẫn tương đối của file nhạc nền (M7.3.3 Mục 3):
@@ -340,7 +338,7 @@ export function normalizeSafeAudioFileName(
   version: number = 1
 ): string {
   const trimmed = (rawFileName || '').trim();
-  const extMatch = /\.(mp3|ogg|wav)$/i.exec(trimmed);
+  const extMatch = /\.(mp3|ogg|wav|m4a|aac|webm)$/i.exec(trimmed);
   const ext = extMatch ? extMatch[1].toLowerCase() : 'mp3';
   const rawBase = extMatch ? trimmed.slice(0, trimmed.length - extMatch[0].length) : trimmed;
 
@@ -405,6 +403,70 @@ export function classifyStorageCloudError(err: unknown): string {
     return 'HTTP 403 (Forbidden): Không đủ quyền truy cập tài nguyên nhạc nền.';
   }
   return msg || 'Không thể tải file nhạc nền từ GitHub Pages.';
+}
+
+/**
+ * Chuẩn hóa thông báo lỗi chi tiết cho quá trình Upload Storage / Ghi Firestore (/sound_catalog, /system_config/audio)
+ * để chỉ rõ bước bị từ chối quyền thay vì hiển thị "Missing or insufficient permissions" mơ hồ.
+ */
+export function formatMusicCloudError(
+  err: unknown,
+  stepLabel: string,
+  fallbackTargetPath?: string
+): string {
+  const errObj = err as { code?: string; message?: string } | null | undefined;
+  const rawMsg =
+    err instanceof Error
+      ? err.message
+      : typeof err === 'string'
+      ? err
+      : typeof errObj?.message === 'string'
+      ? errObj.message
+      : String(err || '');
+  let parsed: {
+    error?: string;
+    operationType?: string;
+    path?: string | null;
+    authInfo?: { userId?: string | null; email?: string | null; emailVerified?: boolean | null };
+  } | null = null;
+  if (rawMsg.startsWith('{')) {
+    try {
+      parsed = JSON.parse(rawMsg);
+    } catch {
+      parsed = null;
+    }
+  }
+
+  const underlyingMsg = parsed?.error || rawMsg || 'Lỗi không xác định.';
+  const targetPath = parsed?.path || fallbackTargetPath || 'cloud';
+  const lower = underlyingMsg.toLowerCase();
+  const code = String(errObj?.code || '').toLowerCase();
+
+  const isStorageUnauthorized =
+    code.includes('storage/unauthorized') ||
+    code.includes('storage/unauthenticated') ||
+    lower.includes('storage/unauthorized') ||
+    lower.includes('firebase storage') ||
+    (targetPath.startsWith('sound_catalog/') && targetPath.includes('/v'));
+
+  const isPermissionError =
+    code.includes('permission') ||
+    code.includes('unauthorized') ||
+    code.includes('unauthenticated') ||
+    lower.includes('missing or insufficient permissions') ||
+    lower.includes('permission-denied') ||
+    lower.includes('unauthorized');
+
+  if (isStorageUnauthorized && isPermissionError) {
+    return `Từ chối quyền Firebase Storage tại "${targetPath}" khi ${stepLabel}: ${underlyingMsg}. Vui lòng đăng nhập đúng Admin (${ADMIN_EMAIL}) và đảm bảo Storage Rules (storage.rules) đã được Publish cho bucket bantank-bd525.firebasestorage.app trên Firebase Console.`;
+  }
+
+  if (isPermissionError) {
+    const authEmail = parsed?.authInfo?.email ? ` (tài khoản hiện tại: ${parsed.authInfo.email})` : '';
+    return `Từ chối quyền Firestore tại "/${targetPath.replace(/^\/+/, '')}" (${parsed?.operationType || 'write'}) khi ${stepLabel}${authEmail}: ${underlyingMsg}. Vui lòng đảm bảo đã đăng nhập Google đúng tài khoản Admin (${ADMIN_EMAIL}) và Publish Firestore Rules mới nhất.`;
+  }
+
+  return `${stepLabel} thất bại tại "${targetPath}": ${underlyingMsg}`;
 }
 
 /**
@@ -507,12 +569,11 @@ export function evaluateSystemAudioConfigRule(params: {
   if (
     typeof incoming.updatedAt !== 'number' ||
     !Number.isInteger(incoming.updatedAt) ||
-    incoming.updatedAt < requestTimeMs - 60000 ||
-    incoming.updatedAt > requestTimeMs + 60000
+    incoming.updatedAt <= 0
   ) {
     return false;
   }
-  if (incoming.updatedBy !== SUPER_ADMIN_EMAIL) return false;
+  if (incoming.updatedBy !== ADMIN_EMAIL) return false;
   if (
     typeof incoming.version !== 'number' ||
     !Number.isInteger(incoming.version) ||
@@ -585,12 +646,20 @@ export class FirebaseSharedMusicCloudAdapter implements SharedMusicCloudAdapter 
       this.inMemoryFallbackBlobs.set(normalizedPath, buf);
 
       if (check.isStorageCatalogPath) {
-        const storage = getFirebaseStorage();
-        const sRef = storageRef(storage, normalizedPath);
-        const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
-        await uploadBytes(sRef, bytes, {
-          contentType: contentType || 'audio/mpeg',
-        });
+        try {
+          const storage = getFirebaseStorage();
+          const sRef = storageRef(storage, normalizedPath);
+          const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+          await uploadBytes(sRef, bytes, {
+            contentType: contentType || 'audio/mpeg',
+          });
+        } catch (storageErr) {
+          const wrapped = new Error(
+            formatMusicCloudError(storageErr, 'tải file âm thanh lên Firebase Storage', normalizedPath)
+          );
+          (wrapped as { code?: string }).code = (storageErr as { code?: string } | null)?.code;
+          throw wrapped;
+        }
       }
     }
     return { assetPath: normalizedPath };
@@ -623,13 +692,19 @@ export class FirebaseSharedMusicCloudAdapter implements SharedMusicCloudAdapter 
     }
 
     if (check.isStorageCatalogPath) {
-      const storage = getFirebaseStorage();
-      const sRef = storageRef(storage, normalizedPath);
-      const buf = await getBytes(sRef, 25 * 1024 * 1024);
-      if (buf.byteLength <= 0) {
-        throw new Error(`File âm thanh ${normalizedPath} trên Firebase Storage bị rỗng (0 bytes).`);
+      try {
+        const storage = getFirebaseStorage();
+        const sRef = storageRef(storage, normalizedPath);
+        const buf = await getBytes(sRef, 25 * 1024 * 1024);
+        if (buf.byteLength <= 0) {
+          throw new Error(`File âm thanh ${normalizedPath} trên Firebase Storage bị rỗng (0 bytes).`);
+        }
+        return buf;
+      } catch (storageErr) {
+        throw new Error(
+          formatMusicCloudError(storageErr, 'tải file âm thanh từ Firebase Storage', normalizedPath)
+        );
       }
-      return buf;
     }
 
     const url = buildGitHubPagesAudioUrl(normalizedPath, version);
@@ -656,11 +731,15 @@ export class FirebaseSharedMusicCloudAdapter implements SharedMusicCloudAdapter 
   }
 
   public async getSystemAudioConfig(): Promise<SystemAudioConfigDocument | null> {
-    const db = getFirebaseDb();
-    const ref = doc(db, 'system_config', 'audio');
-    const snap = await getDoc(ref);
-    if (!snap.exists()) return null;
-    return snap.data() as SystemAudioConfigDocument;
+    try {
+      const db = getFirebaseDb();
+      const ref = doc(db, 'system_config', 'audio');
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return null;
+      return snap.data() as SystemAudioConfigDocument;
+    } catch (err) {
+      handleFirestoreError(err, 'get', 'system_config/audio');
+    }
   }
 
   public async saveSystemAudioConfig(config: SystemAudioConfigDocument): Promise<void> {
@@ -668,15 +747,23 @@ export class FirebaseSharedMusicCloudAdapter implements SharedMusicCloudAdapter 
     if (!check.valid) {
       throw new Error(check.error || 'Đường dẫn nhạc không an toàn.');
     }
-    const db = getFirebaseDb();
-    const ref = doc(db, 'system_config', 'audio');
-    await setDoc(ref, config);
+    try {
+      const db = getFirebaseDb();
+      const ref = doc(db, 'system_config', 'audio');
+      await setDoc(ref, config);
+    } catch (err) {
+      handleFirestoreError(err, 'write', 'system_config/audio');
+    }
   }
 
   public async deleteSystemAudioConfig(): Promise<void> {
-    const db = getFirebaseDb();
-    const ref = doc(db, 'system_config', 'audio');
-    await deleteDoc(ref);
+    try {
+      const db = getFirebaseDb();
+      const ref = doc(db, 'system_config', 'audio');
+      await deleteDoc(ref);
+    } catch (err) {
+      handleFirestoreError(err, 'delete', 'system_config/audio');
+    }
   }
 
   public subscribeSystemAudioConfig(
@@ -695,31 +782,47 @@ export class FirebaseSharedMusicCloudAdapter implements SharedMusicCloudAdapter 
         }
       },
       (err) => {
-        if (onError) onError(err);
+        try {
+          handleFirestoreError(err, 'get', 'system_config/audio');
+        } catch (wrappedErr) {
+          if (onError) onError(wrappedErr as Error);
+        }
       }
     );
     return unsub;
   }
 
   public async listSoundCatalog(): Promise<SoundCatalogEntry[]> {
-    const db = getFirebaseDb();
-    const snap = await getDocs(collection(db, 'sound_catalog'));
-    const list: SoundCatalogEntry[] = [];
-    for (const d of snap.docs) {
-      list.push(d.data() as SoundCatalogEntry);
+    try {
+      const db = getFirebaseDb();
+      const snap = await getDocs(collection(db, 'sound_catalog'));
+      const list: SoundCatalogEntry[] = [];
+      for (const d of snap.docs) {
+        list.push(d.data() as SoundCatalogEntry);
+      }
+      list.sort((a, b) => b.updatedAt - a.updatedAt);
+      return list;
+    } catch (err) {
+      handleFirestoreError(err, 'list', 'sound_catalog');
     }
-    list.sort((a, b) => b.updatedAt - a.updatedAt);
-    return list;
   }
 
   public async saveSoundCatalogEntry(entry: SoundCatalogEntry): Promise<void> {
-    const db = getFirebaseDb();
-    await setDoc(doc(db, 'sound_catalog', entry.soundId), entry);
+    try {
+      const db = getFirebaseDb();
+      await setDoc(doc(db, 'sound_catalog', entry.soundId), entry);
+    } catch (err) {
+      handleFirestoreError(err, 'write', `sound_catalog/${entry.soundId}`);
+    }
   }
 
   public async deleteSoundCatalogEntry(soundId: string): Promise<void> {
-    const db = getFirebaseDb();
-    await deleteDoc(doc(db, 'sound_catalog', soundId));
+    try {
+      const db = getFirebaseDb();
+      await deleteDoc(doc(db, 'sound_catalog', soundId));
+    } catch (err) {
+      handleFirestoreError(err, 'delete', `sound_catalog/${soundId}`);
+    }
   }
 
   public subscribeSoundCatalog(
@@ -738,7 +841,11 @@ export class FirebaseSharedMusicCloudAdapter implements SharedMusicCloudAdapter 
         onUpdate(list);
       },
       (err) => {
-        if (onError) onError(err);
+        try {
+          handleFirestoreError(err, 'list', 'sound_catalog');
+        } catch (wrappedErr) {
+          if (onError) onError(wrappedErr as Error);
+        }
       }
     );
     return unsub;
@@ -922,7 +1029,7 @@ const MUSIC_STORAGE_KEYS = {
 };
 
 const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 25 MB max
-const ALLOWED_EXTENSIONS = ['.mp3', '.ogg', '.wav'];
+const ALLOWED_EXTENSIONS = ['.mp3', '.ogg', '.wav', '.m4a', '.aac', '.webm'];
 const ALLOWED_MIME_TYPES = [
   'audio/mpeg',
   'audio/mp3',
@@ -931,6 +1038,10 @@ const ALLOWED_MIME_TYPES = [
   'audio/wav',
   'audio/x-wav',
   'audio/wave',
+  'audio/mp4',
+  'audio/x-m4a',
+  'audio/aac',
+  'audio/webm',
 ];
 
 /**
@@ -1113,6 +1224,13 @@ export class MusicManager {
     return this.sharedSyncError;
   }
 
+  public clearSharedSyncError(): void {
+    if (this.sharedSyncError !== null) {
+      this.sharedSyncError = null;
+      this.notify();
+    }
+  }
+
   public isCloudSyncing(): boolean {
     return this.isCloudSyncInProgress;
   }
@@ -1227,7 +1345,11 @@ export class MusicManager {
         void this.applySharedAudioConfigSnapshot(config);
       },
       (err) => {
-        this.sharedSyncError = err?.message || 'Không thể đồng bộ cấu hình nhạc nền chung.';
+        this.sharedSyncError = formatMusicCloudError(
+          err,
+          'đồng bộ cấu hình nhạc nền chung',
+          'system_config/audio'
+        );
         this.notify();
       }
     );
@@ -1240,8 +1362,16 @@ export class MusicManager {
           }
           this.notify();
         },
-        () => {
-          // Ignore catalog list error if collection is empty
+        (err) => {
+          const formatted = formatMusicCloudError(
+            err,
+            'tải danh mục âm thanh hệ thống',
+            'sound_catalog'
+          );
+          if (formatted.toLowerCase().includes('từ chối quyền') || formatted.toLowerCase().includes('permission')) {
+            this.sharedSyncError = formatted;
+            this.notify();
+          }
         }
       );
     }
@@ -1535,7 +1665,7 @@ export class MusicManager {
     if (!hasValidExt || !hasValidMime) {
       return {
         valid: false,
-        error: `Định dạng không hỗ trợ (${file.name}). Chỉ chấp nhận MP3, OGG hoặc WAV.`,
+        error: `Định dạng không hỗ trợ (${file.name}). Chỉ chấp nhận MP3, OGG, WAV, M4A, AAC hoặc WEBM.`,
       };
     }
 
@@ -1750,8 +1880,9 @@ export class MusicManager {
       this.loopConfig.silenceThresholdDb
     );
     const cleanDisplayName =
-      (params.displayName || params.fileName.replace(/\.(mp3|ogg|wav)$/i, '')).trim().slice(0, 120) ||
-      'Nhạc Nền Hệ Thống';
+      (params.displayName || params.fileName.replace(/\.(mp3|ogg|wav|m4a|aac|webm)$/i, ''))
+        .trim()
+        .slice(0, 120) || 'Nhạc Nền Hệ Thống';
     const durationSec = Number(params.decodedBuffer.duration.toFixed(2));
     const stagedAt = params.nowMs ?? Date.now();
     const runtimeUrl = buildGitHubPagesAudioUrl(assetPath, targetVersion);
@@ -1972,18 +2103,25 @@ export class MusicManager {
       ? 'audio/wav'
       : 'audio/mpeg';
     const rawContentType = (params.contentType || inferredMime).split(';')[0].trim().toLowerCase();
-    const contentType = /^audio\/(mpeg|mp3|ogg|wav|x-wav|wave)$/.test(rawContentType)
+    const contentType = /^audio\/(mpeg|mp3|ogg|wav|x-wav|wave|mp4|x-m4a|aac|webm)$/.test(rawContentType)
       ? rawContentType
       : inferredMime;
     const writeTimeMs = Math.round(params.nowMs ?? Date.now());
     const cleanDisplayName =
       (
         params.displayName ||
-        pathCheck.normalizedFileName.replace(/^bgm_v\d+_/i, '').replace(/\.(mp3|ogg|wav)$/i, '')
+        pathCheck.normalizedFileName.replace(/^bgm_v\d+_/i, '').replace(/\.(mp3|ogg|wav|m4a|aac|webm)$/i, '')
       )
         .trim()
         .slice(0, 120) || 'Nhạc Nền Hệ Thống';
-    const durationSec = Math.max(0.01, Number(decodedBuffer.duration.toFixed(2)));
+    const rawDuration = Number(decodedBuffer.duration);
+    const durationSec = Math.min(7200, Math.max(0.01, Number.isFinite(rawDuration) ? Number(rawDuration.toFixed(2)) : 1));
+    const safeTrimStart = Number.isFinite(trimBounds.trimStartSec)
+      ? Number(Math.max(0, trimBounds.trimStartSec).toFixed(2))
+      : 0;
+    const safeTrimEnd = Number.isFinite(trimBounds.trimEndSec)
+      ? Number(Math.max(0, trimBounds.trimEndSec).toFixed(2))
+      : durationSec;
 
     const nextConfig: SystemAudioConfigDocument = {
       assetPath: pathCheck.normalizedAssetPath,
@@ -1991,13 +2129,13 @@ export class MusicManager {
       contentType,
       fileSize: Math.round(deployedBinary.byteLength),
       updatedAt: writeTimeMs,
-      updatedBy: SUPER_ADMIN_EMAIL,
+      updatedBy: ADMIN_EMAIL,
       version: Math.round(nextVersion),
       isEnabled: true,
       displayName: cleanDisplayName,
       durationSec,
-      trimStartSec: Number(Math.max(0, trimBounds.trimStartSec).toFixed(2)),
-      trimEndSec: Number(Math.max(0, trimBounds.trimEndSec).toFixed(2)),
+      trimStartSec: safeTrimStart,
+      trimEndSec: safeTrimEnd,
       loopGapMs: 0,
       fadeOutMs: Math.round(this.loopConfig.crossfadeDurationSec * 1000),
     };
@@ -2007,15 +2145,11 @@ export class MusicManager {
       await this.cloudAdapter.saveSystemAudioConfig(nextConfig);
     } catch (firestoreErr: any) {
       this.isCloudSyncInProgress = false;
-      const errText =
-        firestoreErr?.message ||
-        'Xác minh file trên GitHub Pages thành công nhưng ghi cấu hình Firestore (/system_config/audio) thất bại.';
-      const isPermErr =
-        String(firestoreErr?.code || '').toLowerCase().includes('permission') ||
-        String(errText).toLowerCase().includes('missing or insufficient permissions');
-      const detailedError = isPermErr
-        ? `Cập nhật Firestore thất bại (giữ nguyên cấu hình nhạc nền hiện tại): ${errText}. Vui lòng đảm bảo bạn đang đăng nhập bằng Super Admin (${SUPER_ADMIN_EMAIL}) và đã publish file firestore.rules mới nhất (có khối match /system_config/{docId}) lên Firebase Console (bantank-bd525).`
-        : `Cập nhật Firestore thất bại (giữ nguyên cấu hình nhạc nền hiện tại): ${errText}`;
+      const detailedError = formatMusicCloudError(
+        firestoreErr,
+        'lưu cấu hình kích hoạt nhạc nền',
+        'system_config/audio'
+      );
       this.sharedSyncError = detailedError;
       this.notify();
       return {
@@ -2144,6 +2278,13 @@ export class MusicManager {
           requiresGitHubPagesDeploy: false,
         };
       }
+      return {
+        success: false,
+        stagedPackage: stageRes.stagedPackage,
+        error:
+          cloudCatalogRes.error ||
+          'Không thể tải lên Firebase Storage hoặc kích hoạt nhạc nền trên Firestore.',
+      };
     }
 
     return {
@@ -2196,14 +2337,28 @@ export class MusicManager {
     if (!basicCheck.valid) {
       return { success: false, error: basicCheck.error };
     }
-    if (!params.decodedBuffer || params.decodedBuffer.duration <= 0) {
+    if (!params.decodedBuffer || !Number.isFinite(params.decodedBuffer.duration) || params.decodedBuffer.duration <= 0) {
       return { success: false, error: 'Thời lượng file âm thanh không hợp lệ.' };
     }
 
+    let previousConfig = this.sharedAudioConfig;
+    if (!previousConfig) {
+      try {
+        previousConfig = await this.cloudAdapter.getSystemAudioConfig();
+      } catch (readErr: any) {
+        const errMsg = formatMusicCloudError(
+          readErr,
+          'đọc phiên bản nhạc nền hiện tại',
+          'system_config/audio'
+        );
+        this.sharedSyncError = errMsg;
+        this.notify();
+        return { success: false, error: errMsg };
+      }
+    }
+
     const nowMs = Math.round(params.nowMs ?? Date.now());
-    const previousConfig =
-      this.sharedAudioConfig ?? (await this.cloudAdapter.getSystemAudioConfig().catch(() => null));
-    const nextVersion = Math.max(1, (previousConfig?.version ?? 0) + 1);
+    const nextVersion = Math.max(1, Math.round((previousConfig?.version ?? 0) + 1));
     const soundId = (params.soundId || `snd_${nowMs}`).replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64);
     const normalizedFileName = normalizeSafeAudioFileName(params.fileName, nextVersion);
     const storagePath = `${SOUND_CATALOG_STORAGE_PREFIX}${soundId}/v${nextVersion}/${normalizedFileName}`;
@@ -2216,11 +2371,17 @@ export class MusicManager {
       (params.displayName || params.fileName.replace(/\.(mp3|ogg|wav|m4a|aac|webm)$/i, ''))
         .trim()
         .slice(0, 120) || 'Nhạc Nền Hệ Thống';
-    const durationSec = Math.max(0.01, Number(params.decodedBuffer.duration.toFixed(2)));
-    const contentType = /^audio\/(mpeg|mp3|ogg|wav|x-wav|wave|mp4|x-m4a|aac|webm)$/.test(
-      (params.contentType || '').toLowerCase()
-    )
-      ? params.contentType.toLowerCase()
+    const rawDuration = Number(params.decodedBuffer.duration);
+    const durationSec = Math.min(7200, Math.max(0.01, Number.isFinite(rawDuration) ? Number(rawDuration.toFixed(2)) : 1));
+    const safeTrimStart = Number.isFinite(trimBounds.trimStartSec)
+      ? Number(Math.max(0, trimBounds.trimStartSec).toFixed(2))
+      : 0;
+    const safeTrimEnd = Number.isFinite(trimBounds.trimEndSec)
+      ? Number(Math.max(0, trimBounds.trimEndSec).toFixed(2))
+      : durationSec;
+    const normalizedMime = (params.contentType || '').split(';')[0].trim().toLowerCase();
+    const contentType = /^audio\/(mpeg|mp3|ogg|wav|x-wav|wave|mp4|x-m4a|aac|webm)$/.test(normalizedMime)
+      ? normalizedMime
       : 'audio/mpeg';
 
     this.isCloudSyncInProgress = true;
@@ -2231,7 +2392,11 @@ export class MusicManager {
       await this.cloudAdapter.uploadAudioBinary(storagePath, params.arrayBuffer, contentType);
     } catch (uploadErr: any) {
       this.isCloudSyncInProgress = false;
-      const errMsg = uploadErr?.message || 'Không thể tải file âm thanh lên Firebase Storage.';
+      const errMsg = formatMusicCloudError(
+        uploadErr,
+        'tải file âm thanh lên Firebase Storage',
+        storagePath
+      );
       this.sharedSyncError = errMsg;
       this.notify();
       return { success: false, error: errMsg };
@@ -2246,8 +2411,8 @@ export class MusicManager {
       fileSize: Math.round(params.fileSize),
       category: 'BGM',
       durationSec,
-      trimStartSec: Number(Math.max(0, trimBounds.trimStartSec).toFixed(2)),
-      trimEndSec: Number(Math.max(0, trimBounds.trimEndSec).toFixed(2)),
+      trimStartSec: safeTrimStart,
+      trimEndSec: safeTrimEnd,
       version: nextVersion,
       isActive: false,
       updatedAt: nowMs,
@@ -2267,14 +2432,19 @@ export class MusicManager {
       }
     } catch (catErr: any) {
       this.isCloudSyncInProgress = false;
-      const errMsg = catErr?.message || 'Không thể lưu metadata âm thanh vào danh mục Firestore.';
+      const errMsg = formatMusicCloudError(
+        catErr,
+        'lưu metadata âm thanh vào danh mục Firestore',
+        `sound_catalog/${soundId}`
+      );
       this.sharedSyncError = errMsg;
       this.notify();
       return { success: false, error: errMsg };
     }
 
     if (params.autoActivate !== false) {
-      const actRes = await this.activateCatalogSound(soundId, nowMs);
+      // Dùng timestamp mới sau khi Storage upload hoàn tất (hoặc params.nowMs nếu test truyền cố định)
+      const actRes = await this.activateCatalogSound(soundId, params.nowMs);
       this.isCloudSyncInProgress = false;
       this.notify();
       return {
@@ -2316,11 +2486,22 @@ export class MusicManager {
 
     let targetEntry = this.soundCatalog.get(soundId);
     if (!targetEntry && this.cloudAdapter.listSoundCatalog) {
-      const all = await this.cloudAdapter.listSoundCatalog().catch(() => []);
-      for (const item of all) {
-        this.soundCatalog.set(item.soundId, item);
+      try {
+        const all = await this.cloudAdapter.listSoundCatalog();
+        for (const item of all) {
+          this.soundCatalog.set(item.soundId, item);
+        }
+        targetEntry = this.soundCatalog.get(soundId);
+      } catch (listErr: any) {
+        const errMsg = formatMusicCloudError(
+          listErr,
+          'đọc danh mục âm thanh để kích hoạt',
+          'sound_catalog'
+        );
+        this.sharedSyncError = errMsg;
+        this.notify();
+        return { success: false, error: errMsg };
       }
-      targetEntry = this.soundCatalog.get(soundId);
     }
 
     if (!targetEntry) {
@@ -2330,14 +2511,36 @@ export class MusicManager {
       };
     }
 
-    const remoteExisting = await this.cloudAdapter.getSystemAudioConfig().catch(() => null);
+    let remoteExisting: SystemAudioConfigDocument | null = null;
+    try {
+      remoteExisting = await this.cloudAdapter.getSystemAudioConfig();
+    } catch (readErr: any) {
+      const errMsg = formatMusicCloudError(
+        readErr,
+        'kiểm tra cấu hình nhạc nền hiện tại trước khi kích hoạt',
+        'system_config/audio'
+      );
+      this.sharedSyncError = errMsg;
+      this.notify();
+      return { success: false, error: errMsg };
+    }
+
     const highestVersion = Math.max(
       this.sharedAudioConfig?.version ?? 0,
       remoteExisting?.version ?? 0,
       targetEntry.version - 1
     );
-    const nextVersion = highestVersion + 1;
+    const nextVersion = Math.max(1, Math.round(highestVersion + 1));
     const writeTimeMs = Math.round(nowMs ?? Date.now());
+    const safeDuration = Number.isFinite(targetEntry.durationSec) && targetEntry.durationSec > 0
+      ? Math.min(7200, targetEntry.durationSec)
+      : 1;
+    const safeTrimStart = Number.isFinite(targetEntry.trimStartSec) && targetEntry.trimStartSec >= 0
+      ? targetEntry.trimStartSec
+      : 0;
+    const safeTrimEnd = Number.isFinite(targetEntry.trimEndSec) && targetEntry.trimEndSec >= 0
+      ? targetEntry.trimEndSec
+      : safeDuration;
 
     const nextConfig: SystemAudioConfigDocument = {
       assetPath: targetEntry.storagePath,
@@ -2345,15 +2548,15 @@ export class MusicManager {
       soundId: targetEntry.soundId,
       fileName: targetEntry.fileName,
       contentType: targetEntry.contentType,
-      fileSize: targetEntry.fileSize,
+      fileSize: Math.round(targetEntry.fileSize),
       updatedAt: writeTimeMs,
       updatedBy: ADMIN_EMAIL,
       version: nextVersion,
       isEnabled: true,
       displayName: targetEntry.displayName,
-      durationSec: targetEntry.durationSec,
-      trimStartSec: targetEntry.trimStartSec,
-      trimEndSec: targetEntry.trimEndSec,
+      durationSec: safeDuration,
+      trimStartSec: safeTrimStart,
+      trimEndSec: safeTrimEnd,
       loopGapMs: 0,
       fadeOutMs: Math.round(this.loopConfig.crossfadeDurationSec * 1000),
     };
@@ -2385,6 +2588,7 @@ export class MusicManager {
       this.stagedAudioPackage = null;
       this.stagedPackageBinary = null;
       this.stagedDecodedBuffer = null;
+      this.sharedSyncError = null;
 
       await this.applySharedAudioConfigSnapshot(nextConfig);
       const activeTrack = this.tracks.get(SHARED_SYSTEM_BGM_ID);
@@ -2394,7 +2598,11 @@ export class MusicManager {
         config: nextConfig,
       };
     } catch (err: any) {
-      const errMsg = err?.message || 'Không thể lưu cấu hình kích hoạt âm thanh lên Firestore.';
+      const errMsg = formatMusicCloudError(
+        err,
+        'lưu cấu hình kích hoạt nhạc nền',
+        'system_config/audio'
+      );
       this.sharedSyncError = errMsg;
       this.notify();
       return {
@@ -2428,7 +2636,7 @@ export class MusicManager {
     } catch (err: any) {
       return {
         success: false,
-        error: err?.message || 'Không thể xóa âm thanh khỏi danh mục.',
+        error: formatMusicCloudError(err, 'xóa âm thanh khỏi danh mục', `sound_catalog/${soundId}`),
       };
     }
   }
@@ -2514,20 +2722,20 @@ export class MusicManager {
     }
 
     // Bước 2: Cập nhật tài liệu cấu hình chung /system_config/audio trên Firestore (chỉ lưu assetPath tương đối)
-    const writeTimeMs = params.nowMs ?? Date.now();
+    const writeTimeMs = Math.round(params.nowMs ?? Date.now());
     const nextConfig: SystemAudioConfigDocument = {
       assetPath: deployedAssetPath,
       fileName: staged.normalizedFileName,
       contentType: staged.contentType,
-      fileSize: params.fileSize,
+      fileSize: Math.round(params.fileSize),
       updatedAt: writeTimeMs,
-      updatedBy: SUPER_ADMIN_EMAIL,
-      version: staged.targetVersion,
+      updatedBy: ADMIN_EMAIL,
+      version: Math.round(staged.targetVersion),
       isEnabled: true,
       displayName: staged.displayName,
-      durationSec: params.durationSec,
-      trimStartSec: params.trimBounds.trimStartSec,
-      trimEndSec: params.trimBounds.trimEndSec,
+      durationSec: Math.min(7200, Math.max(0.01, params.durationSec)),
+      trimStartSec: Math.max(0, params.trimBounds.trimStartSec),
+      trimEndSec: Math.max(0, params.trimBounds.trimEndSec),
       loopGapMs: 0,
       fadeOutMs: Math.round(this.loopConfig.crossfadeDurationSec * 1000),
     };
@@ -2541,14 +2749,16 @@ export class MusicManager {
         await this.cloudAdapter.deleteAudioBinary(deployedAssetPath).catch(() => {});
       }
       this.isCloudSyncInProgress = false;
-      const errText =
-        firestoreErr?.message ||
-        'Phát hành file thành công nhưng ghi tài liệu Firestore (/system_config/audio) thất bại.';
+      const errText = formatMusicCloudError(
+        firestoreErr,
+        'lưu cấu hình nhạc nền chung',
+        'system_config/audio'
+      );
       this.sharedSyncError = errText;
       this.notify();
       return {
         success: false,
-        error: `Cập nhật Firestore thất bại (đã giữ nguyên nhạc nền hiện tại): ${errText}`,
+        error: errText,
       };
     }
 
@@ -2607,7 +2817,7 @@ export class MusicManager {
     nowMs?: number
   ): Promise<{ success: boolean; error?: string }> {
     if (!this.canManageMusic()) {
-      return { success: false, error: 'Chỉ Super Admin mới có quyền bật/tắt nhạc nền chung.' };
+      return { success: false, error: `Chỉ Admin duy nhất (${ADMIN_EMAIL}) mới có quyền bật/tắt nhạc nền chung.` };
     }
     const current = this.sharedAudioConfig ?? (await this.cloudAdapter.getSystemAudioConfig().catch(() => null));
     if (!current) {
@@ -2616,8 +2826,8 @@ export class MusicManager {
     const nextConfig: SystemAudioConfigDocument = {
       ...current,
       isEnabled: enabled,
-      updatedAt: nowMs ?? Date.now(),
-      updatedBy: SUPER_ADMIN_EMAIL,
+      updatedAt: Math.round(nowMs ?? Date.now()),
+      updatedBy: ADMIN_EMAIL,
       version: current.version + 1,
     };
     try {
@@ -2627,7 +2837,7 @@ export class MusicManager {
     } catch (err: any) {
       return {
         success: false,
-        error: err?.message || 'Không thể cập nhật trạng thái nhạc nền chung trên Firestore.',
+        error: formatMusicCloudError(err, 'bật/tắt nhạc nền chung', 'system_config/audio'),
       };
     }
   }
@@ -2638,7 +2848,7 @@ export class MusicManager {
    */
   public async removeSharedSystemAudio(): Promise<{ success: boolean; error?: string }> {
     if (!this.canManageMusic()) {
-      return { success: false, error: 'Chỉ Super Admin mới có quyền xóa cấu hình nhạc nền chung.' };
+      return { success: false, error: `Chỉ Admin duy nhất (${ADMIN_EMAIL}) mới có quyền xóa cấu hình nhạc nền chung.` };
     }
 
     try {
@@ -2648,7 +2858,7 @@ export class MusicManager {
     } catch (err: any) {
       return {
         success: false,
-        error: err?.message || 'Không thể xóa cấu hình nhạc nền chung trên Firestore.',
+        error: formatMusicCloudError(err, 'xóa cấu hình nhạc nền chung', 'system_config/audio'),
       };
     }
   }
@@ -2672,7 +2882,7 @@ export class MusicManager {
     sourceInfo?: MusicTrackMetadata['sourceInfo'];
   }): { success: boolean; track?: MusicTrackMetadata; error?: string } {
     if (!this.canManageMusic()) {
-      return { success: false, error: 'Chỉ Super Admin mới có quyền thêm nhạc nền.' };
+      return { success: false, error: `Chỉ Admin duy nhất (${ADMIN_EMAIL}) mới có quyền thêm nhạc nền.` };
     }
 
     const check = MusicManager.validateAudioFileBasic({
@@ -2730,11 +2940,14 @@ export class MusicManager {
         ...this.sharedAudioConfig,
         displayName: track.displayName.slice(0, 120),
         updatedAt: Date.now(),
-        updatedBy: SUPER_ADMIN_EMAIL,
+        updatedBy: ADMIN_EMAIL,
         version: this.sharedAudioConfig.version + 1,
       };
       this.sharedAudioConfig = updatedConfig;
-      void this.cloudAdapter.saveSystemAudioConfig(updatedConfig).catch(() => {});
+      void this.cloudAdapter.saveSystemAudioConfig(updatedConfig).catch((err) => {
+        this.sharedSyncError = formatMusicCloudError(err, 'đổi tên bài nhạc', 'system_config/audio');
+        this.notify();
+      });
     }
     this.savePersistedState();
     this.notify();
@@ -2749,7 +2962,7 @@ export class MusicManager {
     newFile: File
   ): Promise<{ success: boolean; track?: MusicTrackMetadata; error?: string }> {
     if (!this.canManageMusic()) {
-      return { success: false, error: 'Chỉ Super Admin mới có quyền thay thế file nhạc.' };
+      return { success: false, error: `Chỉ Admin duy nhất (${ADMIN_EMAIL}) mới có quyền thay thế file nhạc.` };
     }
 
     const existing = this.tracks.get(trackId);

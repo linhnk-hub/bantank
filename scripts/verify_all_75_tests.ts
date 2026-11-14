@@ -96,6 +96,9 @@ import {
   SHARED_SYSTEM_BGM_ID,
   STAGED_LOCAL_PREVIEW_BGM_ID,
   buildGitHubPagesAudioUrl,
+  type SharedMusicCloudAdapter,
+  type SoundCatalogEntry,
+  type SystemAudioConfigDocument,
 } from '../src/core/musicManager.ts';
 import {
   AVATAR_LIMITS,
@@ -1349,13 +1352,136 @@ async function verifyM735SharedAvatarCatalogAsyncSuite() {
   console.log('[M7.3.6 & M7.3.7 UI Cleanup, Avatar Recovery, Role Frames, Single-BGM & Co-op Online E2E Verification] 23/23 MANDATORY CASES PASS');
 }
 
+async function verifyM7311StageAudioUploadAsyncSuite() {
+  const mm = MusicManager.getInstance();
+  const synthBuffer = {
+    duration: 42,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    getChannelData: () => new Float32Array(44100),
+  };
+  const sampleBinary = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00]).buffer;
+
+  // 1. Storage upload error must return success=false with Storage diagnostic and clear cleanly
+  const cloud1 = new InMemorySharedMusicCloudAdapter();
+  mm.setCloudAdapter(cloud1, async () => synthBuffer);
+  mm.setUserRole('ADMIN');
+  cloud1.failNextStorageUpload = true;
+  const storageFailRes = await mm.uploadAndCatalogAudioBuffer({
+    soundId: 'snd_stage_err1',
+    fileName: 'stage_bgm.m4a',
+    displayName: 'Stage BGM Err',
+    contentType: 'audio/mp4',
+    fileSize: 256_000,
+    decodedBuffer: synthBuffer,
+    arrayBuffer: sampleBinary,
+    autoActivate: true,
+    nowMs: 1_730_000_000_000,
+  });
+  if (
+    storageFailRes.success !== false ||
+    !storageFailRes.error?.includes('Firebase Storage') ||
+    !mm.getSharedSyncError()?.includes('Firebase Storage')
+  ) {
+    throw new Error('Stage audio upload Storage failure was masked or missing diagnostic');
+  }
+  mm.clearSharedSyncError();
+  if (mm.getSharedSyncError() !== null) {
+    throw new Error('clearSharedSyncError did not clear sharedSyncError');
+  }
+
+  // 2. Successful upload -> /sound_catalog saved + /system_config/audio v1 activated -> second activate bumps v2 with fresh timestamp
+  const okRes = await mm.uploadAndCatalogAudioBuffer({
+    soundId: 'snd_stage_ok',
+    fileName: 'stage_2_theme.m4a',
+    displayName: 'Stage 2 Theme',
+    contentType: 'audio/mp4',
+    fileSize: 512_000,
+    decodedBuffer: synthBuffer,
+    arrayBuffer: sampleBinary,
+    autoActivate: true,
+    nowMs: 1_730_000_010_000,
+  });
+  if (
+    !okRes.success ||
+    okRes.config?.version !== 1 ||
+    okRes.config?.assetPath !== 'sound_catalog/snd_stage_ok/v1/bgm_v1_stage_2_theme.m4a'
+  ) {
+    throw new Error('Stage audio upload & catalog activation v1 failed');
+  }
+
+  const reactivateRes = await mm.activateCatalogSound('snd_stage_ok');
+  if (
+    !reactivateRes.success ||
+    reactivateRes.config?.version !== 2 ||
+    !(reactivateRes.config.updatedAt > 1_730_000_010_000)
+  ) {
+    throw new Error('activateCatalogSound did not increment version monotonically with fresh timestamp');
+  }
+
+  // 3. /system_config/audio permission-denied during uploadTrack (browser Firebase adapter path) must NOT mask failure
+  let activeConfigInMock: SystemAudioConfigDocument | null = null;
+  const catalogMap = new Map<string, SoundCatalogEntry>();
+  const mockFirebaseAdapter: SharedMusicCloudAdapter = {
+    uploadAudioBinary: async (assetPath) => ({ assetPath }),
+    deleteAudioBinary: async () => {},
+    fetchAudioBinary: async () => sampleBinary.slice(0),
+    getSystemAudioConfig: async () => activeConfigInMock,
+    saveSystemAudioConfig: async () => {
+      throw new Error(
+        JSON.stringify({
+          error: 'Missing or insufficient permissions.',
+          operationType: 'write',
+          path: 'system_config/audio',
+          authInfo: { email: 'linhnk2013@gmail.com', emailVerified: true },
+        })
+      );
+    },
+    deleteSystemAudioConfig: async () => {
+      activeConfigInMock = null;
+    },
+    subscribeSystemAudioConfig: () => () => {},
+    listSoundCatalog: async () => Array.from(catalogMap.values()),
+    saveSoundCatalogEntry: async (entry) => {
+      catalogMap.set(entry.soundId, entry);
+    },
+    deleteSoundCatalogEntry: async (soundId) => {
+      catalogMap.delete(soundId);
+    },
+    subscribeSoundCatalog: () => () => {},
+  };
+
+  mm.setCloudAdapter(mockFirebaseAdapter, async () => synthBuffer);
+  mm.setUserRole('ADMIN');
+  const fakeFile = {
+    name: 'stage_boss.mp3',
+    type: 'audio/mpeg',
+    size: 128_000,
+    arrayBuffer: async () => sampleBinary.slice(0),
+  } as unknown as File;
+  const uploadTrackFailRes = await mm.uploadTrack(fakeFile, 'Stage Boss');
+  if (
+    uploadTrackFailRes.success !== false ||
+    uploadTrackFailRes.requiresGitHubPagesDeploy === true ||
+    !uploadTrackFailRes.error?.includes('/system_config/audio')
+  ) {
+    throw new Error('uploadTrack masked Firestore /system_config/audio permission failure');
+  }
+
+  mm.clearSharedSyncError();
+  mm.resetAllAssignmentsToDefault();
+  mm.syncRoleFromAuthUser(null);
+  console.log('[M7.3.11 Stage Audio Upload Diagnostics & E2E Verification] 4/4 MANDATORY CASES PASS');
+}
+
 async function runAllAsyncVerifications() {
   await verifyM733AsyncWorkflow();
   await verifyM735SharedAvatarCatalogAsyncSuite();
-  const asyncCasesCount = 10 + 23;
+  await verifyM7311StageAudioUploadAsyncSuite();
+  const asyncCasesCount = 10 + 23 + 4;
   console.log('============================================');
   console.log(`SYNC UNIT TESTS  : ${totalPassed}/${totalTests} PASS (M2-M5: 75 | M6: 136 | M7.1: 35 | M7.2: 10 | M7.3: ${m73Results.length})`);
-  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23)`);
+  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4)`);
   console.log(`GRAND TOTAL SUITE: ${totalPassed + asyncCasesCount}/${totalTests + asyncCasesCount} PASS (0 FAILED, 0 DUPLICATED)`);
   console.log('============================================');
   process.exit(0);

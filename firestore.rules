@@ -1271,7 +1271,8 @@ service cloud.firestore {
         && data.fileSize is int
         && data.fileSize > 0
         && data.fileSize <= 26214400
-        && isValidClientMillisTimestamp(data.updatedAt)
+        && data.updatedAt is int
+        && data.updatedAt > 0
         && data.updatedBy == 'linhnk2013@gmail.com'
         && data.version is int
         && data.version >= 1

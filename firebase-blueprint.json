@@ -172,11 +172,14 @@
     },
     "SystemAudioConfig": {
       "title": "SystemAudioConfig",
-      "description": "Cấu hình nhạc nền chung toàn hệ thống (M7.3.3) phân phối qua GitHub Pages tại thư mục tĩnh public/audio/ (không dùng Firebase Storage, không lưu downloadURL/token).",
+      "description": "Cấu hình nhạc nền chung toàn hệ thống (/system_config/audio) hỗ trợ Firebase Storage (sound_catalog/...) và đường dẫn tĩnh (audio/...).",
       "type": "object",
       "properties": {
-        "assetPath": { "type": "string", "minLength": 11, "maxLength": 300, "pattern": "^audio/[A-Za-z0-9._-]+\\.(mp3|ogg|wav)$" },
-        "fileName": { "type": "string", "minLength": 5, "maxLength": 255, "pattern": "^[A-Za-z0-9._-]+\\.(mp3|ogg|wav)$" },
+        "assetPath": { "type": "string", "minLength": 6, "maxLength": 300 },
+        "storagePath": { "type": "string", "maxLength": 300 },
+        "soundId": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "audioDataUrl": { "type": "string", "maxLength": 900000 },
+        "fileName": { "type": "string", "minLength": 5, "maxLength": 255, "pattern": "^[A-Za-z0-9._-]+\\.(mp3|ogg|wav|m4a|aac|webm)$" },
         "contentType": { "type": "string", "minLength": 9, "maxLength": 120 },
         "fileSize": { "type": "number" },
         "updatedAt": { "type": "number" },
@@ -200,6 +203,55 @@
         "version",
         "isEnabled"
       ]
+    },
+    "SoundCatalogItem": {
+      "title": "SoundCatalogItem",
+      "description": "Metadata danh mục âm thanh dùng chung lưu trên Firebase Storage (/sound_catalog/{soundId}), chỉ Admin duy nhất linhnk2013@gmail.com ghi.",
+      "type": "object",
+      "properties": {
+        "soundId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "fileName": { "type": "string", "minLength": 5, "maxLength": 180, "pattern": "^[A-Za-z0-9._-]+\\.(mp3|ogg|wav|m4a|aac|webm)$" },
+        "storagePath": { "type": "string", "maxLength": 300 },
+        "audioDataUrl": { "type": "string", "maxLength": 900000 },
+        "contentType": { "type": "string", "minLength": 9, "maxLength": 120 },
+        "fileSize": { "type": "number" },
+        "category": { "type": "string", "enum": ["BGM", "SFX"] },
+        "actionSlot": { "type": "string", "enum": ["PLAYER_SHOOT", "TANK_EXPLODE", "BULLET_HIT_BRICK", "BULLET_HIT_STEEL", "BASE_DESTROYED"] },
+        "durationSec": { "type": "number" },
+        "trimStartSec": { "type": "number" },
+        "trimEndSec": { "type": "number" },
+        "version": { "type": "number" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" },
+        "updatedBy": { "type": "string" }
+      },
+      "required": [
+        "soundId",
+        "fileName",
+        "storagePath",
+        "contentType",
+        "fileSize",
+        "version",
+        "isActive",
+        "updatedAt",
+        "updatedBy"
+      ]
+    },
+    "SystemActionSfxConfig": {
+      "title": "SystemActionSfxConfig",
+      "description": "Cấu hình âm thanh hành động tùy chỉnh (/system_config/action_sfx) đồng bộ thời gian thực cho toàn bộ người chơi.",
+      "type": "object",
+      "properties": {
+        "tracks": { "type": "object" },
+        "slots": { "type": "object" },
+        "updatedAt": { "type": "number" },
+        "updatedBy": { "type": "string" },
+        "version": { "type": "number" }
+      },
+      "required": ["updatedAt", "updatedBy", "version"]
     }
   },
   "firestore": {
@@ -215,6 +267,10 @@
       "schema": { "$ref": "#/entities/AvatarCatalogItem" },
       "description": "Danh mục avatar dùng chung lưu trên Firebase Storage (M7.3.5)."
     },
+    "/sound_catalog/{soundId}": {
+      "schema": { "$ref": "#/entities/SoundCatalogItem" },
+      "description": "Danh mục âm thanh & nhạc nền dùng chung lưu trên Firebase Storage."
+    },
     "/admins/{uid}": {
       "schema": { "$ref": "#/entities/AdminRecord" },
       "description": "Bảng phân quyền ADMIN duy nhất (linhnk2013@gmail.com) và MOD."
@@ -229,7 +285,7 @@
     },
     "/system_config/{docId}": {
       "schema": { "$ref": "#/entities/SystemAudioConfig" },
-      "description": "Cấu hình nhạc nền chung toàn hệ thống (/system_config/audio)."
+      "description": "Cấu hình hệ thống (/system_config/audio, /system_config/stages_catalog, /system_config/action_sfx)."
     }
   }
 }
