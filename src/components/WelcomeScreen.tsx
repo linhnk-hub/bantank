@@ -3,9 +3,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import { AlertCircle, CheckCircle2, Gamepad2 } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { AlertCircle, CheckCircle2, Gamepad2, Loader2 } from 'lucide-react';
 import { GameLogo } from './GameLogo.tsx';
+import { MusicManager, type HomeBackgroundVideoConfig } from '../core/musicManager.ts';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 
 export interface WelcomeScreenProps {
   onSignIn: () => Promise<void>;
@@ -24,8 +26,94 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   successMessage,
   onClearFeedback,
 }) => {
+  const musicManager = MusicManager.getInstance();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [homeVideoConfig, setHomeVideoConfig] = useState<HomeBackgroundVideoConfig | null>(() =>
+    musicManager.getHomeVideoConfig()
+  );
+  const [homeVideoUrl, setHomeVideoUrl] = useState<string | null>(() =>
+    musicManager.getHomeVideoUrl()
+  );
+  const [isHomeVideoLoading, setIsHomeVideoLoading] = useState<boolean>(() =>
+    musicManager.isHomeVideoLoading()
+  );
+  const [homeVideoError, setHomeVideoError] = useState<string | null>(() =>
+    musicManager.getHomeVideoError()
+  );
+  const [isVideoBuffering, setIsVideoBuffering] = useState<boolean>(() =>
+    Boolean(musicManager.getHomeVideoUrl())
+  );
+
+  useEffect(() => {
+    const unsubMusic = musicManager.subscribe(() => {
+      const nextConfig = musicManager.getHomeVideoConfig();
+      const nextUrl = musicManager.getHomeVideoUrl();
+      setHomeVideoConfig(nextConfig);
+      setHomeVideoUrl((prevUrl) => {
+        if (nextUrl && nextUrl !== prevUrl) {
+          setIsVideoBuffering(true);
+        } else if (!nextUrl) {
+          setIsVideoBuffering(false);
+        }
+        return nextUrl;
+      });
+      setIsHomeVideoLoading(musicManager.isHomeVideoLoading());
+      setHomeVideoError(musicManager.getHomeVideoError());
+    });
+    return unsubMusic;
+  }, [musicManager]);
+
+  const tryPlayIntroVideo = () => {
+    const el = videoRef.current;
+    if (!el) return;
+    el.muted = true;
+    el.defaultMuted = true;
+    const p = el.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => {
+        // Ignore strict browser policy errors; fallback listeners remain active
+      });
+    }
+  };
+
+  useEffect(() => {
+    if (homeVideoConfig?.isEnabled && homeVideoUrl) {
+      tryPlayIntroVideo();
+    }
+  }, [homeVideoConfig?.isEnabled, homeVideoUrl]);
+
   return (
     <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+      {/* Intro Background Video (preloaded immediately on page load, blurred & looped automatically) */}
+      {homeVideoConfig?.isEnabled && homeVideoUrl && (
+        <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+          <video
+            ref={videoRef}
+            key={homeVideoUrl}
+            src={homeVideoUrl}
+            autoPlay
+            muted
+            playsInline
+            preload="auto"
+            loop={homeVideoConfig.loop !== false}
+            style={{ opacity: homeVideoConfig.opacity }}
+            className="w-full h-full object-cover blur-[3px] scale-105"
+            onLoadStart={() => setIsVideoBuffering(true)}
+            onLoadedData={() => {
+              setIsVideoBuffering(false);
+              tryPlayIntroVideo();
+            }}
+            onCanPlay={() => {
+              setIsVideoBuffering(false);
+              tryPlayIntroVideo();
+            }}
+            onPlaying={() => setIsVideoBuffering(false)}
+            onError={() => setIsVideoBuffering(false)}
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/60 via-neutral-950/30 to-neutral-950/80" />
+        </div>
+      )}
+
       {/* Background Ambience: Subtle retro scanlines and radial glow */}
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.15),rgba(255,255,255,0))] pointer-events-none" />
       <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
@@ -36,7 +124,9 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <div className="mb-2 p-3.5 rounded-xl bg-emerald-950/90 border border-emerald-800 text-emerald-200 text-xs sm:text-sm flex items-center justify-between shadow-xl animate-fade-in">
             <div className="flex items-center gap-2.5">
               <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
-              <span className="font-medium">{successMessage}</span>
+              <span className="font-medium whitespace-pre-line">
+                {formatSentenceLineBreaks(successMessage)}
+              </span>
             </div>
             <button
               onClick={onClearFeedback}
@@ -51,7 +141,9 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <div className="mb-2 p-3.5 rounded-xl bg-rose-950/90 border border-rose-800 text-rose-200 text-xs sm:text-sm flex items-center justify-between shadow-xl animate-fade-in">
             <div className="flex items-center gap-2.5">
               <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
-              <span className="font-medium">{errorMessage}</span>
+              <span className="font-medium whitespace-pre-line">
+                {formatSentenceLineBreaks(errorMessage)}
+              </span>
             </div>
             <button
               onClick={onClearFeedback}
@@ -78,19 +170,20 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           </h1>
           <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mt-1.5 sm:mt-2.5 mb-4 sm:mb-6" />
 
-          {/* Google Sign-in Call To Action & Trial Mode Button */}
+          {/* Google Sign-in Call To Action & Trial Mode Button (Unified size) */}
           <div className="w-full max-w-sm flex flex-col items-center gap-2.5 px-2 mb-4">
             <button
               type="button"
+              data-testid="welcome-google-signin-btn"
               onClick={onSignIn}
               disabled={isProcessing}
-              className="w-full py-3.5 px-6 rounded-2xl bg-white hover:bg-neutral-100 text-neutral-900 font-extrabold text-sm sm:text-base shadow-2xl shadow-white/10 hover:shadow-amber-500/20 transition-all transform active:scale-95 flex items-center justify-center gap-3 border border-neutral-200 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
+              className="w-full py-3 px-6 rounded-2xl bg-white hover:bg-neutral-100 text-neutral-900 font-extrabold text-xs sm:text-sm shadow-lg hover:shadow-amber-500/20 transition-all transform active:scale-95 flex items-center justify-center gap-2.5 border border-neutral-200 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
             >
               {isProcessing ? (
-                <div className="w-5 h-5 border-2 border-neutral-400 border-t-neutral-900 rounded-full animate-spin" />
+                <div className="w-4 h-4 border-2 border-neutral-400 border-t-neutral-900 rounded-full animate-spin shrink-0" />
               ) : (
                 /* Google Official "G" Multi-color SVG */
-                <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24">
                   <path
                     fill="#4285F4"
                     d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
@@ -109,7 +202,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                   />
                 </svg>
               )}
-              <span className="tracking-wide">
+              <span className="tracking-wider uppercase">
                 {isProcessing ? 'ĐANG KẾT NỐI GOOGLE...' : 'ĐĂNG NHẬP BẰNG GOOGLE'}
               </span>
             </button>
@@ -122,13 +215,30 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 disabled={isProcessing}
                 className="w-full py-3 px-6 rounded-2xl bg-neutral-900 hover:bg-neutral-800 text-amber-300 font-extrabold text-xs sm:text-sm border border-amber-500/40 hover:border-amber-400 transition-all transform active:scale-95 flex items-center justify-center gap-2.5 shadow-lg cursor-pointer disabled:opacity-50"
               >
-                <Gamepad2 className="w-4 h-4 text-amber-400" />
+                <Gamepad2 className="w-4 h-4 text-amber-400 shrink-0" />
                 <span className="tracking-wider uppercase">Chơi thử</span>
               </button>
             )}
           </div>
         </div>
       </main>
+
+      {/* Trạng thái đang tải Video Intro (hiển thị ngay phía trên thanh footer khi chưa đăng nhập) */}
+      {homeVideoConfig?.isEnabled &&
+        !homeVideoError &&
+        (isHomeVideoLoading || (Boolean(homeVideoUrl) && isVideoBuffering)) && (
+          <div
+            data-testid="home-video-loading-banner"
+            role="status"
+            aria-live="polite"
+            className="relative z-10 w-full border-t border-amber-500/25 bg-neutral-900/90 backdrop-blur-sm px-4 py-2 text-xs text-amber-200 flex items-center justify-center gap-2 shrink-0"
+          >
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
+            <span>
+              Đang tải video intro{homeVideoConfig.fileName ? ` (${homeVideoConfig.fileName})` : ''}...
+            </span>
+          </div>
+        )}
 
       {/* Footer Strip */}
       <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">

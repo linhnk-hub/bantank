@@ -26,6 +26,7 @@ import {
   STAGE_1_MAP,
   formatCountdownMMSS,
   getMatchDurationSecondsForDifficulty,
+  getStartingLivesForDifficultyAndMode,
 } from './core/constants.ts';
 import { validateStageMap } from './core/mapValidator.ts';
 import { GameEngine } from './core/gameEngine.ts';
@@ -47,6 +48,11 @@ import { ModeSelectionScreen } from './components/ModeSelectionScreen.tsx';
 import { SessionAlertModal } from './components/SessionAlertModal.tsx';
 import { GameLogo } from './components/GameLogo.tsx';
 import { QuickAudioToggleButton } from './components/QuickAudioToggleButton.tsx';
+import {
+  getShowOnlineNetStatsPreference,
+  ONLINE_NET_STATS_PREF_EVENT,
+  ONLINE_NET_STATS_STORAGE_KEY,
+} from './core/networkStatsPref.ts';
 import {
   RotateCcw,
   Pause,
@@ -90,7 +96,11 @@ export default function App() {
   const [gameEngine] = useState<GameEngine>(() => new GameEngine());
   const [gameState, setGameState] = useState<GameCoreState | null>(null);
   const [isPaused, setIsPaused] = useState<boolean>(false);
-  const [, setFps] = useState<number>(60);
+  const [fps, setFps] = useState<number>(60);
+  const [peerPingMs, setPeerPingMs] = useState<number | null>(() => coopManager.getPeerPingMs());
+  const [showOnlineNetStats, setShowOnlineNetStats] = useState<boolean>(() =>
+    getShowOnlineNetStatsPreference()
+  );
   const [difficulty, setDifficulty] = useState<'DEFAULT' | 'EXTREME'>('DEFAULT');
   const [selectedMode, setSelectedMode] = useState<'SOLO' | 'TWO_PLAYERS'>('SOLO');
   const [twoPlayerOption, setTwoPlayerOption] = useState<'P2_AI' | 'P2_REAL'>('P2_AI');
@@ -99,6 +109,28 @@ export default function App() {
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTabId>('ACCOUNT');
   const [isMatchAllowed, setIsMatchAllowed] = useState<boolean>(false);
   const [isTrialMode, setIsTrialMode] = useState<boolean>(() => authManager.isTrialMode());
+
+  // Sync live peer Ping & online network telemetry toggle preference
+  useEffect(() => {
+    const unsubPing = coopManager.subscribe(() => {
+      setPeerPingMs(coopManager.getPeerPingMs());
+    });
+    const handlePrefEvent = () => {
+      setShowOnlineNetStats(getShowOnlineNetStatsPreference());
+    };
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === ONLINE_NET_STATS_STORAGE_KEY) {
+        setShowOnlineNetStats(getShowOnlineNetStatsPreference());
+      }
+    };
+    window.addEventListener(ONLINE_NET_STATS_PREF_EVENT, handlePrefEvent);
+    window.addEventListener('storage', handleStorage);
+    return () => {
+      unsubPing();
+      window.removeEventListener(ONLINE_NET_STATS_PREF_EVENT, handlePrefEvent);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [coopManager]);
 
   // Desktop PC detection: screen width >= 1024px with fine pointer (mouse/trackpad)
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
@@ -114,20 +146,22 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Sync Home BGM when entering MAIN_MENU / MODE_SELECTION, and pause on WELCOME
+  // Autoplay Home BGM immediately on WELCOME, MAIN_MENU, and MODE_SELECTION without waiting for login/click
   useEffect(() => {
     const mm = MusicManager.getInstance();
-    if (appScreen === 'MAIN_MENU' || appScreen === 'MODE_SELECTION') {
-      if (currentUser) {
-        mm.syncMenuPlayback();
-      }
-    } else if (appScreen === 'WELCOME') {
-      mm.pause();
+    if (
+      appScreen === 'WELCOME' ||
+      appScreen === 'MAIN_MENU' ||
+      appScreen === 'MODE_SELECTION'
+    ) {
+      SoundManager.getInstance().unlock();
+      mm.syncMenuPlayback();
     }
   }, [appScreen, currentUser]);
 
-  // Safe browser autoplay unlock for Web Audio API
+  // Eager audio unlock on mount + browser autoplay gesture fallback if policy requires interaction
   useEffect(() => {
+    SoundManager.getInstance().unlock();
     const unlockAudio = () => {
       SoundManager.getInstance().unlock();
     };
@@ -984,13 +1018,28 @@ export default function App() {
               </div>
               <div className="flex items-center gap-1 text-rose-400 font-bold" title="Mạng P1">
                 <Heart className="w-3.5 h-3.5 fill-rose-500" />
-                <span>P1×{gameState?.p1State.lives ?? 3}</span>
+                <span>
+                  P1×
+                  {gameState?.p1State.lives ??
+                    getStartingLivesForDifficultyAndMode(
+                      gameState?.difficulty ?? difficulty,
+                      gameState?.gameMode ?? 'SOLO'
+                    )}
+                </span>
               </div>
               {(gameState?.gameMode === 'TWO_PLAYERS_AI' || gameState?.gameMode === 'TWO_PLAYERS_ONLINE') && gameState?.p2State && (
                 <div className="flex items-center gap-1 text-emerald-400 font-bold" title="Mạng P2">
                   <Heart className="w-3.5 h-3.5 fill-emerald-500" />
                   <span>P2×{gameState.p2State.lives}</span>
                 </div>
+              )}
+              {isCoopOnlineMatch && showOnlineNetStats && (
+                <span
+                  data-testid="landscape-online-net-stats"
+                  className="px-1.5 py-0.5 rounded bg-sky-950/75 border border-sky-700/50 text-sky-300 text-[10px] font-bold"
+                >
+                  {peerPingMs != null ? `${Math.round(peerPingMs)}ms` : '--ms'} • {Math.round(fps)}fps
+                </span>
               )}
             </div>
 
@@ -1174,13 +1223,28 @@ export default function App() {
               </div>
               <div className="flex items-center gap-1 text-rose-400 font-bold" title="Mạng P1">
                 <Heart className="w-3.5 h-3.5 fill-rose-500" />
-                <span>P1×{gameState?.p1State.lives ?? 3}</span>
+                <span>
+                  P1×
+                  {gameState?.p1State.lives ??
+                    getStartingLivesForDifficultyAndMode(
+                      gameState?.difficulty ?? difficulty,
+                      gameState?.gameMode ?? 'SOLO'
+                    )}
+                </span>
               </div>
               {(gameState?.gameMode === 'TWO_PLAYERS_AI' || gameState?.gameMode === 'TWO_PLAYERS_ONLINE') && gameState?.p2State && (
                 <div className="flex items-center gap-1 text-emerald-400 font-bold" title="Mạng P2">
                   <Heart className="w-3.5 h-3.5 fill-emerald-500" />
                   <span>P2×{gameState.p2State.lives}</span>
                 </div>
+              )}
+              {isCoopOnlineMatch && showOnlineNetStats && (
+                <span
+                  data-testid="portrait-online-net-stats"
+                  className="px-1.5 py-0.5 rounded bg-sky-950/75 border border-sky-700/50 text-sky-300 text-[10px] font-bold"
+                >
+                  {peerPingMs != null ? `${Math.round(peerPingMs)}ms` : '--ms'} • {Math.round(fps)}fps
+                </span>
               )}
             </div>
 
@@ -1494,8 +1558,17 @@ export default function App() {
                     <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
                     <span>Xem hướng dẫn điều khiển trong mục Hướng dẫn</span>
                   </button>
-                  <div className="text-[11px] text-neutral-500 font-mono">
-                    60 FPS
+                  <div className="flex items-center gap-2 text-[11px] font-mono">
+                    {isCoopOnlineMatch && showOnlineNetStats ? (
+                      <span
+                        data-testid="desktop-online-net-stats"
+                        className="px-2 py-0.5 rounded bg-sky-950/75 border border-sky-700/50 text-sky-300 font-bold"
+                      >
+                        Ping: {peerPingMs != null ? `${Math.round(peerPingMs)} ms` : '-- ms'} • {Math.round(fps)} FPS
+                      </span>
+                    ) : (
+                      <span className="text-neutral-500">{Math.round(fps)} FPS</span>
+                    )}
                   </div>
                 </div>
               </div>
@@ -1522,6 +1595,9 @@ export default function App() {
                 onPause={isCoopOnlineMatch ? undefined : handlePause}
                 isSuperAdmin={isSuperAdmin}
                 localOnlineRole={localOnlineRole}
+                fps={fps}
+                peerPingMs={peerPingMs}
+                showOnlineNetStats={showOnlineNetStats}
               />
 
               {/* Admin Only: Terrain Legend & QA Quick Access Card */}
@@ -1590,6 +1666,7 @@ export default function App() {
         isReturningToLobby={isReturningToLobby}
         returnToLobbyError={returnToLobbyError}
         isTrialMode={isTrialMode}
+        localOnlineRole={localOnlineRole}
       />
 
       <StageClearModal
@@ -1601,6 +1678,7 @@ export default function App() {
         isReturningToLobby={isReturningToLobby}
         returnToLobbyError={returnToLobbyError}
         isTrialMode={isTrialMode}
+        localOnlineRole={localOnlineRole}
       />
     </div>
   );

@@ -1055,6 +1055,31 @@ export const MusicAdminPanel: React.FC = () => {
             />
             <button
               type="button"
+              data-testid="activate-static-intro-video-btn"
+              disabled={isCloudSyncing || isUploadingVideo}
+              onClick={async () => {
+                setStatusMsg(null);
+                const res = await musicManager.activateStaticIntroVideo();
+                if (res.homeVideo) {
+                  setVideoEnabledDraft(res.homeVideo.isEnabled);
+                  setVideoOpacityDraft(res.homeVideo.opacity);
+                  setVideoLoopDraft(res.homeVideo.loop);
+                  setIsVideoDirty(false);
+                }
+                setStatusMsg({
+                  type: res.success ? 'success' : 'error',
+                  text: res.success
+                    ? 'Đã kích hoạt video Intro mặc định (intro-bantank.mp4).'
+                    : res.error || 'Không thể kích hoạt video Intro mặc định.',
+                });
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-amber-500/40 disabled:opacity-50 text-amber-200 font-bold text-xs shadow transition-all cursor-pointer"
+            >
+              <Film className="w-3.5 h-3.5 text-amber-400" />
+              <span>Dùng Intro mặc định</span>
+            </button>
+            <button
+              type="button"
               data-testid="upload-home-video-btn"
               disabled={isCloudSyncing || isUploadingVideo}
               onClick={() => videoUploadInputRef.current?.click()}
@@ -1179,7 +1204,7 @@ export const MusicAdminPanel: React.FC = () => {
                   playsInline
                   loop={videoLoopDraft}
                   style={{ opacity: videoOpacityDraft }}
-                  className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+                  className="absolute inset-0 w-full h-full object-cover blur-[3px] scale-105 pointer-events-none"
                 />
                 <div className="relative z-10 px-3 py-1 rounded bg-neutral-950/75 border border-neutral-700 text-[10px] font-mono text-amber-300">
                   Xem trước độ mờ {Math.round(videoOpacityDraft * 100)}% • {videoLoopDraft ? 'Loop' : '1 lần'}

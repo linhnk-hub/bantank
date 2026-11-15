@@ -164,6 +164,21 @@ export const P1_CONFIG = {
   SPAWN_DIRECTION: 'UP' as const,
 } as const;
 
+/**
+ * Mạng khởi đầu thống nhất theo độ khó & chế độ chơi:
+ * - Giải trí (DEFAULT): 3 mạng ở mọi chế độ.
+ * - Thử thách (EXTREME): Solo = 2 mạng; Co-op (AI / Online P1 & P2) = 1 mạng.
+ */
+export function getStartingLivesForDifficultyAndMode(
+  difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT',
+  gameMode: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' = 'SOLO'
+): number {
+  if (difficulty === 'EXTREME') {
+    return gameMode === 'SOLO' ? 2 : 1;
+  }
+  return P1_CONFIG.STARTING_LIVES;
+}
+
 export const ENEMY_CONFIG = {
   MAX_ACTIVE: 5,
   TOTAL_COUNT: 30,

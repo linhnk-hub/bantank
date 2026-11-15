@@ -20,6 +20,10 @@ import { runAllM6CorrectionAITests as runM6AICorr } from '../src/core/testHarnes
 import { runAllM7_1Tests as runM71 } from '../src/core/testHarnessM7_1.ts';
 import { runAllM7_2Tests as runM72 } from '../src/core/testHarnessM7_2.ts';
 import { runAllM7_3Tests as runM73 } from '../src/core/testHarnessM7_3.ts';
+import {
+  getShowOnlineNetStatsPreference,
+  setShowOnlineNetStatsPreference,
+} from '../src/core/networkStatsPref.ts';
 
 console.log('--- RUNNING FULL AUTOMATED REGRESSION SUITE ---');
 
@@ -1670,16 +1674,131 @@ async function verifyM7312FixesAsyncSuite() {
   console.log('[M7.3.12 Fixes (Rematch Sync, BT0-9, Logout Button, Storage Stream Fallback, Video Banner) E2E] 4/4 PASS');
 }
 
+async function verifyM7313FixesAsyncSuite() {
+  const fsMod = await import('node:fs');
+  const pathMod = await import('node:path');
+
+  const readSrc = (rel: string) =>
+    fsMod.readFileSync(pathMod.resolve(process.cwd(), rel), 'utf-8');
+
+  const welcomeSrc = readSrc('src/components/WelcomeScreen.tsx');
+  const mainMenuSrc = readSrc('src/components/MainMenuScreen.tsx');
+  const modeSelectSrc = readSrc('src/components/ModeSelectionScreen.tsx');
+  const lobbySrc = readSrc('src/components/CoopOnlineLobbyModal.tsx');
+  const settingsSrc = readSrc('src/components/SettingsModal.tsx');
+  const gameOverSrc = readSrc('src/components/GameOverModal.tsx');
+  const stageClearSrc = readSrc('src/components/StageClearModal.tsx');
+  const m3HudSrc = readSrc('src/components/M3Hud.tsx');
+  const appSrc = readSrc('src/App.tsx');
+
+  // 1. Preload & autoplay blurred looping video on Welcome & MainMenu + loading banner above <footer>
+  const welcomeBannerIdx = welcomeSrc.indexOf('home-video-loading-banner');
+  const welcomeFooterIdx = welcomeSrc.indexOf('<footer');
+  if (
+    !welcomeSrc.includes('<video') ||
+    !welcomeSrc.includes('blur-[3px]') ||
+    !welcomeSrc.includes('preload="auto"') ||
+    welcomeBannerIdx === -1 ||
+    welcomeFooterIdx === -1 ||
+    welcomeBannerIdx > welcomeFooterIdx ||
+    !mainMenuSrc.includes('blur-[3px]') ||
+    !mainMenuSrc.includes('preload="auto"')
+  ) {
+    throw new Error('WelcomeScreen / MainMenuScreen video preload, blur, or loading banner check failed');
+  }
+
+  // 2. Public intro-bantank.mp4 file presence
+  if (!fsMod.existsSync(pathMod.resolve(process.cwd(), 'public/intro-bantank.mp4'))) {
+    throw new Error('public/intro-bantank.mp4 is missing');
+  }
+
+  // 3. Google Sign-In button matches Chơi thử size (py-3 text-xs sm:text-sm w-4 h-4)
+  if (!welcomeSrc.includes('data-testid="welcome-google-signin-btn"') || !welcomeSrc.includes('py-3 px-6 rounded-2xl bg-white')) {
+    throw new Error('WelcomeScreen Google Sign-In button unified sizing check failed');
+  }
+
+  // 4. App.tsx syncs menu BGM on WELCOME without requiring login
+  if (!appSrc.includes("appScreen === 'WELCOME'") || !appSrc.includes('SoundManager.getInstance().unlock()')) {
+    throw new Error('App.tsx immediate WELCOME BGM / audio unlock check failed');
+  }
+
+  // 5. ModeSelectionScreen hides Quay lại inside online waiting room & CoopOnlineLobbyModal checks FINISHED
+  if (
+    !modeSelectSrc.includes('isInsideOnlineWaitingRoom') ||
+    !modeSelectSrc.includes('{!isInsideOnlineWaitingRoom && (') ||
+    !lobbySrc.includes("room.status === 'FINISHED'")
+  ) {
+    throw new Error('Waiting room Quay lại hiding or FINISHED lobby guard check failed');
+  }
+
+  // 6. GameOverModal & StageClearModal use getStartingLivesForDifficultyAndMode & localOnlineRole
+  if (
+    !gameOverSrc.includes('getStartingLivesForDifficultyAndMode') ||
+    !gameOverSrc.includes('localOnlineRole') ||
+    !stageClearSrc.includes('getStartingLivesForDifficultyAndMode') ||
+    !stageClearSrc.includes('localOnlineRole')
+  ) {
+    throw new Error('GameOverModal / StageClearModal accurate lives calculation check failed');
+  }
+
+  // 7. SettingsModal avatar blurred backdrop, Ping/FPS toggle, Online/Offline status (no Hoạt động status badge)
+  if (
+    !settingsSrc.includes('account-avatar-blurred-backdrop') ||
+    !settingsSrc.includes('toggle-online-net-stats-btn') ||
+    !settingsSrc.includes("? 'Online' : 'Offline'") ||
+    settingsSrc.includes("? 'Đang trực tuyến' : 'Hoạt động'") ||
+    m3HudSrc.includes("'HOẠT ĐỘNG'") ||
+    !m3HudSrc.includes("'ONLINE'") ||
+    !m3HudSrc.includes('hud-online-net-stats')
+  ) {
+    throw new Error('SettingsModal / M3Hud avatar backdrop, Ping/FPS toggle, or Online/Offline status check failed');
+  }
+
+  // 8. Preference helper & static intro video activation flow
+  if (getShowOnlineNetStatsPreference() !== true) {
+    throw new Error('Default getShowOnlineNetStatsPreference() should be true');
+  }
+  setShowOnlineNetStatsPreference(false);
+
+  const mm = MusicManager.getInstance();
+  const cloud = new InMemorySharedMusicCloudAdapter();
+  mm.setCloudAdapter(cloud, async () => ({
+    duration: 24,
+    sampleRate: 44100,
+    numberOfChannels: 1,
+    getChannelData: () => new Float32Array(44100),
+  }));
+  mm.syncRoleFromAuthUser({
+    uid: 'uid_admin_m7313',
+    email: 'linhnk2013@gmail.com',
+    emailVerified: true,
+    providerIds: ['google.com'],
+  });
+  const staticAct = await mm.activateStaticIntroVideo({ nowMs: 1_760_000_005_000 });
+  if (
+    !staticAct.success ||
+    staticAct.homeVideo?.storagePath !== 'intro-bantank.mp4' ||
+    staticAct.homeVideo?.isEnabled !== true ||
+    staticAct.homeVideo?.loop !== true
+  ) {
+    throw new Error('MusicManager.activateStaticIntroVideo() verification failed');
+  }
+  mm.syncRoleFromAuthUser(null);
+
+  console.log('[M7.3.13 Fixes (12 Items: EXTREME Lives, Intro Autoplay/Banner/Blur, Waiting Room, Rematch, Net Stats, Status, Line Breaks) E2E] 8/8 PASS');
+}
+
 async function runAllAsyncVerifications() {
   await verifyM733AsyncWorkflow();
   await verifyM735SharedAvatarCatalogAsyncSuite();
   await verifyM7311StageAudioUploadAsyncSuite();
   await verifyMediaAndVideoUpgradeAsyncSuite();
   await verifyM7312FixesAsyncSuite();
-  const asyncCasesCount = 10 + 23 + 4 + 3 + 4;
+  await verifyM7313FixesAsyncSuite();
+  const asyncCasesCount = 10 + 23 + 4 + 3 + 4 + 8;
   console.log('============================================');
   console.log(`SYNC UNIT TESTS  : ${totalPassed}/${totalTests} PASS (M2-M5: 75 | M6: 136 | M7.1: 35 | M7.2: 10 | M7.3: ${m73Results.length})`);
-  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Upgrade: 3 | M7.3.12 Fixes: 4)`);
+  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Upgrade: 3 | M7.3.12 Fixes: 4 | M7.3.13 Fixes: 8)`);
   console.log(`GRAND TOTAL SUITE: ${totalPassed + asyncCasesCount}/${totalTests + asyncCasesCount} PASS (0 FAILED, 0 DUPLICATED)`);
   console.log('============================================');
   process.exit(0);

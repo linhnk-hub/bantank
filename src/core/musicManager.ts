@@ -108,6 +108,19 @@ export interface HomeBackgroundVideoConfig {
   isEnabled: boolean;
 }
 
+export const DEFAULT_STATIC_HOME_VIDEO_CONFIG: Readonly<HomeBackgroundVideoConfig> = {
+  videoId: 'intro_bantank_static',
+  displayName: 'Video Intro Bắn Tank',
+  fileName: 'intro-bantank.mp4',
+  storagePath: 'intro-bantank.mp4',
+  contentType: 'video/mp4',
+  fileSize: 5872025,
+  version: 1,
+  opacity: 0.35,
+  loop: true,
+  isEnabled: true,
+};
+
 export interface SystemMediaConfigDocument {
   homeSoundId: string | null;
   globalSoundId: string | null;
@@ -1622,11 +1635,12 @@ export class MusicManager {
   private unsubSharedMediaConfig: (() => void) | null = null;
   private soundCatalog: Map<string, SoundCatalogEntry> = new Map();
   private loadingTrackPromises: Map<string, Promise<boolean>> = new Map();
-  private homeVideoUrl: string | null = null;
+  private homeVideoUrl: string | null = './intro-bantank.mp4';
   private homeVideoObjectUrl: string | null = null;
   private homeVideoLoading: boolean = false;
   private homeVideoError: string | null = null;
   private homeVideoFetchToken: number = 0;
+  private hasExplicitlyDeletedHomeVideo: boolean = false;
   private subscribedSharedUserUid: string | null = null;
   private loadedSharedVersion: number = 0;
   private loadedSharedAssetPath: string = '';
@@ -1681,8 +1695,9 @@ export class MusicManager {
     this.loadingTrackPromises.clear();
     this.streamUrls.clear();
     this.revokeHomeVideoObjectUrl();
-    this.homeVideoUrl = null;
+    this.homeVideoUrl = './intro-bantank.mp4';
     this.homeVideoError = null;
+    this.hasExplicitlyDeletedHomeVideo = false;
     this.stagedAudioPackage = null;
     this.stagedPackageBinary = null;
     this.stagedDecodedBuffer = null;
@@ -1845,8 +1860,9 @@ export class MusicManager {
     this.loadingTrackPromises.clear();
     this.streamUrls.clear();
     this.revokeHomeVideoObjectUrl();
-    this.homeVideoUrl = null;
+    this.homeVideoUrl = './intro-bantank.mp4';
     this.homeVideoError = null;
+    this.hasExplicitlyDeletedHomeVideo = false;
     this.stagedAudioPackage = null;
     this.stagedPackageBinary = null;
     this.stagedDecodedBuffer = null;
@@ -4100,7 +4116,7 @@ export class MusicManager {
 
     if (!config) {
       this.revokeHomeVideoObjectUrl();
-      this.homeVideoUrl = null;
+      this.homeVideoUrl = this.hasExplicitlyDeletedHomeVideo ? null : './intro-bantank.mp4';
       this.homeVideoLoading = false;
       this.homeVideoError = null;
       this.notify();
@@ -4135,14 +4151,20 @@ export class MusicManager {
       stageTracks: stageMap,
     };
 
-    const nextVideoPath = config.homeVideo?.storagePath ?? null;
-    const nextVideoEnabled = config.homeVideo?.isEnabled ?? false;
+    if (config.homeVideo) {
+      this.hasExplicitlyDeletedHomeVideo = false;
+    }
+    const effectiveHomeVideo =
+      config.homeVideo ??
+      (this.hasExplicitlyDeletedHomeVideo ? null : { ...DEFAULT_STATIC_HOME_VIDEO_CONFIG });
+    const nextVideoPath = effectiveHomeVideo?.storagePath ?? null;
+    const nextVideoEnabled = effectiveHomeVideo?.isEnabled ?? false;
     if (
       nextVideoPath !== previousVideoPath ||
       nextVideoEnabled !== previousVideoEnabled ||
       (nextVideoEnabled && !this.homeVideoUrl)
     ) {
-      void this.resolveHomeVideoPlaybackUrl(config.homeVideo ?? null);
+      void this.resolveHomeVideoPlaybackUrl(effectiveHomeVideo);
     }
 
     // Nạp trước các file nhạc đang được gán nếu có trong catalog
@@ -4237,7 +4259,9 @@ export class MusicManager {
     const nextHomeVideo =
       overrideHomeVideo !== undefined
         ? overrideHomeVideo
-        : (this.sharedMediaConfig?.homeVideo ?? remoteExisting?.homeVideo ?? null);
+        : (this.sharedMediaConfig?.homeVideo ??
+          remoteExisting?.homeVideo ??
+          (this.hasExplicitlyDeletedHomeVideo ? null : { ...DEFAULT_STATIC_HOME_VIDEO_CONFIG }));
 
     const nextConfig: SystemMediaConfigDocument = {
       homeSoundId: sanitizeIdOrNull(this.assignments.homeTrackId),
@@ -4310,7 +4334,16 @@ export class MusicManager {
   }
 
   public getHomeVideoConfig(): HomeBackgroundVideoConfig | null {
-    return this.sharedMediaConfig?.homeVideo ? { ...this.sharedMediaConfig.homeVideo } : null;
+    if (this.sharedMediaConfig?.homeVideo) {
+      return { ...this.sharedMediaConfig.homeVideo };
+    }
+    if (this.hasExplicitlyDeletedHomeVideo) {
+      return null;
+    }
+    if (this.sharedMediaConfig && this.sharedMediaConfig.homeVideo === null) {
+      return { ...DEFAULT_STATIC_HOME_VIDEO_CONFIG };
+    }
+    return { ...DEFAULT_STATIC_HOME_VIDEO_CONFIG };
   }
 
   public getHomeVideoUrl(): string | null {
@@ -4387,6 +4420,7 @@ export class MusicManager {
         isEnabled: true,
       };
 
+      this.hasExplicitlyDeletedHomeVideo = false;
       const saveRes = await this.saveMediaConfigToCloud(nowMs, homeVideo);
       if (!saveRes.success) {
         if (this.cloudAdapter.deleteVideoBinary) {
@@ -4438,6 +4472,7 @@ export class MusicManager {
       loop: options?.loop ?? prevVideo?.loop ?? true,
       isEnabled: true,
     };
+    this.hasExplicitlyDeletedHomeVideo = false;
     const saveRes = await this.saveMediaConfigToCloud(options?.nowMs, homeVideo);
     if (!saveRes.success) {
       return { success: false, error: saveRes.error };
@@ -4456,7 +4491,7 @@ export class MusicManager {
         error: `Chỉ Admin (${ADMIN_EMAIL}) mới có quyền cấu hình video nền.`,
       };
     }
-    const existing = this.sharedMediaConfig?.homeVideo;
+    const existing = this.getHomeVideoConfig();
     if (!existing) {
       return { success: false, error: 'Chưa có video nền Trang chủ nào được tải lên.' };
     }
@@ -4485,11 +4520,17 @@ export class MusicManager {
       };
     }
     const existing = this.sharedMediaConfig?.homeVideo ?? null;
+    this.hasExplicitlyDeletedHomeVideo = true;
     const res = await this.saveMediaConfigToCloud(nowMs, null);
     if (!res.success) {
+      this.hasExplicitlyDeletedHomeVideo = false;
       return { success: false, error: res.error };
     }
-    if (existing?.storagePath && this.cloudAdapter.deleteVideoBinary) {
+    if (
+      existing?.storagePath &&
+      existing.storagePath !== 'intro-bantank.mp4' &&
+      this.cloudAdapter.deleteVideoBinary
+    ) {
       await this.cloudAdapter.deleteVideoBinary(existing.storagePath).catch(() => {});
     }
     await this.resolveHomeVideoPlaybackUrl(null);
@@ -5018,6 +5059,16 @@ export class MusicManager {
     }
 
     if ((ctx as AudioContext).state === 'suspended') {
+      try {
+        const resumeResult = (ctx as AudioContext).resume?.();
+        if (resumeResult && typeof resumeResult.catch === 'function') {
+          resumeResult.catch(() => {
+            this.ensureAutoplayInteractionUnlock();
+          });
+        }
+      } catch {
+        // fallback below
+      }
       this.ensureAutoplayInteractionUnlock();
     }
 

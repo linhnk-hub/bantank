@@ -36,6 +36,7 @@ import {
   getRoleNameFrameClasses,
 } from '../core/authManager.ts';
 import { AvatarManager } from '../core/avatarManager.ts';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 
 export type CoopLobbySubView = 'MAIN' | 'CREATE' | 'JOIN';
 
@@ -291,12 +292,20 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   // ===========================================================================
   // CHƯA Ở TRONG PHÒNG CHỜ: ĐIỀU HƯỚNG 3 BƯỚC (MAIN / CREATE / JOIN)
   // ===========================================================================
-  if (!room || !signalingReady || room.status === 'ABANDONED' || room.status === 'EXPIRED') {
+  if (
+    !room ||
+    !signalingReady ||
+    room.status === 'FINISHED' ||
+    room.status === 'ABANDONED' ||
+    room.status === 'EXPIRED'
+  ) {
     return (
       <div className="space-y-4">
         {room && (room.status === 'ABANDONED' || room.status === 'EXPIRED') && (
           <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-2">
-            <span>{room.disconnectReason || 'Phòng chơi trước đã kết thúc.'}</span>
+            <span className="whitespace-pre-line">
+              {formatSentenceLineBreaks(room.disconnectReason || 'Phòng chơi trước đã kết thúc.')}
+            </span>
             <button
               type="button"
               onClick={() => void coopManager.leaveRoom()}
@@ -310,7 +319,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
         {errorMsg && (
           <div className="p-3 rounded-xl bg-red-950/70 border border-red-500/50 text-red-200 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-            <span>{errorMsg}</span>
+            <span className="whitespace-pre-line">{formatSentenceLineBreaks(errorMsg)}</span>
           </div>
         )}
 
@@ -449,7 +458,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     <Flame className="w-5 h-5 text-rose-400 shrink-0" />
                     <div>
                       <div className="font-black text-xs sm:text-sm">Thử thách</div>
-                      <div className="text-[10px] text-neutral-400">3 mạng • 60s • Áp lực cao</div>
+                      <div className="text-[10px] text-neutral-400">1 mạng • 60s • Áp lực cao</div>
                     </div>
                   </div>
                   {createDifficulty === 'EXTREME' && (
@@ -769,8 +778,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                 )}
               </span>
             </div>
-            <p className="text-[11px] text-neutral-300 mt-0.5 font-medium">
-              {lobbyStatusSummaryText}
+            <p className="text-[11px] text-neutral-300 mt-0.5 font-medium whitespace-pre-line">
+              {formatSentenceLineBreaks(lobbyStatusSummaryText)}
             </p>
           </div>
         </div>
@@ -799,7 +808,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
       {errorMsg && (
         <div className="p-3 rounded-xl bg-red-950/70 border border-red-500/50 text-red-200 text-xs flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-          <span>{errorMsg}</span>
+          <span className="whitespace-pre-line">{formatSentenceLineBreaks(errorMsg)}</span>
         </div>
       )}
 
@@ -821,12 +830,14 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
             ) : (
               <Loader2 className="w-4 h-4 animate-spin text-sky-400 shrink-0" />
             )}
-            <span>
+            <span className="whitespace-pre-line">
               {room.rtcConnectionState === 'CONNECTED'
                 ? 'Kết nối máy chủ thành công!'
                 : room.rtcConnectionState === 'FAILED'
-                  ? coopManager.getWebrtcErrorMessage() ||
-                    'Kết nối máy chủ thất bại. Kết nối lại hoặc rời phòng.'
+                  ? formatSentenceLineBreaks(
+                      coopManager.getWebrtcErrorMessage() ||
+                        'Kết nối máy chủ thất bại. Kết nối lại hoặc rời phòng.'
+                    )
                   : 'Đang kết nối máy chủ'}
             </span>
           </div>

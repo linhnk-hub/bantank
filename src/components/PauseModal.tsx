@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { Play, RotateCcw, LogOut, AlertTriangle } from 'lucide-react';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 
 interface PauseModalProps {
   isOpen: boolean;
@@ -77,8 +78,10 @@ export const PauseModal: React.FC<PauseModalProps> = ({
             </div>
             <div>
               <h4 className="text-sm font-bold text-white">Xác nhận thoát</h4>
-              <p className="text-xs text-neutral-300 mt-1">
-                Bạn có chắc chắn muốn thoát trận đấu? Tiến trình hiện tại sẽ bị mất.
+              <p className="text-xs text-neutral-300 mt-1 whitespace-pre-line">
+                {formatSentenceLineBreaks(
+                  'Bạn có chắc chắn muốn thoát trận đấu? Tiến trình hiện tại sẽ bị mất.'
+                )}
               </p>
             </div>
 

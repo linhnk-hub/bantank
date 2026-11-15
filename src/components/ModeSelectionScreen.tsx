@@ -16,6 +16,7 @@ import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
 import { CoopOnlineLobbyPanel, type CoopLobbySubView } from './CoopOnlineLobbyModal.tsx';
 import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
 import { CoopOnlineManager, type CoopRoomDocument } from '../core/coopOnlineManager.ts';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import {
   ArrowLeft,
   ArrowRight,
@@ -166,6 +167,12 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
   const [cardMode, setCardMode] = useState<SelectionCardMode>(deriveInitialCardMode);
   const [flowStep, setFlowStep] = useState<SelectionFlowStep>(deriveInitialFlowStep);
+  const [activeOnlineRoom, setActiveOnlineRoom] = useState<CoopRoomDocument | null>(() =>
+    CoopOnlineManager.getInstance().getCurrentRoom()
+  );
+  const [signalingReady, setSignalingReady] = useState<boolean>(() =>
+    CoopOnlineManager.getInstance().isRoomSignalingReady()
+  );
   const avatarManager = AvatarManager.getInstance();
   const effectiveUid = user.uid || firebaseUser?.uid || '';
   const [avatarError, setAvatarError] = useState(false);
@@ -174,6 +181,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   useEffect(() => {
     const coopMgr = CoopOnlineManager.getInstance();
     return coopMgr.subscribe((room) => {
+      setActiveOnlineRoom(room);
+      setSignalingReady(coopMgr.isRoomSignalingReady());
       if (
         room &&
         room.status === 'WAITING' &&
@@ -264,7 +273,20 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     [onStartOnlineMatch]
   );
 
+  const isInsideOnlineWaitingRoom =
+    flowStep === 'COOP_ONLINE_LOBBY' &&
+    Boolean(
+      activeOnlineRoom &&
+        activeOnlineRoom.status !== 'FINISHED' &&
+        activeOnlineRoom.status !== 'ABANDONED' &&
+        activeOnlineRoom.status !== 'EXPIRED' &&
+        signalingReady
+    );
+
   const handleTopBack = () => {
+    if (isInsideOnlineWaitingRoom) {
+      return;
+    }
     if (flowStep === 'COOP_ONLINE_LOBBY') {
       if (onlineLobbySubView !== 'MAIN') {
         setOnlineLobbySubView('MAIN');
@@ -287,17 +309,20 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       {/* Top Header Bar — M7.3.10: Sticky Top Menu with Safe Area, Quick Audio Mute/Unmute, and mobile overflow protection */}
       <header className="sticky top-0 z-40 w-full border-b border-neutral-800 bg-neutral-900/95 backdrop-blur-md px-2.5 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 shrink-0 shadow-md">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-1.5 sm:gap-2 min-w-0">
-          {/* Left: Back Button */}
+          {/* Left: Back Button (Hidden when inside Co-op Online waiting room) */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={handleTopBack}
-              className="px-2.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 transition-all active:scale-95 shadow flex items-center gap-1.5 cursor-pointer text-xs font-bold"
-              title="Quay lại"
-            >
-              <ArrowLeft className="w-4 h-4 text-amber-400 shrink-0" />
-              <span className="hidden sm:inline">Quay lại</span>
-            </button>
+            {!isInsideOnlineWaitingRoom && (
+              <button
+                type="button"
+                data-testid="mode-selection-back-btn"
+                onClick={handleTopBack}
+                className="px-2.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 transition-all active:scale-95 shadow flex items-center gap-1.5 cursor-pointer text-xs font-bold"
+                title="Quay lại"
+              >
+                <ArrowLeft className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="hidden sm:inline">Quay lại</span>
+              </button>
+            )}
           </div>
 
           {/* Right: User Profile (Avatar + Display Name with Role Border Color), Quick Audio Toggle & Unified Cài đặt */}
@@ -605,9 +630,11 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
                     <p
                       data-testid="difficulty-note-default"
-                      className="text-xs text-neutral-300 leading-relaxed mt-3"
+                      className="text-xs text-neutral-300 leading-relaxed mt-3 whitespace-pre-line"
                     >
-                      Có 3 mạng chơi, thời gian trận đấu 120 giây (02:00). Nhịp độ cân bằng, phù hợp chơi thư giãn và rèn kỹ năng chiến đấu.
+                      {formatSentenceLineBreaks(
+                        'Có 3 mạng chơi, thời gian trận đấu 120 giây (02:00). Nhịp độ cân bằng, phù hợp chơi thư giãn và rèn kỹ năng chiến đấu.'
+                      )}
                     </p>
                   </div>
 
@@ -653,9 +680,11 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
                     <p
                       data-testid="difficulty-note-extreme"
-                      className="text-xs text-neutral-300 leading-relaxed mt-3"
+                      className="text-xs text-neutral-300 leading-relaxed mt-3 whitespace-pre-line"
                     >
-                      Có 3 mạng chơi, giới hạn trận đấu 60 giây (01:00). Xe địch phản ứng nhanh và dồn hỏa lực mạnh vào căn cứ, đòi hỏi phản xạ và chiến thuật cao.
+                      {formatSentenceLineBreaks(
+                        'Solo có 2 mạng chơi, Co-op (AI / Online) có 1 mạng chơi, giới hạn trận đấu 60 giây (01:00). Xe địch phản ứng nhanh và dồn hỏa lực mạnh vào căn cứ, đòi hỏi phản xạ và chiến thuật cao.'
+                      )}
                     </p>
                   </div>
 

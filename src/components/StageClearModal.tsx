@@ -6,6 +6,9 @@
 import React from 'react';
 import { Trophy, Award, RotateCcw, Home, Clock, Heart, Users, Loader2 } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
+import { getStartingLivesForDifficultyAndMode } from '../core/constants.ts';
+import { CoopOnlineManager, type CoopPlayerRole } from '../core/coopOnlineManager.ts';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 
 interface StageClearModalProps {
   isOpen: boolean;
@@ -16,6 +19,7 @@ interface StageClearModalProps {
   isReturningToLobby?: boolean;
   returnToLobbyError?: string | null;
   isTrialMode?: boolean;
+  localOnlineRole?: CoopPlayerRole;
 }
 
 export const StageClearModal: React.FC<StageClearModalProps> = ({
@@ -27,10 +31,60 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
   isReturningToLobby = false,
   returnToLobbyError = null,
   isTrialMode = false,
+  localOnlineRole,
 }) => {
   if (!isOpen || !state) return null;
 
   const isCoopOnline = state.gameMode === 'TWO_PLAYERS_ONLINE';
+  const isCoop = state.gameMode === 'TWO_PLAYERS_AI' || isCoopOnline;
+  const effectiveOnlineRole =
+    localOnlineRole !== undefined
+      ? localOnlineRole
+      : isCoopOnline
+        ? CoopOnlineManager.getInstance().getRole()
+        : null;
+
+  const startingLives = getStartingLivesForDifficultyAndMode(
+    state.difficulty ?? 'DEFAULT',
+    state.gameMode ?? 'SOLO'
+  );
+  const localPlayerState =
+    isCoopOnline && effectiveOnlineRole === 'GUEST' && state.p2State
+      ? state.p2State
+      : state.p1State;
+  const isLocalEliminated = Boolean(
+    localPlayerState.isSpectator ||
+      localPlayerState.hasLeftMatch ||
+      (localPlayerState.isDead && localPlayerState.lives <= 0)
+  );
+  const livesLeft = isLocalEliminated
+    ? 0
+    : Math.max(0, Math.min(startingLives, Number(localPlayerState.lives ?? 0)));
+
+  const teammateState =
+    isCoop && state.p2State
+      ? isCoopOnline && effectiveOnlineRole === 'GUEST'
+        ? state.p1State
+        : state.p2State
+      : null;
+  const teammateEliminated = teammateState
+    ? Boolean(
+        teammateState.isSpectator ||
+          teammateState.hasLeftMatch ||
+          (teammateState.isDead && teammateState.lives <= 0)
+      )
+    : false;
+  const teammateLivesLeft = teammateState
+    ? teammateEliminated
+      ? 0
+      : Math.max(0, Math.min(startingLives, Number(teammateState.lives ?? 0)))
+    : 0;
+  const teammateLabel =
+    isCoopOnline && effectiveOnlineRole === 'GUEST'
+      ? 'Mạng còn lại của P1:'
+      : state.gameMode === 'TWO_PLAYERS_AI'
+        ? 'Mạng còn lại của Đồng đội AI:'
+        : 'Mạng còn lại của P2:';
 
   const counts = state.defeatedCounts || { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 };
   const totalDefeated = counts.BASIC + counts.FAST + counts.POWER + counts.ARMOR;
@@ -53,7 +107,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
               CHIẾN THẮNG MÀN CHƠI!
             </h2>
             <p className="text-[11px] sm:text-xs text-amber-300 font-bold font-mono tracking-wide">
-              STAGE 1
+              STAGE {state.currentStageId ?? 1}
             </p>
           </div>
 
@@ -123,20 +177,30 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
                 <span>{totalDefeated} / 30 xe (Toàn bộ)</span>
               </div>
 
-              <div className="flex items-center justify-between text-[11px] text-neutral-300 pt-0.5">
+              <div
+                data-testid="stageclear-lives-stat"
+                className="flex items-center justify-between text-[11px] text-neutral-300 pt-0.5"
+              >
                 <span className="flex items-center gap-1 text-red-400">
                   <Heart className="w-3 h-3 fill-red-500" />
                   Số mạng còn lại:
                 </span>
-                <span className="font-bold text-white">{state.p1State.lives} mạng</span>
+                <span className="font-bold text-white">{livesLeft} mạng</span>
               </div>
+
+              {teammateState && (
+                <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-0.5">
+                  <span>{teammateLabel}</span>
+                  <span>{teammateLivesLeft} mạng</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {returnToLobbyError && isCoopOnline && (
-          <div className="mx-4 mb-2 p-2.5 rounded-xl bg-red-950/75 border border-red-500/40 text-red-200 text-[11px] font-medium text-center">
-            {returnToLobbyError}
+          <div className="mx-4 mb-2 p-2.5 rounded-xl bg-red-950/75 border border-red-500/40 text-red-200 text-[11px] font-medium text-center whitespace-pre-line">
+            {formatSentenceLineBreaks(returnToLobbyError)}
           </div>
         )}
 

@@ -30,6 +30,7 @@ import {
   Users,
   ChevronLeft,
   ChevronRight,
+  Activity,
 } from 'lucide-react';
 import { SoundManager, type AudioSettings } from '../core/audio.ts';
 import { MusicManager } from '../core/musicManager.ts';
@@ -56,6 +57,11 @@ import {
 } from '../core/authManager.ts';
 import { MusicAdminPanel } from './MusicAdminPanel.tsx';
 import { StageEditorPanel } from './StageEditorPanel.tsx';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
+import {
+  getShowOnlineNetStatsPreference,
+  setShowOnlineNetStatsPreference,
+} from '../core/networkStatsPref.ts';
 
 export type SettingsTabId =
   | 'ACCOUNT'
@@ -187,6 +193,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const [audioSettings, setAudioSettings] = useState<AudioSettings>(() =>
     soundManager.getSettings()
+  );
+  const [showOnlineNetStats, setShowOnlineNetStats] = useState<boolean>(() =>
+    getShowOnlineNetStatsPreference()
   );
   const [showMusicAdmin, setShowMusicAdmin] = useState<boolean>(true);
 
@@ -788,9 +797,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* Current Active Avatar Preview (Image Only) */}
-                <div className="flex items-center justify-center p-3 rounded-2xl bg-neutral-950/80 border border-amber-500/30">
-                  <div className="relative w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-amber-400 p-1 bg-neutral-950 overflow-hidden shadow-xl ring-4 ring-amber-500/15 flex items-center justify-center shrink-0">
+                {/* Current Active Avatar Preview (Image Only + Enlarged Blurred Backdrop) */}
+                <div className="relative overflow-hidden flex items-center justify-center p-4 rounded-2xl bg-neutral-950/80 border border-amber-500/30">
+                  {effectiveAvatarUrl && !avatarLoadError && (
+                    <>
+                      <img
+                        src={effectiveAvatarUrl}
+                        alt=""
+                        aria-hidden="true"
+                        data-testid="account-avatar-blurred-backdrop"
+                        className="absolute inset-0 w-full h-full object-cover scale-150 blur-md opacity-45 pointer-events-none select-none"
+                      />
+                      <div className="absolute inset-0 bg-neutral-950/35 pointer-events-none" />
+                    </>
+                  )}
+                  <div className="relative z-10 w-20 h-20 sm:w-24 sm:h-24 rounded-full border-2 border-amber-400 p-1 bg-neutral-950/90 overflow-hidden shadow-xl ring-4 ring-amber-500/15 flex items-center justify-center shrink-0">
                     {effectiveAvatarUrl && !avatarLoadError ? (
                       <img
                         src={effectiveAvatarUrl}
@@ -941,6 +962,37 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
               </form>
+
+              {/* Tùy chọn hiển thị Ping & FPS khi chơi Online với người */}
+              <div className="p-3.5 rounded-xl bg-neutral-900/80 border border-neutral-800 flex flex-wrap items-center justify-between gap-3">
+                <div className="space-y-0.5 min-w-0 flex-1">
+                  <div className="flex items-center gap-2 font-bold text-neutral-100 text-xs">
+                    <Activity className="w-4 h-4 text-sky-400 shrink-0" />
+                    <span>Hiển thị Ping &amp; FPS (Chơi Online 2 người)</span>
+                  </div>
+                  <p className="text-[11px] text-neutral-400 leading-relaxed whitespace-pre-line">
+                    {formatSentenceLineBreaks(
+                      'Hiển thị độ trễ mạng (Ping) và tốc độ khung hình (FPS) trong trận Co-op Online. Có thể bật hoặc tắt bất kỳ lúc nào.'
+                    )}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  data-testid="toggle-online-net-stats-btn"
+                  onClick={() => {
+                    const nextVal = !showOnlineNetStats;
+                    setShowOnlineNetStats(nextVal);
+                    setShowOnlineNetStatsPreference(nextVal);
+                  }}
+                  className={`px-3.5 py-1.5 rounded-lg text-[11px] font-extrabold transition-all cursor-pointer shrink-0 ${
+                    showOnlineNetStats
+                      ? 'bg-sky-500 text-black shadow shadow-sky-500/20'
+                      : 'bg-neutral-800 text-neutral-400 border border-neutral-700 hover:text-neutral-200'
+                  }`}
+                >
+                  {showOnlineNetStats ? 'ĐANG BẬT' : 'ĐANG TẮT'}
+                </button>
+              </div>
             </section>
           )}
 
@@ -1269,7 +1321,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               className="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold cursor-pointer"
                               title="Upload ảnh mới"
                             >
-                              Upload (v{item.version + 1})
+                              Đổi
                             </button>
 
                             <button
@@ -1474,7 +1526,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     >
                       <div className="font-extrabold text-xs">2. THỬ THÁCH (SIÊU KHÓ)</div>
                       <div className="text-[11px] text-neutral-400 mt-1">
-                        1 mạng duy nhất • AI chiến thuật áp lực cao.
+                        Solo 2 mạng • Co-op 1 mạng • 60s • Áp lực cao.
                       </div>
                     </button>
                   </div>
@@ -1718,18 +1770,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <ShieldCheck className="w-4 h-4" />
                     <span>XÁC NHẬN THAY ĐỔI QUYỀN HẠN TÀI KHOẢN</span>
                   </div>
-                  <p className="text-neutral-200 leading-relaxed">
-                    Bạn có chắc chắn muốn thực hiện thao tác{' '}
-                    <strong className="text-amber-300">{pendingRoleChangeConfirm.label}</strong> cho
-                    tài khoản{' '}
-                    <strong className="text-white">
-                      {pendingRoleChangeConfirm.account.displayName}
-                    </strong>
-                    {pendingRoleChangeConfirm.account.email
-                      ? ` (${pendingRoleChangeConfirm.account.email})`
-                      : ''}
-                    ?
-                    Thao tác này sẽ được ghi nhận vào Nhật ký Audit.
+                  <p className="text-neutral-200 leading-relaxed whitespace-pre-line">
+                    {formatSentenceLineBreaks(
+                      `Bạn có chắc chắn muốn thực hiện thao tác ${pendingRoleChangeConfirm.label} cho tài khoản ${pendingRoleChangeConfirm.account.displayName}${pendingRoleChangeConfirm.account.email ? ` (${pendingRoleChangeConfirm.account.email})` : ''}? Thao tác này sẽ được ghi nhận vào Nhật ký Audit.`
+                    )}
                   </p>
                   <div className="flex items-center gap-2">
                     <button
@@ -1851,10 +1895,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 className={`text-[10px] px-2 py-0.5 rounded font-bold ${
                                   acc.status === 'ACTIVE'
                                     ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-700/60'
-                                    : 'bg-neutral-800 text-neutral-300 border border-neutral-700'
+                                    : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
                                 }`}
                               >
-                                {acc.status === 'ACTIVE' ? 'Đang trực tuyến' : 'Hoạt động'}
+                                {acc.status === 'ACTIVE' ? 'Online' : 'Offline'}
                               </span>
                             </td>
 

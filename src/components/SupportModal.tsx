@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   Keyboard,
 } from 'lucide-react';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 
 interface SupportModalProps {
   isOpen: boolean;
@@ -67,8 +68,11 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
             <ul className="space-y-1.5 text-neutral-300 pl-1">
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                <span>
-                  <strong>Bảo vệ căn cứ Đại bàng:</strong> Căn cứ nằm ở chính giữa cạnh dưới bản đồ. Nếu Đại Bàng bị trúng đạn của xe địch, trận đấu sẽ kết thúc ngay lập tức (Game Over).
+                <span className="whitespace-pre-line">
+                  <strong>Bảo vệ căn cứ Đại bàng:</strong>{' '}
+                  {formatSentenceLineBreaks(
+                    'Căn cứ nằm ở chính giữa cạnh dưới bản đồ. Nếu Đại Bàng bị trúng đạn của xe địch, trận đấu sẽ kết thúc ngay lập tức (Game Over).'
+                  )}
                 </span>
               </li>
               <li className="flex items-start gap-2">
@@ -189,9 +193,24 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
               <span>4. Xử lý sự cố kết nối</span>
             </div>
             <ul className="space-y-1 text-[11px] text-neutral-300">
-              <li>• <strong>Không mở được cửa sổ đăng nhập Google:</strong> Hãy kiểm tra và cho phép trình duyệt mở cửa sổ bật lên (Popup) trên trang <strong>bantank.online</strong>.</li>
-              <li>• <strong>Thông báo tài khoản đang mở ở thiết bị khác:</strong> Mỗi tài khoản Gmail chỉ hoạt động trên 1 thiết bị tại một thời điểm để bảo vệ tiến trình chơi. Nhấn <em>Kết nối lại</em> trên thiết bị bạn muốn sử dụng.</li>
-              <li>• <strong>Không tìm thấy phòng Co-op Online:</strong> Đảm bảo cả 2 người chơi nhập đúng mã phòng 6 ký tự, phòng chưa bắt đầu trận và chưa quá 15 phút chờ.</li>
+              <li className="whitespace-pre-line">
+                • <strong>Không mở được cửa sổ đăng nhập Google:</strong>{' '}
+                {formatSentenceLineBreaks(
+                  'Hãy kiểm tra và cho phép trình duyệt mở cửa sổ bật lên (Popup) trên trang bantank.online.'
+                )}
+              </li>
+              <li className="whitespace-pre-line">
+                • <strong>Thông báo tài khoản đang mở ở thiết bị khác:</strong>{' '}
+                {formatSentenceLineBreaks(
+                  'Mỗi tài khoản Gmail chỉ online trên 1 thiết bị tại một thời điểm để bảo vệ tiến trình chơi. Nhấn Kết nối lại trên thiết bị bạn muốn sử dụng.'
+                )}
+              </li>
+              <li className="whitespace-pre-line">
+                • <strong>Không tìm thấy phòng Co-op Online:</strong>{' '}
+                {formatSentenceLineBreaks(
+                  'Đảm bảo cả 2 người chơi nhập đúng mã phòng BTxxxx, phòng chưa bắt đầu trận và chưa quá 15 phút chờ.'
+                )}
+              </li>
             </ul>
           </div>
         </div>

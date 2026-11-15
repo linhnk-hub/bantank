@@ -7,6 +7,7 @@ import {
   SIMULATION_CONFIG,
   MATCH_TIMER_CONFIG,
   getMatchDurationSecondsForDifficulty,
+  getStartingLivesForDifficultyAndMode,
   P1_CONFIG,
   ENEMY_CONFIG,
   TANK_CONFIG,
@@ -456,12 +457,14 @@ export class GameEngine {
     const matchDurationSeconds = getMatchDurationSecondsForDifficulty(this.difficulty);
     const remainingTicks = matchDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
 
+    const startingLives = getStartingLivesForDifficultyAndMode(this.difficulty, this.gameMode);
+
     this.state = {
       tickCount: 0,
       stageRunSeq: this.stageRunSeq,
       p1: customP1 ?? createP1Tank(),
       p1State: {
-        lives: P1_CONFIG.STARTING_LIVES,
+        lives: startingLives,
         isDead: false,
         respawnTimer: 0,
         shieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,
@@ -514,6 +517,13 @@ export class GameEngine {
     this.state.remainingSeconds = matchDurationSeconds;
     this.state.stageElapsedSeconds = 0;
     this.state.isTimeoutGameOver = false;
+    if (this.state.tickCount === 0 || this.state.matchState === MATCH_STATES.MENU) {
+      const startingLives = getStartingLivesForDifficultyAndMode(diff, this.gameMode);
+      this.state.p1State.lives = startingLives;
+      if (this.state.p2State) {
+        this.state.p2State.lives = startingLives;
+      }
+    }
   }
 
   public getGameMode(): 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' {
@@ -523,6 +533,13 @@ export class GameEngine {
   public setGameMode(mode: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE'): void {
     this.gameMode = mode;
     this.state.gameMode = mode;
+    if (this.state.tickCount === 0 || this.state.matchState === MATCH_STATES.MENU) {
+      const startingLives = getStartingLivesForDifficultyAndMode(this.difficulty, mode);
+      this.state.p1State.lives = startingLives;
+      if (this.state.p2State) {
+        this.state.p2State.lives = startingLives;
+      }
+    }
   }
 
   public getState(): Readonly<GameCoreState> {
@@ -714,13 +731,14 @@ export class GameEngine {
 
     const matchDurationSeconds = getMatchDurationSecondsForDifficulty(this.difficulty);
     const remainingTicks = matchDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
+    const startingLives = getStartingLivesForDifficultyAndMode(this.difficulty, this.gameMode);
 
     this.state = {
       tickCount: 0,
       stageRunSeq: this.stageRunSeq,
       p1: createP1Tank(),
       p1State: {
-        lives: P1_CONFIG.STARTING_LIVES,
+        lives: startingLives,
         isDead: false,
         respawnTimer: 0,
         shieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,
@@ -731,7 +749,7 @@ export class GameEngine {
       },
       p2: this.isCoopMode() ? createP2Tank() : null,
       p2State: this.isCoopMode() ? {
-        lives: P1_CONFIG.STARTING_LIVES,
+        lives: startingLives,
         isDead: false,
         respawnTimer: 0,
         shieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,
@@ -830,7 +848,8 @@ export class GameEngine {
     // Carry forward P1/P2 lives and existing total score
     const preservedLives = this.state.p1State.lives;
     const p1Eliminated = Boolean(this.state.p1State.isDead && preservedLives <= 0);
-    const preservedP2Lives = this.state.p2State?.lives ?? P1_CONFIG.STARTING_LIVES;
+    const fallbackStartingLives = getStartingLivesForDifficultyAndMode(this.difficulty, this.gameMode);
+    const preservedP2Lives = this.state.p2State?.lives ?? fallbackStartingLives;
     const p2HasLeft = Boolean(this.state.p2State?.hasLeftMatch || this.processedPeerLeavePlayers.has('P2'));
     const p2Eliminated = Boolean(
       p2HasLeft || (this.state.p2State?.isDead && preservedP2Lives <= 0)
@@ -932,13 +951,14 @@ export class GameEngine {
     const currentStage = this.stageManager.getCurrentStage();
     const matchDurationSeconds = getMatchDurationSecondsForDifficulty(this.difficulty);
     const remainingTicks = matchDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
+    const startingLives = getStartingLivesForDifficultyAndMode(this.difficulty, this.gameMode);
 
     this.state = {
       tickCount: 0,
       stageRunSeq: this.stageRunSeq,
       p1: customP1 ?? createP1Tank(),
       p1State: {
-        lives: P1_CONFIG.STARTING_LIVES,
+        lives: startingLives,
         isDead: false,
         respawnTimer: 0,
         shieldTimer: P1_CONFIG.RESPAWN_SHIELD_S,

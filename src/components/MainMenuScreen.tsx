@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import type { SessionStateSnapshot } from '../core/sessionManager.ts';
 import {
   getUserDisplayLabel,
@@ -26,6 +26,7 @@ import {
 import { GameLogo } from './GameLogo.tsx';
 import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
 import { MusicManager, type HomeBackgroundVideoConfig } from '../core/musicManager.ts';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 
 export interface MainMenuScreenProps {
   user: {
@@ -64,6 +65,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   const isSessionActive = session.status === 'ACTIVE';
   const avatarManager = AvatarManager.getInstance();
   const musicManager = MusicManager.getInstance();
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [avatarError, setAvatarError] = useState(false);
   const [, setAvatarTick] = useState(0);
   const [homeVideoConfig, setHomeVideoConfig] = useState<HomeBackgroundVideoConfig | null>(() =>
@@ -78,7 +80,22 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   const [homeVideoError, setHomeVideoError] = useState<string | null>(() =>
     musicManager.getHomeVideoError()
   );
-  const [isVideoBuffering, setIsVideoBuffering] = useState<boolean>(false);
+  const [isVideoBuffering, setIsVideoBuffering] = useState<boolean>(() =>
+    Boolean(musicManager.getHomeVideoUrl())
+  );
+
+  const tryPlayIntroVideo = () => {
+    const el = videoRef.current;
+    if (!el) return;
+    el.muted = true;
+    el.defaultMuted = true;
+    const p = el.play();
+    if (p && typeof p.catch === 'function') {
+      p.catch(() => {
+        // Ignore strict browser policy rejections
+      });
+    }
+  };
 
   useEffect(() => {
     const unsubMusic = musicManager.subscribe(() => {
@@ -98,6 +115,12 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
     });
     return unsubMusic;
   }, [musicManager]);
+
+  useEffect(() => {
+    if (homeVideoConfig?.isEnabled && homeVideoUrl) {
+      tryPlayIntroVideo();
+    }
+  }, [homeVideoConfig?.isEnabled, homeVideoUrl]);
 
   useEffect(() => {
     avatarManager.observeCatalog();
@@ -152,21 +175,29 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
 
   return (
     <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      {/* Home Background Video (.mp4 with configurable opacity & loop) */}
+      {/* Home Background Video (.mp4 with configurable opacity, blur & loop) */}
       {homeVideoConfig?.isEnabled && homeVideoUrl && (
         <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
           <video
+            ref={videoRef}
             key={homeVideoUrl}
             src={homeVideoUrl}
             autoPlay
             muted
             playsInline
+            preload="auto"
             loop={homeVideoConfig.loop !== false}
             style={{ opacity: homeVideoConfig.opacity }}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover blur-[3px] scale-105"
             onLoadStart={() => setIsVideoBuffering(true)}
-            onLoadedData={() => setIsVideoBuffering(false)}
-            onCanPlay={() => setIsVideoBuffering(false)}
+            onLoadedData={() => {
+              setIsVideoBuffering(false);
+              tryPlayIntroVideo();
+            }}
+            onCanPlay={() => {
+              setIsVideoBuffering(false);
+              tryPlayIntroVideo();
+            }}
             onPlaying={() => setIsVideoBuffering(false)}
             onError={() => setIsVideoBuffering(false)}
           />
@@ -261,8 +292,8 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
                 <span>Không thể xác nhận phiên tài khoản</span>
               </div>
-              <p className="text-[11px] sm:text-xs text-rose-200/90 leading-relaxed">
-                {formatAccountStatusMessage(session.message, session.status)}
+              <p className="text-[11px] sm:text-xs text-rose-200/90 leading-relaxed whitespace-pre-line">
+                {formatSentenceLineBreaks(formatAccountStatusMessage(session.message, session.status))}
               </p>
               <div>
                 <button

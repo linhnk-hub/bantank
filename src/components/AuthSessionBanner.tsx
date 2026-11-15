@@ -22,6 +22,7 @@ import {
   UserCheck,
 } from 'lucide-react';
 import { SessionAlertModal } from './SessionAlertModal.tsx';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 
 export interface SessionBadgeDisplay {
   label: string;
@@ -50,7 +51,7 @@ export function formatAccountStatusMessage(
     .replace(/Phiên đăng nhập đã được mở trên một thiết bị khác/gi, 'Tài khoản này đang được mở trên một thiết bị khác')
     .replace(/Phiên làm việc đã tạm dừng sau 5 phút không hoạt động/gi, 'Tài khoản đã tạm dừng sau 5 phút không hoạt động')
     .replace(/Phiên đăng nhập/gi, 'Tài khoản')
-    .replace(/Phiên làm việc/gi, 'Trạng thái hoạt động')
+    .replace(/Phiên làm việc/gi, 'Trạng thái online')
     .replace(/Phiên hoạt động/gi, 'Đã xác thực')
     .replace(/Bị chiếm phiên/gi, 'Đang mở ở thiết bị khác')
     .replace(/Phiên hết hạn/gi, 'Tạm dừng do ngưng thao tác')
@@ -346,7 +347,9 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
               : 'bg-emerald-950/90 text-emerald-300 border-b border-emerald-800/80'
           }`}
         >
-          <span>{formatAccountStatusMessage(feedbackMsg.text, session.status)}</span>
+          <span className="whitespace-pre-line">
+            {formatSentenceLineBreaks(formatAccountStatusMessage(feedbackMsg.text, session.status))}
+          </span>
           <button
             onClick={() => setFeedbackMsg(null)}
             className="text-neutral-400 hover:text-white px-1"

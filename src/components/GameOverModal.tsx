@@ -6,7 +6,12 @@
 import React from 'react';
 import { RotateCcw, Home, Skull, Trophy, Clock, ShieldAlert, Users, Loader2 } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
-import { formatCountdownMMSS } from '../core/constants.ts';
+import {
+  formatCountdownMMSS,
+  getStartingLivesForDifficultyAndMode,
+} from '../core/constants.ts';
+import { CoopOnlineManager, type CoopPlayerRole } from '../core/coopOnlineManager.ts';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 
 interface GameOverModalProps {
   isOpen: boolean;
@@ -17,6 +22,7 @@ interface GameOverModalProps {
   isReturningToLobby?: boolean;
   returnToLobbyError?: string | null;
   isTrialMode?: boolean;
+  localOnlineRole?: CoopPlayerRole;
 }
 
 export const GameOverModal: React.FC<GameOverModalProps> = ({
@@ -28,16 +34,65 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   isReturningToLobby = false,
   returnToLobbyError = null,
   isTrialMode = false,
+  localOnlineRole,
 }) => {
   if (!isOpen || !state || !state.isGameOver || state.matchState !== 'GAME_OVER') return null;
 
   const isCoopOnline = state.gameMode === 'TWO_PLAYERS_ONLINE';
+  const isCoop = state.gameMode === 'TWO_PLAYERS_AI' || isCoopOnline;
+  const effectiveOnlineRole =
+    localOnlineRole !== undefined
+      ? localOnlineRole
+      : isCoopOnline
+        ? CoopOnlineManager.getInstance().getRole()
+        : null;
+
+  const startingLives = getStartingLivesForDifficultyAndMode(
+    state.difficulty ?? 'DEFAULT',
+    state.gameMode ?? 'SOLO'
+  );
+  const localPlayerState =
+    isCoopOnline && effectiveOnlineRole === 'GUEST' && state.p2State
+      ? state.p2State
+      : state.p1State;
+  const isLocalEliminated = Boolean(
+    localPlayerState.isSpectator ||
+      localPlayerState.hasLeftMatch ||
+      (localPlayerState.isDead && localPlayerState.lives <= 0)
+  );
+  const livesLeft = isLocalEliminated
+    ? 0
+    : Math.max(0, Math.min(startingLives, Number(localPlayerState.lives ?? 0)));
+  const livesUsed = Math.max(0, startingLives - livesLeft);
+
+  const teammateState =
+    isCoop && state.p2State
+      ? isCoopOnline && effectiveOnlineRole === 'GUEST'
+        ? state.p1State
+        : state.p2State
+      : null;
+  const teammateEliminated = teammateState
+    ? Boolean(
+        teammateState.isSpectator ||
+          teammateState.hasLeftMatch ||
+          (teammateState.isDead && teammateState.lives <= 0)
+      )
+    : false;
+  const teammateLivesLeft = teammateState
+    ? teammateEliminated
+      ? 0
+      : Math.max(0, Math.min(startingLives, Number(teammateState.lives ?? 0)))
+    : 0;
+  const teammateLabel =
+    isCoopOnline && effectiveOnlineRole === 'GUEST'
+      ? 'Mạng còn lại của P1:'
+      : state.gameMode === 'TWO_PLAYERS_AI'
+        ? 'Mạng còn lại của Đồng đội AI:'
+        : 'Mạng còn lại của P2:';
 
   const counts = state.defeatedCounts || { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 };
   const totalDefeated = counts.BASIC + counts.FAST + counts.POWER + counts.ARMOR;
   const isNewRecord = state.score >= state.highScore && state.score > 0;
-  const livesLeft = Math.max(0, state.p1State.lives);
-  const livesUsed = 3 - livesLeft;
   const isTimeout = Boolean(state.isTimeoutGameOver);
   const isBaseDestroyed = Boolean(state.terrain.isBaseDestroyed);
   const causeBadgeLabel = isTimeout
@@ -141,17 +196,27 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                 </span>
               </div>
 
-              <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-0.5">
+              <div
+                data-testid="gameover-lives-stat"
+                className="flex items-center justify-between text-[11px] text-neutral-400 pt-0.5"
+              >
                 <span>Mạng đã dùng / còn lại:</span>
                 <span>{livesUsed} đã dùng / {livesLeft} còn lại</span>
               </div>
+
+              {teammateState && (
+                <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-0.5">
+                  <span>{teammateLabel}</span>
+                  <span>{teammateLivesLeft} còn lại</span>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
         {returnToLobbyError && isCoopOnline && (
-          <div className="mx-4 mb-2 p-2.5 rounded-xl bg-red-950/75 border border-red-500/40 text-red-200 text-[11px] font-medium text-center">
-            {returnToLobbyError}
+          <div className="mx-4 mb-2 p-2.5 rounded-xl bg-red-950/75 border border-red-500/40 text-red-200 text-[11px] font-medium text-center whitespace-pre-line">
+            {formatSentenceLineBreaks(returnToLobbyError)}
           </div>
         )}
 

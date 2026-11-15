@@ -33,7 +33,8 @@ import {
 import { StageManager, cloneStageMap, createBlankDraftMap } from './stageManager.ts';
 import { validateStageMap, STAGE_SPAWN_POINTS } from './mapValidator.ts';
 import { SessionManager, SESSION_TIMINGS } from './sessionManager.ts';
-import { STAGE_1_MAP } from './constants.ts';
+import { STAGE_1_MAP, getStartingLivesForDifficultyAndMode } from './constants.ts';
+import { formatSentenceLineBreaks } from './textFormat.ts';
 import { ScoreManager } from './scoreManager.ts';
 import {
   getAvailableSettingsTabsForRole,
@@ -54,6 +55,7 @@ import {
   MusicManager,
   InMemorySharedMusicCloudAdapter,
   SHARED_SYSTEM_BGM_ID,
+  DEFAULT_STATIC_HOME_VIDEO_CONFIG,
   evaluateSystemAudioConfigRule,
   evaluateSystemMediaConfigRule,
   classifyStorageCloudError,
@@ -132,6 +134,8 @@ import {
   buildCreateRoomStepErrorMessage,
   COOP_ONLINE_CONFIG,
   type CoopAuthoritativeSnapshot,
+  type CoopDataChannelMessage,
+  type CoopP2PChannelAdapter,
   type CoopRoomDocument,
   type CoopRoomLobbyDocument,
   type CoopRoomSignalingDocument,
@@ -10006,6 +10010,202 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T71: Đồng bộ Guest P2 vào trận lại sau Về phòng chờ qua P2P MATCH_STARTED & HOST_SNAPSHOT',
       passed,
       details: `guestImmediateOk=${guestImmediateOk}, snapshotPromotesGuestOk=${snapshotPromotesGuestOk}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T72: M7.3.13 – 12 HẠNG MỤC SỬA LỖI & CẢI TIẾN (MẠNG THỬ THÁCH, REMATCH, PING RTT, LINE BREAK, INTRO VIDEO MẶC ĐỊNH)
+  // =========================================================================
+  {
+    // 1. Unified EXTREME starting lives: SOLO = 2, COOP (AI & Online) = 1; DEFAULT = 3
+    const livesMatrixOk =
+      getStartingLivesForDifficultyAndMode('DEFAULT', 'SOLO') === 3 &&
+      getStartingLivesForDifficultyAndMode('DEFAULT', 'TWO_PLAYERS_AI') === 3 &&
+      getStartingLivesForDifficultyAndMode('DEFAULT', 'TWO_PLAYERS_ONLINE') === 3 &&
+      getStartingLivesForDifficultyAndMode('EXTREME', 'SOLO') === 2 &&
+      getStartingLivesForDifficultyAndMode('EXTREME', 'TWO_PLAYERS_AI') === 1 &&
+      getStartingLivesForDifficultyAndMode('EXTREME', 'TWO_PLAYERS_ONLINE') === 1;
+
+    const engSoloExt = new GameEngine(undefined, undefined, false);
+    engSoloExt.startMatch('SOLO', 'EXTREME');
+    const soloExtLivesOk = engSoloExt.getState().p1State.lives === 2;
+
+    const engCoopAiExt = new GameEngine(undefined, undefined, false);
+    engCoopAiExt.startMatch('TWO_PLAYERS_AI', 'EXTREME');
+    const coopAiExtLivesOk =
+      engCoopAiExt.getState().p1State.lives === 1 &&
+      engCoopAiExt.getState().p2State?.lives === 1;
+
+    const engCoopOnlineExt = new GameEngine(undefined, undefined, false);
+    engCoopOnlineExt.startMatch('TWO_PLAYERS_ONLINE', 'EXTREME');
+    const coopOnlineExtLivesOk =
+      engCoopOnlineExt.getState().p1State.lives === 1 &&
+      engCoopOnlineExt.getState().p2State?.lives === 1;
+
+    // 2. Verify P1 death decrements lives properly in SOLO EXTREME (2 -> 1 -> 0 GAME_OVER)
+    const engDeathTest = new GameEngine(undefined, undefined, false);
+    engDeathTest.startMatch('SOLO', 'EXTREME');
+    const mutSt = engDeathTest.getState() as any;
+    mutSt.p1State.shieldTimer = 0;
+    mutSt.p1.isShielded = false;
+    mutSt.bullets.push({
+      id: 'eb_test_1',
+      ownerId: 'enemy_1',
+      ownerType: 'enemy',
+      x: mutSt.p1.x + 2,
+      y: mutSt.p1.y + 2,
+      direction: 'DOWN',
+      speed: 0,
+      isActive: true,
+    });
+    engDeathTest.advanceTime(17, NEUTRAL_INPUT);
+    const p1FirstDeathOk =
+      engDeathTest.getState().p1State.lives === 1 &&
+      engDeathTest.getState().p1State.isDead === true &&
+      engDeathTest.getState().isGameOver === false;
+
+    // Second lethal hit -> lives = 0 & GAME_OVER
+    mutSt.p1State.isDead = false;
+    mutSt.p1.isAlive = true;
+    mutSt.p1State.shieldTimer = 0;
+    mutSt.p1.isShielded = false;
+    mutSt.bullets.push({
+      id: 'eb_test_2',
+      ownerId: 'enemy_2',
+      ownerType: 'enemy',
+      x: mutSt.p1.x + 2,
+      y: mutSt.p1.y + 2,
+      direction: 'DOWN',
+      speed: 0,
+      isActive: true,
+    });
+    engDeathTest.advanceTime(17, NEUTRAL_INPUT);
+    const p1ZeroLivesGameOverOk =
+      engDeathTest.getState().p1State.lives === 0 &&
+      engDeathTest.getState().p1State.isSpectator === true &&
+      engDeathTest.getState().isGameOver === true;
+
+    // 3. Rematch/create room past 5 busy public slot candidates + stale recordMatchFinish guard + FINISHED terminal leave guard + PING/PONG RTT
+    const storage = new InMemoryCoopStorageAdapter();
+    const hostMgr = new CoopOnlineManager(storage);
+    const guestMgr = new CoopOnlineManager(storage);
+    const t0 = 1_760_000_000_000;
+    const { hostChannel, guestChannel } = createInMemoryP2PChannelPair(
+      (msg) => hostMgr.handleIncomingDataChannelMessage(msg, t0 + 500),
+      (msg) => guestMgr.handleIncomingDataChannelMessage(msg, t0 + 500)
+    );
+    const hostUser = { uid: 'uid_t72_h', displayName: 'Host T72', email: 'h72@gmail.com', emailVerified: true };
+    const guestUser = { uid: 'uid_t72_g', displayName: 'Guest T72', email: 'g72@gmail.com', emailVerified: true };
+
+    // Pre-occupy all 5 deterministic bucket candidates so public room creation must fall back to random BTxxxx
+    for (const busyCode of ['BT0101', 'BT0102', 'BT0103', 'BT0104', 'BT0105']) {
+      storage.setRoomSync(busyCode, {
+        roomCode: busyCode,
+        status: 'WAITING',
+        difficulty: 'EXTREME',
+        hostUid: 'other_h',
+        hostDisplayName: 'Other',
+        hostReady: false,
+        hostLastActiveAt: t0,
+        guestUid: null,
+        guestDisplayName: null,
+        guestReady: false,
+        guestLastActiveAt: null,
+        rtcConnectionState: 'NEW',
+        createdAt: t0,
+        expiresAt: t0 + 900_000,
+        disconnectReason: null,
+      });
+    }
+    const createdPastSlots = hostMgr.createRoomSync(storage, hostUser, 'EXTREME', t0, undefined, {
+      hasPassword: false,
+    });
+    const createdPastSlotsOk =
+      createdPastSlots.success === true &&
+      Boolean(createdPastSlots.room && /^BT[0-9]{4}$/.test(createdPastSlots.room.roomCode));
+
+    const code1 = createdPastSlots.room!.roomCode;
+    guestMgr.joinRoomSync(storage, code1, guestUser, t0 + 20);
+    hostMgr.setPlayerReadySync(storage, true, t0 + 40);
+    guestMgr.setPlayerReadySync(storage, true, t0 + 50);
+    storage.setRoomSync(code1, { ...storage.getRoomSync(code1)!, rtcConnectionState: 'CONNECTED' });
+    hostMgr.attachCustomP2PChannel(hostChannel, t0 + 60);
+    guestMgr.attachCustomP2PChannel(guestChannel, t0 + 60);
+    hostMgr.startOnlineMatchSync(storage, hostUser.uid, undefined, t0 + 80);
+
+    // PING -> PONG RTT test
+    const sentPingMsgs: CoopDataChannelMessage[] = [];
+    const rttChannel: CoopP2PChannelAdapter = {
+      isOpen: () => true,
+      send: (msg) => {
+        sentPingMsgs.push(msg);
+        return true;
+      },
+      close: () => {},
+    };
+    hostMgr.attachCustomP2PChannel(rttChannel, t0 + 100);
+    guestMgr.handleIncomingDataChannelMessage({ type: 'PING', timestamp: t0 + 100 }, t0 + 115);
+    hostMgr.handleIncomingDataChannelMessage(
+      { type: 'PONG', pingTimestamp: t0 + 100, timestamp: t0 + 115 },
+      t0 + 142
+    );
+    const pingRttOk = hostMgr.getPeerPingMs() === 42;
+
+    // Return to lobby creates new room, then recordMatchFinishSync on waiting rematch room must NOT overwrite WAITING state
+    const rematchRes = hostMgr.returnToLobbyFromMatchSync(storage, hostUser, 'BT7299', t0 + 200);
+    const staleFinishRes = hostMgr.recordMatchFinishSync(storage, 120, 'GAME_OVER', t0 + 220);
+    const staleOverwriteBlockedOk =
+      rematchRes.success === true &&
+      staleFinishRes.success === false &&
+      hostMgr.getCurrentRoom()?.roomCode === 'BT7299' &&
+      hostMgr.getCurrentRoom()?.status === 'WAITING';
+
+    // leaveRoom on FINISHED room preserves FINISHED status instead of overwriting with ABANDONED
+    storage.setRoomSync('BT7299', { ...storage.getRoomSync('BT7299')!, status: 'FINISHED' });
+    hostMgr.leaveRoomSync(storage, 'Match completed', t0 + 250);
+    const finishedPreservedOnLeaveOk = storage.getRoomSync('BT7299')?.status === 'FINISHED';
+
+    // 4. Sentence line-break formatter checks
+    const formattedBasic = formatSentenceLineBreaks('Câu một. Câu hai! Câu ba? Giá trị 0.8 giây.');
+    const formattedPreserve = formatSentenceLineBreaks(
+      'File intro-bantank.mp4 sẵn sàng. Email: linhnk2013@gmail.com để hỗ trợ. VD. test... Xong.'
+    );
+    const sentenceFormatOk =
+      formattedBasic === 'Câu một.\nCâu hai! Câu ba? Giá trị 0.8 giây.' &&
+      formattedPreserve ===
+        'File intro-bantank.mp4 sẵn sàng.\nEmail: linhnk2013@gmail.com để hỗ trợ.\nVD. test... Xong.';
+
+    // 5. Default static intro video config active & preserved on sign-out
+    const mm = MusicManager.getInstance();
+    mm.revokeSharedAudioOnSignOut();
+    const defaultVideoCfg = mm.getHomeVideoConfig();
+    const defaultVideoUrl = mm.getHomeVideoUrl();
+    const staticIntroVideoOk =
+      DEFAULT_STATIC_HOME_VIDEO_CONFIG.storagePath === 'intro-bantank.mp4' &&
+      defaultVideoCfg?.isEnabled === true &&
+      defaultVideoCfg?.loop === true &&
+      defaultVideoCfg?.opacity === 0.35 &&
+      defaultVideoUrl === './intro-bantank.mp4';
+
+    const passed =
+      livesMatrixOk &&
+      soloExtLivesOk &&
+      coopAiExtLivesOk &&
+      coopOnlineExtLivesOk &&
+      p1FirstDeathOk &&
+      p1ZeroLivesGameOverOk &&
+      createdPastSlotsOk &&
+      pingRttOk &&
+      staleOverwriteBlockedOk &&
+      finishedPreservedOnLeaveOk &&
+      sentenceFormatOk &&
+      staticIntroVideoOk;
+
+    results.push({
+      id: 'M7_3_T72',
+      name: 'T72: M7.3.13 – Mạng Thử thách (Solo 2 / Co-op 1), P1 chết giảm mạng, tạo phòng/rematch khi đủ 5 slot, Ping RTT, ngắt dòng câu & intro-bantank.mp4 mặc định',
+      passed,
+      details: `livesMatrix=${livesMatrixOk && soloExtLivesOk && coopAiExtLivesOk && coopOnlineExtLivesOk}, p1Death=${p1FirstDeathOk && p1ZeroLivesGameOverOk}, roomRematch=${createdPastSlotsOk && staleOverwriteBlockedOk && finishedPreservedOnLeaveOk}, pingRtt=${pingRttOk}, sentenceFormat=${sentenceFormatOk}, staticVideo=${staticIntroVideoOk}`,
     });
   }
 

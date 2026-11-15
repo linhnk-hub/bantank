@@ -25,6 +25,7 @@ import {
   UserMinus,
 } from 'lucide-react';
 import { CoopOnlineManager, type CoopPlayerRole } from '../core/coopOnlineManager.ts';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 
 interface M3HudProps {
   state: GameCoreState | null;
@@ -33,6 +34,9 @@ interface M3HudProps {
   onPause?: () => void;
   isSuperAdmin?: boolean;
   localOnlineRole?: CoopPlayerRole;
+  fps?: number;
+  peerPingMs?: number | null;
+  showOnlineNetStats?: boolean;
 }
 
 export const M3Hud: React.FC<M3HudProps> = ({
@@ -42,6 +46,9 @@ export const M3Hud: React.FC<M3HudProps> = ({
   onPause,
   isSuperAdmin = false,
   localOnlineRole,
+  fps = 60,
+  peerPingMs = null,
+  showOnlineNetStats = true,
 }) => {
   if (!state) {
     return null;
@@ -248,7 +255,9 @@ export const M3Hud: React.FC<M3HudProps> = ({
           <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
           <div className="flex flex-col">
             <span className="text-sm">GAME OVER</span>
-            <span className="text-xs text-red-300 font-normal">{state.gameOverReason ?? 'Thất bại!'}</span>
+            <span className="text-xs text-red-300 font-normal whitespace-pre-line">
+              {formatSentenceLineBreaks(state.gameOverReason ?? 'Thất bại!')}
+            </span>
           </div>
         </div>
       )}
@@ -322,7 +331,7 @@ export const M3Hud: React.FC<M3HudProps> = ({
                     ? `HỒI SINH (${p1State.respawnTimer.toFixed(1)}s)`
                     : p1State.shieldTimer > 0
                     ? 'BẢO VỆ'
-                    : 'HOẠT ĐỘNG'}
+                    : 'ONLINE'}
                 </span>
               </div>
 
@@ -405,10 +414,22 @@ export const M3Hud: React.FC<M3HudProps> = ({
         </>
       )}
 
-      {/* Hotkeys reminder */}
-      <div className="text-[10px] text-neutral-500 border-t border-neutral-800 pt-2 flex flex-wrap justify-between gap-1">
+      {/* Hotkeys reminder & Network / FPS telemetry */}
+      <div className="text-[10px] text-neutral-500 border-t border-neutral-800 pt-2 flex flex-wrap justify-between items-center gap-1.5">
         <span>Điều khiển: W/A/S/D hoặc Mũi tên để di chuyển | Space / J để bắn đạn</span>
-        <span className="font-mono text-neutral-400">60 FPS</span>
+        <div className="flex items-center gap-2 font-mono text-neutral-400">
+          {state.gameMode === 'TWO_PLAYERS_ONLINE' && showOnlineNetStats && (
+            <span
+              data-testid="hud-online-net-stats"
+              className="px-1.5 py-0.5 rounded bg-sky-950/70 border border-sky-700/50 text-sky-300 font-bold"
+            >
+              Ping: {peerPingMs != null ? `${Math.round(peerPingMs)} ms` : '-- ms'} • {Math.round(fps)} FPS
+            </span>
+          )}
+          {!(state.gameMode === 'TWO_PLAYERS_ONLINE' && showOnlineNetStats) && (
+            <span>{Math.round(fps)} FPS</span>
+          )}
+        </div>
       </div>
     </div>
   );
