@@ -451,7 +451,7 @@ export function runAllM6CorrectionAITests(): {
 
     // Verify uploading does NOT auto-replace current active track
     const resolvedBeforeAssign = mm.resolveEffectiveTrack(1, 'SOLO');
-    const notAutoReplaced = resolvedBeforeAssign.resolvedScope === 'BUILTIN_DEFAULT';
+    const notAutoReplaced = resolvedBeforeAssign.trackId !== 'test_track_global';
 
     // Register Mode and Stage tracks
     mm.registerDecodedTrack({

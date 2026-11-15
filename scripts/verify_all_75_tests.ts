@@ -22,6 +22,10 @@ import { runAllM7_2Tests as runM72 } from '../src/core/testHarnessM7_2.ts';
 import { runAllM7_3Tests as runM73 } from '../src/core/testHarnessM7_3.ts';
 import { runAllM7_4Tests as runM74 } from '../src/core/testHarnessM7_4.ts';
 import {
+  runAllM7_5Tests as runM75,
+  verifyM751AsyncEndToEndSuite,
+} from '../src/core/testHarnessM7_5.ts';
+import {
   getShowOnlineNetStatsPreference,
   setShowOnlineNetStatsPreference,
 } from '../src/core/networkStatsPref.ts';
@@ -46,6 +50,7 @@ const m71Results = runM71().results;
 const m72Results = runM72().results;
 const m73Results = runM73().results;
 const m74Results = runM74().results;
+const m75Results = runM75().results;
 
 const allSuites = [
   { name: 'M2 Physics & Tank (12 Tests)', results: m2Results },
@@ -66,6 +71,7 @@ const allSuites = [
   { name: 'M7.2 Ally AI, Co-op, Profile & Typography (10 Tests)', results: m72Results },
   { name: `M7.3 Rules Hardening, WebRTC Co-op, Audio, Avatar, RBAC & Security Audit (${m73Results.length} Tests)`, results: m73Results },
   { name: `M7.4 Campaign Stages 2–10, Progression, Co-op Sync & Security (${m74Results.length} Tests)`, results: m74Results },
+  { name: `M7.5 Player Statistics, Static Media, Audit Logging & 9-Step Archive (${m75Results.length} Tests)`, results: m75Results },
 ];
 
 let totalTests = 0;
@@ -101,6 +107,8 @@ import {
   MusicManager,
   InMemorySharedMusicCloudAdapter,
   SHARED_SYSTEM_BGM_ID,
+  STATIC_BGM_INDEX_ID,
+  STATIC_BGM_STAGE_ID,
   STAGED_LOCAL_PREVIEW_BGM_ID,
   buildGitHubPagesAudioUrl,
   shouldFallbackToAudioStream,
@@ -223,12 +231,15 @@ async function verifyM733AsyncWorkflow() {
     throw new Error('M7.3.3 v2 cache-busting activation failed');
   }
 
-  // 6. Mô phỏng file nhạc bị thiếu (404) hoặc bị hỏng trên GitHub Pages -> Tự động fallback về nhạc 8-bit mặc định
+  // 6. Mô phỏng file nhạc bị thiếu (404) hoặc bị hỏng trên GitHub Pages -> Tự động thu hồi SHARED_SYSTEM_BGM_ID và fallback về nhạc Stage tĩnh mặc định (bgm-stage.mp3)
   await sharedCloud.deleteAudioBinary(stageV2.stagedPackage.assetPath);
   mm.revokeSharedAudioOnSignOut();
   await mm.applySharedAudioConfigSnapshot(activateV2.config!);
-  if (mm.resolveEffectiveTrack(1, 'SOLO').resolvedScope !== 'BUILTIN_DEFAULT') {
-    throw new Error('M7.3.3 missing/corrupt file 8-bit fallback failed');
+  if (
+    mm.resolveEffectiveTrack(1, 'SOLO').trackId === SHARED_SYSTEM_BGM_ID ||
+    mm.resolveEffectiveTrack(1, 'SOLO').trackId !== STATIC_BGM_STAGE_ID
+  ) {
+    throw new Error('M7.3.3 missing/corrupt file static BGM fallback failed');
   }
 
   mm.resetAllAssignmentsToDefault();
@@ -1370,15 +1381,14 @@ async function verifyM7311StageAudioUploadAsyncSuite() {
   };
   const sampleBinary = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00]).buffer;
 
-  // 1. Storage upload error must return success=false with Storage diagnostic and clear cleanly
+  // 1. M7.5.1 PHẦN 2: Client audio upload via uploadAndCatalogAudioBuffer & uploadTrack must be blocked
   const cloud1 = new InMemorySharedMusicCloudAdapter();
   mm.setCloudAdapter(cloud1, async () => synthBuffer);
   mm.setUserRole('ADMIN');
-  cloud1.failNextStorageUpload = true;
-  const storageFailRes = await mm.uploadAndCatalogAudioBuffer({
-    soundId: 'snd_stage_err1',
+  const blockedCatalogUpload = await mm.uploadAndCatalogAudioBuffer({
+    soundId: 'snd_stage_blocked',
     fileName: 'stage_bgm.m4a',
-    displayName: 'Stage BGM Err',
+    displayName: 'Stage BGM Blocked',
     contentType: 'audio/mp4',
     fileSize: 256_000,
     decodedBuffer: synthBuffer,
@@ -1386,50 +1396,72 @@ async function verifyM7311StageAudioUploadAsyncSuite() {
     autoActivate: true,
     nowMs: 1_730_000_000_000,
   });
-  if (
-    storageFailRes.success !== false ||
-    !storageFailRes.error?.includes('Firebase Storage') ||
-    !mm.getSharedSyncError()?.includes('Firebase Storage')
-  ) {
-    throw new Error('Stage audio upload Storage failure was masked or missing diagnostic');
+  const fakeFile = {
+    name: 'stage_boss.mp3',
+    type: 'audio/mpeg',
+    size: 128_000,
+    arrayBuffer: async () => sampleBinary.slice(0),
+  } as unknown as File;
+  const blockedUploadTrack = await mm.uploadTrack(fakeFile, 'Stage Boss');
+  if (blockedCatalogUpload.success !== false || blockedUploadTrack.success !== false) {
+    throw new Error('Client audio upload must be blocked per M7.5.1');
   }
   mm.clearSharedSyncError();
   if (mm.getSharedSyncError() !== null) {
     throw new Error('clearSharedSyncError did not clear sharedSyncError');
   }
 
-  // 2. Successful upload -> /sound_catalog saved + /system_config/audio v1 activated -> second activate bumps v2 with fresh timestamp
-  const okRes = await mm.uploadAndCatalogAudioBuffer({
+  // 2. Existing /sound_catalog entry activation bumps v1 -> v2 monotonically without client re-upload
+  const existingPath = 'sound_catalog/snd_stage_ok/v1/bgm_v1_stage_2_theme.m4a';
+  cloud1.deployStaticAudioFileToGitHubPages(existingPath, sampleBinary, 'audio/mp4');
+  await cloud1.saveSoundCatalogEntry({
     soundId: 'snd_stage_ok',
-    fileName: 'stage_2_theme.m4a',
     displayName: 'Stage 2 Theme',
+    fileName: 'bgm_v1_stage_2_theme.m4a',
+    storagePath: existingPath,
     contentType: 'audio/mp4',
-    fileSize: 512_000,
-    decodedBuffer: synthBuffer,
-    arrayBuffer: sampleBinary,
-    autoActivate: true,
-    nowMs: 1_730_000_010_000,
+    fileSize: sampleBinary.byteLength,
+    category: 'BGM',
+    durationSec: 42,
+    trimStartSec: 0,
+    trimEndSec: 42,
+    version: 1,
+    isActive: false,
+    updatedAt: 1_730_000_010_000,
+    updatedBy: 'linhnk2013@gmail.com',
   });
+  mm.ensureSharedConfigSubscription('uid_admin_m7311');
+  const actV1 = await mm.activateCatalogSound('snd_stage_ok');
+  const actV2 = await mm.activateCatalogSound('snd_stage_ok');
   if (
-    !okRes.success ||
-    okRes.config?.version !== 1 ||
-    okRes.config?.assetPath !== 'sound_catalog/snd_stage_ok/v1/bgm_v1_stage_2_theme.m4a'
+    !actV1.success ||
+    actV1.config?.version !== 1 ||
+    !actV2.success ||
+    actV2.config?.version !== 2 ||
+    !(actV2.config.updatedAt >= actV1.config.updatedAt)
   ) {
-    throw new Error('Stage audio upload & catalog activation v1 failed');
+    throw new Error('activateCatalogSound did not increment version monotonically');
   }
 
-  const reactivateRes = await mm.activateCatalogSound('snd_stage_ok');
-  if (
-    !reactivateRes.success ||
-    reactivateRes.config?.version !== 2 ||
-    !(reactivateRes.config.updatedAt > 1_730_000_010_000)
-  ) {
-    throw new Error('activateCatalogSound did not increment version monotonically with fresh timestamp');
-  }
-
-  // 3. /system_config/audio permission-denied during uploadTrack (browser Firebase adapter path) must NOT mask failure
+  // 3. /system_config/audio permission-denied during activateCatalogSound must NOT mask failure
   let activeConfigInMock: SystemAudioConfigDocument | null = null;
   const catalogMap = new Map<string, SoundCatalogEntry>();
+  catalogMap.set('snd_perm_test', {
+    soundId: 'snd_perm_test',
+    displayName: 'Perm Test',
+    fileName: 'bgm_v1_perm.mp3',
+    storagePath: 'sound_catalog/snd_perm_test/v1/bgm_v1_perm.mp3',
+    contentType: 'audio/mpeg',
+    fileSize: sampleBinary.byteLength,
+    category: 'BGM',
+    durationSec: 42,
+    trimStartSec: 0,
+    trimEndSec: 42,
+    version: 1,
+    isActive: false,
+    updatedAt: 1_730_000_020_000,
+    updatedBy: 'linhnk2013@gmail.com',
+  });
   const mockFirebaseAdapter: SharedMusicCloudAdapter = {
     uploadAudioBinary: async (assetPath) => ({ assetPath }),
     deleteAudioBinary: async () => {},
@@ -1456,30 +1488,27 @@ async function verifyM7311StageAudioUploadAsyncSuite() {
     deleteSoundCatalogEntry: async (soundId) => {
       catalogMap.delete(soundId);
     },
-    subscribeSoundCatalog: () => () => {},
+    subscribeSoundCatalog: (cb) => {
+      cb(Array.from(catalogMap.values()));
+      return () => {};
+    },
   };
 
   mm.setCloudAdapter(mockFirebaseAdapter, async () => synthBuffer);
   mm.setUserRole('ADMIN');
-  const fakeFile = {
-    name: 'stage_boss.mp3',
-    type: 'audio/mpeg',
-    size: 128_000,
-    arrayBuffer: async () => sampleBinary.slice(0),
-  } as unknown as File;
-  const uploadTrackFailRes = await mm.uploadTrack(fakeFile, 'Stage Boss');
+  mm.ensureSharedConfigSubscription('uid_admin_perm_test');
+  const activatePermFail = await mm.activateCatalogSound('snd_perm_test');
   if (
-    uploadTrackFailRes.success !== false ||
-    uploadTrackFailRes.requiresGitHubPagesDeploy === true ||
-    !uploadTrackFailRes.error?.includes('/system_config/audio')
+    activatePermFail.success !== false ||
+    !activatePermFail.error?.includes('system_config/audio')
   ) {
-    throw new Error('uploadTrack masked Firestore /system_config/audio permission failure');
+    throw new Error('activateCatalogSound masked Firestore /system_config/audio permission failure');
   }
 
   mm.clearSharedSyncError();
   mm.resetAllAssignmentsToDefault();
   mm.syncRoleFromAuthUser(null);
-  console.log('[M7.3.11 Stage Audio Upload Diagnostics & E2E Verification] 4/4 MANDATORY CASES PASS');
+  console.log('[M7.3.11 & M7.5.1 Static Audio Guard + Catalog Activation Diagnostics E2E] 4/4 MANDATORY CASES PASS');
 }
 
 async function verifyMediaAndVideoUpgradeAsyncSuite() {
@@ -1499,22 +1528,24 @@ async function verifyMediaAndVideoUpgradeAsyncSuite() {
     'utf-8'
   );
 
-  // 1. UI checks: tab renamed to 'Media', no v1/v2 or 'Admin duy nhất' in MusicAdminPanel, 2 - AI & 2P present, Loop Kích hoạt & MP4 upload present
+  // 1. UI checks: tab renamed to 'Media', no v1/v2 or 'Admin duy nhất', 2 - AI & 2P present, Loop Kích hoạt present, AND zero client upload inputs/buttons per M7.5.1
   if (
     !settingsModalSrc.includes("label: 'Media'") ||
+    settingsModalSrc.includes('type="file"') ||
+    musicAdminSrc.includes('type="file"') ||
+    musicAdminSrc.includes('data-testid="upload-home-video-btn"') ||
     musicAdminSrc.includes('Admin duy nhất') ||
     musicAdminSrc.includes('v${') ||
     musicAdminSrc.includes('?v=') ||
     !musicAdminSrc.includes('2 - AI') ||
     !musicAdminSrc.includes('2P') ||
     !musicAdminSrc.includes('data-testid="loop-activate-btn"') ||
-    !musicAdminSrc.includes('data-testid="upload-home-video-btn"') ||
     !mainMenuSrc.includes('<video')
   ) {
     throw new Error('Media UI requirements check failed in SettingsModal / MusicAdminPanel / MainMenuScreen');
   }
 
-  // 2. Multi-file audio upload + assignments (Home, 2 - AI, 2P, Stage) + Loop cloud activation + Home MP4 video
+  // 2. Client multi-file upload blocked + static BGM assignments (Home, 2 - AI, 2P, Stage) + Loop cloud activation + Static Home MP4 video
   const mm = MusicManager.getInstance();
   const cloud = new InMemorySharedMusicCloudAdapter();
   const synthBuffer = {
@@ -1530,19 +1561,17 @@ async function verifyMediaAndVideoUpgradeAsyncSuite() {
   const sampleAudio = new Uint8Array([0x49, 0x44, 0x33, 0x04, 0x00, 0x00, 0x00, 0x00]).buffer;
   const audioFiles = [
     { name: 'home_theme.mp3', type: 'audio/mpeg', size: 64_000, arrayBuffer: async () => sampleAudio.slice(0) },
-    { name: 'stage1_theme.ogg', type: 'audio/ogg', size: 96_000, arrayBuffer: async () => sampleAudio.slice(0) },
   ] as unknown as File[];
 
   const batchRes = await mm.uploadMultipleAudioFiles(audioFiles);
-  if (batchRes.uploaded.length !== 2 || batchRes.failed.length !== 0) {
-    throw new Error('Multi-file audio upload failed');
+  if (batchRes.uploaded.length !== 0 || batchRes.failed.length !== 1) {
+    throw new Error('Client multi-file audio upload must be blocked per M7.5.1');
   }
 
-  const [homeEntry, stage1Entry] = batchRes.uploaded;
-  mm.assignToHome(homeEntry.soundId);
-  mm.assignToMode('COOP_AI', stage1Entry.soundId);
-  mm.assignToMode('TWO_PLAYER', homeEntry.soundId);
-  mm.assignToStage(1, stage1Entry.soundId);
+  mm.assignToHome(STATIC_BGM_INDEX_ID);
+  mm.assignToMode('COOP_AI', STATIC_BGM_STAGE_ID);
+  mm.assignToMode('TWO_PLAYER', STATIC_BGM_INDEX_ID);
+  mm.assignToStage(1, STATIC_BGM_STAGE_ID);
   mm.updateLoopConfig({ loop: true, crossfadeDurationSec: 1.5 });
 
   const loopActRes = await mm.activateLoopConfigSystemWide(1_731_000_000_000);
@@ -1550,16 +1579,16 @@ async function verifyMediaAndVideoUpgradeAsyncSuite() {
   if (
     !loopActRes.success ||
     !assignActRes.success ||
-    assignActRes.config?.homeSoundId !== homeEntry.soundId ||
-    assignActRes.config?.modeSoundIds.COOP_AI !== stage1Entry.soundId ||
-    assignActRes.config?.modeSoundIds.TWO_PLAYER !== homeEntry.soundId ||
-    assignActRes.config?.stageSoundIds['1'] !== stage1Entry.soundId ||
+    assignActRes.config?.homeSoundId !== STATIC_BGM_INDEX_ID ||
+    assignActRes.config?.modeSoundIds.COOP_AI !== STATIC_BGM_STAGE_ID ||
+    assignActRes.config?.modeSoundIds.TWO_PLAYER !== STATIC_BGM_INDEX_ID ||
+    assignActRes.config?.stageSoundIds['1'] !== STATIC_BGM_STAGE_ID ||
     assignActRes.config?.loopConfig.crossfadeDurationSec !== 1.5
   ) {
-    throw new Error('Failed to activate loop config or multi-scope media assignments system-wide');
+    throw new Error('Failed to activate loop config or multi-scope static media assignments system-wide');
   }
 
-  // 3. Home MP4 Video Upload + Opacity & Loop update
+  // 3. Home MP4 Video: client upload blocked, static intro-bantank.mp4 activation + Opacity & Loop update succeed
   const fakeVideoFile = {
     name: 'home_bg.mp4',
     type: 'video/mp4',
@@ -1567,13 +1596,27 @@ async function verifyMediaAndVideoUpgradeAsyncSuite() {
     arrayBuffer: async () => new Uint8Array([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]).buffer,
   } as unknown as File;
 
-  const vidRes = await mm.uploadHomeBackgroundVideo(fakeVideoFile, {
+  const blockedVidRes = await mm.uploadHomeBackgroundVideo(fakeVideoFile, {
     opacity: 0.4,
     loop: true,
     nowMs: 1_731_000_002_000,
   });
-  if (!vidRes.success || !vidRes.homeVideo || vidRes.homeVideo.opacity !== 0.4 || !mm.getHomeVideoUrl()) {
-    throw new Error('Home MP4 video upload & URL resolution failed');
+  if (blockedVidRes.success !== false) {
+    throw new Error('Client Home MP4 video upload must be blocked per M7.5.1');
+  }
+
+  const staticVidRes = await mm.activateStaticIntroVideo({
+    opacity: 0.4,
+    loop: true,
+    nowMs: 1_731_000_002_500,
+  });
+  if (
+    !staticVidRes.success ||
+    staticVidRes.homeVideo?.storagePath !== 'intro-bantank.mp4' ||
+    staticVidRes.homeVideo?.opacity !== 0.4 ||
+    !mm.getHomeVideoUrl()
+  ) {
+    throw new Error('Static Home MP4 video activation & URL resolution failed');
   }
 
   const vidUpdateRes = await mm.updateHomeVideoSettings({ opacity: 0.65, loop: false }, 1_731_000_003_000);
@@ -1581,14 +1624,9 @@ async function verifyMediaAndVideoUpgradeAsyncSuite() {
     throw new Error('Home video opacity/loop update failed');
   }
 
-  const vidDelRes = await mm.deleteHomeBackgroundVideo(1_731_000_004_000);
-  if (!vidDelRes.success || mm.getHomeVideoConfig() !== null) {
-    throw new Error('Home video deletion failed');
-  }
-
   mm.resetAllAssignmentsToDefault();
   mm.syncRoleFromAuthUser(null);
-  console.log('[Media Upgrade (Multi-Audio, 2-AI/2P/Stages, Loop Activation, Home MP4 Video) E2E] 3/3 MANDATORY CASES PASS');
+  console.log('[Media Static Catalog (Static BGM, 2-AI/2P/Stages, Loop Activation, Static Home MP4 Video) E2E] 3/3 MANDATORY CASES PASS');
 }
 
 async function verifyM7312FixesAsyncSuite() {
@@ -1798,10 +1836,11 @@ async function runAllAsyncVerifications() {
   await verifyMediaAndVideoUpgradeAsyncSuite();
   await verifyM7312FixesAsyncSuite();
   await verifyM7313FixesAsyncSuite();
-  const asyncCasesCount = 10 + 23 + 4 + 3 + 4 + 8;
+  await verifyM751AsyncEndToEndSuite();
+  const asyncCasesCount = 10 + 23 + 4 + 3 + 4 + 8 + 5;
   console.log('============================================');
-  console.log(`SYNC UNIT TESTS  : ${totalPassed}/${totalTests} PASS (M2-M5: 75 | M6: 136 | M7.1: 35 | M7.2: 10 | M7.3: ${m73Results.length} | M7.4: ${m74Results.length})`);
-  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Upgrade: 3 | M7.3.12 Fixes: 4 | M7.3.13 Fixes: 8)`);
+  console.log(`SYNC UNIT TESTS  : ${totalPassed}/${totalTests} PASS (M2-M5: 75 | M6: 136 | M7.1: 35 | M7.2: 10 | M7.3: ${m73Results.length} | M7.4: ${m74Results.length} | M7.5: ${m75Results.length})`);
+  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Static: 3 | M7.3.12 Fixes: 4 | M7.3.13 Fixes: 8 | M7.5.1 Audit/Archive/Backup: 5)`);
   console.log(`GRAND TOTAL SUITE: ${totalPassed + asyncCasesCount}/${totalTests + asyncCasesCount} PASS (0 FAILED, 0 DUPLICATED)`);
   console.log('============================================');
   process.exit(0);

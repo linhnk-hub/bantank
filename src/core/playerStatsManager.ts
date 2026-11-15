@@ -682,7 +682,7 @@ export class PlayerStatsManager {
     const localStats = this.getOrLoadPerUidStats(cleanUid);
     const cloudStats = this.cloudFieldsByUid.get(cleanUid) ?? null;
     const stageProg = StageProgressionManager.getInstance().getUserStageProgressSnapshot(cleanUid);
-    const scoreMgr = ScoreManager.getInstance();
+    const scoreMgr = new ScoreManager();
 
     // Level: ONLY real `/users/{uid}.level` if configured; NEVER fabricated (Clause 1.2)
     const realLevel = cloudStats?.level ?? null;

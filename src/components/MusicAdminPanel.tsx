@@ -3,16 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Music,
-  Upload,
   Play,
   Square,
-  Trash2,
   Edit3,
   Check,
-  Lock,
   Sliders,
   Layers,
   AlertCircle,
@@ -95,10 +92,6 @@ export const MusicAdminPanel: React.FC = () => {
   );
   const [isVideoDirty, setIsVideoDirty] = useState<boolean>(false);
 
-  const multiUploadInputRef = useRef<HTMLInputElement | null>(null);
-  const videoUploadInputRef = useRef<HTMLInputElement | null>(null);
-  const actionSfxInputRef = useRef<HTMLInputElement | null>(null);
-  const [targetActionSfxId, setTargetActionSfxId] = useState<GameActionSoundId | null>(null);
   const [actionSfxTracks, setActionSfxTracks] = useState<
     Record<GameActionSoundId, CustomActionSoundTrack | null>
   >(() => soundManager.getAllActionSoundTracks());
@@ -108,9 +101,6 @@ export const MusicAdminPanel: React.FC = () => {
   const [managedStages, setManagedStages] = useState<ManagedStageRecord[]>(() =>
     StageManager.getInstance().getManagedStages()
   );
-  const [isUploadingBatch, setIsUploadingBatch] = useState<boolean>(false);
-  const [isUploadingVideo, setIsUploadingVideo] = useState<boolean>(false);
-  const [isUploadingActionSfx, setIsUploadingActionSfx] = useState<boolean>(false);
 
   useEffect(() => {
     const stageManager = StageManager.getInstance();
@@ -154,7 +144,7 @@ export const MusicAdminPanel: React.FC = () => {
     return null;
   }
 
-  // Danh sách file âm thanh duy nhất để hiển thị & chọn gán
+  // Danh sách file âm thanh tĩnh để hiển thị & chọn gán
   const selectableTracks: MusicTrackMetadata[] = tracks.filter((t) => {
     if (t.id === STAGED_LOCAL_PREVIEW_BGM_ID) return false;
     if (t.id === SHARED_SYSTEM_BGM_ID && soundCatalog.some((c) => c.storagePath === t.storagePathOrUrl)) {
@@ -167,74 +157,6 @@ export const MusicAdminPanel: React.FC = () => {
     managedStages.length > 0
       ? [...managedStages].sort((a, b) => a.orderIndex - b.orderIndex)
       : [];
-
-  const handleMultiAudioUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
-    if (!fileList || fileList.length === 0) return;
-    const files = Array.from(fileList);
-    e.target.value = '';
-
-    setStatusMsg(null);
-    musicManager.clearSharedSyncError();
-    soundManager.unlock();
-    setIsUploadingBatch(true);
-
-    try {
-      const res = await musicManager.uploadMultipleAudioFiles(files, {
-        autoActivateSingle: false,
-      });
-      setSoundCatalog(musicManager.getSoundCatalog());
-      setTracks(musicManager.getTracks());
-
-      if (res.uploaded.length > 0 && res.failed.length === 0) {
-        setStatusMsg({
-          type: 'success',
-          text: `Đã tải lên thành công ${res.uploaded.length} file âm thanh vào thư viện Media. Hãy chọn file áp dụng cho Nhạc nền / Stage bên dưới rồi bấm "Kích hoạt".`,
-        });
-      } else if (res.uploaded.length > 0 && res.failed.length > 0) {
-        setStatusMsg({
-          type: 'info',
-          text: `Đã tải lên ${res.uploaded.length} file. ${res.failed.length} file lỗi: ${res.failed
-            .map((f) => `${f.fileName} (${f.error})`)
-            .join('; ')}`,
-        });
-      } else if (res.failed.length > 0) {
-        setStatusMsg({
-          type: 'error',
-          text: res.failed.map((f) => `${f.fileName}: ${f.error}`).join(' | '),
-        });
-      }
-    } finally {
-      setIsUploadingBatch(false);
-    }
-  };
-
-  const handleDeleteTrackOrCatalog = async (track: MusicTrackMetadata) => {
-    setStatusMsg(null);
-    const inCatalog = soundCatalog.some((c) => c.soundId === track.id);
-    if (inCatalog) {
-      const res = await musicManager.deleteCatalogSound(track.id);
-      if (res.success) {
-        setSoundCatalog(musicManager.getSoundCatalog());
-        setTracks(musicManager.getTracks());
-        setStatusMsg({
-          type: 'info',
-          text: `Đã xóa "${track.displayName}" khỏi thư viện âm thanh.`,
-        });
-      } else {
-        setStatusMsg({
-          type: 'error',
-          text: res.error || 'Không thể xóa file âm thanh.',
-        });
-      }
-    } else if (musicManager.deleteTrack(track.id)) {
-      setTracks(musicManager.getTracks());
-      setStatusMsg({
-        type: 'info',
-        text: `Đã gỡ "${track.displayName}" khỏi thư viện.`,
-      });
-    }
-  };
 
   const handleStartRename = (track: MusicTrackMetadata) => {
     setEditingId(track.id);
@@ -287,38 +209,6 @@ export const MusicAdminPanel: React.FC = () => {
     }
   };
 
-  const handleUploadHomeVideo = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    setStatusMsg(null);
-    setIsUploadingVideo(true);
-    try {
-      const res = await musicManager.uploadHomeBackgroundVideo(file, {
-        opacity: videoOpacityDraft,
-        loop: videoLoopDraft,
-      });
-      if (res.success && res.homeVideo) {
-        setIsVideoDirty(false);
-        setVideoOpacityDraft(res.homeVideo.opacity);
-        setVideoLoopDraft(res.homeVideo.loop);
-        setVideoEnabledDraft(res.homeVideo.isEnabled);
-        setStatusMsg({
-          type: 'success',
-          text: `Đã tải lên & kích hoạt video nền "${res.homeVideo.displayName}" cho Trang chủ!`,
-        });
-      } else {
-        setStatusMsg({
-          type: 'error',
-          text: res.error || 'Không thể tải lên video nền .mp4.',
-        });
-      }
-    } finally {
-      setIsUploadingVideo(false);
-    }
-  };
-
   const handleActivateHomeVideoSettings = async () => {
     setStatusMsg(null);
     const res = await musicManager.updateHomeVideoSettings({
@@ -340,50 +230,6 @@ export const MusicAdminPanel: React.FC = () => {
     }
   };
 
-  const handleDeleteHomeVideo = async () => {
-    setStatusMsg(null);
-    const res = await musicManager.deleteHomeBackgroundVideo();
-    if (res.success) {
-      setIsVideoDirty(false);
-      setStatusMsg({
-        type: 'info',
-        text: 'Đã gỡ video nền Trang chủ.',
-      });
-    } else {
-      setStatusMsg({
-        type: 'error',
-        text: res.error || 'Không thể xóa video nền Trang chủ.',
-      });
-    }
-  };
-
-  const handleActionSfxFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    const actionId = targetActionSfxId;
-    setTargetActionSfxId(null);
-    if (!file || !actionId) return;
-
-    setIsUploadingActionSfx(true);
-    try {
-      const res = await soundManager.uploadActionSound(actionId, file, { autoActivate: false });
-      if (res.ok && res.track) {
-        setActionSfxTracks(soundManager.getAllActionSoundTracks());
-        setStatusMsg({
-          type: 'info',
-          text: `Đã tải lên file "${res.track.fileName}" (${res.track.durationSec}s) cho [${actionId}]. Hãy bấm nút "Kích hoạt" để áp dụng cho toàn bộ người chơi.`,
-        });
-      } else {
-        setStatusMsg({
-          type: 'error',
-          text: res.error || 'Không thể tải lên file âm thanh hành động.',
-        });
-      }
-    } finally {
-      setIsUploadingActionSfx(false);
-    }
-  };
-
   const handleActivateActionSfx = (actionId: GameActionSoundId, label: string) => {
     soundManager.unlock();
     const res = soundManager.activateActionSound(actionId);
@@ -391,7 +237,7 @@ export const MusicAdminPanel: React.FC = () => {
       setActionSfxTracks(soundManager.getAllActionSoundTracks());
       setStatusMsg({
         type: 'success',
-        text: `Đã kích hoạt âm thanh "${res.track.fileName}" cho "${label}" và đồng bộ cho toàn bộ người chơi.`,
+        text: `Đã kích hoạt âm thanh tĩnh "${res.track.fileName}" cho "${label}".`,
       });
     } else {
       setStatusMsg({
@@ -407,28 +253,12 @@ export const MusicAdminPanel: React.FC = () => {
       setActionSfxTracks(soundManager.getAllActionSoundTracks());
       setStatusMsg({
         type: 'info',
-        text: `Đã tạm tắt file tùy chỉnh cho "${label}" (giữ lại file đã tải lên, phát lại 8-Bit mặc định).`,
+        text: `Đã chuyển "${label}" sang âm thanh 8-Bit tổng hợp (giữ nguyên file tĩnh trong public/audio/sfx/).`,
       });
     } else {
       setStatusMsg({
         type: 'error',
         text: res.error || 'Không thể tạm tắt âm thanh hành động.',
-      });
-    }
-  };
-
-  const handleDeleteActionSfx = (actionId: GameActionSoundId, label: string) => {
-    const res = soundManager.deleteActionSound(actionId);
-    if (res.ok) {
-      setActionSfxTracks(soundManager.getAllActionSoundTracks());
-      setStatusMsg({
-        type: 'info',
-        text: `Đã xóa file tùy chỉnh và khôi phục âm thanh 8-Bit mặc định cho "${label}".`,
-      });
-    } else {
-      setStatusMsg({
-        type: 'error',
-        text: res.error || 'Không thể xóa âm thanh hành động.',
       });
     }
   };
@@ -458,14 +288,14 @@ export const MusicAdminPanel: React.FC = () => {
           <div className="flex items-center gap-2 flex-wrap">
             <Music className="w-4 h-4 text-amber-400" />
             <h3 className="font-extrabold text-sm text-white">
-              Quản Lý Media, Nhạc Nền &amp; Video Hệ Thống
+              Quản Lý Media Tĩnh, Nhạc Nền &amp; Video Hệ Thống
             </h3>
             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-              Đồng Bộ Thời Gian Thực
+              Media Tĩnh Chuẩn Hóa
             </span>
           </div>
           <p className="text-[11px] text-neutral-400">
-            Tải lên nhiều file âm thanh (MP3, OGG, WAV, M4A ≤ 25 MB) và video nền (.mp4 ≤ 100 MB) để gán cho Trang chủ, Chế độ chơi &amp; từng Stage.
+            Sử dụng trực tiếp bộ file BGM tĩnh (<code>public/audio/bgm/</code>), 7 file SFX tĩnh (<code>public/audio/sfx/</code>) và video Intro nền (<code>intro-bantank.mp4</code>). Đã khóa tải file mới từ trình duyệt.
           </p>
         </div>
         {sharedMediaConfig && (
@@ -510,164 +340,117 @@ export const MusicAdminPanel: React.FC = () => {
         </div>
       )}
 
-      {/* SECTION 1: MULTI-FILE AUDIO UPLOAD & LIBRARY */}
+      {/* SECTION 1: STATIC BGM LIBRARY (NO UPLOAD / NO DELETE) */}
       <div className="p-3.5 rounded-xl bg-neutral-950/70 border border-neutral-800 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 font-bold text-neutral-200">
             <FileAudio className="w-4 h-4 text-amber-400" />
-            <span>1. Thư Viện File Âm Thanh ({selectableTracks.length} file)</span>
+            <span>1. Thư Viện Nhạc Nền Tĩnh ({selectableTracks.length} file)</span>
           </div>
-
-          {isAdmin ? (
-            <div>
-              <input
-                ref={multiUploadInputRef}
-                type="file"
-                multiple
-                accept=".mp3,.ogg,.wav,.m4a,.aac,.webm,audio/mpeg,audio/ogg,audio/wav,audio/mp4,audio/aac,audio/webm"
-                onChange={handleMultiAudioUpload}
-                className="hidden"
-              />
-              <button
-                type="button"
-                data-testid="media-multi-upload-btn"
-                disabled={isCloudSyncing || isUploadingBatch}
-                onClick={() => multiUploadInputRef.current?.click()}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs shadow active:scale-95 transition-all cursor-pointer"
-              >
-                <Upload className="w-3.5 h-3.5" />
-                <span>
-                  {isUploadingBatch || isCloudSyncing
-                    ? 'Đang tải lên thư viện...'
-                    : 'Tải Lên Nhiều File Âm Thanh (MP3 / OGG / WAV / M4A)'}
-                </span>
-              </button>
-            </div>
-          ) : (
-            <span className="text-[11px] text-rose-400 font-semibold flex items-center gap-1">
-              <Lock className="w-3.5 h-3.5" /> Chỉ Admin được quản lý Media
-            </span>
-          )}
+          <span className="text-[10px] font-mono text-emerald-300">
+            public/audio/bgm/bgm-index.mp3 • bgm-stage.mp3
+          </span>
         </div>
 
-        {selectableTracks.length === 0 ? (
-          <div className="p-4 rounded-lg bg-neutral-900/60 border border-neutral-800/80 text-center text-neutral-400 space-y-1">
-            <p className="font-semibold text-neutral-300">Chưa có file âm thanh nào trong thư viện.</p>
-            <p className="text-[11px]">
-              Nhấn <strong>&quot;Tải Lên Nhiều File Âm Thanh&quot;</strong> để chọn một hoặc nhiều bài nhạc, sau đó gán cho Trang chủ, Chế độ chơi và từng Stage bên dưới.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
-            {selectableTracks.map((track) => {
-              const usageLabels = musicManager.getTrackUsageLabels(track.id);
-              const isPreviewing = previewId === track.id;
+        <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+          {selectableTracks.map((track) => {
+            const usageLabels = musicManager.getTrackUsageLabels(track.id);
+            const isPreviewing = previewId === track.id;
 
-              return (
-                <div
-                  key={track.id}
-                  className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
-                >
-                  <div className="space-y-1 flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      {editingId === track.id ? (
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            type="text"
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
-                            className="px-2 py-0.5 rounded bg-neutral-950 border border-amber-500 text-white text-xs font-bold"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => handleConfirmRename(track.id)}
-                            className="p-1 rounded bg-emerald-500 text-black cursor-pointer"
-                            title="Lưu tên"
-                          >
-                            <Check className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ) : (
-                        <span className="font-extrabold text-white text-xs">{track.displayName}</span>
-                      )}
+            return (
+              <div
+                key={track.id}
+                className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5"
+              >
+                <div className="space-y-1 flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {editingId === track.id ? (
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="text"
+                          value={editingName}
+                          onChange={(e) => setEditingName(e.target.value)}
+                          className="px-2 py-0.5 rounded bg-neutral-950 border border-amber-500 text-white text-xs font-bold"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleConfirmRename(track.id)}
+                          className="p-1 rounded bg-emerald-500 text-black cursor-pointer"
+                          title="Lưu tên"
+                        >
+                          <Check className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ) : (
+                      <span className="font-extrabold text-white text-xs">{track.displayName}</span>
+                    )}
 
-                      <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 truncate max-w-[200px]">
-                        {track.fileName}
-                      </span>
+                    <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-neutral-800 text-neutral-300 truncate max-w-[200px]">
+                      {track.fileName}
+                    </span>
 
-                      {usageLabels.length > 0 ? (
-                        usageLabels.map((lbl) => (
-                          <span
-                            key={lbl}
-                            className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
-                          >
-                            {lbl}
-                          </span>
-                        ))
-                      ) : (
-                        <span className="px-2 py-0.5 rounded text-[10px] bg-neutral-800 text-neutral-400">
-                          Sẵn sàng gán
+                    {usageLabels.length > 0 ? (
+                      usageLabels.map((lbl) => (
+                        <span
+                          key={lbl}
+                          className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40"
+                        >
+                          {lbl}
                         </span>
-                      )}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-400 font-mono">
-                      <span>Thời lượng: {formatDuration(track.durationSec)}</span>
-                      <span>Dung lượng: {formatBytes(track.sizeBytes)}</span>
-                    </div>
+                      ))
+                    ) : (
+                      <span className="px-2 py-0.5 rounded text-[10px] bg-neutral-800 text-neutral-400">
+                        Sẵn sàng gán
+                      </span>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        isPreviewing
-                          ? musicManager.stopPreview()
-                          : musicManager.previewTrack(track.id)
-                      }
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
-                        isPreviewing
-                          ? 'bg-amber-500 text-black'
-                          : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
-                      }`}
-                    >
-                      {isPreviewing ? (
-                        <>
-                          <Square className="w-3 h-3 fill-black" />
-                          <span>Dừng thử</span>
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-3 h-3 fill-current" />
-                          <span>Nghe thử</span>
-                        </>
-                      )}
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleStartRename(track)}
-                      className="p-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 cursor-pointer"
-                      title="Đổi tên hiển thị"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      type="button"
-                      disabled={isCloudSyncing}
-                      onClick={() => void handleDeleteTrackOrCatalog(track)}
-                      className="p-1.5 rounded bg-neutral-800 hover:bg-rose-900/60 text-rose-400 cursor-pointer disabled:opacity-50"
-                      title="Xóa khỏi thư viện"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                  <div className="flex flex-wrap items-center gap-3 text-[11px] text-neutral-400 font-mono">
+                    <span>Thời lượng: {formatDuration(track.durationSec)}</span>
+                    <span>Dung lượng: {formatBytes(track.sizeBytes)}</span>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      isPreviewing
+                        ? musicManager.stopPreview()
+                        : musicManager.previewTrack(track.id)
+                    }
+                    className={`flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-bold transition-all cursor-pointer ${
+                      isPreviewing
+                        ? 'bg-amber-500 text-black'
+                        : 'bg-neutral-800 hover:bg-neutral-700 text-neutral-200'
+                    }`}
+                  >
+                    {isPreviewing ? (
+                      <>
+                        <Square className="w-3 h-3 fill-black" />
+                        <span>Dừng thử</span>
+                      </>
+                    ) : (
+                      <>
+                        <Play className="w-3 h-3 fill-current" />
+                        <span>Nghe thử</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleStartRename(track)}
+                    className="p-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-300 cursor-pointer"
+                    title="Đổi tên hiển thị"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* SECTION 2: LOOP, SKIP SILENCE & CROSSFADE (WITH SYSTEM-WIDE ACTIVATE BUTTON) */}
@@ -712,7 +495,7 @@ export const MusicAdminPanel: React.FC = () => {
               loopConfig.loop
                 ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
                 : 'bg-neutral-900 border-neutral-800 text-neutral-400'
-            } ${!isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+            }`}
           >
             <div className="font-extrabold text-xs flex items-center justify-between">
               <span>Loop Tự Động</span>
@@ -729,7 +512,7 @@ export const MusicAdminPanel: React.FC = () => {
               loopConfig.skipSilence
                 ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
                 : 'bg-neutral-900 border-neutral-800 text-neutral-400'
-            } ${!isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+            }`}
           >
             <div className="font-extrabold text-xs flex items-center justify-between">
               <span>Skip Silence</span>
@@ -746,7 +529,7 @@ export const MusicAdminPanel: React.FC = () => {
               loopConfig.seamlessLoop
                 ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
                 : 'bg-neutral-900 border-neutral-800 text-neutral-400'
-            } ${!isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+            }`}
           >
             <div className="font-extrabold text-xs flex items-center justify-between">
               <span>Seamless Loop</span>
@@ -763,7 +546,7 @@ export const MusicAdminPanel: React.FC = () => {
               loopConfig.crossfade
                 ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300'
                 : 'bg-neutral-900 border-neutral-800 text-neutral-400'
-            } ${!isAdmin ? 'opacity-60 cursor-not-allowed' : ''}`}
+            }`}
           >
             <div className="font-extrabold text-xs flex items-center justify-between">
               <span>Crossfade</span>
@@ -773,7 +556,6 @@ export const MusicAdminPanel: React.FC = () => {
           </button>
         </div>
 
-        {/* Crossfade Duration Slider */}
         <div className="flex items-center gap-3 pt-1">
           <span className="text-neutral-300 font-semibold shrink-0">
             Thời gian Crossfade:
@@ -805,7 +587,7 @@ export const MusicAdminPanel: React.FC = () => {
               <span>3. Phạm Vi Áp Dụng Âm Thanh</span>
             </div>
             <p className="text-[11px] text-neutral-400 mt-0.5">
-              Chọn file cho Nhạc nền Trang chủ, Toàn Game, từng chế độ (Solo, 2 - AI, 2P) và từng Stage đang có, sau đó bấm <strong>Kích hoạt</strong>.
+              Chọn file tĩnh cho Nhạc nền Trang chủ, Toàn Game, từng chế độ (Solo, 2 - AI, 2P) và từng Stage đang có, sau đó bấm <strong>Kích hoạt</strong>.
             </p>
           </div>
 
@@ -1032,31 +814,24 @@ export const MusicAdminPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* SECTION 4: HOME BACKGROUND VIDEO (.mp4) WITH OPACITY & LOOP */}
+      {/* SECTION 4: STATIC HOME BACKGROUND VIDEO (intro-bantank.mp4) WITH OPACITY & LOOP */}
       <div className="p-3.5 rounded-xl bg-neutral-950/70 border border-neutral-800 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="flex items-center gap-2 font-bold text-neutral-200">
               <Film className="w-4 h-4 text-amber-400" />
-              <span>4. Video Chạy Nền Trang Chủ (.mp4)</span>
+              <span>4. Video Chạy Nền Trang Chủ (intro-bantank.mp4)</span>
             </div>
             <p className="text-[11px] text-neutral-400 mt-0.5">
-              Tải lên video định dạng <code className="text-amber-300 font-mono">.mp4</code> (tối đa 100 MB) để chạy nền Trang chủ với độ mờ và vòng lặp liên tục.
+              Điều chỉnh hiển thị, độ mờ và vòng lặp cho video Intro nền tĩnh tích hợp sẵn.
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <input
-              ref={videoUploadInputRef}
-              type="file"
-              accept=".mp4,video/mp4"
-              onChange={handleUploadHomeVideo}
-              className="hidden"
-            />
             <button
               type="button"
               data-testid="activate-static-intro-video-btn"
-              disabled={isCloudSyncing || isUploadingVideo}
+              disabled={isCloudSyncing}
               onClick={async () => {
                 setStatusMsg(null);
                 const res = await musicManager.activateStaticIntroVideo();
@@ -1078,16 +853,6 @@ export const MusicAdminPanel: React.FC = () => {
               <Film className="w-3.5 h-3.5 text-amber-400" />
               <span>Dùng Intro mặc định</span>
             </button>
-            <button
-              type="button"
-              data-testid="upload-home-video-btn"
-              disabled={isCloudSyncing || isUploadingVideo}
-              onClick={() => videoUploadInputRef.current?.click()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-extrabold text-xs shadow transition-all cursor-pointer"
-            >
-              <Upload className="w-3.5 h-3.5" />
-              <span>{isUploadingVideo ? 'Đang tải video...' : 'Upload Video (.mp4)'}</span>
-            </button>
           </div>
         </div>
 
@@ -1097,7 +862,7 @@ export const MusicAdminPanel: React.FC = () => {
             <div className="text-[11px] text-neutral-300 flex items-center justify-between gap-2">
               <span>File hiện tại:</span>
               <strong className="text-amber-300 font-mono truncate max-w-[220px]">
-                {homeVideoConfig ? `${homeVideoConfig.fileName} (${formatBytes(homeVideoConfig.fileSize)})` : 'Chưa cài đặt'}
+                {homeVideoConfig ? `${homeVideoConfig.fileName}` : 'intro-bantank.mp4'}
               </strong>
             </div>
 
@@ -1178,15 +943,6 @@ export const MusicAdminPanel: React.FC = () => {
                   <Rocket className="w-3.5 h-3.5" />
                   <span>{isVideoDirty ? 'Kích hoạt thay đổi' : 'Kích hoạt'}</span>
                 </button>
-                <button
-                  type="button"
-                  disabled={isCloudSyncing}
-                  onClick={() => void handleDeleteHomeVideo()}
-                  className="px-2.5 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-700/50 font-bold text-xs flex items-center gap-1 cursor-pointer"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Xóa</span>
-                </button>
               </div>
             )}
           </div>
@@ -1219,26 +975,21 @@ export const MusicAdminPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* SECTION 5: ACTION SFX */}
+      {/* SECTION 5: STATIC ACTION SFX (7 FILES IN public/audio/sfx/ — NO UPLOAD / NO DELETE) */}
       <div className="p-3.5 rounded-xl bg-neutral-950 border border-amber-500/30 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2 font-bold text-amber-300">
             <FileAudio className="w-4 h-4 text-amber-400" />
-            <span>5. Âm thanh hành động (Action SFX)</span>
+            <span>5. Âm thanh hành động tĩnh (Action SFX • 7 File)</span>
           </div>
+          <span className="text-[10px] font-mono text-emerald-300">
+            public/audio/sfx/*.mp3
+          </span>
         </div>
 
         <p className="text-[11px] text-neutral-400 leading-relaxed">
-          Tải lên hoặc thay thế file âm thanh riêng (<code>.mp3</code>, <code>.ogg</code>, <code>.wav</code>) cho từng hành động chiến đấu trong game. Nếu chưa tải file riêng, hệ thống tự động sử dụng bộ tổng hợp âm thanh 8-Bit mặc định.
+          Sử dụng 7 file hiệu ứng chiến đấu tĩnh tích hợp sẵn trong <code>public/audio/sfx/</code>. Admin có thể nghe thử hoặc chuyển qua lại với bộ tổng hợp 8-Bit mặc định.
         </p>
-
-        <input
-          ref={actionSfxInputRef}
-          type="file"
-          accept=".mp3,.ogg,.wav,.m4a,audio/mpeg,audio/ogg,audio/wav"
-          onChange={handleActionSfxFileChange}
-          className="hidden"
-        />
 
         <div className="space-y-2">
           {GAME_ACTION_SOUND_SLOTS.map((slot) => {
@@ -1251,9 +1002,7 @@ export const MusicAdminPanel: React.FC = () => {
                 className={`p-3 rounded-xl border transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 ${
                   isCustomActive
                     ? 'bg-emerald-950/20 border-emerald-500/50'
-                    : customTrack
-                      ? 'bg-amber-950/20 border-amber-500/50'
-                      : 'bg-neutral-900/90 border-neutral-800'
+                    : 'bg-neutral-900/90 border-neutral-800'
                 }`}
               >
                 <div className="space-y-1 min-w-0">
@@ -1263,22 +1012,16 @@ export const MusicAdminPanel: React.FC = () => {
                       className={`text-[9px] px-1.5 py-0.5 rounded font-mono font-bold border ${
                         isCustomActive
                           ? 'bg-emerald-950/90 text-emerald-300 border-emerald-500/40'
-                          : customTrack
-                            ? 'bg-amber-950/90 text-amber-300 border-amber-500/40'
-                            : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                          : 'bg-neutral-800 text-neutral-400 border-neutral-700'
                       }`}
                     >
-                      {isCustomActive
-                        ? 'ĐANG KÍCH HOẠT'
-                        : customTrack
-                          ? 'CHƯA KÍCH HOẠT'
-                          : '8-BIT MẶC ĐỊNH'}
+                      {isCustomActive ? 'SFX TĨNH ĐANG BẬT' : '8-BIT MẶC ĐỊNH'}
                     </span>
                   </div>
                   <p className="text-[10px] text-neutral-400">{slot.description}</p>
                   {customTrack && (
                     <div className="text-[10px] font-mono text-amber-300/90 truncate">
-                      File: {customTrack.fileName} • {customTrack.durationSec}s •{' '}
+                      File tĩnh: {customTrack.fileName} • {customTrack.durationSec}s •{' '}
                       {(customTrack.fileSizeBytes / 1024).toFixed(1)} KB
                     </div>
                   )}
@@ -1298,55 +1041,29 @@ export const MusicAdminPanel: React.FC = () => {
                     <span>Nghe thử</span>
                   </button>
 
-                  {customTrack && !isCustomActive && (
+                  {!isCustomActive && (
                     <button
                       type="button"
                       data-testid={`admin-action-sfx-activate-${slot.id}`}
                       onClick={() => handleActivateActionSfx(slot.id, slot.label)}
                       className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/50 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
-                      title={`Kích hoạt âm thanh tùy chỉnh cho ${slot.label}`}
+                      title={`Bật file SFX tĩnh cho ${slot.label}`}
                     >
                       <CheckCircle2 className="w-3 h-3" />
                       <span>Kích hoạt</span>
                     </button>
                   )}
 
-                  {customTrack && isCustomActive && (
+                  {isCustomActive && (
                     <button
                       type="button"
                       data-testid={`admin-action-sfx-deactivate-${slot.id}`}
                       onClick={() => handleDeactivateActionSfx(slot.id, slot.label)}
                       className="px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                      title="Dùng file 8-Bit mặc định"
+                      title="Chuyển sang âm thanh 8-Bit tổng hợp"
                     >
                       <Square className="w-3 h-3" />
                       <span>Mặc định</span>
-                    </button>
-                  )}
-
-                  <button
-                    type="button"
-                    disabled={isUploadingActionSfx}
-                    onClick={() => {
-                      setTargetActionSfxId(slot.id);
-                      actionSfxInputRef.current?.click();
-                    }}
-                    className="px-2.5 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors disabled:opacity-50"
-                    title="Upload file âm thanh"
-                  >
-                    <Upload className="w-3 h-3" />
-                    <span>Upload</span>
-                  </button>
-
-                  {customTrack && (
-                    <button
-                      type="button"
-                      onClick={() => handleDeleteActionSfx(slot.id, slot.label)}
-                      className="px-2 py-1.5 rounded-lg bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-700/50 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
-                      title="Xóa file tùy chỉnh và khôi phục 8-Bit mặc định"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                      <span>Xóa</span>
                     </button>
                   )}
                 </div>

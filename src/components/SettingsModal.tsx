@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Volume2,
@@ -11,9 +11,7 @@ import {
   Music,
   Sliders,
   User,
-  Upload,
   Check,
-  Trash2,
   RefreshCw,
   Lock,
   ShieldCheck,
@@ -21,8 +19,6 @@ import {
   CheckCircle2,
   Save,
   Camera,
-  Eye,
-  EyeOff,
   Sparkles,
   Image as ImageIcon,
   Gamepad2,
@@ -31,6 +27,11 @@ import {
   ChevronLeft,
   ChevronRight,
   Activity,
+  Terminal,
+  Trophy,
+  Award,
+  Clock,
+  History,
 } from 'lucide-react';
 import { SoundManager, type AudioSettings } from '../core/audio.ts';
 import { MusicManager } from '../core/musicManager.ts';
@@ -39,10 +40,7 @@ import { TOTAL_CAMPAIGN_STAGES } from '../core/campaignStages.ts';
 import {
   AvatarManager,
   type AvatarCatalogItem,
-  type StagedCatalogAvatarFile,
   type UserProfileAvatarMetadata,
-  type PendingCatalogMetadataSync,
-  type AvatarUploadUiStatus,
 } from '../core/avatarManager.ts';
 import {
   AuthManager,
@@ -57,8 +55,13 @@ import {
   type UserAccountSummary,
   type UserRole,
 } from '../core/authManager.ts';
+import {
+  PlayerStatsManager,
+  type PlayerFullStatisticsSnapshot,
+} from '../core/playerStatsManager.ts';
 import { MusicAdminPanel } from './MusicAdminPanel.tsx';
 import { StageEditorPanel } from './StageEditorPanel.tsx';
+import { SystemLogsAdminPanel } from './SystemLogsAdminPanel.tsx';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import {
   getShowOnlineNetStatsPreference,
@@ -71,7 +74,8 @@ export type SettingsTabId =
   | 'AUDIO_SETTINGS'
   | 'GAME_MODE_SETTINGS'
   | 'ADMIN_OTHER'
-  | 'USER_ACCOUNTS';
+  | 'USER_ACCOUNTS'
+  | 'SYSTEM_LOGS';
 
 /**
  * M7.3.11.6 Section 3: Kích thước khung chuẩn đồng nhất cho tất cả các mục con trong Cài đặt hệ thống
@@ -164,6 +168,15 @@ export function getAvailableSettingsTabsForRole(
     });
   }
 
+  // M7.5.1 PHẦN 4: Mục LOG HỆ THỐNG chỉ dành riêng cho duy nhất ADMIN (linhnk2013@gmail.com)
+  if (effectiveRole === 'ADMIN') {
+    tabs.push({
+      id: 'SYSTEM_LOGS',
+      label: 'LOG HỆ THỐNG',
+      adminOnly: true,
+    });
+  }
+
   return tabs;
 }
 
@@ -220,25 +233,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     null
   );
 
-  // Admin Catalog Management state
-  const [stagedCatalogFile, setStagedCatalogFile] = useState<StagedCatalogAvatarFile | null>(() =>
-    avatarManager.getStagedCatalogFile()
+  const playerStatsManager = PlayerStatsManager.getInstance();
+  const [playerStats, setPlayerStats] = useState<PlayerFullStatisticsSnapshot>(() =>
+    playerStatsManager.getPlayerStatisticsSnapshot(currentUid)
   );
-  const [pendingCatalogSync, setPendingCatalogSync] = useState<PendingCatalogMetadataSync | null>(
-    () => avatarManager.getPendingCatalogSync()
-  );
-  const [uploadProgressPct, setUploadProgressPct] = useState<number | null>(() =>
-    avatarManager.getUploadProgressPct()
-  );
-  const [uploadUiStatus, setUploadUiStatus] = useState<AvatarUploadUiStatus>(() =>
-    avatarManager.getUploadUiStatus()
-  );
-  const [uploadUiStatusLabel, setUploadUiStatusLabel] = useState<string | null>(() =>
-    avatarManager.getUploadUiStatusLabelVi()
-  );
-  const [catalogNameInput, setCatalogNameInput] = useState<string>('');
-  const [catalogSortOrderInput, setCatalogSortOrderInput] = useState<number>(10);
-  const [replaceTargetId, setReplaceTargetId] = useState<string | null>(null);
 
   // User Accounts Pagination & Role Assignment state (M7.3.11 Mục II)
   const [accountsPageList, setAccountsPageList] = useState<UserAccountSummary[]>([]);
@@ -265,8 +263,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     isVerifiedSuperAdmin || hasRolePermission(userRole, 'MANAGE_STAGES');
   const canViewPermissionMatrixTab =
     isVerifiedSuperAdmin || hasRolePermission(userRole, 'VIEW_AUDIT_AND_MONITORING');
-
-  const adminFileInputRef = useRef<HTMLInputElement | null>(null);
 
   const loadUserAccountsPage = async (targetPageIndex: number, cursor: unknown | null) => {
     if (!canViewAccountsTab) return;
@@ -370,26 +366,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [isOpen, activeTab, canViewAccountsTab]);
 
   useEffect(() => {
+    setPlayerStats(playerStatsManager.getPlayerStatisticsSnapshot(currentUid));
     const unsubAvatar = avatarManager.subscribe(() => {
       const uid = authManager.getCurrentUser()?.uid || currentUid;
       setUserMeta(avatarManager.getUserMetadata(uid));
       setActiveCatalog(avatarManager.getCatalogItems(false));
       setAllCatalog(avatarManager.getCatalogItems(true));
-      setStagedCatalogFile(avatarManager.getStagedCatalogFile());
-      setPendingCatalogSync(avatarManager.getPendingCatalogSync());
-      setUploadProgressPct(avatarManager.getUploadProgressPct());
-      setUploadUiStatus(avatarManager.getUploadUiStatus());
-      setUploadUiStatusLabel(avatarManager.getUploadUiStatusLabelVi());
       setRenderTick((t) => t + 1);
     });
     const unsubSound = soundManager.subscribe(() => {
       setAudioSettings(soundManager.getSettings());
     });
+    const unsubStats = playerStatsManager.subscribe(() => {
+      const uid = authManager.getCurrentUser()?.uid || currentUid;
+      setPlayerStats(playerStatsManager.getPlayerStatisticsSnapshot(uid));
+    });
     return () => {
       unsubAvatar();
       unsubSound();
+      unsubStats();
     };
-  }, [avatarManager, authManager, currentUid, soundManager]);
+  }, [avatarManager, authManager, currentUid, soundManager, playerStatsManager]);
 
   if (!isOpen) return null;
 
@@ -406,12 +403,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const isSelectedCatalogActive = Boolean(
     selectedCatalogId && activeCatalog.some((item) => item.avatarId === selectedCatalogId)
   );
-
-  const plannedVersionInfo = isVerifiedSuperAdmin
-    ? avatarManager.getPlannedUploadVersionInfo({
-        replaceAvatarId: replaceTargetId,
-      })
-    : null;
 
   const handleBgmToggle = () => {
     soundManager.unlock();
@@ -508,129 +499,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
-  // Super Admin Catalog Handlers
-  const handleAdminPickCatalogFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file) return;
-
-    setFeedback(null);
-    setIsBusy(true);
-    try {
-      const res = await avatarManager.stageCatalogAvatarFile(file);
-      if (!res.success || !res.staged) {
-        setFeedback({
-          type: 'error',
-          text: res.error || 'File ảnh không hợp lệ.',
-        });
-      } else {
-        if (
-          pendingCatalogSync &&
-          pendingCatalogSync.status === 'UPLOAD_INDETERMINATE' &&
-          !replaceTargetId
-        ) {
-          setReplaceTargetId(pendingCatalogSync.avatarId);
-          if (!catalogNameInput.trim()) {
-            setCatalogNameInput(pendingCatalogSync.name || 'Chiến Xa Tank');
-          }
-          setCatalogSortOrderInput(pendingCatalogSync.sortOrder ?? 10);
-        } else if (!catalogNameInput.trim()) {
-          const defaultLabel = file.name.replace(/\.[^.]+$/, '').slice(0, 40);
-          setCatalogNameInput(defaultLabel || 'Chiến Xa Tank');
-        }
-      }
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleAdminCancelStaged = () => {
-    avatarManager.cancelActiveUpload();
-    avatarManager.clearStagedCatalogFile();
-    setReplaceTargetId(null);
-    setFeedback(null);
-  };
-
-  const handleAdminUploadCatalog = async () => {
-    setFeedback(null);
-    setIsBusy(true);
-    try {
-      const res = await avatarManager.uploadStagedCatalogAvatar({
-        name: catalogNameInput,
-        sortOrder: catalogSortOrderInput,
-        isActive: true,
-        replaceAvatarId: replaceTargetId,
-      });
-      setFeedback({
-        type: res.success ? 'success' : 'error',
-        text: res.message || (res.success ? 'Tải lên thành công!' : 'Tải lên thất bại.'),
-      });
-      if (res.success) {
-        setAvatarLoadError(false);
-        setReplaceTargetId(null);
-        setCatalogNameInput('');
-        setCatalogSortOrderInput((prev) => prev + 10);
-        onProfileUpdated?.();
-      }
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleAdminRetryCatalogSync = async () => {
-    setFeedback(null);
-    setIsBusy(true);
-    try {
-      const res = await avatarManager.retryPendingCatalogMetadataSync();
-      setFeedback({
-        type: res.success ? 'success' : 'error',
-        text: res.message || (res.success ? 'Đã đồng bộ thành công!' : 'Đồng bộ thất bại.'),
-      });
-      if (res.success) {
-        setReplaceTargetId(null);
-      }
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleAdminToggleActive = async (item: AvatarCatalogItem) => {
-    setFeedback(null);
-    setIsBusy(true);
-    try {
-      const res = await avatarManager.updateCatalogItemMetadata({
-        avatarId: item.avatarId,
-        isActive: !item.isActive,
-      });
-      setFeedback({
-        type: res.success ? 'success' : 'error',
-        text: res.message || 'Đã cập nhật trạng thái.',
-      });
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
-  const handleAdminStartReplace = (item: AvatarCatalogItem) => {
-    setReplaceTargetId(item.avatarId);
-    setCatalogNameInput(item.name);
-    setCatalogSortOrderInput(item.sortOrder);
-    adminFileInputRef.current?.click();
-  };
-
-  const handleAdminDeleteCatalogItem = async (item: AvatarCatalogItem) => {
-    setFeedback(null);
-    setIsBusy(true);
-    try {
-      const res = await avatarManager.deleteCatalogItem(item.avatarId);
-      setFeedback({
-        type: res.success ? 'success' : 'error',
-        text: res.message || 'Không thể xóa avatar.',
-      });
-    } finally {
-      setIsBusy(false);
-    }
-  };
+  // M7.5.1 PHẦN 2: Mọi thao tác tải lên / thay thế / xóa avatar từ client đã bị vô hiệu hóa.
 
   const handleNextAccountsPage = () => {
     if (!accountsHasNextPage || isLoadingAccounts) return;
@@ -668,6 +537,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         return <Shield className="w-3.5 h-3.5" />;
       case 'USER_ACCOUNTS':
         return <Users className="w-3.5 h-3.5" />;
+      case 'SYSTEM_LOGS':
+        return <Terminal className="w-3.5 h-3.5" />;
     }
   };
 
@@ -995,351 +866,295 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {showOnlineNetStats ? 'ĐANG BẬT' : 'ĐANG TẮT'}
                 </button>
               </div>
+              {/* M7.5.1 PHẦN 1: THỐNG KÊ THÀNH TÍCH & LỊCH SỬ TRUY CẬP NGƯỜI CHƠI (THEO UID) */}
+              <div
+                data-testid="system-player-statistics-section"
+                className="p-4 rounded-2xl bg-neutral-900/90 border border-neutral-800 space-y-4"
+              >
+                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-neutral-800 pb-2.5">
+                  <div className="flex items-center gap-2 font-extrabold text-amber-300 text-xs sm:text-sm uppercase tracking-wider">
+                    <Trophy className="w-4 h-4 text-amber-400" />
+                    <span>THỐNG KÊ NGƯỜI CHƠI &amp; PHIÊN TRUY CẬP</span>
+                  </div>
+                  <span
+                    className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
+                      playerStats.currentSession.isOnlineActive
+                        ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600/60'
+                        : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                    }`}
+                  >
+                    Phiên: {playerStats.currentSession.isOnlineActive ? 'Online' : 'Offline'}
+                  </span>
+                </div>
+
+                {/* 4 trụ cột phân biệt rõ: Level • Quân hàm PvP • Điểm XP • Số dư Xu */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  <div
+                    data-testid="stat-card-player-level"
+                    className="p-3 rounded-xl bg-neutral-950 border border-sky-500/30 space-y-1"
+                  >
+                    <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
+                      <span>Level (Cấp độ)</span>
+                      <Award className="w-3.5 h-3.5 text-sky-400" />
+                    </div>
+                    <div className="text-sm font-extrabold font-mono text-sky-300">
+                      {playerStats.level !== null ? `Lv. ${playerStats.level}` : 'Lv. --'}
+                    </div>
+                    <div className="text-[10px] text-neutral-400 leading-snug">
+                      {playerStats.levelSystemLabel}
+                    </div>
+                  </div>
+
+                  <div
+                    data-testid="stat-card-pvp-rank"
+                    className="p-3 rounded-xl bg-neutral-950 border border-purple-500/30 space-y-1"
+                  >
+                    <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
+                      <span>Quân hàm PvP</span>
+                      <Shield className="w-3.5 h-3.5 text-purple-400" />
+                    </div>
+                    <div className="text-sm font-extrabold text-purple-300 truncate">
+                      {playerStats.pvpRankLabel}
+                    </div>
+                    <div className="text-[10px] text-neutral-400">
+                      Tách biệt hoàn toàn với Level &amp; XP
+                    </div>
+                  </div>
+
+                  <div
+                    data-testid="stat-card-total-xp"
+                    className="p-3 rounded-xl bg-neutral-950 border border-amber-500/30 space-y-1"
+                  >
+                    <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
+                      <span>Tổng điểm XP</span>
+                      <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                    </div>
+                    <div className="text-sm font-extrabold font-mono text-amber-300">
+                      {playerStats.totalXp.toLocaleString('vi-VN')} XP
+                    </div>
+                    <div className="text-[10px] font-mono text-neutral-400">
+                      Kỷ lục trận: {playerStats.highScoreXp.toLocaleString('vi-VN')} XP
+                    </div>
+                  </div>
+
+                  <div
+                    data-testid="stat-card-xu-balance"
+                    className="p-3 rounded-xl bg-neutral-950 border border-emerald-500/30 space-y-1"
+                  >
+                    <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
+                      <span>Số dư Xu</span>
+                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                    </div>
+                    <div className="text-sm font-extrabold font-mono text-emerald-300">
+                      {playerStats.xuBalance.toLocaleString('vi-VN')} Xu
+                    </div>
+                    <div className="text-[10px] text-neutral-400">
+                      Độc lập, không tự quy đổi từ XP
+                    </div>
+                  </div>
+                </div>
+
+                {/* Thành tích Chiến dịch & Hoạt động chiến đấu */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
+                    <div className="text-[10px] text-neutral-400">Tiến độ Chiến dịch</div>
+                    <div className="text-xs font-extrabold font-mono text-white">
+                      Stage {playerStats.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
+                    </div>
+                    <div className="text-[10px] text-neutral-500">
+                      Đã qua {playerStats.completedStages.length}/{TOTAL_CAMPAIGN_STAGES} màn
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
+                    <div className="text-[10px] text-neutral-400">Trận đã hoàn thành</div>
+                    <div className="text-xs font-extrabold font-mono text-white">
+                      {playerStats.matchesPlayed} trận
+                    </div>
+                    <div className="text-[10px] font-mono text-neutral-400">
+                      Thắng <span className="text-emerald-300">{playerStats.matchesWon}</span> • Thua{' '}
+                      <span className="text-rose-300">{playerStats.matchesLost}</span>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
+                    <div className="text-[10px] text-neutral-400">Xe địch tiêu diệt</div>
+                    <div className="text-xs font-extrabold font-mono text-white">
+                      {playerStats.totalEnemiesDefeated} xe
+                    </div>
+                    <div className="text-[10px] font-mono text-neutral-500">
+                      B:{playerStats.defeatedByType.BASIC} F:{playerStats.defeatedByType.FAST} P:
+                      {playerStats.defeatedByType.POWER} A:{playerStats.defeatedByType.ARMOR}
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
+                    <div className="text-[10px] text-neutral-400">Phòng Co-op Online</div>
+                    <div className="text-xs font-extrabold font-mono text-white">
+                      {playerStats.coopRoomsParticipated} phòng
+                    </div>
+                    <div className="text-[10px] text-neutral-500">Đã tạo hoặc tham gia</div>
+                  </div>
+                </div>
+
+                {/* Lịch sử truy cập & Trạng thái phiên hiện tại */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
+                    <div className="text-[10px] text-neutral-400 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-amber-400" />
+                      <span>Tổng số lần đăng nhập</span>
+                    </div>
+                    <div
+                      data-testid="stat-total-logins"
+                      className="text-xs font-extrabold font-mono text-amber-300"
+                    >
+                      {playerStats.totalLogins} lần
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
+                    <div className="text-[10px] text-neutral-400">Đăng nhập đầu tiên</div>
+                    <div className="text-[11px] font-mono text-neutral-200">
+                      {playerStats.firstLoginAtMs
+                        ? new Date(playerStats.firstLoginAtMs).toLocaleString('vi-VN')
+                        : 'Chưa ghi nhận'}
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
+                    <div className="text-[10px] text-neutral-400">Đăng nhập gần nhất</div>
+                    <div className="text-[11px] font-mono text-neutral-200">
+                      {playerStats.lastLoginAtMs
+                        ? new Date(playerStats.lastLoginAtMs).toLocaleString('vi-VN')
+                        : 'Chưa ghi nhận'}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Chi tiết phiên hiện tại */}
+                <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                  <div className="text-neutral-300">
+                    Trạng thái phiên:{' '}
+                    <strong
+                      className={
+                        playerStats.currentSession.isOnlineActive
+                          ? 'text-emerald-300'
+                          : 'text-neutral-400'
+                      }
+                    >
+                      {playerStats.currentSession.status}
+                    </strong>{' '}
+                    • Timeout nhàn rỗi: {playerStats.currentSession.idleTimeoutMinutes} phút
+                  </div>
+                  {playerStats.currentSession.sessionId && (
+                    <span className="font-mono text-[10px] text-neutral-400">
+                      Mã phiên: {playerStats.currentSession.sessionId.slice(0, 16)}
+                    </span>
+                  )}
+                </div>
+
+                {/* Nhật ký Đăng nhập & Đăng xuất gần đây */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-bold text-neutral-300">
+                    <span className="flex items-center gap-1.5">
+                      <History className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Lịch sử đăng nhập &amp; đăng xuất ({playerStats.authHistory.length})</span>
+                    </span>
+                  </div>
+                  {playerStats.authHistory.length === 0 ? (
+                    <div className="p-2.5 rounded-lg bg-neutral-950 border border-neutral-800 text-[11px] text-neutral-500">
+                      Chưa có bản ghi lịch sử đăng nhập/đăng xuất cho tài khoản này.
+                    </div>
+                  ) : (
+                    <div
+                      data-testid="player-auth-history-list"
+                      className="max-h-36 overflow-y-auto space-y-1 pr-1"
+                    >
+                      {playerStats.authHistory.slice(0, 12).map((evt) => (
+                        <div
+                          key={evt.id}
+                          className="px-2.5 py-1.5 rounded-lg bg-neutral-950 border border-neutral-800 flex flex-wrap items-center justify-between gap-2 text-[11px]"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold font-mono ${
+                                evt.eventType === 'LOGIN'
+                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/60'
+                                  : 'bg-amber-950 text-amber-300 border border-amber-700/60'
+                              }`}
+                            >
+                              {evt.eventType === 'LOGIN' ? 'ĐĂNG NHẬP' : 'ĐĂNG XUẤT'}
+                            </span>
+                            <span className="text-neutral-200">{evt.note}</span>
+                          </div>
+                          <span className="font-mono text-[10px] text-neutral-400">
+                            {new Date(evt.timestampMs).toLocaleString('vi-VN')}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             </section>
           )}
 
           {/* =========================================================================
-              TAB 2: HÌNH ẢNH (CHỈ DÀNH CHO ADMIN)
+              TAB 2: HÌNH ẢNH (CHỈ DÀNH CHO ADMIN — DANH MỤC AVATAR TĨNH M7.5.1)
              ========================================================================= */}
           {activeTab === 'IMAGE_SETTINGS' && isVerifiedSuperAdmin && (
             <section className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/40 space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/20 pb-2.5">
                 <div className="flex items-center gap-1.5 font-extrabold text-amber-300 uppercase">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>HÌNH ẢNH • QUẢN LÝ DANH MỤC AVATAR</span>
+                  <span>HÌNH ẢNH • DANH MỤC AVATAR TĨNH ({allCatalog.length} MẪU)</span>
                 </div>
-                <span className="text-[10px] text-amber-200/80 font-mono">
-                  JPEG / PNG / WebP • ≤ 5 MB • ≤ 2048×2048 px
+                <span className="text-[10px] text-emerald-300 font-mono font-bold">
+                  public/avatar/ava01.png .. ava11.png
                 </span>
               </div>
 
-              <input
-                ref={adminFileInputRef}
-                type="file"
-                accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp"
-                onChange={handleAdminPickCatalogFile}
-                className="hidden"
-              />
+              <div className="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 text-[11px] text-neutral-300 leading-relaxed whitespace-pre-line">
+                {formatSentenceLineBreaks(
+                  'Chức năng tải lên, thay thế và xóa Avatar từ trình duyệt đã được khóa cố định theo thiết lập Media Tĩnh. Toàn bộ người chơi sử dụng trực tiếp 11 mẫu Avatar chuẩn tích hợp sẵn hoặc ảnh đại diện Google cá nhân.'
+                )}
+              </div>
 
-              {/* Live Upload Status Badge (M7.3.7 Mục II.1.2.E) */}
-              {uploadUiStatusLabel && (
-                <div
-                  className={`px-3 py-2 rounded-lg border flex items-center justify-between gap-2 text-xs font-bold ${
-                    uploadUiStatus === 'SUCCESS'
-                      ? 'bg-emerald-950/80 border-emerald-500/50 text-emerald-200'
-                      : uploadUiStatus === 'FAILED_NEEDS_NEW_VERSION' ||
-                          uploadUiStatus === 'INTERRUPTED'
-                        ? 'bg-amber-950/80 border-amber-500/50 text-amber-200'
-                        : 'bg-sky-950/80 border-sky-500/50 text-sky-200'
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <RefreshCw
-                      className={`w-3.5 h-3.5 shrink-0 ${
-                        uploadUiStatus === 'UPLOADING' || uploadUiStatus === 'VERIFYING'
-                          ? 'animate-spin'
-                          : ''
-                      }`}
-                    />
-                    <span>Trạng thái tiến trình: {uploadUiStatusLabel}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Pending Firestore Metadata Sync / Indeterminate F5 Recovery Alert (M7.3.7 Mục II.1.2) */}
-              {pendingCatalogSync && (
-                <div
-                  className={`p-3.5 rounded-xl space-y-2.5 border ${
-                    pendingCatalogSync.status === 'UPLOAD_CONFIRMED_METADATA_PENDING'
-                      ? 'bg-sky-950/60 border-sky-500/50'
-                      : 'bg-amber-950/60 border-amber-500/50'
-                  }`}
-                >
-                  <div className="text-[11px] font-semibold text-white leading-relaxed">
-                    {pendingCatalogSync.status === 'UPLOAD_CONFIRMED_METADATA_PENDING' ? (
-                      <span className="text-sky-200">
-                        <strong className="text-white">[Đã xác minh Storage thành công]</strong> File{' '}
-                        <span className="font-mono text-white">
-                          {pendingCatalogSync.storagePath}
-                        </span>{' '}
-                        (v{pendingCatalogSync.version}) đã tồn tại hợp lệ trên Firebase Storage nhưng chưa ghi được metadata lên Firestore. Bạn có thể hoàn tất đồng bộ metadata ngay mà không cần upload lại file.
-                      </span>
-                    ) : (
-                      <span className="text-amber-200">
-                        <strong className="text-amber-300">[Upload bị gián đoạn — Cần chọn file tải lên phiên bản mới]</strong>{' '}
-                        Tiến trình upload tại{' '}
-                        <span className="font-mono text-white">
-                          {pendingCatalogSync.storagePath}
-                        </span>{' '}
-                        (v{pendingCatalogSync.version}) bị gián đoạn khi F5/mất kết nối và object chưa tồn tại hoàn chỉnh trên Firebase Storage. Đường dẫn{' '}
-                        <span className="font-mono text-white">v{pendingCatalogSync.version}</span>{' '}
-                        được giữ khóa chống ghi đè; khi bạn chọn lại file ảnh, hệ thống sẽ tự động tải lên phiên bản mới{' '}
-                        <span className="font-mono font-extrabold text-emerald-300">
-                          v{pendingCatalogSync.version + 1}
-                        </span>{' '}
-                        cho cùng avatar <span className="font-mono text-white">{pendingCatalogSync.avatarId}</span>.
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {pendingCatalogSync.status === 'UPLOAD_CONFIRMED_METADATA_PENDING' && (
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={handleAdminRetryCatalogSync}
-                        className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-black font-extrabold text-xs flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <RefreshCw className={`w-3.5 h-3.5 ${isBusy ? 'animate-spin' : ''}`} />
-                        <span>HOÀN TẤT GHI METADATA (KHÔNG UPLOAD LẠI)</span>
-                      </button>
-                    )}
-                    {pendingCatalogSync.status === 'UPLOAD_INDETERMINATE' && (
-                      <>
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => {
-                            setReplaceTargetId(pendingCatalogSync.avatarId);
-                            setCatalogNameInput(pendingCatalogSync.name || 'Chiến Xa Tank');
-                            setCatalogSortOrderInput(pendingCatalogSync.sortOrder ?? 10);
-                            adminFileInputRef.current?.click();
-                          }}
-                          className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Upload className="w-3.5 h-3.5" />
-                          <span>
-                            CHỌN FILE TẢI LÊN PHIÊN BẢN MỚI (v{pendingCatalogSync.version + 1})
-                          </span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isBusy}
-                          onClick={() => void avatarManager.discardPendingCatalogUpload()}
-                          className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-amber-200 border border-amber-500/40 font-bold text-xs cursor-pointer"
-                        >
-                          BỎ QUA THÔNG BÁO (GIỮ KHÓA PATH v{pendingCatalogSync.version})
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Staged Catalog File Upload Form */}
-              {stagedCatalogFile ? (
-                <div className="p-3 rounded-xl bg-neutral-900/90 border border-amber-500/40 space-y-3">
-                  <div className="flex items-center justify-between gap-3 flex-wrap">
-                    <div className="flex items-center gap-3">
-                      {stagedCatalogFile.previewObjectUrl && (
-                        <img
-                          src={stagedCatalogFile.previewObjectUrl}
-                          alt="Xem trước"
-                          className="w-14 h-14 rounded-full object-cover border border-amber-400 shrink-0"
-                        />
-                      )}
-                      <div className="text-[11px] space-y-0.5">
-                        <div className="font-bold text-white">
-                          {replaceTargetId
-                            ? `Cập nhật / Khôi phục cho mã: ${replaceTargetId}`
-                            : `Thêm mới: ${stagedCatalogFile.sanitizedFileName}`}
-                        </div>
-                        <div className="text-neutral-300 font-mono">
-                          {stagedCatalogFile.format} • {stagedCatalogFile.width}×
-                          {stagedCatalogFile.height} px •{' '}
-                          {formatFileSize(stagedCatalogFile.sizeBytes)}
-                        </div>
-                      </div>
-                    </div>
-
-                    {plannedVersionInfo && (
-                      <div className="px-2.5 py-1.5 rounded-lg bg-neutral-950 border border-emerald-500/40 text-right">
-                        <div className="text-[10px] text-neutral-400">Phiên bản sẽ tạo</div>
-                        <div className="text-xs font-extrabold font-mono text-emerald-300">
-                          {plannedVersionInfo.targetAvatarId} • v{plannedVersionInfo.nextVersion}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    <div className="sm:col-span-2">
-                      <label className="block text-[10px] text-neutral-400 mb-1">
-                        Tên hiển thị avatar (1–60 ký tự)
-                      </label>
-                      <input
-                        type="text"
-                        maxLength={60}
-                        value={catalogNameInput}
-                        onChange={(e) => setCatalogNameInput(e.target.value)}
-                        placeholder="VD: Chiến Xa Đại Bàng Vàng"
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-950 border border-neutral-700 text-white text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] text-neutral-400 mb-1">
-                        Thứ tự sắp xếp (sortOrder)
-                      </label>
-                      <input
-                        type="number"
-                        min={0}
-                        max={999999}
-                        value={catalogSortOrderInput}
-                        onChange={(e) =>
-                          setCatalogSortOrderInput(Math.max(0, parseInt(e.target.value, 10) || 0))
-                        }
-                        className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-950 border border-neutral-700 text-white text-xs font-mono"
-                      />
-                    </div>
-                  </div>
-
-                  {uploadProgressPct !== null && (
-                    <div className="space-y-1">
-                      <div className="flex justify-between text-[10px] font-mono text-amber-300">
-                        <span>{uploadUiStatusLabel || 'Đang tải lên Firebase Storage...'}</span>
-                        <span>{uploadProgressPct}%</span>
-                      </div>
-                      <div className="w-full h-1.5 bg-neutral-800 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-amber-400 transition-all"
-                          style={{ width: `${uploadProgressPct}%` }}
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      disabled={isBusy}
-                      onClick={handleAdminUploadCatalog}
-                      className="px-3.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
-                    >
-                      <Check className="w-3.5 h-3.5" />
-                      <span>
-                        {isBusy
-                          ? uploadUiStatusLabel || 'ĐANG TẢI LÊN...'
-                          : plannedVersionInfo
-                            ? `XÁC NHẬN TẢI LÊN (v${plannedVersionInfo.nextVersion})`
-                            : 'TẢI LÊN FIREBASE STORAGE'}
-                      </span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAdminCancelStaged}
-                      className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 font-bold text-xs flex items-center gap-1 cursor-pointer"
-                    >
-                      <X className="w-3.5 h-3.5" />
-                      <span>HỦY</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between flex-wrap gap-2">
-
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => {
-                      setReplaceTargetId(null);
-                      adminFileInputRef.current?.click();
-                    }}
-                    className="px-3.5 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1.5 shadow cursor-pointer disabled:opacity-50"
-                  >
-                    <Upload className="w-3.5 h-3.5" />
-                    <span>THÊM AVATAR</span>
-                  </button>
-                </div>
-              )}
-
-              {/* Admin Catalog Items Table / List */}
               {allCatalog.length > 0 && (
-                <div className="space-y-2 pt-2 border-t border-amber-500/20">
-                  <div className="text-[11px] font-bold text-amber-200">
-                    Danh sách Avatar ({allCatalog.length})
-                  </div>
-                  <div className="space-y-1.5 max-h-60 overflow-y-auto pr-1">
-                    {allCatalog.map((item) => {
-                      const itemUrl = avatarManager.getCatalogItemUrl(item.storagePath);
-                      return (
-                        <div
-                          key={item.avatarId}
-                          className="p-2 rounded-lg bg-neutral-900/90 border border-neutral-800 flex items-center justify-between gap-2"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="w-9 h-9 rounded-full overflow-hidden border border-neutral-700 bg-neutral-950 shrink-0 flex items-center justify-center">
-                              {itemUrl ? (
-                                <img
-                                  src={itemUrl}
-                                  alt={item.name}
-                                  className="w-full h-full object-cover"
-                                />
-                              ) : (
-                                <ImageIcon className="w-4 h-4 text-neutral-500" />
-                              )}
-                            </div>
-                            <div className="min-w-0">
-                              <div className="text-xs font-bold text-white truncate">
-                                {item.name}{' '}
-                              </div>
-                              <div className="text-[10px] font-mono text-neutral-400 truncate">
-                                {item.storagePath} • {formatFileSize(item.fileSize)}
-                              </div>
-                            </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-80 overflow-y-auto pr-1">
+                  {allCatalog.map((item) => {
+                    const itemUrl = avatarManager.getCatalogItemUrl(item.storagePath);
+                    return (
+                      <div
+                        key={item.avatarId}
+                        className="p-2.5 rounded-lg bg-neutral-900/90 border border-neutral-800 flex items-center justify-between gap-2.5"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-10 h-10 rounded-full overflow-hidden border border-amber-500/40 bg-neutral-950 shrink-0 flex items-center justify-center">
+                            {itemUrl ? (
+                              <img
+                                src={itemUrl}
+                                alt={item.name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <ImageIcon className="w-4 h-4 text-neutral-500" />
+                            )}
                           </div>
-
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              type="button"
-                              disabled={isBusy}
-                              onClick={() => handleAdminToggleActive(item)}
-                              className={`px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 cursor-pointer ${
-                                item.isActive
-                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
-                                  : 'bg-neutral-800 text-neutral-400 border border-neutral-700'
-                              }`}
-                              title={
-                                item.isActive
-                                  ? 'Đang kích hoạt (Nhấn để Ẩn)'
-                                  : 'Đang ẩn (Nhấn để Kích hoạt)'
-                              }
-                            >
-                              {item.isActive ? (
-                                <>
-                                  <Eye className="w-3 h-3" />
-                                  <span>Hiện</span>
-                                </>
-                              ) : (
-                                <>
-                                  <EyeOff className="w-3 h-3" />
-                                  <span>Ẩn</span>
-                                </>
-                              )}
-                            </button>
-
-                            <button
-                              type="button"
-                              disabled={isBusy}
-                              onClick={() => handleAdminStartReplace(item)}
-                              className="px-2 py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-[10px] font-bold cursor-pointer"
-                              title="Upload ảnh mới"
-                            >
-                              Đổi
-                            </button>
-
-                            <button
-                              type="button"
-                              disabled={isBusy}
-                              onClick={() => handleAdminDeleteCatalogItem(item)}
-                              className="p-1 rounded bg-rose-950/60 hover:bg-rose-900/80 text-rose-300 border border-rose-800/60 cursor-pointer"
-                              title="Xóa khỏi danh mục (Chỉ xóa khi không có người chơi đang dùng)"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-white truncate">{item.name}</div>
+                            <div className="text-[10px] font-mono text-neutral-400 truncate">
+                              {item.storagePath} • {formatFileSize(item.fileSize)}
+                            </div>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
+
+                        <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold shrink-0">
+                          Tĩnh • Mở
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </section>
@@ -2003,6 +1818,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
             </section>
+          )}
+
+          {/* =========================================================================
+              TAB 7: LOG HỆ THỐNG (CHỈ DUY NHẤT ADMIN linhnk2013@gmail.com — M7.5.1 PHẦN 4 & 5)
+             ========================================================================= */}
+          {activeTab === 'SYSTEM_LOGS' && isVerifiedSuperAdmin && (
+            <SystemLogsAdminPanel user={currentUser} />
           )}
         </div>
 

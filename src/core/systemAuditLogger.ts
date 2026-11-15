@@ -643,8 +643,25 @@ export class SystemAuditLogger {
   public canAccessSystemLogs(actorOverride?: AuthIdentityLike | null): boolean {
     const actor =
       actorOverride !== undefined ? actorOverride : AuthManager.getInstance().getCurrentUser();
-    if (!actor) return false;
-    return isAdminUser(actor) && resolveUserRole(actor) === 'ADMIN';
+    if (!actor || typeof actor.uid !== 'string' || actor.uid.trim().length === 0) {
+      return false;
+    }
+    const rawActor = actor as {
+      uid: string;
+      email?: string | null;
+      emailVerified?: boolean;
+      providerData?: Array<{ providerId: string }>;
+      providerIds?: string[];
+      role?: string;
+    };
+    const normalizedActor = {
+      uid: rawActor.uid.trim(),
+      email: rawActor.email ?? null,
+      emailVerified: Boolean(rawActor.emailVerified),
+      providerData: rawActor.providerData,
+      providerIds: rawActor.providerIds,
+    };
+    return isAdminUser(normalizedActor) && resolveUserRole(normalizedActor) === 'ADMIN';
   }
 
   private hydrateFromLocalStorage(): void {

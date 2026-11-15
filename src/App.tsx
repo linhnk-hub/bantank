@@ -865,7 +865,7 @@ export default function App() {
       runKey,
       outcome,
       stageId,
-      gameMode: gameState.gameMode,
+      gameMode: gameState.gameMode || 'SOLO',
       earnedScoreXp: gameState.score,
       defeatedByType: gameState.defeatedCounts,
       roomCode,

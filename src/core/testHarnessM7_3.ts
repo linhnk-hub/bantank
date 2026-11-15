@@ -55,6 +55,7 @@ import {
   MusicManager,
   InMemorySharedMusicCloudAdapter,
   SHARED_SYSTEM_BGM_ID,
+  STATIC_BGM_STAGE_ID,
   DEFAULT_STATIC_HOME_VIDEO_CONFIG,
   evaluateSystemAudioConfigRule,
   evaluateSystemMediaConfigRule,
@@ -4049,13 +4050,14 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       incoming: v2Config,
     });
 
-    // Kiểm tra fallback về 8-bit khi cấu hình bị tắt hoặc đường dẫn không hợp lệ:
+    // Kiểm tra fallback về nhạc Stage tĩnh mặc định khi cấu hình bị tắt hoặc đường dẫn không hợp lệ:
     void mm.applySharedAudioConfigSnapshot({
       ...v1Config,
       assetPath: '../invalid_outside_audio.mp3',
     });
     const fallbackOnInvalidPath =
-      mm.resolveEffectiveTrack(1, 'SOLO').resolvedScope === 'BUILTIN_DEFAULT';
+      mm.resolveEffectiveTrack(1, 'SOLO').trackId !== SHARED_SYSTEM_BGM_ID &&
+      mm.resolveEffectiveTrack(1, 'SOLO').trackId === STATIC_BGM_STAGE_ID;
 
     // 10. Không ảnh hưởng đăng nhập, M7.1 Session, Co-op Online và gameplay:
     const engine = new GameEngine();
@@ -7014,13 +7016,15 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       !regularTabIds.includes('GAME_MODE_SETTINGS') &&
       !regularTabIds.includes('ADMIN_OTHER') &&
       !regularTabIds.includes('USER_ACCOUNTS') &&
-      superAdminTabLabels.length === 6 &&
+      !regularTabIds.includes('SYSTEM_LOGS') &&
+      superAdminTabLabels.length === 7 &&
       superAdminTabLabels[0] === 'Thông tin' &&
       superAdminTabLabels[1] === 'Hình ảnh' &&
       superAdminTabLabels[2] === 'Media' &&
       superAdminTabLabels[3] === 'Chế độ chơi' &&
       superAdminTabLabels[4] === 'Cấp quyền' &&
-      superAdminTabLabels[5] === 'Tài khoản';
+      superAdminTabLabels[5] === 'Tài khoản' &&
+      superAdminTabLabels[6] === 'LOG HỆ THỐNG';
 
     // 2. Kiểm tra phân trang danh sách Tài khoản (tối đa 10 tài khoản/trang, Trước/Sau) & bảo mật quyền truy cập (Mục 3)
     const seedAccounts = Array.from({ length: 25 }, (_, idx) => {
@@ -7068,7 +7072,9 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     mm.resetAllAssignmentsToDefault();
     mm.syncPlaybackWithContext(1, 'SOLO');
     const silentWhenNoCustomTrack =
-      sm.isProceduralBgmPlaying() === false && mm.getActiveSourceCount() === 0;
+      sm.isProceduralBgmPlaying() === false &&
+      mm.resolveEffectiveTrack(1, 'SOLO').trackId === STATIC_BGM_STAGE_ID &&
+      mm.getActiveSourceCount() <= 1;
 
     const passed =
       tabsRoleFilterOk &&
@@ -7220,7 +7226,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     // 3. Kiểm tra phân quyền & quản lý âm thanh hành động (Action SFX) của Super Admin (Mục 4)
     const all7ActionSlotsDefined = GAME_ACTION_SOUND_SLOTS.length === 7;
 
-    // Người chơi thường (PLAYER) bị từ chối upload và xóa
+    // Người chơi thường (PLAYER) bị từ chối upload, xóa và bật/tắt Action SFX
     sm.setActionSoundAdminRole('PLAYER');
     const fakePlayerFile = {
       name: 'player_hack_shoot.mp3',
@@ -7229,13 +7235,15 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     };
     const playerUploadRes = sm.uploadActionSoundSync('P1_SHOOT', fakePlayerFile);
     const playerDeleteRes = sm.deleteActionSound('P1_SHOOT');
+    const playerActivateRes = sm.activateActionSound('P1_SHOOT');
     const playerBlockedOk =
       sm.canManageActionSounds() === false &&
       playerUploadRes.ok === false &&
       playerDeleteRes.ok === false &&
-      sm.getActionSoundTrack('P1_SHOOT') === null;
+      playerActivateRes.ok === false &&
+      sm.getActionSoundTrack('P1_SHOOT')?.fileName === 'gun-player.mp3';
 
-    // Admin duy nhất (linhnk2013@gmail.com) được phép upload, thay thế, phát âm thanh tùy chỉnh và xóa về mặc định
+    // M7.5.1: Admin duy nhất (linhnk2013@gmail.com) cũng bị chặn upload/replace/delete từ client, nhưng được phép bật/tắt file SFX tĩnh public/audio/sfx/gun-player.mp3
     sm.setActionSoundAdminRole('ADMIN');
     const adminShootFileV1 = {
       name: 'tank_cannon_v1.mp3',
@@ -7243,37 +7251,33 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       size: 32000,
     };
     const adminUploadRes = sm.uploadActionSoundSync('P1_SHOOT', adminShootFileV1);
-    const trackAfterUpload = sm.getActionSoundTrack('P1_SHOOT');
+    const adminReplaceRes = sm.replaceActionSoundSync('P1_SHOOT', adminShootFileV1);
+    const adminDeleteRes = sm.deleteActionSound('P1_SHOOT');
+    const adminActivateRes = sm.activateActionSound('P1_SHOOT');
+    const staticTrack = sm.getActionSoundTrack('P1_SHOOT');
 
-    // Thay thế bằng file v2
-    const adminShootFileV2 = {
-      name: 'tank_cannon_v2.wav',
-      type: 'audio/wav',
-      size: 48000,
-    };
-    const adminReplaceRes = sm.replaceActionSoundSync('P1_SHOOT', adminShootFileV2);
-    const trackAfterReplace = sm.getActionSoundTrack('P1_SHOOT');
-
-    // Khi P1 bắn (playP1Shoot), hệ thống ghi nhận phát custom action sound P1_SHOOT
+    // Khi P1 bắn (playP1Shoot), hệ thống ghi nhận phát file SFX tĩnh P1_SHOOT
     sm.clearLastPlayedCustomActionId();
     sm.playP1Shoot();
     const customActionDispatchedOnShoot = sm.getLastPlayedCustomActionId() === 'P1_SHOOT';
 
-    // Xóa file tùy chỉnh -> quay về 8-bit mặc định
-    const adminDeleteRes = sm.deleteActionSound('P1_SHOOT');
-    const trackAfterDelete = sm.getActionSoundTrack('P1_SHOOT');
+    // Tạm tắt rồi bật lại file tĩnh để khôi phục trạng thái mặc định
+    const adminDeactivateRes = sm.deactivateActionSound('P1_SHOOT');
+    const inactiveCheck = sm.isActionSoundActive('P1_SHOOT') === false;
+    sm.activateActionSound('P1_SHOOT');
     sm.setActionSoundAdminRole(null);
 
     const adminActionSfxLifecycleOk =
       all7ActionSlotsDefined &&
       playerBlockedOk &&
-      adminUploadRes.ok === true &&
-      trackAfterUpload?.fileName === 'tank_cannon_v1.mp3' &&
-      adminReplaceRes.ok === true &&
-      trackAfterReplace?.fileName === 'tank_cannon_v2.wav' &&
+      adminUploadRes.ok === false &&
+      adminReplaceRes.ok === false &&
+      adminDeleteRes.ok === false &&
+      adminActivateRes.ok === true &&
+      staticTrack?.fileName === 'gun-player.mp3' &&
       customActionDispatchedOnShoot &&
-      adminDeleteRes.ok === true &&
-      trackAfterDelete === null;
+      adminDeactivateRes.ok === true &&
+      inactiveCheck;
 
     const passed =
       logoSpecOk &&
@@ -8425,7 +8429,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const tc2Pass =
       mm.canManageMusic() === true &&
       sm.canManageActionSounds() === true &&
-      adminTabs.length === 6 &&
+      adminTabs.length === 7 &&
       hasRolePermission('ADMIN', 'MANAGE_STAGES') &&
       hasRolePermission('ADMIN', 'MANAGE_AUDIO_SYSTEM') &&
       hasRolePermission('ADMIN', 'MANAGE_AVATAR_CATALOG') &&
@@ -9154,14 +9158,17 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const playerTabs = getAvailableSettingsTabsForRole('PLAYER').map((t) => t.id);
     const section3UnifiedLayoutOk =
       UNIFIED_SETTINGS_MODAL_WIDTH_CLASS === 'w-full max-w-4xl' &&
-      adminTabs.length === 6 &&
+      adminTabs.length === 7 &&
       adminTabs.includes('USER_ACCOUNTS') &&
       adminTabs.includes('ADMIN_OTHER') &&
       adminTabs.includes('IMAGE_SETTINGS') &&
+      adminTabs.includes('SYSTEM_LOGS') &&
       modTabs.includes('USER_ACCOUNTS') &&
       !modTabs.includes('IMAGE_SETTINGS') &&
+      !modTabs.includes('SYSTEM_LOGS') &&
       !playerTabs.includes('USER_ACCOUNTS') &&
-      !playerTabs.includes('ADMIN_OTHER');
+      !playerTabs.includes('ADMIN_OTHER') &&
+      !playerTabs.includes('SYSTEM_LOGS');
 
     // 2. Mục 4: Khôi phục cài đặt âm thanh mặc định trong SoundManager
     const tempSoundMgr = SoundManager.getInstance();
@@ -9236,17 +9243,19 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       authEmail: 'player@gmail.com',
     });
 
-    // 4. Kiểm tra vòng đời Upload -> Chưa kích hoạt -> Kích hoạt -> Tạm tắt của Action SFX
+    // 4. Kiểm tra vòng đời Chặn Upload từ Client -> Tạm tắt -> Kích hoạt lại của Action SFX tĩnh (M7.5.1)
     tempSoundMgr.setActionSoundAdminRole('ADMIN');
-    const sfxUploadInactive = tempSoundMgr.uploadActionSoundSync(
+    const sfxUploadBlocked = tempSoundMgr.uploadActionSoundSync(
       'P1_SHOOT',
       { name: 'cannon_pending.wav', type: 'audio/wav', size: 24000 },
       { autoActivate: false }
     );
+    const deactivateRes = tempSoundMgr.deactivateActionSound('P1_SHOOT');
     tempSoundMgr.clearLastPlayedCustomActionId();
     tempSoundMgr.playP1Shoot();
     const skippedWhenInactive =
-      sfxUploadInactive.ok === true &&
+      sfxUploadBlocked.ok === false &&
+      deactivateRes.ok === true &&
       tempSoundMgr.isActionSoundActive('P1_SHOOT') === false &&
       tempSoundMgr.getLastPlayedCustomActionId() === null;
 
@@ -9258,15 +9267,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       tempSoundMgr.isActionSoundActive('P1_SHOOT') === true &&
       tempSoundMgr.getLastPlayedCustomActionId() === 'P1_SHOOT';
 
-    const deactivateRes = tempSoundMgr.deactivateActionSound('P1_SHOOT');
-    const deactivatedOk =
-      deactivateRes.ok === true &&
-      tempSoundMgr.isActionSoundActive('P1_SHOOT') === false;
-
-    tempSoundMgr.deleteActionSound('P1_SHOOT');
     tempSoundMgr.setActionSoundAdminRole(null);
-    const actionSfxActivationLifecycleOk =
-      skippedWhenInactive && playedAfterActivate && deactivatedOk;
+    const actionSfxActivationLifecycleOk = skippedWhenInactive && playedAfterActivate;
 
     const section6AdminAudioSyncOk =
       storagePathCheck.valid === true &&
@@ -9307,11 +9309,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       sfxVolume: 0.85,
     });
     soundMgr.setActionSoundAdminRole('ADMIN');
-    soundMgr.uploadActionSoundSync(
-      'P1_SHOOT',
-      { name: 'gunshot_test.wav', type: 'audio/wav', size: 12000 },
-      { autoActivate: true }
-    );
+    soundMgr.activateActionSound('P1_SHOOT');
 
     // 1. Nhấn nút tắt nhạc nền trên thanh menu
     const mutedAfterFirstToggle = soundMgr.toggleBgmMute();
@@ -9325,8 +9323,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const mutedAfterSecondToggle = soundMgr.toggleBgmMute();
     const settingsWhenBgmRestored = soundMgr.getSettings();
 
-    // Dọn dẹp & khôi phục trạng thái âm thanh ban đầu
-    soundMgr.deleteActionSound('P1_SHOOT');
+    // Khôi phục trạng thái âm thanh ban đầu
     soundMgr.setActionSoundAdminRole(null);
     soundMgr.updateSettings(prevSettings);
     soundMgr.setMuted(prevMuted);

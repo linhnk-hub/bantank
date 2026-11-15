@@ -18,8 +18,6 @@ export interface AudioSettings {
 
 import { ScoreManager } from './scoreManager.ts';
 import { ADMIN_EMAIL, AuthManager, isAdminUser } from './authManager.ts';
-import { doc, onSnapshot } from 'firebase/firestore';
-import { getFirebaseDb, handleFirestoreError } from './firebaseConfig.ts';
 import { SystemAuditLogger } from './systemAuditLogger.ts';
 
 export const DEFAULT_AUDIO_SETTINGS: Readonly<AudioSettings> = {
@@ -236,7 +234,6 @@ export class SoundManager {
     this.loadSettings();
     this.registerCanonicalStaticActionTracks();
     this.preloadStaticActionSfxBinaries();
-    this.initCloudActionSfxSubscription();
   }
 
   public static getInstance(): SoundManager {
@@ -608,7 +605,7 @@ export class SoundManager {
     }
   }
 
-  private preloadStaticActionSfxBinaries(): void {
+  public preloadStaticActionSfxBinaries(): void {
     if (this.staticSfxPreloadStarted || typeof window === 'undefined' || typeof fetch !== 'function') {
       return;
     }
@@ -1506,70 +1503,7 @@ export class SoundManager {
     }
   }
 
-  private initCloudActionSfxSubscription(): void {
-    if (typeof window === 'undefined') return;
-    AuthManager.getInstance().subscribe((user) => {
-      if (this.unsubCloudActionSfx) {
-        this.unsubCloudActionSfx();
-        this.unsubCloudActionSfx = null;
-      }
-      if (!user) return;
-      try {
-        const db = getFirebaseDb();
-        const ref = doc(db, 'system_config', 'action_sfx');
-        this.unsubCloudActionSfx = onSnapshot(
-          ref,
-          (snap) => {
-            if (!snap.exists()) return;
-            const data = snap.data() as {
-              tracks?: Record<string, CustomActionSoundTrack>;
-              version?: number;
-              updatedAt?: number;
-            };
-            if (typeof data.version === 'number' && data.version > this.lastCloudActionSfxVersion) {
-              this.lastCloudActionSfxVersion = data.version;
-            }
-            if (!data.tracks || typeof data.tracks !== 'object') return;
-            const cloudUpdatedAt = typeof data.updatedAt === 'number' ? data.updatedAt : 0;
-            for (const slot of GAME_ACTION_SOUND_SLOTS) {
-              const incoming = data.tracks[slot.id];
-              const existing = this.customActionTracks.get(slot.id);
-              if (incoming && incoming.actionId === slot.id && incoming.fileName) {
-                if (
-                  !existing ||
-                  incoming.updatedAtMs > existing.updatedAtMs ||
-                  (incoming.updatedAtMs === existing.updatedAtMs &&
-                    incoming.isActive !== existing.isActive)
-                ) {
-                  this.customActionTracks.set(slot.id, incoming);
-                  this.customActionBuffers.delete(slot.id);
-                }
-              } else if (!incoming && existing && cloudUpdatedAt > existing.updatedAtMs) {
-                this.customActionTracks.delete(slot.id);
-                this.customActionBuffers.delete(slot.id);
-              }
-            }
-            this.saveCustomActionTracksToStorage();
-            void this.hydrateCustomActionBuffers();
-            this.notifyListeners();
-          },
-          (err) => {
-            try {
-              handleFirestoreError(err, 'get', 'system_config/action_sfx');
-            } catch (wrappedErr: any) {
-              const msg = String(wrappedErr?.message || '');
-              if (msg.toLowerCase().includes('permission')) {
-                this.cloudActionSfxError = `Từ chối quyền đọc /system_config/action_sfx: ${msg}`;
-                this.notifyListeners();
-              }
-            }
-          }
-        );
-      } catch {
-        // Ignore if Firestore is not initialized in test env
-      }
-    });
-  }
+  // M7.5.1: Legacy Firestore /system_config/action_sfx runtime override disabled; 7 static SFX in public/audio/sfx/ are authoritative.
 
   private async hydrateCustomActionBuffers(): Promise<void> {
     if (!this.ctx) return;
