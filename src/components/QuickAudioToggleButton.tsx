@@ -84,9 +84,6 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
         />
       )}
       {showLabelOnDesktop && (
-        <span className="hidden md:inline text-neutral-200">
-          {isBgmMuted ? 'Đã tắt nhạc' : 'Nhạc nền'}
-        </span>
       )}
     </button>
   );

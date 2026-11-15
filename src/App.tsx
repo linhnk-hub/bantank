@@ -1603,7 +1603,7 @@ export default function App() {
                     }`}
                   >
                     <Play className={`w-3.5 h-3.5 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
-                    <span>{isMatchAllowed ? 'BẮT ĐẦU TRẬN ĐẤU' : 'ĐĂNG NHẬP GMAIL ĐỂ BẮT ĐẦU'}</span>
+                    <span>{isMatchAllowed ? 'BẮT ĐẦU TRẬN ĐẤU' : 'ĐĂNG NHẬP ĐỂ BẮT ĐẦU'}</span>
                   </button>
                 </div>
               )}
@@ -1689,7 +1689,6 @@ export default function App() {
                   title="Hướng dẫn điều khiển"
                 >
                   <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
-                  <span className="hidden sm:inline">Hướng dẫn</span>
                 </button>
 
                 {isSuperAdmin && (
