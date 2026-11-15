@@ -56,6 +56,7 @@ import {
   ONLINE_NET_STATS_STORAGE_KEY,
 } from './core/networkStatsPref.ts';
 import { PlayerStatsManager } from './core/playerStatsManager.ts';
+import { buildBattleXpIdentifiers } from './core/playerLevelSystem.ts';
 import { SystemAuditLogger } from './core/systemAuditLogger.ts';
 import {
   RotateCcw,
@@ -849,7 +850,7 @@ export default function App() {
     }
   }, [isStageClearModalOpen, gameState, isTrialMode, currentUser?.uid, coopManager]);
 
-  // M7.5.1: Record per-UID completed match outcome (WIN / LOSS) without altering XP/Xu/Rank formulas
+  // M7.5.1 & M7.5.2: Record per-UID completed match outcome (WIN / LOSS) with exact enemy XP breakdown (zero bonus XP)
   useEffect(() => {
     if (isTrialMode || !currentUser?.uid || !gameState) return;
     if (!isStageClearModalOpen && !isGameOverModalOpen) return;
@@ -859,21 +860,39 @@ export default function App() {
       gameState.gameMode === 'TWO_PLAYERS_ONLINE'
         ? (coopManager.getCurrentRoom()?.roomCode ?? null)
         : null;
-    const runKey = `${gameState.gameMode}:${roomCode ?? 'local'}:st${stageId}:run${gameState.stageRunSeq}:${outcome}`;
+    const counts = gameState.defeatedCounts || { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 };
+    const stageEarnedXp =
+      (counts.BASIC || 0) * 1 +
+      (counts.FAST || 0) * 2 +
+      (counts.POWER || 0) * 3 +
+      (counts.ARMOR || 0) * 5;
+    const matchInstanceId = gameState.matchInstanceId || gameEngine.getMatchInstanceId();
+    const { runKey, xpEventId } = buildBattleXpIdentifiers({
+      uid: currentUser.uid,
+      gameMode: gameState.gameMode || 'SOLO',
+      matchInstanceId,
+      stageId,
+      stageRunSeq: gameState.stageRunSeq,
+      outcome,
+      roomCode,
+    });
     PlayerStatsManager.getInstance().recordMatchOutcome({
       uid: currentUser.uid,
       runKey,
+      xpEventId,
       outcome,
       stageId,
       gameMode: gameState.gameMode || 'SOLO',
-      earnedScoreXp: gameState.score,
-      defeatedByType: gameState.defeatedCounts,
+      earnedScoreXp: stageEarnedXp,
+      runTotalScoreXp: gameState.score,
+      defeatedByType: counts,
       roomCode,
     });
   }, [
     isStageClearModalOpen,
     isGameOverModalOpen,
     gameState,
+    gameEngine,
     isTrialMode,
     currentUser?.uid,
     coopManager,

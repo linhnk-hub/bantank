@@ -59,6 +59,26 @@ export const NEUTRAL_INPUT: Readonly<InputState> = Object.freeze({
   shoot: false,
 });
 
+let matchInstanceCounter = 0;
+
+export function createMatchInstanceId(): string {
+  matchInstanceCounter += 1;
+  const seq = matchInstanceCounter.toString(36);
+  const cryptoObj =
+    typeof globalThis !== 'undefined'
+      ? (globalThis as { crypto?: { randomUUID?: () => string } }).crypto
+      : undefined;
+  if (cryptoObj && typeof cryptoObj.randomUUID === 'function') {
+    const rawUuid = cryptoObj.randomUUID().replace(/-/g, '').slice(0, 12);
+    return `m_${seq}_${rawUuid}`;
+  }
+  const ts = Date.now().toString(36);
+  const rand = Math.floor(Math.random() * 0xffffffff)
+    .toString(36)
+    .padStart(6, '0');
+  return `m_${ts}_${seq}_${rand}`.slice(0, 28);
+}
+
 export function validateAndNormalizeAuthoritativeSnapshot(
   rawSnapshot: unknown,
   lastAppliedSnapshotSeq: number,
@@ -234,6 +254,7 @@ export function validateAndNormalizeAuthoritativeSnapshot(
 export class GameEngine {
   private state: GameCoreState;
   private stageRunSeq: number = 1;
+  private matchInstanceId: string = createMatchInstanceId();
   private lastAppliedSnapshotSeq: number = 0;
   private lastAppliedStageRunSeq: number = 0;
   private lastAppliedTickCount: number = -1;
@@ -465,6 +486,7 @@ export class GameEngine {
 
     const currentStage = this.stageManager.getCurrentStage();
     this.stageRunSeq = 1;
+    this.matchInstanceId = createMatchInstanceId();
     const matchDurationSeconds = getMatchDurationSecondsForDifficulty(this.difficulty);
     const remainingTicks = matchDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
 
@@ -473,6 +495,7 @@ export class GameEngine {
     this.state = {
       tickCount: 0,
       stageRunSeq: this.stageRunSeq,
+      matchInstanceId: this.matchInstanceId,
       p1: customP1 ?? createP1Tank(),
       p1State: {
         lives: startingLives,
@@ -813,6 +836,7 @@ export class GameEngine {
     this.state = {
       tickCount: 0,
       stageRunSeq: this.stageRunSeq,
+      matchInstanceId: this.matchInstanceId,
       p1: createP1Tank(),
       p1State: {
         lives: startingLives,
@@ -937,6 +961,8 @@ export class GameEngine {
     this.enforceProgression = nextEnforce;
     this.gameMode = mode;
     this.difficulty = difficulty;
+    // Generate a fresh client-side matchInstanceId for every new match (note: client ID only, not server match proof)
+    this.matchInstanceId = createMatchInstanceId();
     // Set stageRunSeq = 0 right before restartStage() so restartStage() increments 0 -> 1 (no double increment)
     this.stageRunSeq = 0;
     this.resetGuestSnapshotTracking();
@@ -1010,6 +1036,7 @@ export class GameEngine {
     this.state = {
       tickCount: 0,
       stageRunSeq: this.stageRunSeq,
+      matchInstanceId: this.matchInstanceId,
       p1: nextP1,
       p1State: {
         lives: preservedLives,
@@ -1095,6 +1122,7 @@ export class GameEngine {
     this.state = {
       tickCount: 0,
       stageRunSeq: this.stageRunSeq,
+      matchInstanceId: this.matchInstanceId,
       p1: customP1 ?? createP1Tank(),
       p1State: {
         lives: startingLives,
@@ -1728,6 +1756,10 @@ export class GameEngine {
     return this.stageRunSeq;
   }
 
+  public getMatchInstanceId(): string {
+    return this.matchInstanceId;
+  }
+
   public getLastAppliedSnapshotSeq(): number {
     return this.lastAppliedSnapshotSeq;
   }
@@ -1974,8 +2006,12 @@ export class GameEngine {
 
     this.difficulty = snapshot.difficulty;
     this.stageRunSeq = snapshot.stageRunSeq;
+    if (typeof snapshot.matchInstanceId === 'string' && snapshot.matchInstanceId.trim().length > 0) {
+      this.matchInstanceId = snapshot.matchInstanceId.trim();
+    }
     this.state.difficulty = snapshot.difficulty;
     this.state.stageRunSeq = snapshot.stageRunSeq;
+    this.state.matchInstanceId = this.matchInstanceId;
     this.state.tickCount = snapshot.tickCount;
     this.state.matchDurationSeconds = snapshot.matchDurationSeconds;
     this.state.remainingTicks = snapshot.remainingTicks;

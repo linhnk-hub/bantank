@@ -31,6 +31,7 @@ import {
   Search,
   ShieldAlert,
   Terminal,
+  Award,
   X,
 } from 'lucide-react';
 import {
@@ -45,13 +46,18 @@ import {
   type SystemLogSeverity,
   type TemporaryOperationalLogBuffer,
 } from '../core/systemAuditLogger.ts';
+import {
+  PlayerStatsManager,
+  type AdminLevelConsistencyScanResult,
+  type UserLevelConsistencyScanEntry,
+} from '../core/playerStatsManager.ts';
 import type { AuthIdentityLike } from '../core/authManager.ts';
 
 export interface SystemLogsAdminPanelProps {
   user?: AuthIdentityLike | null;
 }
 
-type AdminLogSubTab = 'SYSTEM_LOGS' | 'PLAYER_HISTORY' | 'ARCHIVE_CLEANUP';
+type AdminLogSubTab = 'SYSTEM_LOGS' | 'PLAYER_HISTORY' | 'LEVEL_AUDIT' | 'ARCHIVE_CLEANUP';
 
 const PAGE_SIZE = 15;
 
@@ -92,6 +98,14 @@ export const SystemLogsAdminPanel: React.FC<SystemLogsAdminPanelProps> = ({ user
     type: 'success' | 'error' | 'info';
     text: string;
   } | null>(null);
+  const [levelConsistencyEntries, setLevelConsistencyEntries] = useState<
+    UserLevelConsistencyScanEntry[]
+  >([]);
+  const [levelScanMeta, setLevelScanMeta] = useState<Omit<
+    AdminLevelConsistencyScanResult,
+    'entries'
+  > | null>(null);
+  const [isScanningLevelConsistency, setIsScanningLevelConsistency] = useState<boolean>(false);
 
   useEffect(() => {
     const unsub = logger.subscribe(() => {
@@ -149,6 +163,20 @@ export const SystemLogsAdminPanel: React.FC<SystemLogsAdminPanelProps> = ({ user
         criticalCount: 0,
         errorCount: 0,
       };
+    }
+    if (subTab === 'LEVEL_AUDIT') {
+      return logger.queryPlayerLevelHistory(
+        {
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+          severity: severityFilter,
+          searchQuery: searchQuery || undefined,
+          uid: selectedPlayerUid || undefined,
+          page,
+          pageSize: PAGE_SIZE,
+        },
+        user
+      );
     }
     if (subTab === 'PLAYER_HISTORY') {
       return logger.queryPlayerActivityHistory(
@@ -295,6 +323,47 @@ export const SystemLogsAdminPanel: React.FC<SystemLogsAdminPanelProps> = ({ user
       return;
     }
     setRestoredArchiveView({ batch: res.batch, manifest: res.manifest });
+  };
+
+  const handleRunLevelConsistencyScan = async () => {
+    setFeedback(null);
+    setIsScanningLevelConsistency(true);
+    try {
+      const res = await PlayerStatsManager.getInstance().scanFirestoreUsersLevelConsistencyForAdmin(
+        user
+      );
+      setLevelScanMeta({
+        success: res.success,
+        errorCode: res.errorCode,
+        errorMessage: res.errorMessage,
+        isProductionVerified: res.isProductionVerified,
+        sourceMode: res.sourceMode,
+        cacheLabel: res.cacheLabel,
+        scannedCount: res.scannedCount,
+        firestoreScannedCount: res.firestoreScannedCount,
+        cacheOnlyCount: res.cacheOnlyCount,
+        inconsistentCount: res.inconsistentCount,
+      });
+      setLevelConsistencyEntries(res.entries);
+
+      if (!res.success) {
+        setFeedback({
+          type: 'error',
+          text: `${res.errorMessage || 'Quét Firestore /users thất bại.'} (Mã: ${
+            res.errorCode || 'SCAN_FAILED'
+          } • Firestore: ${res.firestoreScannedCount} • Cache RAM: ${res.cacheOnlyCount}${
+            res.cacheLabel ? ` • ${res.cacheLabel}` : ''
+          }).`,
+        });
+      } else {
+        setFeedback({
+          type: res.inconsistentCount > 0 ? 'error' : 'success',
+          text: `Quét chỉ đọc (Read-Only) hoàn tất: Firestore đã đọc ${res.firestoreScannedCount} hồ sơ • Chỉ từ Cache RAM ${res.cacheOnlyCount} hồ sơ • Bất nhất ${res.inconsistentCount} hồ sơ (Không tự động ghi đè Production).`,
+        });
+      }
+    } finally {
+      setIsScanningLevelConsistency(false);
+    }
   };
 
   const handleExportBackup = async () => {
@@ -462,6 +531,19 @@ export const SystemLogsAdminPanel: React.FC<SystemLogsAdminPanelProps> = ({ user
           </button>
           <button
             type="button"
+            data-testid="subtab-level-audit"
+            onClick={() => setSubTab('LEVEL_AUDIT')}
+            className={`px-3 py-1.5 rounded-lg font-extrabold flex items-center gap-1.5 cursor-pointer transition-colors ${
+              subTab === 'LEVEL_AUDIT'
+                ? 'bg-amber-500 text-black'
+                : 'bg-neutral-900 border border-neutral-800 text-neutral-300 hover:border-neutral-700'
+            }`}
+          >
+            <Award className="w-3.5 h-3.5" />
+            <span>Kiểm toán Level 1–50</span>
+          </button>
+          <button
+            type="button"
             data-testid="subtab-archive-cleanup"
             onClick={() => setSubTab('ARCHIVE_CLEANUP')}
             className={`px-3 py-1.5 rounded-lg font-extrabold flex items-center gap-1.5 cursor-pointer transition-colors ${
@@ -586,10 +668,137 @@ export const SystemLogsAdminPanel: React.FC<SystemLogsAdminPanelProps> = ({ user
       </div>
 
       {/* =====================================================================
-          SUB-TAB 1 & 2: SYSTEM LOGS & PLAYER ACTIVITY HISTORY
+          SUB-TAB 1, 2 & LEVEL_AUDIT: SYSTEM LOGS, PLAYER HISTORY & LEVEL AUDIT
          ===================================================================== */}
-      {(subTab === 'SYSTEM_LOGS' || subTab === 'PLAYER_HISTORY') && (
+      {(subTab === 'SYSTEM_LOGS' ||
+        subTab === 'PLAYER_HISTORY' ||
+        subTab === 'LEVEL_AUDIT') && (
         <div className="space-y-3">
+          {subTab === 'LEVEL_AUDIT' && (
+            <div
+              data-testid="admin-level-consistency-panel"
+              className="p-3.5 rounded-xl bg-neutral-900/90 border border-sky-500/35 space-y-2.5"
+            >
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <div className="space-y-0.5">
+                  <div className="font-extrabold text-sky-300 uppercase flex items-center gap-1.5">
+                    <Award className="w-4 h-4 text-sky-400" />
+                    <span>
+                      ĐỐI CHIẾU DỮ LIỆU LEVEL CŨ TRÊN /users (CHỈ ĐỌC • KHÔNG GHI ĐÈ PRODUCTION)
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-neutral-400">
+                    Công thức chuẩn M7.5.2: <code className="font-mono text-amber-300">XP_REQUIRED(L) = 100 × L × (L - 1) / 2</code> (Lv.1 = 0 XP • Lv.50 = 122.500 XP). Quét kiểm tra lệch trường <code className="font-mono text-sky-200">level</code> so với <code className="font-mono text-sky-200">totalXp / xp</code> mà không tự sửa dữ liệu.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  data-testid="scan-level-consistency-btn"
+                  disabled={isScanningLevelConsistency}
+                  onClick={() => void handleRunLevelConsistencyScan()}
+                  className="px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-400 text-black font-extrabold text-xs flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shrink-0"
+                >
+                  <RefreshCw
+                    className={`w-3.5 h-3.5 ${isScanningLevelConsistency ? 'animate-spin' : ''}`}
+                  />
+                  <span>
+                    {isScanningLevelConsistency
+                      ? 'Đang đối chiếu...'
+                      : 'Quét đối chiếu /users (Read-Only)'}
+                  </span>
+                </button>
+              </div>
+
+              {levelScanMeta && (
+                <div
+                  data-testid="level-scan-status-summary"
+                  className={`p-2.5 rounded-lg border text-[11px] font-mono space-y-1 ${
+                    !levelScanMeta.success
+                      ? 'bg-rose-950/60 border-rose-500/50 text-rose-200'
+                      : levelScanMeta.cacheOnlyCount > 0
+                        ? 'bg-amber-950/50 border-amber-500/50 text-amber-200'
+                        : 'bg-emerald-950/40 border-emerald-500/40 text-emerald-200'
+                  }`}
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2 font-bold">
+                    <span>
+                      {levelScanMeta.success
+                        ? `ĐỌC FIRESTORE THÀNH CÔNG • Nguồn: ${levelScanMeta.sourceMode}`
+                        : `QUÉT FIRESTORE THẤT BẠI (${levelScanMeta.errorCode || 'SCAN_FAILED'})`}
+                    </span>
+                    <span>
+                      Firestore: {levelScanMeta.firestoreScannedCount} • Cache RAM:{' '}
+                      {levelScanMeta.cacheOnlyCount} • Lệch: {levelScanMeta.inconsistentCount}
+                    </span>
+                  </div>
+                  {levelScanMeta.cacheLabel && (
+                    <div
+                      data-testid="cache-only-warning-banner"
+                      className="px-2 py-1 rounded bg-amber-500/20 border border-amber-400/50 text-amber-200 font-extrabold uppercase"
+                    >
+                      {levelScanMeta.cacheLabel}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {levelConsistencyEntries.length > 0 && (
+                <div className="overflow-x-auto rounded-lg border border-neutral-800 bg-neutral-950/80 max-h-48 overflow-y-auto">
+                  <table className="w-full text-left border-collapse text-[11px] font-mono">
+                    <thead>
+                      <tr className="bg-neutral-900 text-neutral-400 border-b border-neutral-800">
+                        <th className="py-1.5 px-2">UID / Email</th>
+                        <th className="py-1.5 px-2">Nguồn dữ liệu</th>
+                        <th className="py-1.5 px-2">XP xác minh</th>
+                        <th className="py-1.5 px-2">Level lưu cũ</th>
+                        <th className="py-1.5 px-2">Level chuẩn</th>
+                        <th className="py-1.5 px-2">Trạng thái</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-800/70">
+                      {levelConsistencyEntries.map((c) => (
+                        <tr key={c.uid}>
+                          <td className="py-1.5 px-2 text-neutral-200">
+                            {c.email ? `${c.email} (${c.uid})` : c.uid}
+                          </td>
+                          <td className="py-1.5 px-2">
+                            {c.dataSource === 'FIRESTORE_LIVE' ? (
+                              <span className="text-emerald-300 font-bold">FIRESTORE</span>
+                            ) : (
+                              <span className="text-amber-300 font-bold">
+                                {c.sourceLabel || 'CACHE ONLY – NOT PRODUCTION VERIFIED'}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-1.5 px-2 tabular-nums text-amber-300">
+                            {c.resolvedVerifiedTotalXp !== null
+                              ? `${c.resolvedVerifiedTotalXp.toLocaleString('vi-VN')} XP`
+                              : 'INVALID'}
+                          </td>
+                          <td className="py-1.5 px-2 tabular-nums text-neutral-300">
+                            {c.storedLevel !== undefined ? String(c.storedLevel) : '--'}
+                          </td>
+                          <td className="py-1.5 px-2 tabular-nums text-sky-300">
+                            {c.expectedLevel !== null ? `Lv. ${c.expectedLevel}` : '--'}
+                          </td>
+                          <td className="py-1.5 px-2">
+                            {c.isConsistent ? (
+                              <span className="text-emerald-300">Khớp chuẩn</span>
+                            ) : (
+                              <span className="text-rose-300 font-bold">
+                                Lệch: {c.discrepancyCodes.join(', ')}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Filter Bar */}
           <div className="p-3 rounded-xl bg-neutral-900/70 border border-neutral-800 space-y-2.5">
             <div className="flex items-center justify-between gap-2">
@@ -675,7 +884,7 @@ export const SystemLogsAdminPanel: React.FC<SystemLogsAdminPanelProps> = ({ user
                 />
               </div>
 
-              {subTab === 'PLAYER_HISTORY' && (
+              {(subTab === 'PLAYER_HISTORY' || subTab === 'LEVEL_AUDIT') && (
                 <select
                   value={selectedPlayerUid}
                   onChange={(e) => setSelectedPlayerUid(e.target.value)}

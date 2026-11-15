@@ -26,6 +26,10 @@ import {
   verifyM751AsyncEndToEndSuite,
 } from '../src/core/testHarnessM7_5.ts';
 import {
+  runAllM7_5_2Tests as runM752,
+  verifyM752AsyncLevelConcurrencyAndScanSuite,
+} from '../src/core/testHarnessM7_5_2.ts';
+import {
   getShowOnlineNetStatsPreference,
   setShowOnlineNetStatsPreference,
 } from '../src/core/networkStatsPref.ts';
@@ -51,6 +55,7 @@ const m72Results = runM72().results;
 const m73Results = runM73().results;
 const m74Results = runM74().results;
 const m75Results = runM75().results;
+const m752Results = runM752().results;
 
 const allSuites = [
   { name: 'M2 Physics & Tank (12 Tests)', results: m2Results },
@@ -72,6 +77,7 @@ const allSuites = [
   { name: `M7.3 Rules Hardening, WebRTC Co-op, Audio, Avatar, RBAC & Security Audit (${m73Results.length} Tests)`, results: m73Results },
   { name: `M7.4 Campaign Stages 2–10, Progression, Co-op Sync & Security (${m74Results.length} Tests)`, results: m74Results },
   { name: `M7.5 Player Statistics, Static Media, Audit Logging & 9-Step Archive (${m75Results.length} Tests)`, results: m75Results },
+  { name: `M7.5.2 Official 50-Level System, XP Integrity, Dedup & Consistency Audit (${m752Results.length} Tests)`, results: m752Results },
 ];
 
 let totalTests = 0;
@@ -1837,10 +1843,11 @@ async function runAllAsyncVerifications() {
   await verifyM7312FixesAsyncSuite();
   await verifyM7313FixesAsyncSuite();
   await verifyM751AsyncEndToEndSuite();
-  const asyncCasesCount = 10 + 23 + 4 + 3 + 4 + 8 + 5;
+  await verifyM752AsyncLevelConcurrencyAndScanSuite();
+  const asyncCasesCount = 10 + 23 + 4 + 3 + 4 + 8 + 5 + 3;
   console.log('============================================');
-  console.log(`SYNC UNIT TESTS  : ${totalPassed}/${totalTests} PASS (M2-M5: 75 | M6: 136 | M7.1: 35 | M7.2: 10 | M7.3: ${m73Results.length} | M7.4: ${m74Results.length} | M7.5: ${m75Results.length})`);
-  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Static: 3 | M7.3.12 Fixes: 4 | M7.3.13 Fixes: 8 | M7.5.1 Audit/Archive/Backup: 5)`);
+  console.log(`SYNC UNIT TESTS  : ${totalPassed}/${totalTests} PASS (M2-M5: 75 | M6: 136 | M7.1: 35 | M7.2: 10 | M7.3: ${m73Results.length} | M7.4: ${m74Results.length} | M7.5.1: ${m75Results.length} | M7.5.2: ${m752Results.length})`);
+  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Static: 3 | M7.3.12 Fixes: 4 | M7.3.13 Fixes: 8 | M7.5.1 Audit/Archive/Backup: 5 | M7.5.2 Level Concurrency & Scan: 3)`);
   console.log(`GRAND TOTAL SUITE: ${totalPassed + asyncCasesCount}/${totalTests + asyncCasesCount} PASS (0 FAILED, 0 DUPLICATED)`);
   console.log('============================================');
   process.exit(0);

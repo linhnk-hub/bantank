@@ -255,6 +255,7 @@ export interface SnapshotValidationResult {
 export interface GameCoreState {
   tickCount: number;
   stageRunSeq: number;
+  matchInstanceId?: string;
   p1: TankStructure;
   p1State: P1PlayerState;
   bullet: BulletStructure | null; // P1 bullet (M2 compatibility)

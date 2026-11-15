@@ -60,6 +60,7 @@ export interface CoopAuthoritativeSnapshot {
   serverTimestamp: number;
   tickCount: number;
   stageRunSeq: number;
+  matchInstanceId?: string;
   difficulty: 'DEFAULT' | 'EXTREME';
   matchDurationSeconds: number;
   remainingTicks: number;
@@ -624,6 +625,7 @@ export function buildAuthoritativeSnapshot(
     serverTimestamp: nowMs,
     tickCount: state.tickCount,
     stageRunSeq,
+    matchInstanceId: state.matchInstanceId,
     difficulty,
     matchDurationSeconds,
     remainingTicks,

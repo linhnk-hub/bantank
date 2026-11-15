@@ -132,7 +132,7 @@ export function runAllM7_5Tests(): { results: M75TestResult[] } {
       outcome: 'WIN',
       stageId: 1,
       gameMode: 'SOLO',
-      earnedScoreXp: 250,
+      earnedScoreXp: 66, // 12*1 + 8*2 + 6*3 + 4*5 = 66 XP
       defeatedByType: { BASIC: 12, FAST: 8, POWER: 6, ARMOR: 4 },
       timestampMs: 1_715_000_120_000,
     });
@@ -144,7 +144,9 @@ export function runAllM7_5Tests(): { results: M75TestResult[] } {
 
     const passed =
       snapA.uid === uidA &&
-      snapA.totalXp === 1450 &&
+      snapA.totalXp === 1516 && // 1450 cloud baseline + 66 verified stage XP -> Lv. 6 (XP_REQUIRED(6)=1500)
+      snapA.level === 6 &&
+      snapA.levelTopMenuBadge === 'Lv. 6' &&
       snapA.xuBalance === 320 &&
       snapA.pvpRankCode === 'CAPTAIN' &&
       snapA.matchesPlayed === 1 &&
@@ -152,8 +154,11 @@ export function runAllM7_5Tests(): { results: M75TestResult[] } {
       snapA.totalEnemiesDefeated === 30 &&
       snapA.coopRoomsParticipated === 1 &&
       snapA.totalLogins === 1 &&
-      // UID B must be completely isolated from UID A
+      // UID B must be completely isolated from UID A & unverified before login/cloud snapshot
       snapB.uid === uidB &&
+      snapB.xpVerificationStatus === 'UNVERIFIED' &&
+      snapB.level === null &&
+      snapB.levelTopMenuBadge === 'Lv. --' &&
       snapB.totalXp === 0 &&
       snapB.xuBalance === 0 &&
       snapB.pvpRankCode === null &&
@@ -171,64 +176,77 @@ export function runAllM7_5Tests(): { results: M75TestResult[] } {
 
     results.push({
       id: 'M7_5_A1',
-      name: 'Group A.1: Cô lập dữ liệu thống kê tuyệt đối theo UID, không rò rỉ giữa tài khoản A/B & reset sạch khi đăng xuất',
+      name: 'Group A.1: Cô lập dữ liệu thống kê tuyệt đối theo UID, cộng dồn XP hợp lệ lên Level, không rò rỉ giữa tài khoản A/B & reset sạch khi đăng xuất',
       passed,
-      details: `snapA(xp=${snapA.totalXp},xu=${snapA.xuBalance},wins=${snapA.matchesWon}), snapB(xp=${snapB.totalXp},logins=${snapB.totalLogins}), signedOutBadge=${snapSignedOut.levelTopMenuBadge}`,
+      details: `snapA(xp=${snapA.totalXp},lv=${snapA.level},xu=${snapA.xuBalance},wins=${snapA.matchesWon}), snapB(status=${snapB.xpVerificationStatus},badge=${snapB.levelTopMenuBadge}), signedOutBadge=${snapSignedOut.levelTopMenuBadge}`,
     });
   }
 
-  // M7_5_A2: Clause 1.2 Honesty — No fabricated Level formula; strict separation of Level vs PvP Rank vs XP vs Xu
+  // M7_5_A2: M7.5.2 Approved 50-Level System — Unverified XP honesty, MAX LEVEL 50 cap, legacy mismatch detection, and strict separation of Level vs PvP Rank vs XP vs Xu
   {
     const statsMgr = PlayerStatsManager.getInstance();
-    const uidUnconf = 'uid_m75_unconf_level';
-    const uidConf = 'uid_m75_conf_level';
+    const uidUnverified = 'uid_m75_unverified_xp';
+    const uidMax = 'uid_m75_max_level';
+    const uidMismatch = 'uid_m75_legacy_mismatch';
 
-    statsMgr.clearUidStatsForTesting(uidUnconf);
-    statsMgr.clearUidStatsForTesting(uidConf);
+    statsMgr.clearUidStatsForTesting(uidUnverified);
+    statsMgr.clearUidStatsForTesting(uidMax);
+    statsMgr.clearUidStatsForTesting(uidMismatch);
 
-    // Huge XP & Xu + COLONEL rank, but NO `level` field on /users/{uid} -> MUST NOT fabricate Level!
-    statsMgr.applyCloudUserDocData(uidUnconf, {
-      uid: uidUnconf,
+    // Unverified UID -> MUST NOT default to Lv. 1; displays Lv. --
+    const unverifiedSnap = statsMgr.getPlayerStatisticsSnapshot(uidUnverified);
+
+    // Huge XP (999,999 >= 122,500) -> Caps at Level 50 (MAX LEVEL, xpNext = null) while preserving totalXp, COLONEL rank, and 50,000 Xu
+    statsMgr.applyCloudUserDocData(uidMax, {
+      uid: uidMax,
       xp: 999_999,
       xu: 50_000,
       rank: 'COLONEL',
     });
-    const unconfSnap = statsMgr.getPlayerStatisticsSnapshot(uidUnconf);
+    const maxSnap = statsMgr.getPlayerStatisticsSnapshot(uidMax);
 
-    // Explicit positive integer `level: 12` on /users/{uid} -> Displays real Level 12 without altering XP/Xu/Rank
-    statsMgr.applyCloudUserDocData(uidConf, {
-      uid: uidConf,
+    // Legacy `level: 12` vs `xp: 4800` (expected Level 10 since XP_REQUIRED(10)=4500, XP_REQUIRED(11)=5500) -> Computes Lv. 10 & flags mismatch without mutating Firestore
+    statsMgr.applyCloudUserDocData(uidMismatch, {
+      uid: uidMismatch,
       level: 12,
       xp: 4800,
       xu: 750,
       rank: 'SERGEANT',
     });
-    const confSnap = statsMgr.getPlayerStatisticsSnapshot(uidConf);
+    const mismatchSnap = statsMgr.getPlayerStatisticsSnapshot(uidMismatch);
 
     const passed =
-      unconfSnap.level === null &&
-      unconfSnap.levelStatus === 'UNCONFIGURED' &&
-      unconfSnap.levelTopMenuBadge === 'Lv. --' &&
-      unconfSnap.levelSystemLabel.includes('Chưa thiết lập') &&
-      unconfSnap.pvpRankCode === 'COLONEL' &&
-      unconfSnap.totalXp === 999_999 &&
-      unconfSnap.xuBalance === 50_000 &&
-      confSnap.level === 12 &&
-      confSnap.levelStatus === 'CONFIGURED' &&
-      confSnap.levelTopMenuBadge === 'Lv. 12' &&
-      confSnap.levelSystemLabel === 'Cấp 12' &&
-      confSnap.pvpRankCode === 'SERGEANT' &&
-      confSnap.totalXp === 4800 &&
-      confSnap.xuBalance === 750;
+      unverifiedSnap.level === null &&
+      unverifiedSnap.xpVerificationStatus === 'UNVERIFIED' &&
+      unverifiedSnap.levelTopMenuBadge === 'Lv. --' &&
+      maxSnap.level === 50 &&
+      maxSnap.isMaxLevel === true &&
+      maxSnap.xpNext === null &&
+      maxSnap.xpRemaining === 0 &&
+      maxSnap.levelProgressPercent === 100 &&
+      maxSnap.levelTopMenuBadge === 'Lv. 50' &&
+      maxSnap.pvpRankCode === 'COLONEL' &&
+      maxSnap.totalXp === 999_999 &&
+      maxSnap.xuBalance === 50_000 &&
+      mismatchSnap.level === 10 &&
+      mismatchSnap.levelTopMenuBadge === 'Lv. 10' &&
+      mismatchSnap.xpNext === 5500 &&
+      mismatchSnap.xpRemaining === 700 &&
+      mismatchSnap.levelConsistencyAudit?.isConsistent === false &&
+      mismatchSnap.levelConsistencyAudit?.discrepancyCodes.includes('STORED_LEVEL_MISMATCH_FORMULA') === true &&
+      mismatchSnap.pvpRankCode === 'SERGEANT' &&
+      mismatchSnap.totalXp === 4800 &&
+      mismatchSnap.xuBalance === 750;
 
-    statsMgr.clearUidStatsForTesting(uidUnconf);
-    statsMgr.clearUidStatsForTesting(uidConf);
+    statsMgr.clearUidStatsForTesting(uidUnverified);
+    statsMgr.clearUidStatsForTesting(uidMax);
+    statsMgr.clearUidStatsForTesting(uidMismatch);
 
     results.push({
       id: 'M7_5_A2',
-      name: 'Group A.2: Tuân thủ Mục 1.2 – Không bịa công thức Level giả từ XP; tách biệt hoàn toàn Level, Quân hàm PvP, XP và Xu',
+      name: 'Group A.2: Hệ thống 50 Level chính thức (M7.5.2) – Chưa xác minh XP hiển thị Lv. --, trần MAX LEVEL 50, phát hiện lệch dữ liệu cũ & tách biệt Level/Rank/XP/Xu',
       passed,
-      details: `unconfBadge=${unconfSnap.levelTopMenuBadge} (xp=${unconfSnap.totalXp}), confBadge=${confSnap.levelTopMenuBadge} (rank=${confSnap.pvpRankCode}, xu=${confSnap.xuBalance})`,
+      details: `unverified=${unverifiedSnap.levelTopMenuBadge}, max=${maxSnap.levelTopMenuBadge}(xp=${maxSnap.totalXp},xpNext=${String(maxSnap.xpNext)}), mismatch=${mismatchSnap.levelTopMenuBadge}(audit=${mismatchSnap.levelConsistencyAudit?.discrepancyCodes.join(',')})`,
     });
   }
 
@@ -312,19 +330,26 @@ export function runAllM7_5Tests(): { results: M75TestResult[] } {
       modeSelSrc.includes('data-testid="top-menu-player-level"') &&
       modeSelSrc.includes('PlayerStatsManager.getInstance()');
 
+    const userProfileSrc = readWorkspaceFile('src/components/UserProfileModal.tsx');
+    const adminLogsSrc = readWorkspaceFile('src/components/SystemLogsAdminPanel.tsx');
+
     const systemStatsUiOk =
       settingsSrc.includes('data-testid="system-player-statistics-section"') &&
-      settingsSrc.includes('Level (Cấp độ)') &&
+      settingsSrc.includes('Level (Cấp độ 1–50)') &&
+      settingsSrc.includes('data-testid="player-level-progress-panel"') &&
+      settingsSrc.includes('data-testid="player-level-progress-bar"') &&
       settingsSrc.includes('Quân hàm PvP') &&
       settingsSrc.includes('Tổng điểm XP') &&
       settingsSrc.includes('Số dư Xu') &&
       settingsSrc.includes('Tổng số lần đăng nhập') &&
-      settingsSrc.includes('Lịch sử đăng nhập &amp; đăng xuất');
+      settingsSrc.includes('Lịch sử đăng nhập &amp; đăng xuất') &&
+      userProfileSrc.includes('data-testid="profile-player-level-card"') &&
+      adminLogsSrc.includes('data-testid="subtab-level-audit"');
 
     const passed = topMenuLevelOk && systemStatsUiOk;
     results.push({
       id: 'M7_5_A4',
-      name: 'Group A.4: Hiển thị Level trên Top Menu (MainMenu & ModeSelection) và Thống kê người chơi đầy đủ trong mục Hệ thống',
+      name: 'Group A.4: Hiển thị Level trên Top Menu, Hồ sơ, mục Hệ thống (kèm thanh tiến độ 0–100%) & tab Kiểm toán Level 1–50 cho ADMIN',
       passed,
       details: `topMenuLevelOk=${topMenuLevelOk}, systemStatsUiOk=${systemStatsUiOk}`,
     });

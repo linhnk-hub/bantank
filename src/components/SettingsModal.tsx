@@ -894,11 +894,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="p-3 rounded-xl bg-neutral-950 border border-sky-500/30 space-y-1"
                   >
                     <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
-                      <span>Level (Cấp độ)</span>
+                      <span>Level (Cấp độ 1–50)</span>
                       <Award className="w-3.5 h-3.5 text-sky-400" />
                     </div>
-                    <div className="text-sm font-extrabold font-mono text-sky-300">
-                      {playerStats.level !== null ? `Lv. ${playerStats.level}` : 'Lv. --'}
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="text-sm font-extrabold font-mono tabular-nums text-sky-300">
+                        {playerStats.level !== null ? `Lv. ${playerStats.level}` : 'Lv. --'}
+                      </span>
+                      {playerStats.isMaxLevel && (
+                        <span
+                          data-testid="system-max-level-badge"
+                          className="px-1.5 py-0.5 rounded bg-amber-500 text-black text-[9px] font-mono font-black uppercase"
+                        >
+                          MAX LEVEL
+                        </span>
+                      )}
                     </div>
                     <div className="text-[10px] text-neutral-400 leading-snug">
                       {playerStats.levelSystemLabel}
@@ -926,13 +936,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="p-3 rounded-xl bg-neutral-950 border border-amber-500/30 space-y-1"
                   >
                     <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
-                      <span>Tổng điểm XP</span>
+                      <span>Tổng điểm XP tích lũy</span>
                       <Trophy className="w-3.5 h-3.5 text-amber-400" />
                     </div>
-                    <div className="text-sm font-extrabold font-mono text-amber-300">
-                      {playerStats.totalXp.toLocaleString('vi-VN')} XP
+                    <div className="text-sm font-extrabold font-mono tabular-nums text-amber-300">
+                      {playerStats.xpVerificationStatus === 'VERIFIED'
+                        ? `${playerStats.totalXp.toLocaleString('vi-VN')} XP`
+                        : 'Chưa xác minh'}
                     </div>
-                    <div className="text-[10px] font-mono text-neutral-400">
+                    <div className="text-[10px] font-mono tabular-nums text-neutral-400">
                       Kỷ lục trận: {playerStats.highScoreXp.toLocaleString('vi-VN')} XP
                     </div>
                   </div>
@@ -945,13 +957,93 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <span>Số dư Xu</span>
                       <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                     </div>
-                    <div className="text-sm font-extrabold font-mono text-emerald-300">
+                    <div className="text-sm font-extrabold font-mono tabular-nums text-emerald-300">
                       {playerStats.xuBalance.toLocaleString('vi-VN')} Xu
                     </div>
                     <div className="text-[10px] text-neutral-400">
                       Độc lập, không tự quy đổi từ XP
                     </div>
                   </div>
+                </div>
+
+                {/* M7.5.2 Mục 6.2: Thanh tiến độ Level 0–100%, XP_NEXT, XP_REMAINING & MAX LEVEL */}
+                <div
+                  data-testid="player-level-progress-panel"
+                  className="p-3.5 rounded-xl bg-neutral-950/90 border border-sky-500/25 space-y-2.5"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 text-xs font-extrabold font-mono text-sky-200">
+                      <span>
+                        Tiến độ Level:{' '}
+                        {playerStats.level !== null ? `Lv. ${playerStats.level}` : 'Lv. --'}
+                      </span>
+                      {playerStats.isMaxLevel && (
+                        <span className="px-2 py-0.5 rounded bg-amber-500 text-black text-[10px] font-black uppercase">
+                          MAX LEVEL
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-[11px] font-mono font-bold tabular-nums text-amber-300">
+                      {playerStats.xpVerificationStatus === 'VERIFIED'
+                        ? `${playerStats.levelProgressPercent}%`
+                        : '--%'}
+                    </span>
+                  </div>
+
+                  <div
+                    data-testid="player-level-progress-bar"
+                    role="progressbar"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={Math.round(playerStats.levelProgressPercent)}
+                    className="w-full h-2.5 rounded-lg bg-neutral-800 border border-neutral-700/80 overflow-hidden"
+                  >
+                    <svg
+                      viewBox="0 0 100 10"
+                      preserveAspectRatio="none"
+                      className="w-full h-full block"
+                    >
+                      <rect
+                        x="0"
+                        y="0"
+                        width={playerStats.levelProgressPercent}
+                        height="10"
+                        className={playerStats.isMaxLevel ? 'fill-amber-400' : 'fill-sky-400'}
+                      />
+                    </svg>
+                  </div>
+
+                  {playerStats.xpVerificationStatus !== 'VERIFIED' ? (
+                    <div className="text-[11px] font-mono text-neutral-400">
+                      Trạng thái XP chưa được xác minh — hệ thống không hiển thị Level giả định.
+                    </div>
+                  ) : playerStats.isMaxLevel ? (
+                    <div className="flex items-center justify-between gap-2 flex-wrap text-[11px] font-mono tabular-nums text-amber-200">
+                      <span>Tổng XP tích lũy: {playerStats.totalXp.toLocaleString('vi-VN')} XP</span>
+                      <span>Đã đạt cấp tối đa (MAX LEVEL) • Tiếp tục tích lũy XP</span>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] font-mono tabular-nums">
+                      <div className="text-neutral-300">
+                        <span className="text-neutral-500">Tổng XP: </span>
+                        <strong className="text-amber-300">
+                          {playerStats.totalXp.toLocaleString('vi-VN')} XP
+                        </strong>
+                      </div>
+                      <div className="text-neutral-300">
+                        <span className="text-neutral-500">Mốc cấp tiếp theo: </span>
+                        <strong className="text-sky-300">
+                          {(playerStats.xpNext ?? 0).toLocaleString('vi-VN')} XP
+                        </strong>
+                      </div>
+                      <div className="text-neutral-300 sm:text-right">
+                        <span className="text-neutral-500">Còn thiếu: </span>
+                        <strong className="text-emerald-300">
+                          {(playerStats.xpRemaining ?? 0).toLocaleString('vi-VN')} XP
+                        </strong>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {/* Thành tích Chiến dịch & Hoạt động chiến đấu */}

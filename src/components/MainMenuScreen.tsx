@@ -245,7 +245,13 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               <span
                 data-testid="top-menu-player-level"
                 title={`Level người chơi: ${playerStats.levelSystemLabel}`}
-                className="text-[10px] font-mono font-extrabold tabular-nums px-1.5 py-0.5 rounded bg-amber-950/90 border border-amber-500/40 text-amber-200 shrink-0 whitespace-nowrap"
+                className={`text-[10px] font-mono font-extrabold tabular-nums px-1.5 py-0.5 rounded border shrink-0 whitespace-nowrap ${
+                  playerStats.isMaxLevel
+                    ? 'bg-amber-500 text-black border-amber-300'
+                    : playerStats.xpVerificationStatus === 'VERIFIED'
+                      ? 'bg-amber-950/90 border-amber-500/40 text-amber-200'
+                      : 'bg-neutral-900 border-neutral-700 text-neutral-400'
+                }`}
               >
                 {playerStats.levelTopMenuBadge}
               </span>

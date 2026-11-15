@@ -92,6 +92,10 @@ export type PlayerActivityEventType =
   | 'COOP_ROOM_CLOSED'
   | 'WEBRTC_PEER_ERROR'
   | 'ROLE_PERMISSION_CHANGED'
+  | 'PLAYER_LEVEL_CHANGED'
+  | 'PLAYER_LEVEL_DATA_MISMATCH'
+  | 'CLIENT_XP_TAMPER_REJECTED'
+  | 'XP_GRANT_REJECTED'
   | 'SYSTEM_DIAGNOSTIC';
 
 export interface SystemAuditLogEntry {
@@ -1730,6 +1734,62 @@ export class SystemAuditLogger {
 
     const playerOnlySource = this.permanentLogs.filter((item) => Boolean(item.uid));
     const filtered = this.filterEntriesInternal(playerOnlySource, filter);
+    let criticalCount = 0;
+    let errorCount = 0;
+    for (const item of filtered) {
+      if (item.severity === 'CRITICAL') criticalCount++;
+      else if (item.severity === 'ERROR') errorCount++;
+    }
+
+    const pageSize = Math.max(1, Math.min(200, Math.floor(filter.pageSize ?? 20)));
+    const totalItems = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+    const currentPage = Math.max(1, Math.min(totalPages, Math.floor(filter.page ?? 1)));
+    const offset = (currentPage - 1) * pageSize;
+    const items = filtered.slice(offset, offset + pageSize).map((e) => ({ ...e }));
+
+    return {
+      success: true,
+      items,
+      totalItems,
+      totalPages,
+      currentPage,
+      pageSize,
+      criticalCount,
+      errorCount,
+    };
+  }
+
+  /**
+   * M7.5.2 Section 7: Queries verified Player Level change & consistency audit logs strictly for sole ADMIN.
+   */
+  public queryPlayerLevelHistory(
+    filter: LogQueryFilter = {},
+    actorOverride?: AuthIdentityLike | null
+  ): PaginatedLogResult {
+    if (!this.canAccessSystemLogs(actorOverride)) {
+      return {
+        success: false,
+        errorCode: 'PERMISSION_DENIED',
+        errorMessage: 'Từ chối truy cập: Chỉ ADMIN duy nhất được phép tra cứu Lịch sử Level.',
+        items: [],
+        totalItems: 0,
+        totalPages: 0,
+        currentPage: 1,
+        pageSize: filter.pageSize ?? 20,
+        criticalCount: 0,
+        errorCount: 0,
+      };
+    }
+
+    const levelEvents = new Set([
+      'PLAYER_LEVEL_CHANGED',
+      'PLAYER_LEVEL_DATA_MISMATCH',
+      'CLIENT_XP_TAMPER_REJECTED',
+      'XP_GRANT_REJECTED',
+    ]);
+    const levelOnlySource = this.permanentLogs.filter((item) => levelEvents.has(item.eventType));
+    const filtered = this.filterEntriesInternal(levelOnlySource, filter);
     let criticalCount = 0;
     let errorCount = 0;
     for (const item of filtered) {
