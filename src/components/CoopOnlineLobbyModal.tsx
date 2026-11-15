@@ -24,6 +24,7 @@ import {
   Zap,
   RefreshCw,
   KeyRound,
+  Map as MapIcon,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import {
@@ -37,6 +38,9 @@ import {
 } from '../core/authManager.ts';
 import { AvatarManager } from '../core/avatarManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
+import { CAMPAIGN_STAGE_SPECS, getCampaignStageSpec } from '../core/campaignStages.ts';
+import { StageProgressionManager } from '../core/stageProgression.ts';
+import { StageMapMiniPreview } from './StageMapMiniPreview.tsx';
 
 export type CoopLobbySubView = 'MAIN' | 'CREATE' | 'JOIN';
 
@@ -75,6 +79,12 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   const [createDifficulty, setCreateDifficulty] = useState<'DEFAULT' | 'EXTREME'>(difficulty);
   const [createHasPassword, setCreateHasPassword] = useState<boolean>(true); // Mặc định: Có mật khẩu
   const [createPasswordInput, setCreatePasswordInput] = useState<string>('');
+  const [userStageProgress, setUserStageProgress] = useState(() =>
+    StageProgressionManager.getInstance().getUserStageProgressSnapshot(user?.uid)
+  );
+  const [createStageId, setCreateStageId] = useState<number>(() =>
+    StageProgressionManager.getInstance().getUnlockedStageForUser(user?.uid, false)
+  );
 
   // Join Room state (M7.3.7 Mục VI.5.3)
   const [joinCodeInput, setJoinCodeInput] = useState('');
@@ -102,6 +112,17 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   useEffect(() => {
     setCreateDifficulty(difficulty);
   }, [difficulty]);
+
+  useEffect(() => {
+    const progMgr = StageProgressionManager.getInstance();
+    const syncProg = () => {
+      const snap = progMgr.getUserStageProgressSnapshot(user?.uid);
+      setUserStageProgress(snap);
+      setCreateStageId((prev) => (prev > snap.unlockedStage ? snap.unlockedStage : prev));
+    };
+    syncProg();
+    return progMgr.subscribe(syncProg);
+  }, [user?.uid]);
 
   useEffect(() => {
     const handleRoomTransition = (
@@ -174,6 +195,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
       const res = await coopManager.createRoom(user, createDifficulty, undefined, {
         hasPassword: createHasPassword,
         password: createHasPassword ? createPasswordInput : undefined,
+        stageId: createStageId,
       });
       if (!res.success) {
         setErrorMsg(res.message || 'Không thể tạo phòng.');
@@ -540,6 +562,69 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
               )}
             </div>
 
+            {/* 3. Chọn Stage chiến dịch (1–10) */}
+            {(() => {
+              const chosenSpec = getCampaignStageSpec(createStageId);
+              return (
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <label className="block text-xs font-extrabold uppercase tracking-wider text-emerald-300">
+                      3. Chọn Stage chiến dịch (1–10)
+                    </label>
+                    <span className="text-[11px] font-mono text-amber-300 font-bold">
+                      Đã mở: Stage {userStageProgress.unlockedStage}/10
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
+                    {CAMPAIGN_STAGE_SPECS.map((stage) => {
+                      const isUnlocked = stage.id <= userStageProgress.unlockedStage;
+                      const isSelected = createStageId === stage.id;
+                      return (
+                        <button
+                          key={stage.id}
+                          type="button"
+                          onClick={() => {
+                            if (!isUnlocked) {
+                              setErrorMsg(
+                                `Stage ${stage.id} đang bị khóa. Cần hoàn thành Stage ${stage.id - 1} để mở khóa.`
+                              );
+                              return;
+                            }
+                            setErrorMsg(null);
+                            setCreateStageId(stage.id);
+                          }}
+                          className={`py-2 px-1 rounded-lg border text-center transition-all flex flex-col items-center justify-center gap-0.5 ${
+                            !isUnlocked
+                              ? 'bg-neutral-950/60 border-neutral-800 text-neutral-600 cursor-not-allowed opacity-65'
+                              : isSelected
+                                ? 'bg-amber-500 border-amber-300 text-black font-black cursor-pointer'
+                                : 'bg-neutral-950 border-neutral-700 text-neutral-200 hover:border-amber-500/60 cursor-pointer'
+                          }`}
+                        >
+                          <span className="text-[10px] font-mono font-extrabold">S{stage.id}</span>
+                          {!isUnlocked && <Lock className="w-2.5 h-2.5 text-neutral-600" />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 flex items-center gap-3">
+                    <StageMapMiniPreview map={chosenSpec.map} sizePx={72} showSpawns />
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <div className="font-mono font-black text-xs text-white truncate">
+                        {chosenSpec.name}
+                      </div>
+                      <p className="text-[11px] text-neutral-400 leading-snug whitespace-pre-line">
+                        {formatSentenceLineBreaks(chosenSpec.terrainFocus)}
+                      </p>
+                      <div className="text-[10px] font-mono text-amber-300/90">
+                        30 địch: Basic {chosenSpec.enemyComposition.BASIC} • Fast {chosenSpec.enemyComposition.FAST} • Power {chosenSpec.enemyComposition.POWER} • Armor {chosenSpec.enemyComposition.ARMOR}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             <div className="flex flex-wrap items-center justify-end gap-3 pt-2 border-t border-neutral-800">
               <button
                 type="submit"
@@ -853,6 +938,82 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
           )}
         </div>
       )}
+
+      {/* Selected Stage Banner + Host Stage Switcher */}
+      {(() => {
+        const lobbyStageId = room.selectedStageId ?? 1;
+        const lobbyStageSpec = getCampaignStageSpec(lobbyStageId);
+        return (
+          <div
+            data-testid="coop-lobby-stage-panel"
+            className="p-3.5 rounded-xl bg-neutral-950/85 border border-neutral-800 space-y-2.5"
+          >
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-300 font-mono uppercase">
+                <MapIcon className="w-3.5 h-3.5 text-amber-400" />
+                <span>Màn chơi phòng: {lobbyStageSpec.name}</span>
+              </div>
+              <span className="text-[10px] font-mono text-neutral-400">
+                {role === 'HOST'
+                  ? 'Chủ phòng (P1) chọn Stage'
+                  : 'Đồng bộ từ Chủ phòng (P1)'}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <StageMapMiniPreview map={lobbyStageSpec.map} sizePx={68} showSpawns />
+              <div className="flex-1 min-w-0 space-y-1">
+                <p className="text-[11px] text-neutral-300 leading-snug whitespace-pre-line">
+                  {formatSentenceLineBreaks(lobbyStageSpec.terrainFocus)}
+                </p>
+                <div className="text-[10px] font-mono text-neutral-400">
+                  30 xe địch: Basic {lobbyStageSpec.enemyComposition.BASIC} • Fast {lobbyStageSpec.enemyComposition.FAST} • Power {lobbyStageSpec.enemyComposition.POWER} • Armor {lobbyStageSpec.enemyComposition.ARMOR}
+                </div>
+              </div>
+            </div>
+
+            {role === 'HOST' && (
+              <div className="grid grid-cols-5 sm:grid-cols-10 gap-1 pt-1">
+                {CAMPAIGN_STAGE_SPECS.map((stage) => {
+                  const isUnlocked = stage.id <= userStageProgress.unlockedStage;
+                  const isSelected = lobbyStageId === stage.id;
+                  return (
+                    <button
+                      key={stage.id}
+                      type="button"
+                      disabled={isBusy}
+                      data-testid={`coop-lobby-stage-btn-${stage.id}`}
+                      onClick={() => {
+                        if (!isUnlocked) {
+                          setErrorMsg(
+                            `Stage ${stage.id} đang bị khóa. Cần hoàn thành Stage ${stage.id - 1} để mở khóa.`
+                          );
+                          return;
+                        }
+                        setErrorMsg(null);
+                        const res = coopManager.setRoomStage(stage.id, user?.uid);
+                        if (!res.success) {
+                          setErrorMsg(res.message || `Không thể chọn Stage ${stage.id}.`);
+                        }
+                      }}
+                      className={`py-1.5 rounded-lg border text-[10px] font-mono font-extrabold flex items-center justify-center gap-0.5 transition-all ${
+                        !isUnlocked
+                          ? 'bg-neutral-900/60 border-neutral-800 text-neutral-600 cursor-not-allowed opacity-60'
+                          : isSelected
+                            ? 'bg-amber-500 border-amber-300 text-black cursor-pointer'
+                            : 'bg-neutral-900 border-neutral-700 text-neutral-300 hover:border-amber-500/60 cursor-pointer'
+                      }`}
+                    >
+                      <span>S{stage.id}</span>
+                      {!isUnlocked && <Lock className="w-2.5 h-2.5" />}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* 2 Player Slots */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

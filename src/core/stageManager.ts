@@ -7,6 +7,7 @@ import { STAGE_1_MAP, ENEMY_CONFIG, MAP_DIMENSIONS } from './constants.ts';
 import { TILE_TYPES, type EnemyType } from './types.ts';
 import { validateStageMap } from './mapValidator.ts';
 import { hasRolePermission, type UserRole } from './rbacMatrix.ts';
+import { CAMPAIGN_STAGE_SPECS } from './campaignStages.ts';
 
 export type StageLifecycleStatus = 'DRAFT' | 'ACTIVE' | 'INACTIVE';
 
@@ -182,6 +183,7 @@ export class StageManager {
   constructor(options?: { loadPersisted?: boolean }) {
     this.initializeOfficialStage1();
     if (options?.loadPersisted) {
+      this.seedOfficialCampaignStages2To10();
       this.loadFromStorage();
     } else if (StageManager.globalInstance) {
       // Seed active stages from global StageManager snapshot so new GameEngine instances
@@ -204,6 +206,8 @@ export class StageManager {
           }
         }
       }
+    } else {
+      this.seedOfficialCampaignStages2To10();
     }
   }
 
@@ -231,6 +235,41 @@ export class StageManager {
       map: cloneStageMap(officialMap),
       enemyQueue: [...STAGE_1_DEFINITION.enemyQueue],
     });
+  }
+
+  public seedOfficialCampaignStages2To10(): void {
+    for (const spec of CAMPAIGN_STAGE_SPECS) {
+      if (spec.id === 1) continue;
+      const clonedMap = cloneStageMap(spec.map);
+      const clonedQueue = [...spec.enemyQueue];
+      const rec: ManagedStageRecord = {
+        id: spec.id,
+        orderIndex: spec.orderIndex,
+        name: spec.name,
+        status: 'ACTIVE',
+        version: 1,
+        activeVersion: 1,
+        updatedAtMs: 1700000000000 + spec.id * 1000,
+        updatedBy: 'system@bantank.online',
+        isOfficialStage1: false,
+        draftMap: cloneStageMap(clonedMap),
+        activeMap: cloneStageMap(clonedMap),
+        enemyQueue: clonedQueue,
+        spawnIntervalS: spec.spawnIntervalS,
+        previousActiveVersions: [],
+      };
+      this.managedStages.set(spec.id, rec);
+      this.stages.set(spec.id, {
+        id: spec.id,
+        name: spec.name,
+        map: cloneStageMap(clonedMap),
+        enemyQueue: [...clonedQueue],
+        spawnIntervalS: spec.spawnIntervalS,
+        orderIndex: spec.orderIndex,
+        version: 1,
+        status: 'ACTIVE',
+      });
+    }
   }
 
   private cloneManagedRecord(rec: ManagedStageRecord): ManagedStageRecord {
@@ -902,11 +941,14 @@ export class StageManager {
     this.currentStageId = 1;
   }
 
-  public resetForTesting(): void {
+  public resetForTesting(options?: { seedCampaignStages?: boolean }): void {
     this.stages.clear();
     this.managedStages.clear();
     this.currentStageId = 1;
     this.initializeOfficialStage1();
+    if (options?.seedCampaignStages) {
+      this.seedOfficialCampaignStages2To10();
+    }
     try {
       if (typeof window !== 'undefined' && window.localStorage) {
         window.localStorage.removeItem(MANAGED_STAGES_STORAGE_KEY);

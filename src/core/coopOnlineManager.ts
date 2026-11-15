@@ -24,6 +24,8 @@ import {
   NEUTRAL_INPUT,
   validateAndNormalizeAuthoritativeSnapshot,
 } from './gameEngine.ts';
+import { getCampaignStageSpec, TOTAL_CAMPAIGN_STAGES } from './campaignStages.ts';
+import { StageProgressionManager } from './stageProgression.ts';
 import type {
   BulletStructure,
   EnemyTank,
@@ -89,7 +91,20 @@ export interface CoopAuthoritativeSnapshot {
 export type CoopDataChannelMessage =
   | { type: 'GUEST_INPUT'; packet: SequencedInputPacket }
   | { type: 'HOST_SNAPSHOT'; snapshot: CoopAuthoritativeSnapshot }
-  | { type: 'MATCH_STARTED'; roomCode: string; difficulty: 'DEFAULT' | 'EXTREME'; timestamp: number }
+  | {
+      type: 'LOBBY_STAGE_SELECTED';
+      stageId: number;
+      stageName: string;
+      timestamp: number;
+    }
+  | {
+      type: 'MATCH_STARTED';
+      roomCode: string;
+      difficulty: 'DEFAULT' | 'EXTREME';
+      stageId?: number;
+      stageName?: string;
+      timestamp: number;
+    }
   | { type: 'GUEST_TERMINAL_ACK'; snapshotSeq: number; timestamp: number }
   | { type: 'REQUEST_RETURN_TO_LOBBY'; timestamp: number }
   | { type: 'GUEST_RETURN_TO_LOBBY_ACK'; nextRoomCode: string; timestamp: number }
@@ -100,6 +115,8 @@ export type CoopDataChannelMessage =
       password?: string;
       difficulty: 'DEFAULT' | 'EXTREME';
       hostUid: string;
+      stageId?: number;
+      stageName?: string;
       timestamp: number;
     }
   | { type: 'PLAYER_LEFT'; role: 'HOST' | 'GUEST'; reason: string; timestamp: number }
@@ -156,15 +173,19 @@ export interface CoopRoomDocument extends CoopRoomLobbyDocument {
   guestIceCandidates?: string | null;
   finalScore?: number;
   matchOutcome?: 'VICTORY' | 'GAME_OVER' | null;
+  selectedStageId?: number;
+  selectedStageName?: string;
 }
 
 export interface CoopCreateRoomOptions {
   hasPassword?: boolean;
   password?: string;
+  stageId?: number;
 }
 
 export interface CoopJoinRoomOptions {
   password?: string;
+  stageId?: number;
 }
 
 export type CoopRoomCreateStep =
@@ -1979,6 +2000,8 @@ export class CoopOnlineManager {
     password?: string;
     difficulty: 'DEFAULT' | 'EXTREME';
     hostUid: string;
+    stageId?: number;
+    stageName?: string;
     timestamp: number;
   } | null = null;
   private rematchInviteResolvers: Array<
@@ -1989,11 +2012,15 @@ export class CoopOnlineManager {
         password?: string;
         difficulty: 'DEFAULT' | 'EXTREME';
         hostUid: string;
+        stageId?: number;
+        stageName?: string;
         timestamp: number;
       } | null
     ) => void
   > = [];
   private isAutoProvisioningRematch: boolean = false;
+  private selectedLobbyStageId: number = 1;
+  private selectedLobbyStageName: string = getCampaignStageSpec(1).name;
 
   // Guest Snapshot Application state
   private guestLastAppliedSnapshotSeq: number = 0;
@@ -2039,8 +2066,31 @@ export class CoopOnlineManager {
       if (this.currentRoom) {
         this.currentRoom = { ...this.currentRoom, rtcConnectionState: 'CONNECTED' };
       }
+      if (this.role === 'HOST' && this.currentRoom) {
+        this.sendOverDataChannel(
+          {
+            type: 'LOBBY_STAGE_SELECTED',
+            stageId: this.selectedLobbyStageId,
+            stageName: this.selectedLobbyStageName,
+            timestamp: nowMs,
+          },
+          true
+        );
+      }
       this.notifyListeners();
     }
+  }
+
+  private applySelectedStageToRoom(room: CoopRoomDocument): CoopRoomDocument {
+    return {
+      ...room,
+      selectedStageId: this.selectedLobbyStageId,
+      selectedStageName: this.selectedLobbyStageName,
+    };
+  }
+
+  public getSelectedRoomStageId(): number {
+    return this.selectedLobbyStageId;
   }
 
   public getCurrentRoom(): CoopRoomDocument | null {
@@ -2360,11 +2410,45 @@ export class CoopOnlineManager {
       }
     }
 
+    const requestedStageId = options?.stageId ?? 1;
+    if (
+      !Number.isInteger(requestedStageId) ||
+      requestedStageId < 1 ||
+      requestedStageId > TOTAL_CAMPAIGN_STAGES
+    ) {
+      this.recordCreateRoomDiagnostic('AUTH_PRECHECK', '/coop_rooms', 'INVALID_DATA');
+      return {
+        success: false,
+        errorCode: 'INVALID_DATA',
+        failedStep: 'AUTH_PRECHECK',
+        message: `Stage ${requestedStageId} không hợp lệ (chỉ hỗ trợ Stage 1–${TOTAL_CAMPAIGN_STAGES}).`,
+      };
+    }
+
+    const stageAccess = StageProgressionManager.getInstance().canUserAccessStage(
+      user.uid,
+      requestedStageId,
+      false
+    );
+    if (!stageAccess.allowed) {
+      this.recordCreateRoomDiagnostic('AUTH_PRECHECK', '/coop_rooms', 'PERMISSION_DENIED');
+      return {
+        success: false,
+        errorCode: 'PERMISSION_DENIED',
+        failedStep: 'AUTH_PRECHECK',
+        message:
+          stageAccess.errorMessage ||
+          `Chủ phòng chưa mở khóa Stage ${requestedStageId}. Vui lòng hoàn thành các Stage trước đó.`,
+      };
+    }
+
     this.cleanupSubscription();
     this.closeWebRTC();
     this.currentRoom = null;
     this.currentSignaling = null;
     this.role = null;
+    this.selectedLobbyStageId = requestedStageId;
+    this.selectedLobbyStageName = getCampaignStageSpec(requestedStageId).name;
 
     const lobbyWriteMs = explicitNowMs ?? Date.now();
     const triedCodes = new Set<string>();
@@ -2591,7 +2675,7 @@ export class CoopOnlineManager {
       this.lastCreatedRoomPassword = normalizedPassword;
       this.pendingRematchInvite = null;
       this.currentSignaling = verifiedSig;
-      this.currentRoom = mergeLobbyAndSignaling(newLobby, verifiedSig);
+      this.currentRoom = this.applySelectedStageToRoom(mergeLobbyAndSignaling(newLobby, verifiedSig));
       this.role = 'HOST';
       this.resetSyncCounters();
       this.listenToRoom(roomCode);
@@ -2739,7 +2823,10 @@ export class CoopOnlineManager {
       const updatedRoom: CoopRoomDocument = mergeLobbyAndSignaling(mergedLobby, syncedSig);
 
       this.currentSignaling = syncedSig;
-      this.currentRoom = updatedRoom;
+      this.selectedLobbyStageId =
+        options && typeof (options as any).stageId === 'number' ? (options as any).stageId : 1;
+      this.selectedLobbyStageName = getCampaignStageSpec(this.selectedLobbyStageId).name;
+      this.currentRoom = this.applySelectedStageToRoom(updatedRoom);
       this.role = 'GUEST';
       this.rtcState = 'CONNECTING';
       this.lastPeerP2PActiveAt = nowMs;
@@ -2749,7 +2836,7 @@ export class CoopOnlineManager {
 
       return {
         success: true,
-        room: updatedRoom,
+        room: this.currentRoom,
       };
     } catch (err: any) {
       return {
@@ -2918,7 +3005,9 @@ export class CoopOnlineManager {
         ...latestRoom,
         ...partial,
       };
-      this.currentRoom = mergeLobbyAndSignaling(mergedLobby, this.currentSignaling);
+      this.currentRoom = this.applySelectedStageToRoom(
+        mergeLobbyAndSignaling(mergedLobby, this.currentSignaling)
+      );
       this.notifyListeners();
       return { success: true, room: this.currentRoom };
     } catch (err: any) {
@@ -2928,6 +3017,79 @@ export class CoopOnlineManager {
         message: err?.message || 'Lỗi cập nhật trạng thái Sẵn sàng.',
       };
     }
+  }
+
+  /**
+   * Chủ phòng (Host) chọn Stage (1..10) trong phòng chờ Co-op Online và đồng bộ P2P tới Guest.
+   */
+  public setRoomStage(
+    stageId: number,
+    callerUid?: string,
+    nowMs: number = Date.now()
+  ): CoopActionResult {
+    if (!this.currentRoom || !this.role) {
+      return {
+        success: false,
+        errorCode: 'ROOM_NOT_FOUND',
+        message: 'Chưa ở trong phòng Co-op Online.',
+      };
+    }
+    if (this.role !== 'HOST' || (callerUid && callerUid !== this.currentRoom.hostUid)) {
+      return {
+        success: false,
+        errorCode: 'NOT_HOST',
+        message: 'Chỉ Chủ phòng (P1) mới có quyền chọn màn chơi cho phòng.',
+      };
+    }
+    if (this.currentRoom.status !== 'WAITING') {
+      return {
+        success: false,
+        errorCode: 'MATCH_ALREADY_STARTED',
+        message: 'Không thể đổi màn chơi khi trận đấu đang diễn ra.',
+      };
+    }
+    if (!Number.isInteger(stageId) || stageId < 1 || stageId > TOTAL_CAMPAIGN_STAGES) {
+      return {
+        success: false,
+        errorCode: 'INVALID_DATA',
+        message: `Stage ${stageId} không hợp lệ (chỉ hỗ trợ Stage 1–${TOTAL_CAMPAIGN_STAGES}).`,
+      };
+    }
+    const actorUid = callerUid || this.currentRoom.hostUid;
+    const access = StageProgressionManager.getInstance().canUserAccessStage(
+      actorUid,
+      stageId,
+      false
+    );
+    if (!access.allowed) {
+      return {
+        success: false,
+        errorCode: 'PERMISSION_DENIED',
+        message:
+          access.errorMessage ||
+          `Chủ phòng chưa mở khóa Stage ${stageId}.`,
+      };
+    }
+
+    const spec = getCampaignStageSpec(stageId);
+    this.selectedLobbyStageId = stageId;
+    this.selectedLobbyStageName = spec.name;
+    this.currentRoom = this.applySelectedStageToRoom(this.currentRoom);
+
+    if (this.isP2PDataChannelOpen()) {
+      this.sendOverDataChannel(
+        {
+          type: 'LOBBY_STAGE_SELECTED',
+          stageId,
+          stageName: spec.name,
+          timestamp: nowMs,
+        },
+        true
+      );
+    }
+
+    this.notifyListeners();
+    return { success: true, room: this.currentRoom };
   }
 
   /**
@@ -2963,6 +3125,21 @@ export class CoopOnlineManager {
       return check;
     }
 
+    const stageAccess = StageProgressionManager.getInstance().canUserAccessStage(
+      callerUid,
+      this.selectedLobbyStageId,
+      false
+    );
+    if (!stageAccess.allowed) {
+      return {
+        success: false,
+        errorCode: 'PERMISSION_DENIED',
+        message:
+          stageAccess.errorMessage ||
+          `Không thể bắt đầu: Chủ phòng chưa mở khóa Stage ${this.selectedLobbyStageId}.`,
+      };
+    }
+
     if (this.rtcState === 'FAILED') {
       return {
         success: false,
@@ -2984,7 +3161,7 @@ export class CoopOnlineManager {
 
     try {
       await this.adapter.updateRoom(this.currentRoom.roomCode, partial);
-      this.currentRoom = { ...this.currentRoom, ...partial };
+      this.currentRoom = this.applySelectedStageToRoom({ ...this.currentRoom, ...partial });
 
       if (this.isP2PDataChannelOpen()) {
         this.sendOverDataChannel(
@@ -2992,6 +3169,8 @@ export class CoopOnlineManager {
             type: 'MATCH_STARTED',
             roomCode: this.currentRoom.roomCode,
             difficulty: this.currentRoom.difficulty,
+            stageId: this.selectedLobbyStageId,
+            stageName: this.selectedLobbyStageName,
             timestamp: nowMs,
           },
           true
@@ -3034,7 +3213,9 @@ export class CoopOnlineManager {
       ) {
         return this.currentRoom;
       }
-      this.currentRoom = mergeLobbyAndSignaling(latest, this.currentSignaling);
+      this.currentRoom = this.applySelectedStageToRoom(
+        mergeLobbyAndSignaling(latest, this.currentSignaling)
+      );
       this.coordinateWebRTCSignaling();
       this.notifyListeners();
       return this.currentRoom;
@@ -3503,11 +3684,43 @@ export class CoopOnlineManager {
       normalizedPassword = pwdCheck.normalized;
     }
 
+    const requestedStageId = options?.stageId ?? 1;
+    if (
+      !Number.isInteger(requestedStageId) ||
+      requestedStageId < 1 ||
+      requestedStageId > TOTAL_CAMPAIGN_STAGES
+    ) {
+      return {
+        success: false,
+        errorCode: 'INVALID_DATA',
+        failedStep: 'AUTH_PRECHECK',
+        message: `Stage ${requestedStageId} không hợp lệ (chỉ hỗ trợ Stage 1–${TOTAL_CAMPAIGN_STAGES}).`,
+      };
+    }
+
+    const stageAccess = StageProgressionManager.getInstance().canUserAccessStage(
+      user.uid,
+      requestedStageId,
+      false
+    );
+    if (!stageAccess.allowed) {
+      return {
+        success: false,
+        errorCode: 'PERMISSION_DENIED',
+        failedStep: 'AUTH_PRECHECK',
+        message:
+          stageAccess.errorMessage ||
+          `Chủ phòng chưa mở khóa Stage ${requestedStageId}.`,
+      };
+    }
+
     this.cleanupSubscription();
     this.closeWebRTC();
     this.currentRoom = null;
     this.currentSignaling = null;
     this.role = null;
+    this.selectedLobbyStageId = requestedStageId;
+    this.selectedLobbyStageName = getCampaignStageSpec(requestedStageId).name;
 
     const triedCodes = new Set<string>();
     const publicSlotCandidates =
@@ -3732,7 +3945,7 @@ export class CoopOnlineManager {
       this.lastCreatedRoomPassword = normalizedPassword;
       this.pendingRematchInvite = null;
       this.currentSignaling = verifiedSig;
-      this.currentRoom = mergeLobbyAndSignaling(newLobby, verifiedSig);
+      this.currentRoom = this.applySelectedStageToRoom(mergeLobbyAndSignaling(newLobby, verifiedSig));
       this.role = 'HOST';
       this.resetSyncCounters();
       this.listenToRoom(roomCode);
@@ -3852,7 +4065,10 @@ export class CoopOnlineManager {
       ...updatedFields,
     };
     this.currentSignaling = syncedSig;
-    this.currentRoom = mergeLobbyAndSignaling(mergedLobby, syncedSig);
+    this.selectedLobbyStageId =
+      options && typeof (options as any).stageId === 'number' ? (options as any).stageId : 1;
+    this.selectedLobbyStageName = getCampaignStageSpec(this.selectedLobbyStageId).name;
+    this.currentRoom = this.applySelectedStageToRoom(mergeLobbyAndSignaling(mergedLobby, syncedSig));
     this.role = 'GUEST';
     this.resetSyncCounters();
     this.listenToRoom(normalized);
@@ -4026,6 +4242,21 @@ export class CoopOnlineManager {
       return check;
     }
 
+    const stageAccess = StageProgressionManager.getInstance().canUserAccessStage(
+      callerUid,
+      this.selectedLobbyStageId,
+      false
+    );
+    if (!stageAccess.allowed) {
+      return {
+        success: false,
+        errorCode: 'PERMISSION_DENIED',
+        message:
+          stageAccess.errorMessage ||
+          `Chủ phòng chưa mở khóa Stage ${this.selectedLobbyStageId}.`,
+      };
+    }
+
     if (this.rtcState === 'FAILED') {
       return {
         success: false,
@@ -4049,7 +4280,9 @@ export class CoopOnlineManager {
       storage.updateRoomSync(this.currentRoom.roomCode, partial);
       const updatedLobby = storage.getRoomSync(this.currentRoom.roomCode);
       if (updatedLobby) {
-        this.currentRoom = mergeLobbyAndSignaling(updatedLobby, this.currentSignaling);
+        this.currentRoom = this.applySelectedStageToRoom(
+          mergeLobbyAndSignaling(updatedLobby, this.currentSignaling)
+        );
       }
 
       if (this.isP2PDataChannelOpen()) {
@@ -4058,6 +4291,8 @@ export class CoopOnlineManager {
             type: 'MATCH_STARTED',
             roomCode: this.currentRoom.roomCode,
             difficulty: this.currentRoom.difficulty,
+            stageId: this.selectedLobbyStageId,
+            stageName: this.selectedLobbyStageName,
             timestamp: nowMs,
           },
           true
@@ -4520,6 +4755,23 @@ export class CoopOnlineManager {
       return;
     }
 
+    if (msg.type === 'LOBBY_STAGE_SELECTED' && this.role === 'GUEST') {
+      if (
+        Number.isInteger(msg.stageId) &&
+        msg.stageId >= 1 &&
+        msg.stageId <= TOTAL_CAMPAIGN_STAGES
+      ) {
+        const spec = getCampaignStageSpec(msg.stageId);
+        this.selectedLobbyStageId = msg.stageId;
+        this.selectedLobbyStageName = msg.stageName || spec.name;
+        if (this.currentRoom) {
+          this.currentRoom = this.applySelectedStageToRoom(this.currentRoom);
+          this.notifyListeners();
+        }
+      }
+      return;
+    }
+
     if (msg.type === 'RETURN_TO_LOBBY' && this.role === 'GUEST') {
       const invite = {
         nextRoomCode: msg.nextRoomCode,
@@ -4527,6 +4779,11 @@ export class CoopOnlineManager {
         password: msg.password,
         difficulty: msg.difficulty,
         hostUid: msg.hostUid,
+        stageId:
+          typeof msg.stageId === 'number' && msg.stageId >= 1 && msg.stageId <= TOTAL_CAMPAIGN_STAGES
+            ? msg.stageId
+            : this.selectedLobbyStageId,
+        stageName: msg.stageName || this.selectedLobbyStageName,
         timestamp: msg.timestamp,
       };
       this.pendingRematchInvite = invite;
@@ -4544,16 +4801,26 @@ export class CoopOnlineManager {
 
     if (msg.type === 'MATCH_STARTED' && this.role === 'GUEST') {
       if (
+        typeof msg.stageId === 'number' &&
+        Number.isInteger(msg.stageId) &&
+        msg.stageId >= 1 &&
+        msg.stageId <= TOTAL_CAMPAIGN_STAGES
+      ) {
+        const spec = getCampaignStageSpec(msg.stageId);
+        this.selectedLobbyStageId = msg.stageId;
+        this.selectedLobbyStageName = msg.stageName || spec.name;
+      }
+      if (
         this.currentRoom &&
         this.currentRoom.roomCode === msg.roomCode &&
         this.currentRoom.status === 'WAITING'
       ) {
-        this.currentRoom = {
+        this.currentRoom = this.applySelectedStageToRoom({
           ...this.currentRoom,
           status: 'PLAYING',
           difficulty: msg.difficulty,
           disconnectReason: null,
-        };
+        });
         this.notifyListeners();
       }
       return;
@@ -4579,13 +4846,24 @@ export class CoopOnlineManager {
 
       // Fail-safe: nếu P1 đã vào trận và đang gửi HOST_SNAPSHOT qua WebRTC trong khi P2 vẫn đang kẹt ở phòng chờ WAITING,
       // lập tức kích hoạt chuyển P2 sang PLAYING để mở BattleScene đồng bộ cùng P1.
+      if (
+        typeof normalizedSnap.currentStageId === 'number' &&
+        Number.isInteger(normalizedSnap.currentStageId) &&
+        normalizedSnap.currentStageId >= 1 &&
+        normalizedSnap.currentStageId <= TOTAL_CAMPAIGN_STAGES
+      ) {
+        this.selectedLobbyStageId = normalizedSnap.currentStageId;
+        this.selectedLobbyStageName =
+          normalizedSnap.currentStageName ||
+          getCampaignStageSpec(normalizedSnap.currentStageId).name;
+      }
       if (this.currentRoom && this.currentRoom.status === 'WAITING') {
-        this.currentRoom = {
+        this.currentRoom = this.applySelectedStageToRoom({
           ...this.currentRoom,
           status: 'PLAYING',
           difficulty: normalizedSnap.difficulty ?? this.currentRoom.difficulty,
           disconnectReason: null,
-        };
+        });
         this.notifyListeners();
       }
 
@@ -4816,6 +5094,8 @@ export class CoopOnlineManager {
         password: usePassword ? rawPassword : undefined,
         difficulty,
         hostUid: user.uid,
+        stageId: this.selectedLobbyStageId,
+        stageName: this.selectedLobbyStageName,
         timestamp: lobbyWriteMs,
       };
       if (this.isP2PDataChannelOpen()) {
@@ -4857,7 +5137,7 @@ export class CoopOnlineManager {
       this.lastHostUser = user;
       this.pendingRematchInvite = null;
       this.currentSignaling = verifiedSig;
-      this.currentRoom = mergeLobbyAndSignaling(newLobby, verifiedSig);
+      this.currentRoom = this.applySelectedStageToRoom(mergeLobbyAndSignaling(newLobby, verifiedSig));
       this.role = 'HOST';
       this.resetSyncCounters();
       this.listenToRoom(nextRoomCode);
@@ -4929,14 +5209,17 @@ export class CoopOnlineManager {
       }
 
       this.pendingRematchInvite = null;
+      const inviteStageId = invite.stageId ?? 1;
       let joinRes = await this.joinRoom(invite.nextRoomCode, user, Date.now(), {
         password: invite.password,
-      });
+        stageId: inviteStageId,
+      } as CoopJoinRoomOptions);
       if (!joinRes.success && joinRes.errorCode === 'ROOM_NOT_FOUND') {
         await new Promise((resolve) => setTimeout(resolve, 300));
         joinRes = await this.joinRoom(invite.nextRoomCode, user, Date.now(), {
           password: invite.password,
-        });
+          stageId: inviteStageId,
+        } as CoopJoinRoomOptions);
       }
       return joinRes;
     }
@@ -5020,6 +5303,8 @@ export class CoopOnlineManager {
             password: usePassword ? rawPassword : undefined,
             difficulty,
             hostUid: user.uid,
+            stageId: this.selectedLobbyStageId,
+            stageName: this.selectedLobbyStageName,
             timestamp: nowMs,
           },
           true
@@ -5030,7 +5315,7 @@ export class CoopOnlineManager {
       this.lastHostUser = user;
       this.pendingRematchInvite = null;
       this.currentSignaling = newSig;
-      this.currentRoom = mergeLobbyAndSignaling(newLobby, newSig);
+      this.currentRoom = this.applySelectedStageToRoom(mergeLobbyAndSignaling(newLobby, newSig));
       this.role = 'HOST';
       this.resetSyncCounters();
       this.listenToRoom(nextRoomCode);
@@ -5046,7 +5331,8 @@ export class CoopOnlineManager {
       this.pendingRematchInvite = null;
       return this.joinRoomSync(storage, invite.nextRoomCode, user, nowMs, {
         password: invite.password,
-      });
+        stageId: invite.stageId ?? 1,
+      } as CoopJoinRoomOptions);
     }
 
     return { success: false, errorCode: 'ROOM_NOT_FOUND' };
@@ -5263,6 +5549,8 @@ export class CoopOnlineManager {
     this.currentRoom = null;
     this.currentSignaling = null;
     this.role = null;
+    this.selectedLobbyStageId = 1;
+    this.selectedLobbyStageName = getCampaignStageSpec(1).name;
     this.resetSyncCounters();
     this.notifyListeners();
 
@@ -5318,7 +5606,9 @@ export class CoopOnlineManager {
             this.recordPeerActiveLeave(peerRole, updatedLobby.disconnectReason || undefined);
           }
           // Không cho phép snapshot cache cũ kéo trạng thái PLAYING quay ngược về WAITING khi P2P đã vào trận
-          const merged = mergeLobbyAndSignaling(updatedLobby, this.currentSignaling);
+          const merged = this.applySelectedStageToRoom(
+            mergeLobbyAndSignaling(updatedLobby, this.currentSignaling)
+          );
           if (
             this.currentRoom &&
             this.currentRoom.roomCode === merged.roomCode &&
@@ -5707,6 +5997,15 @@ export class CoopOnlineManager {
         void this.adapter
           .updateRoom(roomCode, { rtcConnectionState: 'CONNECTED', hostLastActiveAt: Date.now() })
           .catch(() => undefined);
+        this.sendOverDataChannel(
+          {
+            type: 'LOBBY_STAGE_SELECTED',
+            stageId: this.selectedLobbyStageId,
+            stageName: this.selectedLobbyStageName,
+            timestamp: Date.now(),
+          },
+          true
+        );
       }
       // Send initial P2P PING for immediate latency measurement
       const pingNow = Date.now();

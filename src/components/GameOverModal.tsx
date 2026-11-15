@@ -12,6 +12,7 @@ import {
 } from '../core/constants.ts';
 import { CoopOnlineManager, type CoopPlayerRole } from '../core/coopOnlineManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
+import { getCampaignStageSpec, TOTAL_CAMPAIGN_STAGES } from '../core/campaignStages.ts';
 
 interface GameOverModalProps {
   isOpen: boolean;
@@ -146,9 +147,12 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
           {/* Statistics Breakdown */}
           <div className="bg-neutral-950/70 border border-neutral-800/80 rounded-xl p-3 space-y-2 text-xs">
-            <div className="font-bold text-neutral-300 pb-1 border-b border-neutral-800 flex justify-between">
+            <div className="font-bold text-neutral-300 pb-1 border-b border-neutral-800 flex justify-between gap-2 flex-wrap">
               <span>THỐNG KÊ CHIẾN TÍCH</span>
-              <span className="text-amber-400 font-mono">STAGE {state.currentStageId ?? 1}</span>
+              <span className="text-amber-400 font-mono">
+                STAGE {state.currentStageId ?? 1}/{TOTAL_CAMPAIGN_STAGES} •{' '}
+                {state.currentStageName || getCampaignStageSpec(state.currentStageId ?? 1).shortTitle}
+              </span>
             </div>
 
             <div className="space-y-1.5 font-mono text-[11px] sm:text-xs">

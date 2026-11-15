@@ -34,6 +34,8 @@ import {
 } from 'lucide-react';
 import { SoundManager, type AudioSettings } from '../core/audio.ts';
 import { MusicManager } from '../core/musicManager.ts';
+import { StageProgressionManager } from '../core/stageProgression.ts';
+import { TOTAL_CAMPAIGN_STAGES } from '../core/campaignStages.ts';
 import {
   AvatarManager,
   type AvatarCatalogItem,
@@ -1821,6 +1823,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <th className="py-2.5 px-2.5 font-bold">Tên</th>
                         <th className="py-2.5 px-2.5 font-bold">Email</th>
                         <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">Quyền</th>
+                        <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">Tiến độ Stage</th>
                         <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">
                           Đăng nhập gần nhất
                         </th>
@@ -1880,6 +1883,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               >
                                 {acc.role === 'PLAYER' ? 'User' : accRoleInfo.label}
                               </span>
+                            </td>
+
+                            {/* 4b. Tiến độ Stage (Stage X/10) */}
+                            <td className="py-2.5 px-2.5 font-mono text-[11px] whitespace-nowrap">
+                              {(() => {
+                                const prog = StageProgressionManager.getInstance().getUserStageProgressSnapshot(
+                                  acc.uid
+                                );
+                                return (
+                                  <span
+                                    data-testid={`user-stage-progress-${acc.uid}`}
+                                    className="px-2 py-0.5 rounded bg-amber-950/70 border border-amber-700/60 text-amber-300 font-bold"
+                                  >
+                                    Stage {prog.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
+                                  </span>
+                                );
+                              })()}
                             </td>
 
                             {/* 5. Ngày đăng nhập gần nhất */}

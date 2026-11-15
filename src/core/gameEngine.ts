@@ -44,6 +44,11 @@ import { findPathAStar } from './ai/pathfinding.ts';
 import { MATCH_STATES, MatchStateMachine, type MatchState } from './matchState.ts';
 import { StageManager, type StageDefinition } from './stageManager.ts';
 import { ScoreManager } from './scoreManager.ts';
+import {
+  StageProgressionManager,
+  type StageMatchSessionToken,
+  type StageClearProof,
+} from './stageProgression.ts';
 import type { CombatEvent, CombatEventType } from './types.ts';
 
 export const NEUTRAL_INPUT: Readonly<InputState> = Object.freeze({
@@ -299,6 +304,12 @@ export class GameEngine {
     tickCount: number
   ) => void;
   private processedPeerLeavePlayers: Set<'P1' | 'P2'> = new Set();
+  private activeUid: string | null = null;
+  private isTrialMode: boolean = false;
+  private enforceProgression: boolean = false;
+  private activeMatchToken: StageMatchSessionToken | null = null;
+  private lastStageClearProof: StageClearProof | null = null;
+  private lastUnlockedStageFromClear: number | null = null;
 
   public isCoopMode(): boolean {
     return this.gameMode === 'TWO_PLAYERS_AI' || this.gameMode === 'TWO_PLAYERS_ONLINE';
@@ -706,6 +717,69 @@ export class GameEngine {
     return false;
   }
 
+  private issueSessionTokenForCurrentStage(): void {
+    const currentStageId = this.stageManager.getCurrentStage().id;
+    if (this.activeUid && !this.isTrialMode) {
+      this.activeMatchToken = StageProgressionManager.getInstance().issueMatchSessionToken(
+        this.activeUid,
+        currentStageId,
+        this.gameMode
+      );
+    } else {
+      this.activeMatchToken = null;
+    }
+  }
+
+  public getLastStageClearProof(): StageClearProof | null {
+    return this.lastStageClearProof ? { ...this.lastStageClearProof } : null;
+  }
+
+  public getLastUnlockedStageFromClear(): number | null {
+    return this.lastUnlockedStageFromClear;
+  }
+
+  public selectCampaignStage(
+    stageId: number,
+    options?: {
+      uid?: string | null;
+      isTrialMode?: boolean;
+      enforceProgression?: boolean;
+    }
+  ): { success: boolean; errorCode?: string; errorMessage?: string } {
+    this.stageManager.syncFromGlobalActiveStages();
+    const targetStage = this.stageManager.getStage(stageId);
+    if (!targetStage) {
+      return {
+        success: false,
+        errorCode: 'STAGE_NOT_FOUND',
+        errorMessage: `Stage ${stageId} chưa được kích hoạt hoặc không tồn tại.`,
+      };
+    }
+
+    const uid = options?.uid !== undefined ? (options.uid ?? null) : this.activeUid;
+    const isTrial = options?.isTrialMode ?? this.isTrialMode;
+    const enforce =
+      options?.enforceProgression ??
+      (this.enforceProgression || options?.uid !== undefined || options?.isTrialMode !== undefined);
+
+    if (enforce) {
+      const access = StageProgressionManager.getInstance().canUserAccessStage(uid, stageId, isTrial);
+      if (!access.allowed) {
+        return {
+          success: false,
+          errorCode: access.errorCode,
+          errorMessage: access.errorMessage,
+        };
+      }
+    }
+
+    this.activeUid = uid;
+    this.isTrialMode = isTrial;
+    this.enforceProgression = enforce;
+    this.stageManager.setCurrentStage(stageId);
+    return { success: true };
+  }
+
   public restartStage(): void {
     const stage = this.stageManager.getCurrentStage();
     this.stageRunSeq += 1;
@@ -723,11 +797,14 @@ export class GameEngine {
     this.isPaused = false;
     this.isForcedSafetyPaused = false;
     this.processedPeerLeavePlayers.clear();
+    this.lastStageClearProof = null;
+    this.lastUnlockedStageFromClear = null;
     this.clearAllInputs();
     this.combatEvents = [];
     this.enemyManager.reset(stage.enemyQueue);
     this.scoreManager.resetRun();
     this.allyAI.reset();
+    this.issueSessionTokenForCurrentStage();
 
     const matchDurationSeconds = getMatchDurationSecondsForDifficulty(this.difficulty);
     const remainingTicks = matchDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
@@ -811,23 +888,82 @@ export class GameEngine {
 
   public startMatch(
     mode: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' = this.gameMode,
-    difficulty: 'DEFAULT' | 'EXTREME' = this.difficulty
-  ): void {
+    difficulty: 'DEFAULT' | 'EXTREME' = this.difficulty,
+    options?: {
+      stageId?: number;
+      uid?: string | null;
+      isTrialMode?: boolean;
+      enforceProgression?: boolean;
+    }
+  ): { success: boolean; errorCode?: string; errorMessage?: string } {
+    this.stageManager.syncFromGlobalActiveStages();
+
+    const hasContextOptions = Boolean(options);
+    const nextUid = options?.uid !== undefined ? (options.uid ?? null) : null;
+    const nextTrial = Boolean(options?.isTrialMode);
+    const nextEnforce = Boolean(
+      options?.enforceProgression || options?.uid !== undefined || options?.isTrialMode !== undefined
+    );
+    const requestedStageId =
+      options?.stageId ?? (hasContextOptions ? 1 : this.stageManager.getCurrentStage().id);
+
+    if (nextEnforce) {
+      const access = StageProgressionManager.getInstance().canUserAccessStage(
+        nextUid,
+        requestedStageId,
+        nextTrial
+      );
+      if (!access.allowed) {
+        return {
+          success: false,
+          errorCode: access.errorCode,
+          errorMessage: access.errorMessage,
+        };
+      }
+    }
+
+    if (options?.stageId !== undefined || nextEnforce) {
+      if (!this.stageManager.setCurrentStage(requestedStageId)) {
+        return {
+          success: false,
+          errorCode: 'STAGE_NOT_FOUND',
+          errorMessage: `Stage ${requestedStageId} chưa sẵn sàng hoặc không tồn tại.`,
+        };
+      }
+    }
+
+    this.activeUid = nextUid;
+    this.isTrialMode = nextTrial;
+    this.enforceProgression = nextEnforce;
     this.gameMode = mode;
     this.difficulty = difficulty;
-    this.stageManager.syncFromGlobalActiveStages();
     // Set stageRunSeq = 0 right before restartStage() so restartStage() increments 0 -> 1 (no double increment)
     this.stageRunSeq = 0;
     this.resetGuestSnapshotTracking();
     this.restartStage();
+    return { success: true };
   }
 
   public advanceToNextStage(): boolean {
+    if (this.isTrialMode) {
+      return false;
+    }
     if (!this.stageManager.hasNextStage()) {
       return false;
     }
     const nextStageId = this.stageManager.getNextStageId();
     if (!nextStageId) return false;
+
+    if (this.enforceProgression) {
+      const access = StageProgressionManager.getInstance().canUserAccessStage(
+        this.activeUid,
+        nextStageId,
+        this.isTrialMode
+      );
+      if (!access.allowed) {
+        return false;
+      }
+    }
 
     this.stageManager.setCurrentStage(nextStageId);
     const stage = this.stageManager.getCurrentStage();
@@ -840,10 +976,13 @@ export class GameEngine {
     this.justResumed = false;
     this.isPaused = false;
     this.isForcedSafetyPaused = false;
+    this.lastStageClearProof = null;
+    this.lastUnlockedStageFromClear = null;
     this.clearAllInputs();
     this.combatEvents = [];
     this.enemyManager.reset(stage.enemyQueue);
     this.allyAI.reset();
+    this.issueSessionTokenForCurrentStage();
 
     // Carry forward P1/P2 lives and existing total score
     const preservedLives = this.state.p1State.lives;
@@ -1556,6 +1695,25 @@ export class GameEngine {
       this.matchStateMachine.transitionTo(MATCH_STATES.STAGE_CLEAR, true);
       this.scoreManager.checkAndUpdateHighScore();
       this.state.highScore = this.scoreManager.getHighScore();
+
+      if (this.activeUid && !this.isTrialMode && this.activeMatchToken) {
+        const proof = StageProgressionManager.getInstance().mintStageClearProof({
+          sessionToken: this.activeMatchToken,
+          totalDefeatedEnemies: this.state.totalDefeatedEnemies,
+          isBaseDestroyed: Boolean(this.state.terrain.isBaseDestroyed),
+          isStageClear: true,
+        });
+        if (proof) {
+          const unlockRes = StageProgressionManager.getInstance().verifyAndRecordStageClear(
+            this.activeUid,
+            proof
+          );
+          if (unlockRes.accepted) {
+            this.lastStageClearProof = proof;
+            this.lastUnlockedStageFromClear = unlockRes.newlyUnlockedStage;
+          }
+        }
+      }
     } else if (this.state.remainingTicks <= 0) {
       // Tier 4: Match Countdown Timeout
       this.state.isGameOver = true;

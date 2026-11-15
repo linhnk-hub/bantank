@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { CoopOnlineManager, type CoopPlayerRole } from '../core/coopOnlineManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
+import { TOTAL_CAMPAIGN_STAGES, getCampaignStageSpec } from '../core/campaignStages.ts';
 
 interface M3HudProps {
   state: GameCoreState | null;
@@ -106,7 +107,10 @@ export const M3Hud: React.FC<M3HudProps> = ({
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 pb-3">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold">
-            <span>STAGE {state.currentStageId ?? 1}</span>
+            <span>
+              STAGE {state.currentStageId ?? 1}/{TOTAL_CAMPAIGN_STAGES} •{' '}
+              {state.currentStageName || getCampaignStageSpec(state.currentStageId ?? 1).shortTitle}
+            </span>
           </div>
 
           <div

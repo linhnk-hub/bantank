@@ -154,13 +154,106 @@ export function validateStageMap(matrix: StageMapMatrix): MapValidationResult {
         );
       }
     }
+
+    // BFS Reachability & Connectivity Validation (only run when base & spawns exist without structural block errors)
+    if (errors.length === 0) {
+      const openPassable = new Set<number>([
+        TILE_TYPES.EMPTY,
+        TILE_TYPES.GRASS,
+        TILE_TYPES.ICE,
+      ]);
+      const breakablePassable = new Set<number>([
+        TILE_TYPES.EMPTY,
+        TILE_TYPES.GRASS,
+        TILE_TYPES.ICE,
+        TILE_TYPES.BRICK,
+      ]);
+
+      const runBfs = (
+        startRow: number,
+        startCol: number,
+        allowedSet: Set<number>,
+        targetBaseIncluded: boolean = false
+      ): Set<string> => {
+        const visited = new Set<string>();
+        const startKey = `${startRow},${startCol}`;
+        if (!allowedSet.has(matrix[startRow][startCol])) {
+          return visited;
+        }
+        const queue: Array<{ r: number; c: number }> = [{ r: startRow, c: startCol }];
+        visited.add(startKey);
+        let head = 0;
+        while (head < queue.length) {
+          const cur = queue[head++];
+          const dirs = [
+            { r: cur.r - 1, c: cur.c },
+            { r: cur.r + 1, c: cur.c },
+            { r: cur.r, c: cur.c - 1 },
+            { r: cur.r, c: cur.c + 1 },
+          ];
+          for (const d of dirs) {
+            if (d.r < 0 || d.r >= MAP_DIMENSIONS.ROWS || d.c < 0 || d.c >= MAP_DIMENSIONS.COLS) {
+              continue;
+            }
+            const key = `${d.r},${d.c}`;
+            if (visited.has(key)) continue;
+            const t = matrix[d.r][d.c];
+            if (allowedSet.has(t) || (targetBaseIncluded && t === TILE_TYPES.BASE)) {
+              visited.add(key);
+              if (t !== TILE_TYPES.BASE) {
+                queue.push(d);
+              }
+            }
+          }
+        }
+        return visited;
+      };
+
+      const p1Spawn = STAGE_SPAWN_POINTS[0]; // [12, 3]
+      const p2Spawn = STAGE_SPAWN_POINTS[1]; // [12, 9]
+      const enemySpawns = STAGE_SPAWN_POINTS.slice(2);
+
+      // 1. Open-passable connectivity: every spawn must connect into the main open combat graph (no walled-off pocket)
+      const p1OpenReach = runBfs(p1Spawn.row, p1Spawn.col, openPassable, false);
+      if (p1OpenReach.size < 4) {
+        errors.push('Vị trí P1 [12, 3] bị cô lập trong vùng không gian quá hẹp (< 4 ô thông thoáng).');
+      }
+      if (!p1OpenReach.has(`${p2Spawn.row},${p2Spawn.col}`)) {
+        // Also allow breakable connectivity as fallback, or fail if blocked by STEEL/WATER
+        const p1Breakable = runBfs(p1Spawn.row, p1Spawn.col, breakablePassable, true);
+        if (!p1Breakable.has(`${p2Spawn.row},${p2Spawn.col}`)) {
+          errors.push('Đường di chuyển giữa P1 [12, 3] và P2 [12, 9] bị chia cắt hoàn toàn bởi vật cản không thể phá hủy.');
+        }
+      }
+
+      // 2. Every enemy spawn must be able to reach Base [12,6] & P1 [12,3] via breakable/open path (STEEL/WATER cannot create an impassable wall)
+      const p1BreakableReach = runBfs(p1Spawn.row, p1Spawn.col, breakablePassable, true);
+      if (!p1BreakableReach.has('12,6')) {
+        errors.push('P1 [12, 3] không có đường tiếp cận khu vực Căn cứ [12, 6].');
+      }
+
+      for (const eSpawn of enemySpawns) {
+        const eOpenReach = runBfs(eSpawn.row, eSpawn.col, openPassable, false);
+        if (eOpenReach.size < 3) {
+          errors.push(
+            `Vị trí ${eSpawn.label} [${eSpawn.row}, ${eSpawn.col}] bị bít kẹt ngay tại điểm xuất phát (< 3 ô thông thoáng).`
+          );
+        }
+        const eBreakableReach = runBfs(eSpawn.row, eSpawn.col, breakablePassable, true);
+        if (!eBreakableReach.has('12,6') || !eBreakableReach.has(`${p1Spawn.row},${p1Spawn.col}`)) {
+          errors.push(
+            `Địa hình không thể phá hủy (STEEL/WATER) đang chặn hoàn toàn đường tiến công từ ${eSpawn.label} tới Căn cứ [12, 6] hoặc P1.`
+          );
+        }
+      }
+    }
   }
 
   const hasThreeBaseCells = false;
 
-  // Check if Stage 1 contains any unintroduced tile types (WATER, GRASS, ICE)
+  // Check if map contains WATER, GRASS, or ICE (Stage 2+ tactical terrain vs Stage 1 classic terrain)
   if (tileCounts[TILE_TYPES.WATER] > 0 || tileCounts[TILE_TYPES.GRASS] > 0 || tileCounts[TILE_TYPES.ICE] > 0) {
-    warnings.push('Bản đồ có chứa loại địa hình WATER, GRASS hoặc ICE (Stage 1 chỉ chứa 0, 1, 2, 9)');
+    warnings.push('Bản đồ có chứa loại địa hình chiến thuật WATER, GRASS hoặc ICE (từ Stage 2–10)');
   }
 
   return {

@@ -17,6 +17,9 @@ import { CoopOnlineLobbyPanel, type CoopLobbySubView } from './CoopOnlineLobbyMo
 import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
 import { CoopOnlineManager, type CoopRoomDocument } from '../core/coopOnlineManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
+import { CAMPAIGN_STAGE_SPECS, getCampaignStageSpec } from '../core/campaignStages.ts';
+import { StageProgressionManager } from '../core/stageProgression.ts';
+import { StageMapMiniPreview } from './StageMapMiniPreview.tsx';
 import {
   ArrowLeft,
   ArrowRight,
@@ -29,6 +32,9 @@ import {
   CheckCircle2,
   Flame,
   Shield,
+  Lock,
+  Map as MapIcon,
+  Unlock,
 } from 'lucide-react';
 
 export type GameModeType = 'SOLO' | 'TWO_PLAYERS';
@@ -49,7 +55,7 @@ export interface ModeSelectionScreenProps {
   session: SessionStateSnapshot;
   isProcessing: boolean;
   onBack: () => void;
-  onStartMatch: (mode: GameModeType, twoPlayerOption?: TwoPlayerOption) => void;
+  onStartMatch: (mode: GameModeType, twoPlayerOption?: TwoPlayerOption, stageId?: number) => void;
   onStartOnlineMatch?: (room: CoopRoomDocument, role: 'HOST' | 'GUEST') => void;
   difficulty: 'DEFAULT' | 'EXTREME';
   onDifficultyChange: (d: 'DEFAULT' | 'EXTREME') => void;
@@ -177,6 +183,24 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   const effectiveUid = user.uid || firebaseUser?.uid || '';
   const [avatarError, setAvatarError] = useState(false);
   const [, setAvatarTick] = useState(0);
+  const [stageProgress, setStageProgress] = useState(() =>
+    StageProgressionManager.getInstance().getUserStageProgressSnapshot(effectiveUid)
+  );
+  const [selectedStageId, setSelectedStageId] = useState<number>(() =>
+    StageProgressionManager.getInstance().getUnlockedStageForUser(effectiveUid, false)
+  );
+  const [stageSelectError, setStageSelectError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const progMgr = StageProgressionManager.getInstance();
+    const syncProg = () => {
+      const snap = progMgr.getUserStageProgressSnapshot(effectiveUid);
+      setStageProgress(snap);
+      setSelectedStageId((prev) => (prev > snap.unlockedStage ? snap.unlockedStage : prev));
+    };
+    syncProg();
+    return progMgr.subscribe(syncProg);
+  }, [effectiveUid]);
 
   useEffect(() => {
     const coopMgr = CoopOnlineManager.getInstance();
@@ -255,12 +279,26 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     e?.stopPropagation();
     onDifficultyChange(nextDiff);
     if (!isSessionActive || isProcessing) return;
-    if (cardMode === 'SOLO') {
-      onStartMatch('SOLO', 'P2_AI');
-    } else if (cardMode === 'COOP_AI') {
-      onStartMatch('TWO_PLAYERS', 'P2_AI');
-    } else if (cardMode === 'COOP_ONLINE') {
+    if (cardMode === 'COOP_ONLINE') {
       setFlowStep('COOP_ONLINE_LOBBY');
+      return;
+    }
+    const access = StageProgressionManager.getInstance().canUserAccessStage(
+      effectiveUid,
+      selectedStageId,
+      false
+    );
+    if (!access.allowed) {
+      setStageSelectError(
+        access.errorMessage || `Stage ${selectedStageId} đang bị khóa.`
+      );
+      return;
+    }
+    setStageSelectError(null);
+    if (cardMode === 'SOLO') {
+      onStartMatch('SOLO', 'P2_AI', selectedStageId);
+    } else if (cardMode === 'COOP_AI') {
+      onStartMatch('TWO_PLAYERS', 'P2_AI', selectedStageId);
     }
   };
 
@@ -602,9 +640,133 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   </span>
                 </div>
                 <h1 className="text-[clamp(1.35rem,5.5vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow-lg uppercase">
-                  CHỌN ĐỘ KHÓ CHIẾN DỊCH
+                  CHỌN MÀN CHƠI &amp; ĐỘ KHÓ
                 </h1>
               </div>
+
+              {/* CAMPAIGN STAGE 1-10 SELECTOR */}
+              {(() => {
+                const selectedSpec = getCampaignStageSpec(selectedStageId);
+                const selectedUnlocked = selectedStageId <= stageProgress.unlockedStage;
+                const selectedCompleted = stageProgress.completedStages.includes(selectedStageId);
+                return (
+                  <section
+                    data-testid="campaign-stage-selector"
+                    className="w-full mb-5 p-4 rounded-2xl border border-neutral-800 bg-neutral-900/85 text-left space-y-3 shadow-lg"
+                  >
+                    <div className="flex items-center justify-between flex-wrap gap-2 border-b border-neutral-800 pb-2.5">
+                      <div className="flex items-center gap-2 font-black text-xs sm:text-sm text-amber-300 font-mono uppercase">
+                        <MapIcon className="w-4 h-4 text-amber-400" />
+                        <span>CHIẾN DỊCH STAGE 1–10</span>
+                      </div>
+                      <span className="text-[11px] font-mono text-emerald-300 font-bold">
+                        Đã mở khóa: Stage {stageProgress.unlockedStage}/10
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
+                      {CAMPAIGN_STAGE_SPECS.map((stage) => {
+                        const isUnlocked = stage.id <= stageProgress.unlockedStage;
+                        const isCompleted = stageProgress.completedStages.includes(stage.id);
+                        const isSelected = selectedStageId === stage.id;
+                        return (
+                          <button
+                            key={stage.id}
+                            type="button"
+                            data-testid={`campaign-stage-btn-${stage.id}`}
+                            onClick={() => {
+                              if (!isUnlocked) {
+                                setStageSelectError(
+                                  `Stage ${stage.id} đang bị khóa. Cần hoàn thành Stage ${stage.id - 1} để mở khóa.`
+                                );
+                                return;
+                              }
+                              setStageSelectError(null);
+                              setSelectedStageId(stage.id);
+                            }}
+                            className={`relative py-2 px-1 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-0.5 ${
+                              !isUnlocked
+                                ? 'bg-neutral-950/70 border-neutral-800 text-neutral-600 cursor-not-allowed opacity-70'
+                                : isSelected
+                                  ? 'bg-amber-500 border-amber-300 text-black font-black ring-2 ring-amber-400/50 cursor-pointer shadow'
+                                  : isCompleted
+                                    ? 'bg-emerald-950/50 border-emerald-600/60 text-emerald-200 hover:border-emerald-400 cursor-pointer'
+                                    : 'bg-neutral-950 border-neutral-700 text-neutral-200 hover:border-amber-500/60 cursor-pointer'
+                            }`}
+                            title={
+                              isUnlocked
+                                ? stage.name
+                                : `Khóa: Hoàn thành Stage ${stage.id - 1} để mở`
+                            }
+                          >
+                            <span className="text-[11px] font-mono font-extrabold">S{stage.id}</span>
+                            {!isUnlocked ? (
+                              <Lock className="w-3 h-3 text-neutral-600" />
+                            ) : isCompleted ? (
+                              <CheckCircle2
+                                className={`w-3 h-3 ${isSelected ? 'text-black' : 'text-emerald-400'}`}
+                              />
+                            ) : (
+                              <Unlock
+                                className={`w-3 h-3 ${isSelected ? 'text-black' : 'text-amber-400'}`}
+                              />
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Selected Stage Detail + 13x13 Preview */}
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3.5 p-3 rounded-xl bg-neutral-950/80 border border-neutral-800">
+                      <StageMapMiniPreview
+                        map={selectedSpec.map}
+                        sizePx={96}
+                        locked={!selectedUnlocked}
+                        showSpawns
+                      />
+                      <div className="flex-1 min-w-0 space-y-1.5 text-center sm:text-left">
+                        <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
+                          <span className="font-mono font-black text-sm text-white">
+                            {selectedSpec.name}
+                          </span>
+                          {selectedCompleted ? (
+                            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 text-[10px] font-bold">
+                              HOÀN THÀNH
+                            </span>
+                          ) : selectedUnlocked ? (
+                            <span className="px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-700/60 text-[10px] font-bold">
+                              ĐÃ MỞ KHÓA
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[10px] font-bold">
+                              ĐÃ KHÓA
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-neutral-300 leading-relaxed whitespace-pre-line">
+                          {formatSentenceLineBreaks(selectedSpec.terrainFocus)}
+                        </p>
+                        <div className="text-[11px] font-mono text-neutral-400 flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                          <span className="text-amber-300 font-bold">30 Xe địch:</span>
+                          <span>Basic {selectedSpec.enemyComposition.BASIC}</span>
+                          <span>•</span>
+                          <span>Fast {selectedSpec.enemyComposition.FAST}</span>
+                          <span>•</span>
+                          <span>Power {selectedSpec.enemyComposition.POWER}</span>
+                          <span>•</span>
+                          <span>Armor {selectedSpec.enemyComposition.ARMOR}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {stageSelectError && (
+                      <div className="p-2.5 rounded-lg bg-rose-950/80 border border-rose-700/70 text-rose-200 text-[11px] font-medium">
+                        {stageSelectError}
+                      </div>
+                    )}
+                  </section>
+                );
+              })()}
 
               <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6 text-left">
                 {/* NORMAL / DEFAULT -> Giải trí */}
@@ -651,7 +813,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                           : 'bg-neutral-800 hover:bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-pointer'
                       }`}
                     >
-                      <span>Xác nhận</span>
+                      <span>Vào Stage {selectedStageId}</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -701,7 +863,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                           : 'bg-neutral-800 hover:bg-rose-500/20 text-rose-300 border border-rose-500/40 cursor-pointer'
                       }`}
                     >
-                      <span>Xác nhận</span>
+                      <span>Vào Stage {selectedStageId}</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>

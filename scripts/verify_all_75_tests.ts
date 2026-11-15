@@ -20,6 +20,7 @@ import { runAllM6CorrectionAITests as runM6AICorr } from '../src/core/testHarnes
 import { runAllM7_1Tests as runM71 } from '../src/core/testHarnessM7_1.ts';
 import { runAllM7_2Tests as runM72 } from '../src/core/testHarnessM7_2.ts';
 import { runAllM7_3Tests as runM73 } from '../src/core/testHarnessM7_3.ts';
+import { runAllM7_4Tests as runM74 } from '../src/core/testHarnessM7_4.ts';
 import {
   getShowOnlineNetStatsPreference,
   setShowOnlineNetStatsPreference,
@@ -44,6 +45,7 @@ const m6AICorrResults = runM6AICorr().results;
 const m71Results = runM71().results;
 const m72Results = runM72().results;
 const m73Results = runM73().results;
+const m74Results = runM74().results;
 
 const allSuites = [
   { name: 'M2 Physics & Tank (12 Tests)', results: m2Results },
@@ -63,6 +65,7 @@ const allSuites = [
   { name: 'M7.1 Firebase Auth & Single-Device Session (35 Tests)', results: m71Results },
   { name: 'M7.2 Ally AI, Co-op, Profile & Typography (10 Tests)', results: m72Results },
   { name: `M7.3 Rules Hardening, WebRTC Co-op, Audio, Avatar, RBAC & Security Audit (${m73Results.length} Tests)`, results: m73Results },
+  { name: `M7.4 Campaign Stages 2–10, Progression, Co-op Sync & Security (${m74Results.length} Tests)`, results: m74Results },
 ];
 
 let totalTests = 0;
@@ -1797,7 +1800,7 @@ async function runAllAsyncVerifications() {
   await verifyM7313FixesAsyncSuite();
   const asyncCasesCount = 10 + 23 + 4 + 3 + 4 + 8;
   console.log('============================================');
-  console.log(`SYNC UNIT TESTS  : ${totalPassed}/${totalTests} PASS (M2-M5: 75 | M6: 136 | M7.1: 35 | M7.2: 10 | M7.3: ${m73Results.length})`);
+  console.log(`SYNC UNIT TESTS  : ${totalPassed}/${totalTests} PASS (M2-M5: 75 | M6: 136 | M7.1: 35 | M7.2: 10 | M7.3: ${m73Results.length} | M7.4: ${m74Results.length})`);
   console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Upgrade: 3 | M7.3.12 Fixes: 4 | M7.3.13 Fixes: 8)`);
   console.log(`GRAND TOTAL SUITE: ${totalPassed + asyncCasesCount}/${totalTests + asyncCasesCount} PASS (0 FAILED, 0 DUPLICATED)`);
   console.log('============================================');

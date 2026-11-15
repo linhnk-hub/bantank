@@ -24,12 +24,14 @@ import { MusicManager, type GameModeScope } from './core/musicManager.ts';
 import {
   MATCH_TIMER_CONFIG,
   STAGE_1_MAP,
+  ENEMY_CONFIG,
   formatCountdownMMSS,
   getMatchDurationSecondsForDifficulty,
   getStartingLivesForDifficultyAndMode,
 } from './core/constants.ts';
 import { validateStageMap } from './core/mapValidator.ts';
 import { GameEngine } from './core/gameEngine.ts';
+import { StageProgressionManager } from './core/stageProgression.ts';
 import {
   CoopOnlineManager,
   COOP_ONLINE_CONFIG,
@@ -397,11 +399,23 @@ export default function App() {
   }, [gameEngine, clearVirtualTouchInputs, getMusicModeFromEngine]);
 
   const handleStartMatch = useCallback(
-    (mode: 'SOLO' | 'TWO_PLAYERS' = 'SOLO', twoPlayerOption?: 'P2_AI' | 'P2_REAL') => {
+    (
+      mode: 'SOLO' | 'TWO_PLAYERS' = 'SOLO',
+      twoPlayerOption?: 'P2_AI' | 'P2_REAL',
+      stageId: number = 1
+    ) => {
       if (sessionSnapshot.status !== 'ACTIVE') return;
       setOnlineDisconnectMsg(null);
       const engineMode = mode === 'TWO_PLAYERS' && twoPlayerOption === 'P2_AI' ? 'TWO_PLAYERS_AI' : 'SOLO';
-      gameEngine.startMatch(engineMode, difficulty);
+      const startRes = gameEngine.startMatch(engineMode, difficulty, {
+        stageId,
+        uid: currentUser?.uid ?? null,
+        isTrialMode: false,
+        enforceProgression: true,
+      });
+      if (!startRes.success) {
+        return;
+      }
       setIsPaused(false);
       const st = gameEngine.getState();
       MusicManager.getInstance().syncPlaybackWithContext(
@@ -411,24 +425,33 @@ export default function App() {
       setGameState({ ...st });
       setAppScreen('BATTLE');
     },
-    [sessionSnapshot.status, gameEngine, difficulty, getMusicModeFromEngine]
+    [sessionSnapshot.status, currentUser?.uid, gameEngine, difficulty, getMusicModeFromEngine]
   );
 
   const handleStartOnlineMatch = useCallback(
-    (room: CoopRoomDocument, _role: CoopPlayerRole) => {
+    (room: CoopRoomDocument, role: CoopPlayerRole) => {
       if (sessionManager.getSnapshot().status !== 'ACTIVE') return;
       setOnlineDisconnectMsg(null);
       setIsReturningToLobby(false);
       setReturnToLobbyError(null);
       setDifficulty(room.difficulty);
-      gameEngine.startMatch('TWO_PLAYERS_ONLINE', room.difficulty);
+      const stageId = room.selectedStageId ?? 1;
+      const startRes = gameEngine.startMatch('TWO_PLAYERS_ONLINE', room.difficulty, {
+        stageId,
+        uid: currentUser?.uid ?? null,
+        isTrialMode: false,
+        enforceProgression: role === 'HOST',
+      });
+      if (!startRes.success) {
+        return;
+      }
       setIsPaused(false);
       const st = gameEngine.getState();
       MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'TWO_PLAYER');
       setGameState({ ...st });
       setAppScreen('BATTLE');
     },
-    [sessionManager, gameEngine]
+    [sessionManager, currentUser?.uid, gameEngine]
   );
 
   const handleStartTrialMode = useCallback(() => {
@@ -438,7 +461,12 @@ export default function App() {
     setOnlineDisconnectMsg(null);
     setDifficulty('DEFAULT');
     setSelectedMode('SOLO');
-    gameEngine.startMatch('SOLO', 'DEFAULT');
+    gameEngine.startMatch('SOLO', 'DEFAULT', {
+      stageId: 1,
+      uid: null,
+      isTrialMode: true,
+      enforceProgression: true,
+    });
     setIsPaused(false);
     const st = gameEngine.getState();
     MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
@@ -755,6 +783,44 @@ export default function App() {
     gameState && gameState.matchState === 'STAGE_CLEAR'
   );
 
+  const recordedGuestOnlineClearKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !isStageClearModalOpen ||
+      !gameState ||
+      gameState.gameMode !== 'TWO_PLAYERS_ONLINE' ||
+      isTrialMode ||
+      !currentUser?.uid ||
+      coopManager.getLocalRole() !== 'GUEST' ||
+      gameState.terrain.isBaseDestroyed ||
+      gameState.totalDefeatedEnemies < ENEMY_CONFIG.TOTAL_COUNT
+    ) {
+      return;
+    }
+    const stageId = gameState.currentStageId ?? 1;
+    const clearKey = `${coopManager.getCurrentRoom()?.roomCode || 'coop'}:${stageId}:${gameState.stageRunSeq}`;
+    if (recordedGuestOnlineClearKeyRef.current === clearKey) return;
+    recordedGuestOnlineClearKeyRef.current = clearKey;
+
+    const progMgr = StageProgressionManager.getInstance();
+    if (stageId <= progMgr.getUnlockedStageForUser(currentUser.uid, false)) {
+      const token = progMgr.issueMatchSessionToken(
+        currentUser.uid,
+        stageId,
+        'TWO_PLAYERS_ONLINE'
+      );
+      const proof = progMgr.mintStageClearProof({
+        sessionToken: token,
+        totalDefeatedEnemies: gameState.totalDefeatedEnemies,
+        isBaseDestroyed: false,
+        isStageClear: true,
+      });
+      if (proof) {
+        progMgr.verifyAndRecordStageClear(currentUser.uid, proof);
+      }
+    }
+  }, [isStageClearModalOpen, gameState, isTrialMode, currentUser?.uid, coopManager]);
+
   const handleProfileUpdated = useCallback(() => {
     setCurrentUser(authManager.getCurrentUser());
     setProfileRevision((r) => r + 1);
@@ -882,8 +948,8 @@ export default function App() {
           session={sessionSnapshot}
           isProcessing={authProcessing}
           onBack={() => setAppScreen('MAIN_MENU')}
-          onStartMatch={(mode, opt) => {
-            handleStartMatch(mode, opt);
+          onStartMatch={(mode, opt, stageId) => {
+            handleStartMatch(mode, opt, stageId);
           }}
           onStartOnlineMatch={handleStartOnlineMatch}
           difficulty={difficulty}

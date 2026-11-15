@@ -9,6 +9,7 @@ import type { GameCoreState } from '../core/types.ts';
 import { getStartingLivesForDifficultyAndMode } from '../core/constants.ts';
 import { CoopOnlineManager, type CoopPlayerRole } from '../core/coopOnlineManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
+import { getCampaignStageSpec, TOTAL_CAMPAIGN_STAGES } from '../core/campaignStages.ts';
 
 interface StageClearModalProps {
   isOpen: boolean;
@@ -93,6 +94,10 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
   const elapsedSeconds = Math.floor(state.stageElapsedSeconds % 60);
   const timeFormatted = `${elapsedMinutes}m ${elapsedSeconds.toString().padStart(2, '0')}s`;
 
+  const currentStageId = state.currentStageId ?? 1;
+  const stageName = state.currentStageName || getCampaignStageSpec(currentStageId).name;
+  const isFinalCampaignStage = currentStageId >= TOTAL_CAMPAIGN_STAGES;
+
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/85 backdrop-blur-md pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-2 sm:px-4 select-none animate-in fade-in duration-200">
       <div className="bg-neutral-900 border border-amber-500/50 rounded-2xl max-w-md w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-2xl overflow-hidden">
@@ -104,11 +109,16 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
               <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
             </div>
             <h2 className="text-xl sm:text-2xl font-black tracking-wider text-amber-400 uppercase">
-              CHIẾN THẮNG MÀN CHƠI!
+              {isFinalCampaignStage ? 'CHINH PHỤC CHIẾN DỊCH!' : 'CHIẾN THẮNG MÀN CHƠI!'}
             </h2>
             <p className="text-[11px] sm:text-xs text-amber-300 font-bold font-mono tracking-wide">
-              STAGE {state.currentStageId ?? 1}
+              STAGE {currentStageId} / {TOTAL_CAMPAIGN_STAGES} • {stageName}
             </p>
+            {isFinalCampaignStage && (
+              <div className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-[10px] font-extrabold font-mono">
+                HOÀN THÀNH TOÀN BỘ CHIẾN DỊCH 10 STAGE!
+              </div>
+            )}
           </div>
 
           {/* Score & Record Display */}
@@ -224,11 +234,16 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
           ) : !isTrialMode ? (
             <button
               type="button"
+              data-testid="stageclear-next-btn"
               onClick={onNextStageOrReplay}
-              className="flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs transition-all shadow-lg shadow-amber-500/20 active:scale-95"
+              className="flex-1 flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs transition-all shadow-lg shadow-amber-500/20 active:scale-95 cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>CHƠI LẠI / TIẾP TỤC</span>
+              <span>
+                {!isFinalCampaignStage
+                  ? `TIẾP TỤC STAGE ${currentStageId + 1}`
+                  : 'CHƠI LẠI STAGE 10'}
+              </span>
             </button>
           ) : null}
 
