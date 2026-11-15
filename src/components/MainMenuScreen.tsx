@@ -287,11 +287,11 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               <button
                 type="button"
                 onClick={onOpenSettings}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow cursor-pointer"
+                aria-label="Cài đặt"
+                className="flex items-center justify-center p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow cursor-pointer"
                 title="Cài đặt Tài khoản & Media"
               >
                 <Settings className="w-3.5 h-3.5 text-amber-400" />
-                <span className="hidden sm:inline">Cài đặt</span>
               </button>
 
               {isSuperAdmin && (
@@ -310,11 +310,11 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 type="button"
                 onClick={onSignOut}
                 disabled={isProcessing}
-                className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow active:scale-95 disabled:opacity-50 cursor-pointer"
+                aria-label="Đăng xuất"
+                className="flex items-center justify-center p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow active:scale-95 disabled:opacity-50 cursor-pointer"
                 title="Đăng xuất khỏi tài khoản an toàn"
               >
                 <LogOut className="w-3.5 h-3.5 text-rose-400" />
-                <span className="hidden sm:inline">Đăng xuất</span>
               </button>
             </div>
           </div>

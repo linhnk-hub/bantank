@@ -33,6 +33,15 @@ import {
   getShowOnlineNetStatsPreference,
   setShowOnlineNetStatsPreference,
 } from '../src/core/networkStatsPref.ts';
+import {
+  StageManager,
+  InMemoryStagesCloudAdapter,
+  cloneStageMap,
+  areStageMapsEqual,
+} from '../src/core/stageManager.ts';
+import { TILE_TYPES } from '../src/core/types.ts';
+import { GameEngine } from '../src/core/gameEngine.ts';
+import { STAGE_2_MAP } from '../src/core/campaignStages.ts';
 
 console.log('--- RUNNING FULL AUTOMATED REGRESSION SUITE ---');
 
@@ -1771,9 +1780,15 @@ async function verifyM7313FixesAsyncSuite() {
     throw new Error('public/intro-bantank.mp4 is missing');
   }
 
-  // 3. Google Sign-In button matches Chơi thử size (py-3 text-xs sm:text-sm w-4 h-4)
-  if (!welcomeSrc.includes('data-testid="welcome-google-signin-btn"') || !welcomeSrc.includes('py-3 px-6 rounded-2xl bg-white')) {
-    throw new Error('WelcomeScreen Google Sign-In button unified sizing check failed');
+  // 3. Google Sign-In & Chơi thử compact width + orange-red / dark-gray gradient shift styling
+  if (
+    !welcomeSrc.includes('data-testid="welcome-google-signin-btn"') ||
+    !welcomeSrc.includes('max-w-[260px]') ||
+    !welcomeSrc.includes('from-orange-600 via-red-600 to-orange-500') ||
+    !welcomeSrc.includes('from-neutral-900 via-zinc-700 to-neutral-950') ||
+    !welcomeSrc.includes('bg-[length:200%_100%] bg-left hover:bg-right')
+  ) {
+    throw new Error('WelcomeScreen compact width & gradient button styling check failed');
   }
 
   // 4. App.tsx syncs menu BGM on WELCOME without requiring login
@@ -1847,6 +1862,148 @@ async function verifyM7313FixesAsyncSuite() {
   console.log('[M7.3.13 Fixes (12 Items: EXTREME Lives, Intro Autoplay/Banner/Blur, Waiting Room, Rematch, Net Stats, Status, Line Breaks) E2E] 8/8 PASS');
 }
 
+async function verifyUiAndStageCloudSyncSuite() {
+  const fsMod = await import('node:fs');
+  const pathMod = await import('node:path');
+  const readSrc = (rel: string) =>
+    fsMod.readFileSync(pathMod.resolve(process.cwd(), rel), 'utf-8');
+
+  // 1. Music icon toggle (Music instead of Volume2/VolumeX) & no Settings/Logout text labels on menu headers
+  const quickAudioSrc = readSrc('src/components/QuickAudioToggleButton.tsx');
+  const mainMenuSrc = readSrc('src/components/MainMenuScreen.tsx');
+  const modeSelectSrc = readSrc('src/components/ModeSelectionScreen.tsx');
+  const authBannerSrc = readSrc('src/components/AuthSessionBanner.tsx');
+  const appSrc = readSrc('src/App.tsx');
+  if (
+    !quickAudioSrc.includes("import { Music } from 'lucide-react'") ||
+    quickAudioSrc.includes('Volume2') ||
+    quickAudioSrc.includes('VolumeX') ||
+    !quickAudioSrc.includes('top-menu-music-muted-icon') ||
+    !quickAudioSrc.includes('top-menu-music-active-icon')
+  ) {
+    throw new Error('QuickAudioToggleButton music icon check failed');
+  }
+  if (
+    mainMenuSrc.includes('>Cài đặt</span>') ||
+    mainMenuSrc.includes('>Đăng xuất</span>') ||
+    modeSelectSrc.includes('>Cài đặt</span>') ||
+    authBannerSrc.includes('>Đăng xuất</span>') ||
+    appSrc.includes('>Cài đặt</span>')
+  ) {
+    throw new Error('Top menu header text labels (Cài đặt / Đăng xuất) must be removed');
+  }
+
+  // 2. Disconnect title updated to "Kết nối bị gián đoạn"
+  const sessionAlertSrc = readSrc('src/components/SessionAlertModal.tsx');
+  if (
+    !sessionAlertSrc.includes('Kết nối bị gián đoạn') ||
+    sessionAlertSrc.includes('Mất kết nối máy chủ')
+  ) {
+    throw new Error('SessionAlertModal disconnect title update check failed');
+  }
+
+  // 3. StageEditorPanel separates clickable/draggable material tile from passive note text
+  const stageEditorSrc = readSrc('src/components/StageEditorPanel.tsx');
+  if (
+    !stageEditorSrc.includes('data-testid={`palette-tile-${tile.code}`}') ||
+    !stageEditorSrc.includes('data-testid={`palette-note-${tile.code}`}') ||
+    !stageEditorSrc.includes('select-none pointer-events-none') ||
+    !stageEditorSrc.includes('syncCatalogToCloud')
+  ) {
+    throw new Error('StageEditorPanel material palette separation or cloud sync check failed');
+  }
+
+  // 4. End-to-End Stage 2 Edit -> Activate -> Cloud Sync -> Other Player StageManager & GameEngine
+  const sharedCloud = new InMemoryStagesCloudAdapter();
+  const adminMgr = StageManager.getInstance();
+  adminMgr.resetForTesting({ seedCampaignStages: true });
+  adminMgr.setCloudAdapter(sharedCloud);
+
+  const editedMap = cloneStageMap(STAGE_2_MAP);
+  editedMap[4][4] = TILE_TYPES.WATER;
+  editedMap[4][5] = TILE_TYPES.ICE;
+
+  const draftRes = adminMgr.saveStageDraft({
+    id: 2,
+    name: 'Stage 2 – Bến Cảng Tùy Chỉnh',
+    orderIndex: 2,
+    map: editedMap,
+    actorRole: 'ADMIN',
+    actorEmail: 'linhnk2013@gmail.com',
+  });
+  if (!draftRes.success) {
+    throw new Error(`Admin saveStageDraft Stage 2 failed: ${draftRes.errors.join(', ')}`);
+  }
+  const actRes = adminMgr.activateStage({
+    id: 2,
+    actorRole: 'ADMIN',
+    actorEmail: 'linhnk2013@gmail.com',
+  });
+  if (!actRes.success) {
+    throw new Error(`Admin activateStage Stage 2 failed: ${actRes.errors.join(', ')}`);
+  }
+  const syncRes = await adminMgr.syncCatalogToCloud({
+    actorRole: 'ADMIN',
+    actorEmail: 'linhnk2013@gmail.com',
+  });
+  if (!syncRes.success) {
+    throw new Error(`Admin syncCatalogToCloud failed: ${syncRes.error}`);
+  }
+
+  // Non-nested arrays check on cloud doc
+  const cloudDoc = await sharedCloud.getCatalog();
+  if (!cloudDoc || cloudDoc.updatedBy !== 'linhnk2013@gmail.com' || cloudDoc.version < 1) {
+    throw new Error('Cloud stages_catalog metadata invalid');
+  }
+  const stage2Entry = cloudDoc.stages.find((s) => s.id === 2);
+  if (!stage2Entry || Array.isArray((stage2Entry as any).draftMapRows)) {
+    throw new Error('Cloud Stage 2 must serialize rows as Firestore map object (no nested arrays)');
+  }
+
+  // Simulate Player B connecting on another device and starting Stage 2
+  const playerBMgr = new StageManager({ loadPersisted: false });
+  playerBMgr.resetForTesting({ seedCampaignStages: true });
+  playerBMgr.setCloudAdapter(sharedCloud);
+  playerBMgr.startCloudSync('uid_player_b_verify');
+  await playerBMgr.refreshFromCloudOnce();
+
+  const playerBStage2 = playerBMgr.getStage(2);
+  const playerBView2 = playerBMgr.getLiveCampaignStageView(2);
+  if (
+    !playerBStage2 ||
+    !areStageMapsEqual(playerBStage2.map, editedMap) ||
+    playerBStage2.name !== 'Stage 2 – Bến Cảng Tùy Chỉnh' ||
+    !areStageMapsEqual(playerBView2.map, editedMap) ||
+    playerBView2.name !== 'Stage 2 – Bến Cảng Tùy Chỉnh'
+  ) {
+    throw new Error('Player B failed to receive updated Stage 2 map/name from cloud sync');
+  }
+
+  // Also ensure global StageManager + GameEngine play the updated Stage 2 when starting match
+  adminMgr.applyCloudCatalog(cloudDoc);
+  const engine = new GameEngine();
+  const startRes = engine.startMatch('SOLO', 'DEFAULT', {
+    stageId: 2,
+    enforceProgression: false,
+  });
+  if (!startRes.success) {
+    throw new Error(`GameEngine.startMatch(stage 2) failed: ${startRes.errorMessage}`);
+  }
+  const st = engine.getState();
+  if (
+    st.currentStageId !== 2 ||
+    st.currentStageName !== 'Stage 2 – Bến Cảng Tùy Chỉnh' ||
+    st.terrain.currentMap[4][4] !== TILE_TYPES.WATER ||
+    st.terrain.currentMap[4][5] !== TILE_TYPES.ICE
+  ) {
+    throw new Error('GameEngine did not load updated cloud-synced Stage 2 map');
+  }
+
+  playerBMgr.stopCloudSync();
+  adminMgr.resetForTesting({ seedCampaignStages: true });
+  console.log('[UI Polish & Stage 2 Cloud Sync E2E] 4/4 PASS');
+}
+
 async function runAllAsyncVerifications() {
   await verifyM733AsyncWorkflow();
   await verifyM735SharedAvatarCatalogAsyncSuite();
@@ -1856,10 +2013,11 @@ async function runAllAsyncVerifications() {
   await verifyM7313FixesAsyncSuite();
   await verifyM751AsyncEndToEndSuite();
   await verifyM752AsyncLevelConcurrencyAndScanSuite();
-  const asyncCasesCount = 10 + 23 + 4 + 3 + 4 + 8 + 5 + 3;
+  await verifyUiAndStageCloudSyncSuite();
+  const asyncCasesCount = 10 + 23 + 4 + 3 + 4 + 8 + 5 + 3 + 4;
   console.log('============================================');
   console.log(`SYNC UNIT TESTS  : ${totalPassed}/${totalTests} PASS (M2-M5: 75 | M6: 136 | M7.1: 35 | M7.2: 10 | M7.3: ${m73Results.length} | M7.4: ${m74Results.length} | M7.5.1: ${m75Results.length} | M7.5.2: ${m752Results.length})`);
-  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Static: 3 | M7.3.12 Fixes: 4 | M7.3.13 Fixes: 8 | M7.5.1 Audit/Archive/Backup: 5 | M7.5.2 Level Concurrency & Scan: 3)`);
+  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Static: 3 | M7.3.12 Fixes: 4 | M7.3.13 Fixes: 8 | M7.5.1 Audit/Archive/Backup: 5 | M7.5.2 Level Concurrency & Scan: 3 | UI & Stage Cloud Sync: 4)`);
   console.log(`GRAND TOTAL SUITE: ${totalPassed + asyncCasesCount}/${totalTests + asyncCasesCount} PASS (0 FAILED, 0 DUPLICATED)`);
   console.log('============================================');
   process.exit(0);

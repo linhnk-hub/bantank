@@ -3,11 +3,32 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import {
+  doc,
+  getDoc,
+  getDocFromServer,
+  setDoc,
+  onSnapshot,
+  type Unsubscribe,
+} from 'firebase/firestore';
+import type { User } from 'firebase/auth';
 import { STAGE_1_MAP, ENEMY_CONFIG, MAP_DIMENSIONS } from './constants.ts';
-import { TILE_TYPES, type EnemyType } from './types.ts';
+import { TILE_TYPES, type EnemyType, type StageMapMatrix } from './types.ts';
 import { validateStageMap } from './mapValidator.ts';
 import { hasRolePermission, type UserRole } from './rbacMatrix.ts';
-import { CAMPAIGN_STAGE_SPECS } from './campaignStages.ts';
+import {
+  ADMIN_EMAIL,
+  isAdminUser,
+  validatePersonalGmailUser,
+  type ValidatedUserAccount,
+} from './authManager.ts';
+import { getFirebaseDb, handleFirestoreError } from './firebaseConfig.ts';
+import {
+  CAMPAIGN_STAGE_SPECS,
+  countEnemyQueueTypes,
+  getCampaignStageSpec,
+  type CampaignStageSpec,
+} from './campaignStages.ts';
 
 export type StageLifecycleStatus = 'DRAFT' | 'ACTIVE' | 'INACTIVE';
 
@@ -165,6 +186,177 @@ export const STAGE_1_DEFINITION: StageDefinition = {
 
 const MANAGED_STAGES_STORAGE_KEY = 'bantank_managed_stages_v1';
 
+export interface FirestoreStageRowMap {
+  r0: number[];
+  r1: number[];
+  r2: number[];
+  r3: number[];
+  r4: number[];
+  r5: number[];
+  r6: number[];
+  r7: number[];
+  r8: number[];
+  r9: number[];
+  r10: number[];
+  r11: number[];
+  r12: number[];
+}
+
+export interface CloudStageCatalogEntry {
+  id: number;
+  orderIndex: number;
+  name: string;
+  status: StageLifecycleStatus;
+  version: number;
+  activeVersion: number | null;
+  updatedAtMs: number;
+  updatedBy: string;
+  draftMapRows: FirestoreStageRowMap;
+  activeMapRows: FirestoreStageRowMap | null;
+  enemyQueue: EnemyType[];
+  spawnIntervalS: number;
+}
+
+export interface SystemStagesCatalogDocument {
+  stage1Map: FirestoreStageRowMap;
+  stages: CloudStageCatalogEntry[];
+  updatedAtMs: number;
+  updatedBy: string;
+  version: number;
+}
+
+export function matrixToFirestoreRowMap(matrix: number[][]): FirestoreStageRowMap {
+  const safeRow = (idx: number): number[] => {
+    const row = Array.isArray(matrix?.[idx]) ? matrix[idx] : [];
+    return Array.from({ length: MAP_DIMENSIONS.COLS }, (_, c) =>
+      typeof row[c] === 'number' && Number.isInteger(row[c]) ? row[c] : 0
+    );
+  };
+  return {
+    r0: safeRow(0),
+    r1: safeRow(1),
+    r2: safeRow(2),
+    r3: safeRow(3),
+    r4: safeRow(4),
+    r5: safeRow(5),
+    r6: safeRow(6),
+    r7: safeRow(7),
+    r8: safeRow(8),
+    r9: safeRow(9),
+    r10: safeRow(10),
+    r11: safeRow(11),
+    r12: safeRow(12),
+  };
+}
+
+export function firestoreRowMapToMatrix(
+  rowMap: FirestoreStageRowMap | Record<string, unknown> | null | undefined
+): number[][] | null {
+  if (!rowMap || typeof rowMap !== 'object') return null;
+  const rows: number[][] = [];
+  for (let r = 0; r < MAP_DIMENSIONS.ROWS; r++) {
+    const rowData = (rowMap as Record<string, unknown>)[`r${r}`];
+    if (!Array.isArray(rowData) || rowData.length !== MAP_DIMENSIONS.COLS) {
+      return null;
+    }
+    rows.push(rowData.map((v) => (typeof v === 'number' && Number.isInteger(v) ? v : 0)));
+  }
+  return rows;
+}
+
+export interface StagesCloudAdapter {
+  getCatalog(): Promise<SystemStagesCatalogDocument | null>;
+  saveCatalog(docData: SystemStagesCatalogDocument): Promise<void>;
+  subscribeCatalog(
+    onUpdate: (docData: SystemStagesCatalogDocument | null) => void,
+    onError?: (err: Error) => void
+  ): () => void;
+}
+
+export class FirebaseStagesCloudAdapter implements StagesCloudAdapter {
+  public async getCatalog(): Promise<SystemStagesCatalogDocument | null> {
+    try {
+      const db = getFirebaseDb();
+      const ref = doc(db, 'system_config', 'stages_catalog');
+      let snap;
+      try {
+        snap = await getDocFromServer(ref);
+      } catch {
+        snap = await getDoc(ref);
+      }
+      if (!snap.exists()) return null;
+      return snap.data() as SystemStagesCatalogDocument;
+    } catch (err) {
+      handleFirestoreError(err, 'get', 'system_config/stages_catalog');
+    }
+  }
+
+  public async saveCatalog(docData: SystemStagesCatalogDocument): Promise<void> {
+    try {
+      const db = getFirebaseDb();
+      const ref = doc(db, 'system_config', 'stages_catalog');
+      await setDoc(ref, docData);
+    } catch (err) {
+      handleFirestoreError(err, 'write', 'system_config/stages_catalog');
+    }
+  }
+
+  public subscribeCatalog(
+    onUpdate: (docData: SystemStagesCatalogDocument | null) => void,
+    onError?: (err: Error) => void
+  ): () => void {
+    const db = getFirebaseDb();
+    const ref = doc(db, 'system_config', 'stages_catalog');
+    const unsub: Unsubscribe = onSnapshot(
+      ref,
+      (snap) => {
+        onUpdate(snap.exists() ? (snap.data() as SystemStagesCatalogDocument) : null);
+      },
+      (err) => {
+        try {
+          handleFirestoreError(err, 'get', 'system_config/stages_catalog');
+        } catch (wrappedErr) {
+          if (onError) onError(wrappedErr as Error);
+        }
+      }
+    );
+    return unsub;
+  }
+}
+
+export class InMemoryStagesCloudAdapter implements StagesCloudAdapter {
+  private doc: SystemStagesCatalogDocument | null = null;
+  private subscribers: Set<(docData: SystemStagesCatalogDocument | null) => void> = new Set();
+
+  public async getCatalog(): Promise<SystemStagesCatalogDocument | null> {
+    return this.doc ? JSON.parse(JSON.stringify(this.doc)) : null;
+  }
+
+  public async saveCatalog(docData: SystemStagesCatalogDocument): Promise<void> {
+    this.doc = JSON.parse(JSON.stringify(docData));
+    const cloned = this.doc ? JSON.parse(JSON.stringify(this.doc)) : null;
+    this.subscribers.forEach((cb) => {
+      try {
+        cb(cloned);
+      } catch {
+        // ignore subscriber errors
+      }
+    });
+  }
+
+  public subscribeCatalog(
+    onUpdate: (docData: SystemStagesCatalogDocument | null) => void
+  ): () => void {
+    this.subscribers.add(onUpdate);
+    if (this.doc) {
+      onUpdate(JSON.parse(JSON.stringify(this.doc)));
+    }
+    return () => {
+      this.subscribers.delete(onUpdate);
+    };
+  }
+}
+
 export class StageManager {
   private static globalInstance: StageManager | null = null;
 
@@ -172,6 +364,11 @@ export class StageManager {
   private managedStages: Map<number, ManagedStageRecord> = new Map();
   private currentStageId: number = 1;
   private listeners: Set<() => void> = new Set();
+  private cloudAdapter: StagesCloudAdapter = new FirebaseStagesCloudAdapter();
+  private cloudUnsubscribe: (() => void) | null = null;
+  private subscribedCloudUid: string | null = null;
+  private cloudVersion: number = 0;
+  private lastCloudSyncError: string | null = null;
 
   public static getInstance(): StageManager {
     if (!StageManager.globalInstance) {
@@ -941,7 +1138,268 @@ export class StageManager {
     this.currentStageId = 1;
   }
 
+  public setCloudAdapter(adapter: StagesCloudAdapter): void {
+    this.stopCloudSync();
+    this.cloudAdapter = adapter;
+  }
+
+  public getCloudSyncState(): {
+    cloudVersion: number;
+    lastCloudSyncError: string | null;
+    isSubscribed: boolean;
+  } {
+    return {
+      cloudVersion: this.cloudVersion,
+      lastCloudSyncError: this.lastCloudSyncError,
+      isSubscribed: Boolean(this.cloudUnsubscribe),
+    };
+  }
+
+  public syncCloudAuthUser(user: User | ValidatedUserAccount | null | undefined): void {
+    const validation = validatePersonalGmailUser((user as User) ?? null);
+    const canAutoSubscribe =
+      typeof window !== 'undefined' || !(this.cloudAdapter instanceof FirebaseStagesCloudAdapter);
+
+    if (validation.isValid && user?.uid && canAutoSubscribe) {
+      this.startCloudSync(user.uid);
+    } else {
+      this.stopCloudSync();
+    }
+  }
+
+  public startCloudSync(uid: string): void {
+    if (!uid) return;
+    if (this.cloudUnsubscribe && this.subscribedCloudUid === uid) {
+      return;
+    }
+    this.stopCloudSync();
+    this.subscribedCloudUid = uid;
+    this.cloudUnsubscribe = this.cloudAdapter.subscribeCatalog(
+      (docData) => {
+        if (docData) {
+          this.applyCloudCatalog(docData);
+        }
+      },
+      (err) => {
+        this.lastCloudSyncError = err?.message || 'Không thể đồng bộ cấu hình màn chơi.';
+        this.notifyListeners();
+      }
+    );
+    void this.refreshFromCloudOnce();
+  }
+
+  public stopCloudSync(): void {
+    if (this.cloudUnsubscribe) {
+      try {
+        this.cloudUnsubscribe();
+      } catch {
+        // ignore unsubscribe errors
+      }
+      this.cloudUnsubscribe = null;
+    }
+    this.subscribedCloudUid = null;
+  }
+
+  public async refreshFromCloudOnce(): Promise<SystemStagesCatalogDocument | null> {
+    try {
+      const docData = await this.cloudAdapter.getCatalog();
+      if (docData) {
+        this.applyCloudCatalog(docData);
+      }
+      return docData;
+    } catch (err: any) {
+      this.lastCloudSyncError = err?.message || 'Không thể tải cấu hình màn chơi từ máy chủ.';
+      return null;
+    }
+  }
+
+  public applyCloudCatalog(docData: SystemStagesCatalogDocument): void {
+    if (!docData || !Array.isArray(docData.stages)) return;
+
+    const remoteVersion = typeof docData.version === 'number' ? docData.version : 0;
+    if (remoteVersion > this.cloudVersion) {
+      this.cloudVersion = remoteVersion;
+    }
+
+    const incomingIds = new Set<number>();
+    for (const entry of docData.stages) {
+      if (!entry || typeof entry.id !== 'number' || entry.id <= 1) continue;
+      const parsedDraft = firestoreRowMapToMatrix(entry.draftMapRows);
+      if (!parsedDraft) continue;
+      const parsedActive = entry.activeMapRows
+        ? firestoreRowMapToMatrix(entry.activeMapRows)
+        : null;
+      const draftValidation = validateStageMap(parsedDraft);
+      const activeValidation = parsedActive ? validateStageMap(parsedActive) : { isValid: false };
+      const existing = this.managedStages.get(entry.id);
+      const resolvedStatus: StageLifecycleStatus =
+        entry.status === 'ACTIVE' && activeValidation.isValid
+          ? 'ACTIVE'
+          : entry.status === 'INACTIVE'
+            ? 'INACTIVE'
+            : 'DRAFT';
+
+      const validQueue =
+        Array.isArray(entry.enemyQueue) && entry.enemyQueue.length === ENEMY_CONFIG.TOTAL_COUNT
+          ? [...entry.enemyQueue]
+          : existing?.enemyQueue
+            ? [...existing.enemyQueue]
+            : [...ENEMY_CONFIG.QUEUE];
+
+      const nextRecord: ManagedStageRecord = {
+        id: entry.id,
+        orderIndex:
+          typeof entry.orderIndex === 'number' && entry.orderIndex >= 2
+            ? entry.orderIndex
+            : entry.id,
+        name:
+          typeof entry.name === 'string' && entry.name.trim()
+            ? entry.name.trim()
+            : `Stage ${entry.id}`,
+        status: resolvedStatus,
+        version: typeof entry.version === 'number' && entry.version >= 1 ? entry.version : 1,
+        activeVersion: typeof entry.activeVersion === 'number' ? entry.activeVersion : null,
+        updatedAtMs: typeof entry.updatedAtMs === 'number' ? entry.updatedAtMs : Date.now(),
+        updatedBy:
+          typeof entry.updatedBy === 'string' && entry.updatedBy.trim()
+            ? entry.updatedBy
+            : ADMIN_EMAIL,
+        isOfficialStage1: false,
+        draftMap: draftValidation.isValid
+          ? cloneStageMap(parsedDraft)
+          : existing?.draftMap
+            ? cloneStageMap(existing.draftMap)
+            : createBlankDraftMap(),
+        activeMap: activeValidation.isValid && parsedActive ? cloneStageMap(parsedActive) : null,
+        enemyQueue: validQueue,
+        spawnIntervalS: typeof entry.spawnIntervalS === 'number' ? entry.spawnIntervalS : 1.0,
+        previousActiveVersions: existing?.previousActiveVersions
+          ? existing.previousActiveVersions.map((v) => ({
+              ...v,
+              map: cloneStageMap(v.map),
+              enemyQueue: [...v.enemyQueue],
+            }))
+          : [],
+      };
+      this.managedStages.set(entry.id, nextRecord);
+      incomingIds.add(entry.id);
+    }
+
+    // Remove any stale custom stages (>10) removed by Admin on cloud
+    for (const existingId of Array.from(this.managedStages.keys())) {
+      if (existingId > 10 && !incomingIds.has(existingId)) {
+        this.managedStages.delete(existingId);
+      }
+    }
+
+    this.lastCloudSyncError = null;
+    this.rebuildActiveStagesMap();
+    this.saveToStorage();
+    this.notifyListeners();
+  }
+
+  public buildCloudCatalogPayload(nextVersion: number): SystemStagesCatalogDocument {
+    const entries: CloudStageCatalogEntry[] = Array.from(this.managedStages.values())
+      .filter((rec) => rec.id > 1)
+      .sort((a, b) => a.id - b.id)
+      .slice(0, 50)
+      .map((rec) => ({
+        id: rec.id,
+        orderIndex: rec.orderIndex,
+        name: rec.name,
+        status: rec.status,
+        version: rec.version,
+        activeVersion: rec.activeVersion,
+        updatedAtMs: Math.max(1, Math.floor(rec.updatedAtMs || Date.now())),
+        updatedBy: ADMIN_EMAIL,
+        draftMapRows: matrixToFirestoreRowMap(rec.draftMap),
+        activeMapRows: rec.activeMap ? matrixToFirestoreRowMap(rec.activeMap) : null,
+        enemyQueue: [...rec.enemyQueue],
+        spawnIntervalS: rec.spawnIntervalS,
+      }));
+
+    return {
+      stage1Map: matrixToFirestoreRowMap(STAGE_1_MAP),
+      stages: entries,
+      updatedAtMs: Math.max(1, Math.floor(Date.now())),
+      updatedBy: ADMIN_EMAIL,
+      version: Math.max(1, Math.floor(nextVersion)),
+    };
+  }
+
+  public async syncCatalogToCloud(params: {
+    actorRole: UserRole;
+    actorEmail: string;
+  }): Promise<{ success: boolean; version?: number; error?: string }> {
+    if (
+      !hasRolePermission(params.actorRole, 'ACTIVATE_STAGE') ||
+      (params.actorEmail || '').trim().toLowerCase() !== ADMIN_EMAIL
+    ) {
+      return {
+        success: false,
+        error: 'Chỉ Admin duy nhất mới có quyền đồng bộ cấu hình màn chơi lên máy chủ.',
+      };
+    }
+
+    try {
+      let remoteVersion = 0;
+      try {
+        const remoteDoc = await this.cloudAdapter.getCatalog();
+        if (remoteDoc && typeof remoteDoc.version === 'number') {
+          remoteVersion = remoteDoc.version;
+        }
+      } catch {
+        // Proceed with local tracked version if document doesn't exist yet or read fails transiently
+      }
+
+      const nextVersion = Math.max(this.cloudVersion + 1, remoteVersion + 1, 1);
+      const payload = this.buildCloudCatalogPayload(nextVersion);
+      await this.cloudAdapter.saveCatalog(payload);
+      this.cloudVersion = nextVersion;
+      this.lastCloudSyncError = null;
+      this.notifyListeners();
+      return { success: true, version: nextVersion };
+    } catch (err: any) {
+      const msg = err?.message || 'Lỗi đồng bộ cấu hình màn chơi lên Firestore.';
+      this.lastCloudSyncError = msg;
+      this.notifyListeners();
+      return { success: false, error: msg };
+    }
+  }
+
+  /**
+   * Trả về thông tin Stage 1–10 kết hợp giữa metadata chiến dịch mặc định và bản đồ/tên sống
+   * đã được Admin kích hoạt trên hệ thống (StageManager).
+   */
+  public getLiveCampaignStageView(stageId: number): CampaignStageSpec {
+    const baseSpec = getCampaignStageSpec(stageId);
+    const liveStage = this.stages.get(stageId);
+    if (!liveStage) {
+      return baseSpec;
+    }
+    const queue =
+      Array.isArray(liveStage.enemyQueue) && liveStage.enemyQueue.length === ENEMY_CONFIG.TOTAL_COUNT
+        ? [...liveStage.enemyQueue]
+        : [...baseSpec.enemyQueue];
+    return {
+      ...baseSpec,
+      orderIndex: liveStage.orderIndex ?? baseSpec.orderIndex,
+      name: liveStage.name || baseSpec.name,
+      map: cloneStageMap(liveStage.map) as StageMapMatrix,
+      enemyQueue: queue,
+      enemyComposition: countEnemyQueueTypes(queue),
+      spawnIntervalS: liveStage.spawnIntervalS ?? baseSpec.spawnIntervalS,
+    };
+  }
+
+  public getLiveCampaignStageViews(): CampaignStageSpec[] {
+    return CAMPAIGN_STAGE_SPECS.map((spec) => this.getLiveCampaignStageView(spec.id));
+  }
+
   public resetForTesting(options?: { seedCampaignStages?: boolean }): void {
+    this.stopCloudSync();
+    this.cloudVersion = 0;
+    this.lastCloudSyncError = null;
     this.stages.clear();
     this.managedStages.clear();
     this.currentStageId = 1;

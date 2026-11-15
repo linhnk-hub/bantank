@@ -38,8 +38,8 @@ import {
 } from '../core/authManager.ts';
 import { AvatarManager } from '../core/avatarManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
-import { CAMPAIGN_STAGE_SPECS, getCampaignStageSpec } from '../core/campaignStages.ts';
 import { StageProgressionManager } from '../core/stageProgression.ts';
+import { StageManager } from '../core/stageManager.ts';
 import { StageMapMiniPreview } from './StageMapMiniPreview.tsx';
 
 export type CoopLobbySubView = 'MAIN' | 'CREATE' | 'JOIN';
@@ -116,6 +116,15 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   useEffect(() => {
     setCreateDifficulty(difficulty);
   }, [difficulty]);
+
+  const stageManager = StageManager.getInstance();
+  const [, setStageCatalogRev] = useState(0);
+
+  useEffect(() => {
+    return stageManager.subscribe(() => {
+      setStageCatalogRev((r) => r + 1);
+    });
+  }, [stageManager]);
 
   useEffect(() => {
     const progMgr = StageProgressionManager.getInstance();
@@ -594,7 +603,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
 
             {/* 3. Chọn Stage chiến dịch (1–10) */}
             {(() => {
-              const chosenSpec = getCampaignStageSpec(createStageId);
+              const liveStageSpecs = stageManager.getLiveCampaignStageViews();
+              const chosenSpec = stageManager.getLiveCampaignStageView(createStageId);
               return (
                 <div className="space-y-2.5">
                   <div className="flex items-center justify-between flex-wrap gap-2">
@@ -606,7 +616,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     </span>
                   </div>
                   <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
-                    {CAMPAIGN_STAGE_SPECS.map((stage) => {
+                    {liveStageSpecs.map((stage) => {
                       const isUnlocked = stage.id <= userStageProgress.unlockedStage;
                       const isSelected = createStageId === stage.id;
                       return (
@@ -928,7 +938,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
       {/* Selected Stage Banner + Host Stage Switcher */}
       {(() => {
         const lobbyStageId = room.selectedStageId ?? 1;
-        const lobbyStageSpec = getCampaignStageSpec(lobbyStageId);
+        const liveStageSpecs = stageManager.getLiveCampaignStageViews();
+        const lobbyStageSpec = stageManager.getLiveCampaignStageView(lobbyStageId);
         return (
           <div
             data-testid="coop-lobby-stage-panel"
@@ -960,7 +971,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
 
             {role === 'HOST' && (
               <div className="grid grid-cols-5 sm:grid-cols-10 gap-1 pt-1">
-                {CAMPAIGN_STAGE_SPECS.map((stage) => {
+                {liveStageSpecs.map((stage) => {
                   const isUnlocked = stage.id <= userStageProgress.unlockedStage;
                   const isSelected = lobbyStageId === stage.id;
                   return (

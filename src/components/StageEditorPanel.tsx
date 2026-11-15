@@ -26,6 +26,7 @@ import { TILE_TYPES } from '../core/types.ts';
 import { validateStageMap, STAGE_SPAWN_POINTS } from '../core/mapValidator.ts';
 import {
   StageManager,
+  areStageMapsEqual,
   cloneStageMap,
   createBlankDraftMap,
   type ManagedStageRecord,
@@ -156,6 +157,7 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
   const [isPainting, setIsPainting] = useState<boolean>(false);
   const [showSpawnLayer, setShowSpawnLayer] = useState<boolean>(true);
   const [previewRefreshNonce, setPreviewRefreshNonce] = useState<number>(0);
+  const [isCloudSyncing, setIsCloudSyncing] = useState<boolean>(false);
   const [feedbackBanner, setFeedbackBanner] = useState<{
     type: 'success' | 'error';
     messages: string[];
@@ -168,6 +170,7 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
       setManagedStages(stageManager.getManagedStages());
     };
     const unsub = stageManager.subscribe(syncStages);
+    void stageManager.refreshFromCloudOnce();
     return () => unsub();
   }, [stageManager]);
 
@@ -274,7 +277,7 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
     });
   };
 
-  const handleSaveStage = (targetStage?: ManagedStageRecord) => {
+  const handleSaveStage = async (targetStage?: ManagedStageRecord) => {
     setFeedbackBanner(null);
     const stageToSave = targetStage ?? currentManagedStage;
     if (!stageToSave) return;
@@ -300,15 +303,30 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
       setEditingOrderIndex(res.stage.orderIndex);
       setEditingMap(cloneStageMap(res.stage.draftMap));
     }
+
+    setIsCloudSyncing(true);
+    const cloudRes = await stageManager.syncCatalogToCloud({ actorRole, actorEmail });
+    setIsCloudSyncing(false);
+
+    if (!cloudRes.success) {
+      setFeedbackBanner({
+        type: 'error',
+        messages: [
+          `Đã lưu bản nháp "${res.stage.name}" (v${res.stage.version}) cục bộ nhưng chưa đồng bộ được lên máy chủ: ${cloudRes.error || 'Lỗi kết nối.'}`,
+        ],
+      });
+      return;
+    }
+
     setFeedbackBanner({
       type: 'success',
       messages: [
-        `Đã lưu bản nháp "${res.stage.name}" (Phiên bản v${res.stage.version}). Các trận đang diễn ra không bị ảnh hưởng.`,
+        `Đã lưu bản nháp "${res.stage.name}" (Phiên bản v${res.stage.version}). Để người chơi thấy bản đồ mới này, hãy nhấn "Kích hoạt".`,
       ],
     });
   };
 
-  const handleActivateStage = (stage: ManagedStageRecord) => {
+  const handleActivateStage = async (stage: ManagedStageRecord) => {
     setFeedbackBanner(null);
     // If activating the currently selected stage, first save any pending draft edits if valid
     if (stage.id === selectedStageId && !stage.isOfficialStage1) {
@@ -338,15 +356,29 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
     }
 
     setManagedStages(stageManager.getManagedStages());
+    setIsCloudSyncing(true);
+    const cloudRes = await stageManager.syncCatalogToCloud({ actorRole, actorEmail });
+    setIsCloudSyncing(false);
+
+    if (!cloudRes.success) {
+      setFeedbackBanner({
+        type: 'error',
+        messages: [
+          `Đã kích hoạt cục bộ "${res.stage.name}" nhưng không thể đồng bộ lên máy chủ cho người chơi khác: ${cloudRes.error || 'Lỗi Firestore.'}`,
+        ],
+      });
+      return;
+    }
+
     setFeedbackBanner({
       type: 'success',
       messages: [
-        `Đã kích hoạt màn chơi "${res.stage.name}" (Thứ tự #${res.stage.orderIndex}, Phiên bản hoạt động v${res.stage.activeVersion}).`,
+        `Đã kích hoạt & đồng bộ máy chủ màn chơi "${res.stage.name}" (Thứ tự #${res.stage.orderIndex}, Phiên bản hoạt động v${res.stage.activeVersion}). Toàn bộ người chơi đã nhận được bản đồ mới.`,
       ],
     });
   };
 
-  const handleDeactivateStage = (stage: ManagedStageRecord) => {
+  const handleDeactivateStage = async (stage: ManagedStageRecord) => {
     setFeedbackBanner(null);
     const res = stageManager.deactivateStage({
       id: stage.id,
@@ -358,13 +390,25 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
       return;
     }
     setManagedStages(stageManager.getManagedStages());
+    setIsCloudSyncing(true);
+    const cloudRes = await stageManager.syncCatalogToCloud({ actorRole, actorEmail });
+    setIsCloudSyncing(false);
+    if (!cloudRes.success) {
+      setFeedbackBanner({
+        type: 'error',
+        messages: [
+          `Đã ngừng kích hoạt cục bộ "${res.stage.name}" nhưng chưa đồng bộ được lên máy chủ: ${cloudRes.error || 'Lỗi Firestore.'}`,
+        ],
+      });
+      return;
+    }
     setFeedbackBanner({
       type: 'success',
-      messages: [`Đã ngừng kích hoạt màn chơi "${res.stage.name}".`],
+      messages: [`Đã ngừng kích hoạt & đồng bộ máy chủ cho "${res.stage.name}".`],
     });
   };
 
-  const handleRestorePreviousVersion = (stage: ManagedStageRecord) => {
+  const handleRestorePreviousVersion = async (stage: ManagedStageRecord) => {
     setFeedbackBanner(null);
     const res = stageManager.restorePreviousActiveVersion({
       id: stage.id,
@@ -379,10 +423,22 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
     if (stage.id === selectedStageId) {
       handleSelectStageForEdit(res.stage);
     }
+    setIsCloudSyncing(true);
+    const cloudRes = await stageManager.syncCatalogToCloud({ actorRole, actorEmail });
+    setIsCloudSyncing(false);
+    if (!cloudRes.success) {
+      setFeedbackBanner({
+        type: 'error',
+        messages: [
+          `Đã khôi phục cục bộ "${res.stage.name}" nhưng chưa đồng bộ được lên máy chủ: ${cloudRes.error || 'Lỗi Firestore.'}`,
+        ],
+      });
+      return;
+    }
     setFeedbackBanner({
       type: 'success',
       messages: [
-        `Đã khôi phục phiên bản hợp lệ trước đó cho "${res.stage.name}" (v${res.stage.version}).`,
+        `Đã khôi phục & đồng bộ phiên bản hợp lệ trước đó cho "${res.stage.name}" (v${res.stage.version}).`,
       ],
     });
   };
@@ -453,6 +509,15 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
             <tbody className="divide-y divide-zinc-800/70">
               {managedStages.map((stage) => {
                 const isSelected = stage.id === selectedStageId;
+                const effectiveMap = isSelected ? editingMap : stage.draftMap;
+                const hasPendingDraftDiff =
+                  !stage.isOfficialStage1 &&
+                  (!stage.activeMap ||
+                    !areStageMapsEqual(effectiveMap, stage.activeMap) ||
+                    (isSelected &&
+                      (editingName.trim() !== stage.name ||
+                        editingOrderIndex !== stage.orderIndex)));
+                const showActivateBtn = stage.status !== 'ACTIVE' || hasPendingDraftDiff;
                 return (
                   <tr
                     key={stage.id}
@@ -469,7 +534,14 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                       )}
                     </td>
                     <td className="py-2 px-2.5 font-semibold text-zinc-100">
-                      {stage.name}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span>{stage.name}</span>
+                        {hasPendingDraftDiff && stage.status === 'ACTIVE' && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[9px] font-bold">
+                            Chưa kích hoạt bản sửa
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2 px-2.5 whitespace-nowrap">
                       {getStatusBadge(stage.status)}
@@ -505,16 +577,22 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                           <>
                             <button
                               type="button"
-                              onClick={() => handleSaveStage(stage)}
-                              className="px-2 py-1 rounded bg-sky-900/70 hover:bg-sky-800 border border-sky-700/70 text-sky-200 text-[10px] font-bold transition-colors"
+                              disabled={isCloudSyncing}
+                              onClick={() => {
+                                void handleSaveStage(stage);
+                              }}
+                              className="px-2 py-1 rounded bg-sky-900/70 hover:bg-sky-800 disabled:opacity-50 border border-sky-700/70 text-sky-200 text-[10px] font-bold transition-colors"
                             >
                               Lưu
                             </button>
-                            {stage.status !== 'ACTIVE' && (
+                            {showActivateBtn && (
                               <button
                                 type="button"
-                                onClick={() => handleActivateStage(stage)}
-                                className="px-2 py-1 rounded bg-emerald-900/70 hover:bg-emerald-800 border border-emerald-700/70 text-emerald-200 text-[10px] font-bold transition-colors"
+                                disabled={isCloudSyncing}
+                                onClick={() => {
+                                  void handleActivateStage(stage);
+                                }}
+                                className="px-2 py-1 rounded bg-emerald-900/70 hover:bg-emerald-800 disabled:opacity-50 border border-emerald-700/70 text-emerald-200 text-[10px] font-bold transition-colors"
                               >
                                 Kích hoạt
                               </button>
@@ -522,8 +600,11 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                             {stage.status === 'ACTIVE' && (
                               <button
                                 type="button"
-                                onClick={() => handleDeactivateStage(stage)}
-                                className="px-2 py-1 rounded bg-rose-900/70 hover:bg-rose-800 border border-rose-700/70 text-rose-200 text-[10px] font-bold transition-colors"
+                                disabled={isCloudSyncing}
+                                onClick={() => {
+                                  void handleDeactivateStage(stage);
+                                }}
+                                className="px-2 py-1 rounded bg-rose-900/70 hover:bg-rose-800 disabled:opacity-50 border border-rose-700/70 text-rose-200 text-[10px] font-bold transition-colors"
                               >
                                 Ngừng kích hoạt
                               </button>
@@ -531,9 +612,12 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                             {stage.previousActiveVersions.length > 0 && (
                               <button
                                 type="button"
-                                onClick={() => handleRestorePreviousVersion(stage)}
+                                disabled={isCloudSyncing}
+                                onClick={() => {
+                                  void handleRestorePreviousVersion(stage);
+                                }}
                                 title="Khôi phục phiên bản hợp lệ trước đó"
-                                className="px-1.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-amber-300 text-[10px] font-bold transition-colors"
+                                className="px-1.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 border border-zinc-700 text-amber-300 text-[10px] font-bold transition-colors"
                               >
                                 <History className="w-3 h-3" />
                               </button>
@@ -639,41 +723,64 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
               <div className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
                 Bảng công cụ 7 loại địa hình (Kéo thả hoặc Chọn để vẽ)
               </div>
-              <div className="grid grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 select-none">
                 {PALETTE_TILES.map((tile) => {
                   const isSelected = selectedTileCode === tile.code;
+                  const canDragTile = canEditStages && !currentManagedStage.isOfficialStage1;
                   return (
-                    <button
+                    <div
                       key={tile.code}
-                      type="button"
-                      draggable={canEditStages}
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('text/plain', String(tile.code));
-                        setSelectedTileCode(tile.code);
-                      }}
-                      onClick={() => setSelectedTileCode(tile.code)}
-                      data-testid={`palette-tile-${tile.code}`}
-                      className={`p-2 rounded-lg border text-left transition-all flex items-start gap-2 ${
-                        isSelected
-                          ? 'bg-amber-500/15 border-amber-400 ring-1 ring-amber-400/50'
-                          : 'bg-zinc-950/90 border-zinc-800 hover:border-zinc-700'
-                      }`}
+                      data-testid={`palette-row-${tile.code}`}
+                      className="p-1.5 rounded-lg border border-zinc-800/80 bg-zinc-950/75 flex items-center gap-2 select-none"
                     >
-                      <span
-                        className={`w-5 h-5 rounded border shrink-0 mt-0.5 ${tile.bgClass} ${tile.borderClass}`}
-                      />
-                      <div className="min-w-0">
-                        <div className="text-[11px] font-bold text-zinc-100 truncate">
+                      <button
+                        type="button"
+                        draggable={canDragTile}
+                        onDragStart={(e) => {
+                          e.dataTransfer.effectAllowed = 'copy';
+                          e.dataTransfer.setData('text/plain', String(tile.code));
+                          if (e.dataTransfer.setDragImage) {
+                            e.dataTransfer.setDragImage(e.currentTarget, 18, 18);
+                          }
+                          setSelectedTileCode(tile.code);
+                        }}
+                        onClick={() => setSelectedTileCode(tile.code)}
+                        data-testid={`palette-tile-${tile.code}`}
+                        title={`Chọn hoặc kéo thả: ${tile.vnName} (${tile.code})`}
+                        className={`shrink-0 w-[96px] px-2 py-1.5 rounded-md border flex items-center gap-1.5 text-left transition-all select-none ${
+                          canDragTile ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
+                        } ${
+                          isSelected
+                            ? 'bg-amber-500/20 border-amber-400 ring-2 ring-amber-400/60 shadow-sm'
+                            : 'bg-zinc-900 border-zinc-700 hover:border-zinc-500'
+                        }`}
+                      >
+                        <span
+                          className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center text-[8px] font-black ${tile.bgClass} ${tile.borderClass}`}
+                        >
+                          {tile.code === TILE_TYPES.BASE ? '🦅' : ''}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold truncate ${
+                            isSelected ? 'text-amber-200' : 'text-zinc-100'
+                          }`}
+                        >
+                          {tile.vnName}
+                        </span>
+                      </button>
+
+                      <div
+                        data-testid={`palette-note-${tile.code}`}
+                        className="min-w-0 flex-1 select-none pointer-events-none"
+                      >
+                        <div className="text-[9px] font-mono text-zinc-400 truncate">
                           {tile.codeLabel}
                         </div>
-                        <div className="text-[10px] text-amber-300/90 font-medium truncate">
-                          {tile.vnName}
-                        </div>
-                        <div className="text-[9px] text-zinc-500 leading-tight mt-0.5 line-clamp-2">
+                        <div className="text-[9px] text-zinc-500 leading-tight line-clamp-2">
                           {tile.shortDesc}
                         </div>
                       </div>
-                    </button>
+                    </div>
                   );
                 })}
               </div>
@@ -778,21 +885,27 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                 <div className="flex flex-wrap items-center gap-2 pt-1">
                   <button
                     type="button"
-                    onClick={() => handleSaveStage()}
+                    disabled={isCloudSyncing}
+                    onClick={() => {
+                      void handleSaveStage();
+                    }}
                     data-testid="btn-save-stage-draft"
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition-colors shadow"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs transition-colors shadow cursor-pointer"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    Lưu màn chơi (Bản nháp)
+                    {isCloudSyncing ? 'Đang lưu...' : 'Lưu màn chơi (Bản nháp)'}
                   </button>
                   <button
                     type="button"
-                    onClick={() => handleActivateStage(currentManagedStage)}
+                    disabled={isCloudSyncing}
+                    onClick={() => {
+                      void handleActivateStage(currentManagedStage);
+                    }}
                     data-testid="btn-activate-stage"
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors shadow"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs transition-colors shadow cursor-pointer"
                   >
                     <Play className="w-3.5 h-3.5" />
-                    Kích hoạt màn chơi
+                    {isCloudSyncing ? 'Đang kích hoạt...' : 'Kích hoạt màn chơi'}
                   </button>
                 </div>
               )}

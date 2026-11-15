@@ -1387,7 +1387,7 @@ export class SessionManager {
     if (this.status === 'ACTIVE') {
       this.status = 'CONNECTION_LOST_UNVERIFIED';
       this.statusMessage =
-        'Mất kết nối với máy chủ. Trận đấu đang tạm dừng để chờ xác minh lại phiên...';
+        'Kết nối bị gián đoạn. Trận đấu đang tạm dừng để chờ xác minh lại phiên...';
       if (this.onPauseGameCallback) this.onPauseGameCallback();
       this.notify();
     }

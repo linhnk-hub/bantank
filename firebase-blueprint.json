@@ -302,6 +302,38 @@
         "version": { "type": "number" }
       },
       "required": ["homeSoundId", "globalSoundId", "modeSoundIds", "stageSoundIds", "loopConfig", "homeVideo", "updatedAt", "updatedBy", "version"]
+    },
+    "SystemStagesCatalogConfig": {
+      "title": "SystemStagesCatalogConfig",
+      "description": "Cấu hình danh sách màn chơi & bản đồ 13x13 (/system_config/stages_catalog) đồng bộ thời gian thực từ Admin tới toàn bộ người chơi.",
+      "type": "object",
+      "properties": {
+        "stage1Map": { "type": "object" },
+        "stages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "number" },
+              "orderIndex": { "type": "number" },
+              "name": { "type": "string" },
+              "status": { "type": "string", "enum": ["DRAFT", "ACTIVE", "INACTIVE"] },
+              "version": { "type": "number" },
+              "activeVersion": { "type": ["number", "null"] },
+              "updatedAtMs": { "type": "number" },
+              "updatedBy": { "type": "string" },
+              "draftMapRows": { "type": "object" },
+              "activeMapRows": { "type": ["object", "null"] },
+              "enemyQueue": { "type": "array" },
+              "spawnIntervalS": { "type": "number" }
+            }
+          }
+        },
+        "updatedAtMs": { "type": "number" },
+        "updatedBy": { "type": "string" },
+        "version": { "type": "number" }
+      },
+      "required": ["stage1Map", "stages", "updatedAtMs", "updatedBy", "version"]
     }
   },
   "firestore": {

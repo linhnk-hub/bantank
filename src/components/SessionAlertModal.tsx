@@ -62,7 +62,7 @@ export const SessionAlertModal: React.FC<SessionAlertModalProps> = ({
             {isIdleWarning && 'Cảnh Báo Phiên Sắp Hết Hạn Không Hoạt Động'}
             {!isIdleWarning && session.status === 'DISPLACED' && 'Tài khoản đang đăng nhập trên thiết bị khác'}
             {!isIdleWarning && session.status === 'PAUSED_IDLE' && 'Tài khoản bị tạm dừng do không hoạt động'}
-            {!isIdleWarning && session.status === 'CONNECTION_LOST_UNVERIFIED' && 'Mất kết nối máy chủ'}
+            {!isIdleWarning && session.status === 'CONNECTION_LOST_UNVERIFIED' && 'Kết nối bị gián đoạn'}
             {!isIdleWarning && session.status === 'HEARTBEAT_REJECTED_UNCLASSIFIED' && 'Bảo vệ tài khoản người dùng'}
           </h3>
           {isIdleWarning ? (

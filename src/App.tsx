@@ -33,6 +33,7 @@ import { validateStageMap } from './core/mapValidator.ts';
 import { GameEngine } from './core/gameEngine.ts';
 import { TOTAL_CAMPAIGN_STAGES } from './core/campaignStages.ts';
 import { StageProgressionManager } from './core/stageProgression.ts';
+import { StageManager } from './core/stageManager.ts';
 import {
   CoopOnlineManager,
   COOP_ONLINE_CONFIG,
@@ -270,7 +271,9 @@ export default function App() {
 
   // Global subscription to AuthManager & SessionManager
   useEffect(() => {
-    MusicManager.getInstance().syncRoleFromAuthUser(authManager.getCurrentUser());
+    const initialAuthUser = authManager.getCurrentUser();
+    MusicManager.getInstance().syncRoleFromAuthUser(initialAuthUser);
+    StageManager.getInstance().syncCloudAuthUser(initialAuthUser);
 
     const unsubReady = authManager.subscribeAuthReady((ready) => {
       setIsAuthReady(ready);
@@ -279,6 +282,7 @@ export default function App() {
     const unsubAuth = authManager.subscribe((u) => {
       setCurrentUser(u);
       MusicManager.getInstance().syncRoleFromAuthUser(u);
+      StageManager.getInstance().syncCloudAuthUser(u);
       setProfileRevision((r) => r + 1);
       if (u) {
         setIsTrialMode(false);
@@ -621,6 +625,7 @@ export default function App() {
       MusicManager.getInstance().pause();
       setIsPaused(false);
       AvatarManager.getInstance().clearSessionStateOnSignOut();
+      StageManager.getInstance().stopCloudSync();
       await sessionManager.releaseSessionAndSignOut();
       setCurrentUser(null);
       setAppScreen('WELCOME');
@@ -1331,11 +1336,11 @@ export default function App() {
                   setSettingsInitialTab('ACCOUNT');
                   setIsSettingsOpen(true);
                 }}
-                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold cursor-pointer"
+                aria-label="Cài đặt"
+                className="flex items-center justify-center p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold cursor-pointer"
                 title="Cài đặt"
               >
-                <Settings className="w-3 h-3 text-amber-400" />
-                <span className="hidden sm:inline">Cài đặt</span>
+                <Settings className="w-3.5 h-3.5 text-amber-400" />
               </button>
 
               {isSuperAdmin && (
@@ -1530,6 +1535,7 @@ export default function App() {
                   setSettingsInitialTab('ACCOUNT');
                   setIsSettingsOpen(true);
                 }}
+                aria-label="Cài đặt"
                 className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 cursor-pointer"
                 title="Cài đặt"
               >
@@ -1668,11 +1674,11 @@ export default function App() {
                       setSettingsInitialTab('ACCOUNT');
                       setIsSettingsOpen(true);
                     }}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
+                    aria-label="Cài đặt"
+                    className="flex items-center justify-center p-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
                     title="Cài đặt Tài khoản & Media"
                   >
                     <Settings className="w-3.5 h-3.5 text-amber-400" />
-                    <span className="hidden sm:inline">Cài đặt</span>
                   </button>
                 )}
 

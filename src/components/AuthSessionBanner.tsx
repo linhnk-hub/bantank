@@ -347,12 +347,14 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
                 </button>
               )}
               <button
+                type="button"
                 onClick={handleSignOut}
                 disabled={isProcessing}
-                className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-all font-semibold active:scale-95 disabled:opacity-50"
+                title="Đăng xuất"
+                aria-label="Đăng xuất"
+                className="flex items-center justify-center p-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-all font-semibold active:scale-95 disabled:opacity-50 cursor-pointer"
               >
-                <LogOut className="w-3 h-3 text-red-400" />
-                <span>Đăng xuất</span>
+                <LogOut className="w-3.5 h-3.5 text-red-400" />
               </button>
             </div>
           ) : (

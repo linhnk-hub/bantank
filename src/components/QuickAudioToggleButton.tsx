@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Volume2, VolumeX } from 'lucide-react';
+import { Music } from 'lucide-react';
 import { SoundManager } from '../core/audio.ts';
 
 export interface QuickAudioToggleButtonProps {
@@ -68,9 +68,20 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
       }
     >
       {isBgmMuted ? (
-        <VolumeX className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+        <span
+          className="relative inline-flex items-center justify-center w-3.5 h-3.5 shrink-0"
+          data-testid="top-menu-music-muted-icon"
+          aria-hidden="true"
+        >
+          <Music className="w-3.5 h-3.5 text-rose-400 opacity-85" />
+          <span className="pointer-events-none absolute w-[15px] h-[1.75px] bg-rose-400 -rotate-45 rounded-full shadow-[0_0_0_1px_rgba(24,24,27,0.9)]" />
+        </span>
       ) : (
-        <Volume2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+        <Music
+          className="w-3.5 h-3.5 text-emerald-400 shrink-0"
+          data-testid="top-menu-music-active-icon"
+          aria-hidden="true"
+        />
       )}
       {showLabelOnDesktop && (
         <span className="hidden md:inline text-neutral-200">

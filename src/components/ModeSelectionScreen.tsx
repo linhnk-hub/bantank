@@ -19,8 +19,8 @@ import { CoopOnlineLobbyPanel, type CoopLobbySubView } from './CoopOnlineLobbyMo
 import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
 import { CoopOnlineManager, type CoopRoomDocument } from '../core/coopOnlineManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
-import { CAMPAIGN_STAGE_SPECS, getCampaignStageSpec } from '../core/campaignStages.ts';
 import { StageProgressionManager } from '../core/stageProgression.ts';
+import { StageManager } from '../core/stageManager.ts';
 import { StageMapMiniPreview } from './StageMapMiniPreview.tsx';
 import {
   ArrowLeft,
@@ -196,6 +196,15 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     StageProgressionManager.getInstance().getUnlockedStageForUser(effectiveUid, false)
   );
   const [stageSelectError, setStageSelectError] = useState<string | null>(null);
+  const stageManager = StageManager.getInstance();
+  const [, setStageCatalogRev] = useState(0);
+
+  useEffect(() => {
+    const unsubStages = stageManager.subscribe(() => {
+      setStageCatalogRev((r) => r + 1);
+    });
+    return unsubStages;
+  }, [stageManager]);
 
   useEffect(() => {
     const progMgr = StageProgressionManager.getInstance();
@@ -440,11 +449,11 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
             <button
               type="button"
               onClick={onOpenSettings}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow cursor-pointer shrink-0"
+              aria-label="Cài đặt"
+              className="flex items-center justify-center p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow cursor-pointer shrink-0"
               title="Cài đặt Tài khoản & Media"
             >
               <Settings className="w-3.5 h-3.5 text-amber-400" />
-              <span className="hidden sm:inline">Cài đặt</span>
             </button>
 
             {isSuperAdmin && (
@@ -692,7 +701,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
               {/* CAMPAIGN STAGE 1-10 SELECTOR */}
               {(() => {
-                const selectedSpec = getCampaignStageSpec(selectedStageId);
+                const liveStageSpecs = stageManager.getLiveCampaignStageViews();
+                const selectedSpec = stageManager.getLiveCampaignStageView(selectedStageId);
                 const selectedUnlocked = selectedStageId <= stageProgress.unlockedStage;
                 const selectedCompleted = stageProgress.completedStages.includes(selectedStageId);
                 return (
@@ -711,7 +721,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
-                      {CAMPAIGN_STAGE_SPECS.map((stage) => {
+                      {liveStageSpecs.map((stage) => {
                         const isUnlocked = stage.id <= stageProgress.unlockedStage;
                         const isCompleted = stageProgress.completedStages.includes(stage.id);
                         const isSelected = selectedStageId === stage.id;
