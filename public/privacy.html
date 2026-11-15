@@ -62,13 +62,14 @@
 
         <!-- Liên kết điều hướng trên Desktop -->
         <nav
+          id="desktop-nav"
           class="hidden md:flex items-center gap-6 lg:gap-8 text-sm font-semibold text-neutral-300"
           aria-label="Điều hướng chính"
         >
-          <a href="/landing.html#gioi-thieu" class="hover:text-amber-400 transition-colors py-1">Giới thiệu</a>
-          <a href="/landing.html#tinh-nang" class="hover:text-amber-400 transition-colors py-1">Tính năng</a>
-          <a href="/landing.html#che-do-choi" class="hover:text-amber-400 transition-colors py-1">Chế độ chơi</a>
-          <a href="/landing.html#huong-dan" class="hover:text-amber-400 transition-colors py-1">Hướng dẫn</a>
+          <a href="/landing.html#gioi-thieu" class="text-neutral-300 hover:text-amber-400 transition-colors py-1 border-b-2 border-transparent">Giới thiệu</a>
+          <a href="/landing.html#tinh-nang" class="text-neutral-300 hover:text-amber-400 transition-colors py-1 border-b-2 border-transparent">Tính năng</a>
+          <a href="/landing.html#che-do-choi" class="text-neutral-300 hover:text-amber-400 transition-colors py-1 border-b-2 border-transparent">Chế độ chơi</a>
+          <a href="/landing.html#huong-dan" class="text-neutral-300 hover:text-amber-400 transition-colors py-1 border-b-2 border-transparent">Hướng dẫn</a>
           <a
             href="/privacy.html"
             aria-current="page"
@@ -100,10 +101,13 @@
         <!-- Nút mở menu trên Mobile -->
         <div class="flex items-center gap-2 sm:hidden">
           <a
-            href="/"
-            class="px-3 py-2 rounded-lg bg-neutral-900 border border-neutral-800 hover:border-amber-500/40 text-amber-300 font-bold text-xs uppercase tracking-wider"
+            href="/?mode=play"
+            class="px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow"
           >
-            ← Trang chủ
+            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+            <span>Chơi ngay</span>
           </a>
           <button
             id="mobile-menu-toggle"
@@ -134,27 +138,34 @@
         <div class="grid grid-cols-2 gap-2 text-sm font-semibold">
           <a
             href="/landing.html#gioi-thieu"
-            class="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+            class="mobile-nav-link px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400 transition-colors"
           >
-            Giới thiệu
+            <span class="inline-block pb-0.5 border-b-2 border-transparent">Giới thiệu</span>
           </a>
           <a
             href="/landing.html#tinh-nang"
-            class="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+            class="mobile-nav-link px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400 transition-colors"
           >
-            Tính năng
+            <span class="inline-block pb-0.5 border-b-2 border-transparent">Tính năng</span>
           </a>
           <a
             href="/landing.html#che-do-choi"
-            class="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+            class="mobile-nav-link px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400 transition-colors"
           >
-            Chế độ chơi
+            <span class="inline-block pb-0.5 border-b-2 border-transparent">Chế độ chơi</span>
           </a>
           <a
             href="/landing.html#huong-dan"
-            class="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+            class="mobile-nav-link px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400 transition-colors"
           >
-            Hướng dẫn
+            <span class="inline-block pb-0.5 border-b-2 border-transparent">Hướng dẫn</span>
+          </a>
+          <a
+            href="/privacy.html"
+            aria-current="page"
+            class="col-span-2 px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400 text-amber-400 font-bold text-center transition-colors"
+          >
+            <span class="inline-block pb-0.5 border-b-2 border-amber-400">Quyền riêng tư</span>
           </a>
         </div>
         <div class="pt-2 flex flex-col gap-2">
@@ -556,10 +567,10 @@
               Danh mục trang chủ
             </div>
             <ul class="space-y-2 text-xs sm:text-sm">
-              <li><a href="landing.html/#gioi-thieu" class="hover:text-amber-400 transition-colors">Giới thiệu trò chơi</a></li>
-              <li><a href="landing.html/#tinh-nang" class="hover:text-amber-400 transition-colors">Tính năng nổi bật</a></li>
-              <li><a href="landing.html/#che-do-choi" class="hover:text-amber-400 transition-colors">Các chế độ chơi</a></li>
-              <li><a href="landing.html/#huong-dan" class="hover:text-amber-400 transition-colors">Hướng dẫn bắt đầu</a></li>
+              <li><a href="/landing.html#gioi-thieu" class="hover:text-amber-400 transition-colors">Giới thiệu trò chơi</a></li>
+              <li><a href="/landing.html#tinh-nang" class="hover:text-amber-400 transition-colors">Tính năng nổi bật</a></li>
+              <li><a href="/landing.html#che-do-choi" class="hover:text-amber-400 transition-colors">Các chế độ chơi</a></li>
+              <li><a href="/landing.html#huong-dan" class="hover:text-amber-400 transition-colors">Hướng dẫn bắt đầu</a></li>
             </ul>
           </div>
 
@@ -574,7 +585,7 @@
                   href="/privacy.html"
                   class="inline-flex items-center gap-1.5 text-amber-400 hover:text-amber-300 font-semibold transition-colors"
                 >
-                  <span>Chính sách quyền riêng tư (Privacy Policy)</span>
+                  <span>Chính sách quyền riêng tư</span>
                 </a>
               </li>
               <li class="flex items-center gap-1.5 text-neutral-300">
@@ -595,6 +606,8 @@
           <div>© 2026 Bắn Tank Online</div>
           <div class="flex items-center gap-4">
             <a href="/" class="hover:text-neutral-300 transition-colors">Trang chủ</a>
+            <span>•</span>
+            <a href="/privacy.html" class="hover:text-neutral-300 transition-colors">Chính sách quyền riêng tư</a>
             <span>•</span>
             <a href="#top" class="hover:text-neutral-300 transition-colors">Lên đầu trang ↑</a>
           </div>

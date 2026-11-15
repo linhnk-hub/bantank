@@ -95,14 +95,44 @@
 
         <!-- Liên kết điều hướng trên Desktop -->
         <nav
+          id="desktop-nav"
           class="hidden md:flex items-center gap-6 lg:gap-8 text-sm font-semibold text-neutral-300"
           aria-label="Điều hướng chính"
         >
-          <a href="#gioi-thieu" class="hover:text-amber-400 transition-colors py-1">Giới thiệu</a>
-          <a href="#tinh-nang" class="hover:text-amber-400 transition-colors py-1">Tính năng</a>
-          <a href="#che-do-choi" class="hover:text-amber-400 transition-colors py-1">Chế độ chơi</a>
-          <a href="#huong-dan" class="hover:text-amber-400 transition-colors py-1">Hướng dẫn</a>
-          <a href="/privacy.html" class="hover:text-amber-400 transition-colors py-1 text-neutral-400">Quyền riêng tư</a>
+          <a
+            href="#gioi-thieu"
+            data-section="gioi-thieu"
+            class="desktop-nav-link text-neutral-300 hover:text-amber-400 transition-colors py-1 border-b-2 border-transparent"
+          >
+            Giới thiệu
+          </a>
+          <a
+            href="#tinh-nang"
+            data-section="tinh-nang"
+            class="desktop-nav-link text-neutral-300 hover:text-amber-400 transition-colors py-1 border-b-2 border-transparent"
+          >
+            Tính năng
+          </a>
+          <a
+            href="#che-do-choi"
+            data-section="che-do-choi"
+            class="desktop-nav-link text-neutral-300 hover:text-amber-400 transition-colors py-1 border-b-2 border-transparent"
+          >
+            Chế độ chơi
+          </a>
+          <a
+            href="#huong-dan"
+            data-section="huong-dan"
+            class="desktop-nav-link text-neutral-300 hover:text-amber-400 transition-colors py-1 border-b-2 border-transparent"
+          >
+            Hướng dẫn
+          </a>
+          <a
+            href="/privacy.html"
+            class="text-neutral-300 hover:text-amber-400 transition-colors py-1 border-b-2 border-transparent"
+          >
+            Quyền riêng tư
+          </a>
         </nav>
 
         <!-- Cụm nút hành động bên phải -->
@@ -164,41 +194,51 @@
         <div class="grid grid-cols-2 gap-2 text-sm font-semibold">
           <a
             href="#gioi-thieu"
-            class="mobile-nav-link px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+            data-section="gioi-thieu"
+            class="mobile-nav-link px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400 transition-colors"
           >
-            Giới thiệu
+            <span class="mobile-nav-label inline-block pb-0.5 border-b-2 border-transparent">Giới thiệu</span>
           </a>
           <a
             href="#tinh-nang"
-            class="mobile-nav-link px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+            data-section="tinh-nang"
+            class="mobile-nav-link px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400 transition-colors"
           >
-            Tính năng
+            <span class="mobile-nav-label inline-block pb-0.5 border-b-2 border-transparent">Tính năng</span>
           </a>
           <a
             href="#che-do-choi"
-            class="mobile-nav-link px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+            data-section="che-do-choi"
+            class="mobile-nav-link px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400 transition-colors"
           >
-            Chế độ chơi
+            <span class="mobile-nav-label inline-block pb-0.5 border-b-2 border-transparent">Chế độ chơi</span>
           </a>
           <a
             href="#huong-dan"
-            class="mobile-nav-link px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+            data-section="huong-dan"
+            class="mobile-nav-link px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400 transition-colors"
           >
-            Hướng dẫn
+            <span class="mobile-nav-label inline-block pb-0.5 border-b-2 border-transparent">Hướng dẫn</span>
+          </a>
+          <a
+            href="/privacy.html"
+            class="col-span-2 px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400 text-center transition-colors"
+          >
+            <span class="inline-block pb-0.5 border-b-2 border-transparent">Quyền riêng tư</span>
           </a>
         </div>
         <div class="pt-2 flex flex-col gap-2">
           <a
+            href="/?mode=play"
+            class="w-full py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2"
+          >
+            <span>Chơi ngay</span>
+          </a>
+          <a
             href="/?mode=trial"
             class="w-full py-2.5 rounded-xl bg-neutral-950 border border-amber-500/40 text-amber-300 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2"
           >
-            <span>Chơi thử ngay (Không cần đăng nhập)</span>
-          </a>
-          <a
-            href="/privacy.html"
-            class="text-center text-xs text-neutral-400 hover:text-amber-400 py-1"
-          >
-            Chính sách quyền riêng tư
+            <span>Chơi thử ngay</span>
           </a>
         </div>
       </nav>
@@ -862,6 +902,7 @@
             <div class="flex items-center gap-3">
               <img
                 src="/logo-bantank.png"
+                onerror="this.onerror=null;this.src='https://i.ibb.co/Rkf42RD9/bantank.png';"
                 alt="Logo Bắn Tank Online"
                 class="w-9 h-9 rounded-lg object-contain border border-amber-500/40 bg-neutral-900 p-1"
               />
@@ -873,7 +914,7 @@
               Trò chơi bắn xe tăng chiến thuật 2D trực tuyến trên trình duyệt web. Hỗ trợ chơi đơn (Solo), phối hợp đồng đội AI, chơi trực tuyến 2 người (Co-op Online) và chế độ Chơi thử không cần đăng nhập.
             </p>
             <p class="text-xs text-neutral-500">
-              Trang chủ:
+              Trang chủ chính thức:
               <a href="https://bantank.online/" class="text-neutral-300 hover:text-amber-400 underline">https://bantank.online/</a>
             </p>
           </div>
@@ -881,13 +922,13 @@
           <!-- Cột 2: Liên kết điều hướng nhanh -->
           <div class="md:col-span-3 space-y-2.5">
             <div class="text-xs font-black uppercase tracking-wider text-neutral-200">
-              MENU
+              Danh mục trang chủ
             </div>
             <ul class="space-y-2 text-xs sm:text-sm">
-              <li><a href="#gioi-thieu" class="hover:text-amber-400 transition-colors">Giới thiệu trò chơi</a></li>
-              <li><a href="#tinh-nang" class="hover:text-amber-400 transition-colors">Tính năng nổi bật</a></li>
-              <li><a href="#che-do-choi" class="hover:text-amber-400 transition-colors">Các chế độ chơi</a></li>
-              <li><a href="#huong-dan" class="hover:text-amber-400 transition-colors">Hướng dẫn bắt đầu</a></li>
+              <li><a href="#gioi-thieu" data-section-jump="gioi-thieu" class="hover:text-amber-400 transition-colors">Giới thiệu trò chơi</a></li>
+              <li><a href="#tinh-nang" data-section-jump="tinh-nang" class="hover:text-amber-400 transition-colors">Tính năng nổi bật</a></li>
+              <li><a href="#che-do-choi" data-section-jump="che-do-choi" class="hover:text-amber-400 transition-colors">Các chế độ chơi</a></li>
+              <li><a href="#huong-dan" data-section-jump="huong-dan" class="hover:text-amber-400 transition-colors">Hướng dẫn bắt đầu</a></li>
             </ul>
           </div>
 
@@ -906,7 +947,7 @@
                 </a>
               </li>
               <li class="flex items-center gap-1.5 text-neutral-300">
-                <span>Liên hệ:</span>
+                <span>Liên hệ hỗ trợ:</span>
                 <a href="mailto:admin@bantank.online" class="text-neutral-200 hover:text-amber-400 underline">
                   admin@bantank.online
                 </a>
@@ -922,6 +963,8 @@
         <div class="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-500">
           <div>© 2026 Bắn Tank Online</div>
           <div class="flex items-center gap-4">
+            <a href="/" class="hover:text-neutral-300 transition-colors">Trang chủ</a>
+            <span>•</span>
             <a href="/privacy.html" class="hover:text-neutral-300 transition-colors">Chính sách quyền riêng tư</a>
             <span>•</span>
             <a href="#top" class="hover:text-neutral-300 transition-colors">Lên đầu trang ↑</a>
@@ -936,30 +979,177 @@
         var panel = document.getElementById('mobile-menu-panel');
         var iconOpen = document.getElementById('icon-menu-open');
         var iconClose = document.getElementById('icon-menu-close');
-        if (!toggleBtn || !panel) return;
-        toggleBtn.addEventListener('click', function () {
-          var isHidden = panel.classList.contains('hidden');
-          if (isHidden) {
-            panel.classList.remove('hidden');
-            toggleBtn.setAttribute('aria-expanded', 'true');
-            if (iconOpen) iconOpen.classList.add('hidden');
-            if (iconClose) iconClose.classList.remove('hidden');
-          } else {
-            panel.classList.add('hidden');
-            toggleBtn.setAttribute('aria-expanded', 'false');
-            if (iconOpen) iconOpen.classList.remove('hidden');
-            if (iconClose) iconClose.classList.add('hidden');
-          }
-        });
-        var links = panel.querySelectorAll('.mobile-nav-link');
-        for (var i = 0; i < links.length; i++) {
-          links[i].addEventListener('click', function () {
-            panel.classList.add('hidden');
-            toggleBtn.setAttribute('aria-expanded', 'false');
-            if (iconOpen) iconOpen.classList.remove('hidden');
-            if (iconClose) iconClose.classList.add('hidden');
+
+        function closeMobileMenu() {
+          if (!panel || !toggleBtn) return;
+          panel.classList.add('hidden');
+          toggleBtn.setAttribute('aria-expanded', 'false');
+          if (iconOpen) iconOpen.classList.remove('hidden');
+          if (iconClose) iconClose.classList.add('hidden');
+        }
+
+        if (toggleBtn && panel) {
+          toggleBtn.addEventListener('click', function () {
+            var isHidden = panel.classList.contains('hidden');
+            if (isHidden) {
+              panel.classList.remove('hidden');
+              toggleBtn.setAttribute('aria-expanded', 'true');
+              if (iconOpen) iconOpen.classList.add('hidden');
+              if (iconClose) iconClose.classList.remove('hidden');
+            } else {
+              closeMobileMenu();
+            }
           });
         }
+
+        var SECTION_IDS = ['gioi-thieu', 'tinh-nang', 'che-do-choi', 'huong-dan'];
+        var desktopLinks = document.querySelectorAll('.desktop-nav-link');
+        var mobileLinks = document.querySelectorAll('.mobile-nav-link');
+        var sectionElements = SECTION_IDS.map(function (id) {
+          return document.getElementById(id);
+        }).filter(Boolean);
+
+        var activeSectionId = null;
+        var manualLockUntil = 0;
+        var lockedSectionId = null;
+        var scrollRafPending = false;
+
+        function applyActiveSection(sectionId) {
+          activeSectionId = sectionId || null;
+
+          for (var i = 0; i < desktopLinks.length; i++) {
+            var link = desktopLinks[i];
+            var isMatch = link.getAttribute('data-section') === activeSectionId;
+            if (isMatch) {
+              link.classList.remove('text-neutral-300', 'border-transparent');
+              link.classList.add('text-amber-400', 'font-bold', 'border-amber-400');
+              link.setAttribute('aria-current', 'true');
+            } else {
+              link.classList.remove('text-amber-400', 'font-bold', 'border-amber-400');
+              link.classList.add('text-neutral-300', 'border-transparent');
+              link.removeAttribute('aria-current');
+            }
+          }
+
+          for (var j = 0; j < mobileLinks.length; j++) {
+            var mLink = mobileLinks[j];
+            var mLabel = mLink.querySelector('.mobile-nav-label');
+            var isMobileMatch = mLink.getAttribute('data-section') === activeSectionId;
+            if (isMobileMatch) {
+              mLink.classList.remove('bg-neutral-950/70', 'border-neutral-800', 'text-neutral-200');
+              mLink.classList.add('bg-amber-500/10', 'border-amber-400', 'text-amber-400', 'font-bold');
+              mLink.setAttribute('aria-current', 'true');
+              if (mLabel) {
+                mLabel.classList.remove('border-transparent');
+                mLabel.classList.add('border-amber-400');
+              }
+            } else {
+              mLink.classList.remove('bg-amber-500/10', 'border-amber-400', 'text-amber-400', 'font-bold');
+              mLink.classList.add('bg-neutral-950/70', 'border-neutral-800', 'text-neutral-200');
+              mLink.removeAttribute('aria-current');
+              if (mLabel) {
+                mLabel.classList.remove('border-amber-400');
+                mLabel.classList.add('border-transparent');
+              }
+            }
+          }
+        }
+
+        function lockAndSelect(sectionId) {
+          lockedSectionId = sectionId || null;
+          manualLockUntil = Date.now() + 850;
+          applyActiveSection(sectionId);
+        }
+
+        function resolveSectionFromHash() {
+          var hash = (window.location.hash || '').replace(/^#/, '');
+          if (SECTION_IDS.indexOf(hash) !== -1) {
+            return hash;
+          }
+          return null;
+        }
+
+        function resolveSectionFromScroll() {
+          if (!sectionElements.length) return null;
+          var headerEl = document.querySelector('header');
+          var headerHeight = headerEl ? headerEl.offsetHeight : 80;
+          var triggerY = window.scrollY + headerHeight + 96;
+
+          var firstTop = sectionElements[0].offsetTop;
+          if (triggerY < firstTop) {
+            return null;
+          }
+
+          var nearBottom =
+            window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 40;
+          if (nearBottom) {
+            return sectionElements[sectionElements.length - 1].id;
+          }
+
+          var currentId = sectionElements[0].id;
+          for (var i = 0; i < sectionElements.length; i++) {
+            if (sectionElements[i].offsetTop <= triggerY) {
+              currentId = sectionElements[i].id;
+            }
+          }
+          return currentId;
+        }
+
+        function bindSectionLinks() {
+          var allAnchorLinks = document.querySelectorAll('a[href^="#"]');
+          for (var i = 0; i < allAnchorLinks.length; i++) {
+            allAnchorLinks[i].addEventListener('click', function (ev) {
+              var href = ev.currentTarget.getAttribute('href') || '';
+              var targetId = href.replace(/^#/, '');
+              if (targetId === 'top') {
+                lockAndSelect(null);
+              } else if (SECTION_IDS.indexOf(targetId) !== -1) {
+                lockAndSelect(targetId);
+              }
+              closeMobileMenu();
+            });
+          }
+        }
+
+        bindSectionLinks();
+
+        var initialSection = resolveSectionFromHash();
+        if (initialSection) {
+          lockAndSelect(initialSection);
+        } else {
+          applyActiveSection(resolveSectionFromScroll());
+        }
+
+        window.addEventListener('hashchange', function () {
+          var hashSection = resolveSectionFromHash();
+          if (hashSection) {
+            lockAndSelect(hashSection);
+          } else {
+            lockAndSelect(null);
+          }
+        });
+
+        window.addEventListener(
+          'scroll',
+          function () {
+            if (scrollRafPending) return;
+            scrollRafPending = true;
+            window.requestAnimationFrame(function () {
+              scrollRafPending = false;
+              if (Date.now() < manualLockUntil) {
+                if (activeSectionId !== lockedSectionId) {
+                  applyActiveSection(lockedSectionId);
+                }
+                return;
+              }
+              var nextId = resolveSectionFromScroll();
+              if (nextId !== activeSectionId) {
+                applyActiveSection(nextId);
+              }
+            });
+          },
+          { passive: true }
+        );
       })();
     </script>
   </body>

@@ -289,8 +289,8 @@ export const CAMPAIGN_STAGE_SPECS: readonly CampaignStageSpec[] = [
   {
     id: 1,
     orderIndex: 1,
-    name: 'Stage 1 - Mặt Trận Khởi Đầu',
-    shortTitle: 'MẶT TRẬN KHỞI ĐẦU',
+    name: 'Stage 1',
+    shortTitle: 'KHỞI ĐẦU',
     terrainFocus: 'Gạch & Thép cơ bản',
     map: STAGE_1_MAP,
     enemyComposition: STAGE_1_COMP,
@@ -300,7 +300,7 @@ export const CAMPAIGN_STAGE_SPECS: readonly CampaignStageSpec[] = [
   {
     id: 2,
     orderIndex: 2,
-    name: 'Stage 2 – HẺM GẠCH',
+    name: 'Stage 2',
     shortTitle: 'HẺM GẠCH',
     terrainFocus: 'Hành lang gạch dày đặc & điểm phá tường chiến thuật',
     map: STAGE_2_MAP,
@@ -311,7 +311,7 @@ export const CAMPAIGN_STAGE_SPECS: readonly CampaignStageSpec[] = [
   {
     id: 3,
     orderIndex: 3,
-    name: 'Stage 3 – PHÁO ĐÀI THÉP',
+    name: 'Stage 3',
     shortTitle: 'PHÁO ĐÀI THÉP',
     terrainFocus: 'Chốt thép kiên cố chia cắt 3 mũi tiến công',
     map: STAGE_3_MAP,
@@ -322,8 +322,8 @@ export const CAMPAIGN_STAGE_SPECS: readonly CampaignStageSpec[] = [
   {
     id: 4,
     orderIndex: 4,
-    name: 'Stage 4 – ĐẦM LẦY',
-    shortTitle: 'ĐẦM LẦY',
+    name: 'Stage 4',
+    shortTitle: 'ĐẦM LẦY CHẾT',
     terrainFocus: 'Mặt nước chia cắt cầu qua sông & bụi cỏ phục kích',
     map: STAGE_4_MAP,
     enemyComposition: STAGE_4_COMP,
@@ -333,8 +333,8 @@ export const CAMPAIGN_STAGE_SPECS: readonly CampaignStageSpec[] = [
   {
     id: 5,
     orderIndex: 5,
-    name: 'Stage 5 – BĂNG TUYẾT',
-    shortTitle: 'BĂNG TUYẾT',
+    name: 'Stage 5',
+    shortTitle: 'BĂNG TAN',
     terrainFocus: 'Trục đường băng thông thoáng & pháo đài biên',
     map: STAGE_5_MAP,
     enemyComposition: STAGE_5_COMP,
@@ -344,8 +344,8 @@ export const CAMPAIGN_STAGE_SPECS: readonly CampaignStageSpec[] = [
   {
     id: 6,
     orderIndex: 6,
-    name: 'Stage 6 – NGÃ BA CHIẾN THUẬT',
-    shortTitle: 'NGÃ BA CHIẾN THUẬT',
+    name: 'Stage 6',
+    shortTitle: 'NGÃ BA MÁU',
     terrainFocus: 'Giao lộ 3 nhánh với lá chắn thép & sông biên',
     map: STAGE_6_MAP,
     enemyComposition: STAGE_6_COMP,
@@ -355,7 +355,7 @@ export const CAMPAIGN_STAGE_SPECS: readonly CampaignStageSpec[] = [
   {
     id: 7,
     orderIndex: 7,
-    name: 'Stage 7 – VÒNG VÂY',
+    name: 'Stage 7',
     shortTitle: 'VÒNG VÂY',
     terrainFocus: 'Vành đai phòng ngự đồng tâm siết chặt trung tâm',
     map: STAGE_7_MAP,
@@ -366,7 +366,7 @@ export const CAMPAIGN_STAGE_SPECS: readonly CampaignStageSpec[] = [
   {
     id: 8,
     orderIndex: 8,
-    name: 'Stage 8 – HÀNH LANG TỬ THỦ',
+    name: 'Stage 8',
     shortTitle: 'HÀNH LANG TỬ THỦ',
     terrainFocus: 'Hành lang dọc hẹp với hỏa lực Power và thiết giáp Armor áp sát trực diện căn cứ',
     map: STAGE_8_MAP,
@@ -377,8 +377,8 @@ export const CAMPAIGN_STAGE_SPECS: readonly CampaignStageSpec[] = [
   {
     id: 9,
     orderIndex: 9,
-    name: 'Stage 9 – MÊ CUNG HỖN HỢP',
-    shortTitle: 'MÊ CUNG HỖN HỢP',
+    name: 'Stage 9',
+    shortTitle: 'MÊ CUNG',
     terrainFocus: 'Mê cung đa địa hình Gạch, Thép, Nước, Cỏ, Băng',
     map: STAGE_9_MAP,
     enemyComposition: STAGE_9_COMP,
@@ -388,7 +388,7 @@ export const CAMPAIGN_STAGE_SPECS: readonly CampaignStageSpec[] = [
   {
     id: 10,
     orderIndex: 10,
-    name: 'Stage 10 – TỔNG HÀNH DINH',
+    name: 'Stage 10',
     shortTitle: 'TỔNG HÀNH DINH',
     terrainFocus: 'Tổng hành dinh tối hậu bảo vệ cửa ngõ chiến trường',
     map: STAGE_10_MAP,

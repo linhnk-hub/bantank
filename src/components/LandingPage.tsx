@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Play,
   Gamepad2,
@@ -209,6 +209,12 @@ export interface LandingPageProps {
   onClearFeedback?: () => void;
 }
 
+const LANDING_SECTION_IDS = ['gioi-thieu', 'tinh-nang', 'che-do-choi', 'huong-dan'] as const;
+type LandingSectionId = (typeof LANDING_SECTION_IDS)[number];
+
+const isLandingSectionId = (value: string): value is LandingSectionId =>
+  (LANDING_SECTION_IDS as readonly string[]).includes(value);
+
 export const LandingPage: React.FC<LandingPageProps> = ({
   currentUser = null,
   onSignIn,
@@ -220,6 +226,85 @@ export const LandingPage: React.FC<LandingPageProps> = ({
   onClearFeedback,
 }) => {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState<LandingSectionId | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const hash = window.location.hash.replace(/^#/, '');
+    return isLandingSectionId(hash) ? hash : null;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    let lockUntil = 0;
+    let lockedId: LandingSectionId | null = null;
+    let rafPending = false;
+
+    const resolveFromHash = (): LandingSectionId | null => {
+      const hash = window.location.hash.replace(/^#/, '');
+      return isLandingSectionId(hash) ? hash : null;
+    };
+
+    const resolveFromScroll = (): LandingSectionId | null => {
+      const sections = LANDING_SECTION_IDS.map((id) => document.getElementById(id)).filter(
+        (el): el is HTMLElement => Boolean(el)
+      );
+      if (sections.length === 0) return null;
+      const headerEl = document.querySelector('header');
+      const headerHeight = headerEl ? headerEl.offsetHeight : 80;
+      const triggerY = window.scrollY + headerHeight + 96;
+      if (triggerY < sections[0].offsetTop) return null;
+      const nearBottom =
+        window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 40;
+      if (nearBottom) return sections[sections.length - 1].id as LandingSectionId;
+      let current = sections[0].id as LandingSectionId;
+      for (const sec of sections) {
+        if (sec.offsetTop <= triggerY) {
+          current = sec.id as LandingSectionId;
+        }
+      }
+      return current;
+    };
+
+    const initialHash = resolveFromHash();
+    if (initialHash) {
+      lockedId = initialHash;
+      lockUntil = Date.now() + 850;
+      setActiveSection(initialHash);
+    } else {
+      setActiveSection(resolveFromScroll());
+    }
+
+    const onHashChange = () => {
+      const nextHash = resolveFromHash();
+      lockedId = nextHash;
+      lockUntil = Date.now() + 850;
+      setActiveSection(nextHash);
+    };
+
+    const onScroll = () => {
+      if (rafPending) return;
+      rafPending = true;
+      window.requestAnimationFrame(() => {
+        rafPending = false;
+        if (Date.now() < lockUntil) {
+          setActiveSection(lockedId);
+          return;
+        }
+        setActiveSection(resolveFromScroll());
+      });
+    };
+
+    window.addEventListener('hashchange', onHashChange);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      window.removeEventListener('hashchange', onHashChange);
+      window.removeEventListener('scroll', onScroll);
+    };
+  }, []);
+
+  const handleSelectSection = (sectionId: LandingSectionId | null) => {
+    setActiveSection(sectionId);
+    setMobileMenuOpen(false);
+  };
 
   const isAuthenticated = Boolean(currentUser);
 
@@ -253,6 +338,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           {/* Thương hiệu & Logo */}
           <a
             href="#top"
+            onClick={() => handleSelectSection(null)}
             className="flex items-center gap-3 group focus:outline-none"
             aria-label="Trang chủ Bắn Tank Online"
           >
@@ -266,7 +352,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 Bắn Tank Online
               </span>
               <span className="text-[11px] text-neutral-400 font-medium hidden sm:inline">
-                Game bắn xe tăng chiến thuật trực tuyến
+                CHIẾN TRƯỜNG HUYỀN THOẠI
               </span>
             </div>
           </a>
@@ -276,33 +362,34 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             className="hidden md:flex items-center gap-6 lg:gap-8 text-sm font-semibold text-neutral-300"
             aria-label="Điều hướng chính"
           >
-            <a
-              href="#gioi-thieu"
-              className="hover:text-amber-400 transition-colors py-1"
-            >
-              Giới thiệu
-            </a>
-            <a
-              href="#tinh-nang"
-              className="hover:text-amber-400 transition-colors py-1"
-            >
-              Tính năng
-            </a>
-            <a
-              href="#che-do-choi"
-              className="hover:text-amber-400 transition-colors py-1"
-            >
-              Chế độ chơi
-            </a>
-            <a
-              href="#huong-dan"
-              className="hover:text-amber-400 transition-colors py-1"
-            >
-              Hướng dẫn
-            </a>
+            {(
+              [
+                ['gioi-thieu', 'Giới thiệu'],
+                ['tinh-nang', 'Tính năng'],
+                ['che-do-choi', 'Chế độ chơi'],
+                ['huong-dan', 'Hướng dẫn'],
+              ] as const
+            ).map(([sectionId, label]) => {
+              const isActive = activeSection === sectionId;
+              return (
+                <a
+                  key={sectionId}
+                  href={`#${sectionId}`}
+                  onClick={() => handleSelectSection(sectionId)}
+                  aria-current={isActive ? 'true' : undefined}
+                  className={
+                    isActive
+                      ? 'text-amber-400 font-bold border-b-2 border-amber-400 py-1 transition-colors'
+                      : 'text-neutral-300 hover:text-amber-400 transition-colors py-1 border-b-2 border-transparent'
+                  }
+                >
+                  {label}
+                </a>
+              );
+            })}
             <a
               href={LANDING_SUPPORT_CONTACT.privacyPolicyUrl}
-              className="hover:text-amber-400 transition-colors py-1 text-neutral-400"
+              className="text-neutral-300 hover:text-amber-400 transition-colors py-1 border-b-2 border-transparent"
             >
               Quyền riêng tư
             </a>
@@ -368,33 +455,45 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             aria-label="Menu di động"
           >
             <div className="grid grid-cols-2 gap-2 text-sm font-semibold">
+              {(
+                [
+                  ['gioi-thieu', 'Giới thiệu'],
+                  ['tinh-nang', 'Tính năng'],
+                  ['che-do-choi', 'Chế độ chơi'],
+                  ['huong-dan', 'Hướng dẫn'],
+                ] as const
+              ).map(([sectionId, label]) => {
+                const isActive = activeSection === sectionId;
+                return (
+                  <a
+                    key={sectionId}
+                    href={`#${sectionId}`}
+                    onClick={() => handleSelectSection(sectionId)}
+                    aria-current={isActive ? 'true' : undefined}
+                    className={
+                      isActive
+                        ? 'px-3 py-2 rounded-lg bg-amber-500/10 border border-amber-400 text-amber-400 font-bold transition-colors'
+                        : 'px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400 transition-colors'
+                    }
+                  >
+                    <span
+                      className={`inline-block pb-0.5 border-b-2 ${
+                        isActive ? 'border-amber-400' : 'border-transparent'
+                      }`}
+                    >
+                      {label}
+                    </span>
+                  </a>
+                );
+              })}
               <a
-                href="#gioi-thieu"
+                href={LANDING_SUPPORT_CONTACT.privacyPolicyUrl}
                 onClick={closeMobileMenu}
-                className="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
+                className="col-span-2 px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400 text-center transition-colors"
               >
-                Giới thiệu
-              </a>
-              <a
-                href="#tinh-nang"
-                onClick={closeMobileMenu}
-                className="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
-              >
-                Tính năng
-              </a>
-              <a
-                href="#che-do-choi"
-                onClick={closeMobileMenu}
-                className="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
-              >
-                Chế độ chơi
-              </a>
-              <a
-                href="#huong-dan"
-                onClick={closeMobileMenu}
-                className="px-3 py-2 rounded-lg bg-neutral-950/70 border border-neutral-800 text-neutral-200 hover:border-amber-500/40 hover:text-amber-400"
-              >
-                Hướng dẫn
+                <span className="inline-block pb-0.5 border-b-2 border-transparent">
+                  Quyền riêng tư
+                </span>
               </a>
             </div>
             <div className="pt-2 flex flex-col gap-2">
@@ -409,16 +508,9 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   className="w-full py-2.5 rounded-xl bg-neutral-950 border border-amber-500/40 text-amber-300 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2"
                 >
                   <Gamepad2 className="w-4 h-4" />
-                  <span>Chơi thử ngay (Không cần đăng nhập)</span>
+                  <span>Chơi thử ngay</span>
                 </button>
               )}
-              <a
-                href={LANDING_SUPPORT_CONTACT.privacyPolicyUrl}
-                onClick={closeMobileMenu}
-                className="text-center text-xs text-neutral-400 hover:text-amber-400 py-1"
-              >
-                Chính sách quyền riêng tư
-              </a>
             </div>
           </nav>
         )}
@@ -1167,22 +1259,38 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               </div>
               <ul className="space-y-2 text-xs sm:text-sm">
                 <li>
-                  <a href="#gioi-thieu" className="hover:text-amber-400 transition-colors">
+                  <a
+                    href="#gioi-thieu"
+                    onClick={() => handleSelectSection('gioi-thieu')}
+                    className="hover:text-amber-400 transition-colors"
+                  >
                     Giới thiệu trò chơi
                   </a>
                 </li>
                 <li>
-                  <a href="#tinh-nang" className="hover:text-amber-400 transition-colors">
+                  <a
+                    href="#tinh-nang"
+                    onClick={() => handleSelectSection('tinh-nang')}
+                    className="hover:text-amber-400 transition-colors"
+                  >
                     Tính năng nổi bật
                   </a>
                 </li>
                 <li>
-                  <a href="#che-do-choi" className="hover:text-amber-400 transition-colors">
+                  <a
+                    href="#che-do-choi"
+                    onClick={() => handleSelectSection('che-do-choi')}
+                    className="hover:text-amber-400 transition-colors"
+                  >
                     Các chế độ chơi
                   </a>
                 </li>
                 <li>
-                  <a href="#huong-dan" className="hover:text-amber-400 transition-colors">
+                  <a
+                    href="#huong-dan"
+                    onClick={() => handleSelectSection('huong-dan')}
+                    className="hover:text-amber-400 transition-colors"
+                  >
                     Hướng dẫn bắt đầu
                   </a>
                 </li>
@@ -1201,7 +1309,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                     className="inline-flex items-center gap-1.5 text-amber-400 hover:text-amber-300 font-semibold transition-colors"
                   >
                     <FileText className="w-3.5 h-3.5" />
-                    <span>Chính sách quyền riêng tư (Privacy Policy)</span>
+                    <span>Chính sách quyền riêng tư</span>
                     <ExternalLink className="w-3 h-3" />
                   </a>
                 </li>
@@ -1225,9 +1333,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
           {/* Dòng bản quyền dưới cùng */}
           <div className="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-500">
             <div>
-              © {LANDING_SUPPORT_CONTACT.copyrightYear} {LANDING_SUPPORT_CONTACT.brandName}. Bảo lưu mọi quyền.
+              © {LANDING_SUPPORT_CONTACT.copyrightYear} {LANDING_SUPPORT_CONTACT.brandName}
             </div>
             <div className="flex items-center gap-4">
+              <a
+                href="/"
+                className="hover:text-neutral-300 transition-colors"
+              >
+                Trang chủ
+              </a>
+              <span>•</span>
               <a
                 href={LANDING_SUPPORT_CONTACT.privacyPolicyUrl}
                 className="hover:text-neutral-300 transition-colors"
@@ -1235,7 +1350,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                 Chính sách quyền riêng tư
               </a>
               <span>•</span>
-              <a href="#top" className="hover:text-neutral-300 transition-colors">
+              <a
+                href="#top"
+                onClick={() => handleSelectSection(null)}
+                className="hover:text-neutral-300 transition-colors"
+              >
                 Lên đầu trang ↑
               </a>
             </div>
