@@ -33,6 +33,7 @@ import {
 } from 'firebase/firestore';
 import { getFirebaseAuth, getFirebaseDb } from './firebaseConfig.ts';
 import { ScoreManager } from './scoreManager.ts';
+import { SystemAuditLogger } from './systemAuditLogger.ts';
 import {
   RBAC_PERMISSION_MATRIX,
   SOLE_ADMIN_EMAIL,
@@ -418,6 +419,20 @@ export interface ValidatedUserAccount {
   providerData?: Array<{ providerId: string }>;
   providerIds?: string[];
 }
+
+export type AuthIdentityLike =
+  | User
+  | ValidatedUserAccount
+  | {
+      uid?: string | null;
+      email?: string | null;
+      emailVerified?: boolean;
+      displayName?: string | null;
+      photoURL?: string | null;
+      providerData?: Array<{ providerId: string }>;
+      providerIds?: string[];
+      serverRole?: UserRoleType | string | null;
+    };
 
 /**
  * M7.3.11.4 Mục 1 & 2: Kiểm tra xem người dùng Firebase hiện tại có phải là tài khoản ADMIN duy nhất hợp lệ hay không.
@@ -836,6 +851,26 @@ export class AuthManager {
         authStatus: entry.authStatus,
       });
     }
+
+    SystemAuditLogger.getInstance().recordEvent({
+      severity: 'WARNING',
+      category: 'SECURITY_PERMISSION_DENIED',
+      eventType: 'SYSTEM_DIAGNOSTIC',
+      message: `Từ chối quyền Firestore (${operation} ${path}): ${rawCode}`,
+      uid: targetUser?.uid ?? null,
+      userEmail: targetUser?.email ?? null,
+      displayName: targetUser?.displayName ?? null,
+      source: 'AuthManager.recordPermissionDiagnostic',
+      outcome: 'FAILURE',
+      errorCode: rawCode,
+      error: err,
+      metadata: {
+        operation,
+        path,
+        resolvedRole,
+        authStatus,
+      },
+    });
 
     return entry;
   }
@@ -1548,6 +1583,25 @@ export class AuthManager {
     }
     const auditEntry = commitRoleChangeAuditEntry(candidateAudit);
 
+    SystemAuditLogger.getInstance().recordEvent({
+      severity: 'INFO',
+      category: 'ADMIN_MOD_ACTION',
+      eventType: 'ROLE_PERMISSION_CHANGED',
+      message: `Cập nhật phân quyền tài khoản ${params.targetEmail || params.targetUid}: ${previousRole} -> ${params.newRole}`,
+      uid: actorUid || null,
+      userEmail: actorEmail || null,
+      source: 'AuthManager.changeUserRoleSync',
+      outcome: 'SUCCESS',
+      skipDeduplication: true,
+      metadata: {
+        auditId: auditEntry.auditId,
+        targetUid: params.targetUid,
+        targetEmail: params.targetEmail,
+        previousRole,
+        newRole: params.newRole,
+      },
+    });
+
     return {
       success: true,
       previousRole,
@@ -1687,6 +1741,25 @@ export class AuthManager {
 
       setVerifiedServerRoleForUid(params.targetUid, params.newRole);
       const auditEntry = commitRoleChangeAuditEntry(candidateAudit);
+
+      SystemAuditLogger.getInstance().recordEvent({
+        severity: 'INFO',
+        category: 'ADMIN_MOD_ACTION',
+        eventType: 'ROLE_PERMISSION_CHANGED',
+        message: `Cập nhật phân quyền trên Firestore cho ${normalizedTargetEmail || params.targetUid}: ${previousRole} -> ${params.newRole}`,
+        uid: actorUid || null,
+        userEmail: actorEmail || null,
+        source: 'AuthManager.changeUserRole',
+        outcome: 'SUCCESS',
+        skipDeduplication: true,
+        metadata: {
+          auditId: auditEntry.auditId,
+          targetUid: params.targetUid,
+          targetEmail: normalizedTargetEmail,
+          previousRole,
+          newRole: params.newRole,
+        },
+      });
 
       return {
         success: true,
@@ -1893,6 +1966,19 @@ export class AuthManager {
 
       this.currentUser = this.auth?.currentUser || user;
       this.notifyListeners(this.currentUser);
+      if (profile.displayName !== undefined) {
+        SystemAuditLogger.getInstance().recordEvent({
+          severity: 'INFO',
+          category: 'CLIENT_LIFECYCLE',
+          eventType: 'DISPLAY_NAME_CHANGED',
+          message: `Cập nhật tên hiển thị thành "${nextDisplayName}"`,
+          uid: user.uid,
+          userEmail: user.email,
+          displayName: nextDisplayName,
+          source: 'AuthManager.updateUserProfile',
+          outcome: 'SUCCESS',
+        });
+      }
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Cập nhật hồ sơ thất bại.' };

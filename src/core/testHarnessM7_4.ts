@@ -15,7 +15,7 @@ import {
   ENEMY_CONFIG,
   P1_CONFIG,
   STAGE_1_MAP,
-  SIMULATION_CONFIG,
+  MATCH_TIMER_CONFIG,
 } from './constants.ts';
 import { validateStageMap, STAGE_SPAWN_POINTS } from './mapValidator.ts';
 import { StageManager, areStageMapsEqual, cloneStageMap } from './stageManager.ts';
@@ -30,6 +30,7 @@ import {
 import { TILE_TYPES } from './types.ts';
 import { checkHitboxVsTerrain, getTankHitbox } from './physics.ts';
 import { createRuntimeTerrainState } from './terrain.ts';
+import { findPathAStar, findPathWithBrickBreachAStar } from './ai/pathfinding.ts';
 
 export interface M74TestResult {
   id: string;
@@ -703,18 +704,383 @@ export function runAllM7_4Tests(): {
       settingsSrc.includes('Tiến độ Stage') &&
       miniSrc.includes('StageMapMiniPreview');
 
+    results.push({
+      id: 'M7_4_T7',
+      name: 'T7: Kiểm tra liên kết UI (Stage 1–10 Selector, Lobby Sync, HUD/Modals, Tiến độ Stage)',
+      passed: uiWired,
+      details: `uiWired=${uiWired}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_4_T8 (M7.4.2): Live 60Hz Enemy AI Pathfinding, Brick-Breaching & Base Attack (Stages 1-10, Deep Audit 2/7/10)
+  // =========================================================================
+  {
+    const stageFailures: string[] = [];
+
+    for (let id = 1; id <= TOTAL_CAMPAIGN_STAGES; id++) {
+      const spec = getCampaignStageSpec(id);
+      const terrain = createRuntimeTerrainState(spec.map);
+
+      // Verify pathfinding (open or brick-breach A*) from all 3 enemy spawns [0,0], [0,6], [0,12] to P1 & Base
+      const spawns = [
+        { label: 'L', x: 0, y: 0 },
+        { label: 'M', x: 96, y: 0 },
+        { label: 'R', x: 192, y: 0 },
+      ];
+      for (const sp of spawns) {
+        const breachToBase = findPathWithBrickBreachAStar(sp, { x: 96, y: 192 }, terrain);
+        const lastBaseWp = breachToBase[breachToBase.length - 1];
+        if (
+          !lastBaseWp ||
+          Math.abs(Math.round(lastBaseWp.x / 16) - 6) +
+            Math.abs(Math.round(lastBaseWp.y / 16) - 12) >
+            1
+        ) {
+          stageFailures.push(`Stage ${id} spawn ${sp.label} no path to Base`);
+        }
+      }
+
+      // Live 60Hz simulation: verify enemies escape all 3 spawns, destroy bricks when enclosed, and advance deep
+      const simTicks = id === 2 || id === 7 || id === 10 ? 2700 : 1800;
+      const simEng = new GameEngine(undefined, undefined, true);
+      simEng.startMatch('SOLO', 'DEFAULT', { stageId: id, enforceProgression: false });
+
+      const laneMaxY: Record<'L' | 'M' | 'R', number> = { L: 0, M: 0, R: 0 };
+      const trackedLane = new Map<string, 'L' | 'M' | 'R'>();
+      let baseWasAttackedOrDestroyed = false;
+
+      for (let t = 0; t < simTicks; t++) {
+        const internal = simEng as any;
+        if (internal.state.terrain.isBaseDestroyed) {
+          baseWasAttackedOrDestroyed = true;
+          internal.state.terrain.isBaseDestroyed = false;
+        }
+        if (internal.state.p1State.lives < 2) {
+          internal.state.p1State.lives = 3;
+        }
+        simEng.stepTick(IDLE_INPUT);
+        const st = simEng.getState();
+        if (st.terrain.isBaseDestroyed) {
+          baseWasAttackedOrDestroyed = true;
+        }
+        for (const e of st.enemies) {
+          if (!trackedLane.has(e.id)) {
+            trackedLane.set(e.id, e.x < 48 ? 'L' : e.x < 144 ? 'M' : 'R');
+          }
+          const ln = trackedLane.get(e.id)!;
+          if (e.y > laneMaxY[ln]) laneMaxY[ln] = e.y;
+        }
+      }
+
+      const endSt = simEng.getState();
+      let damagedBrickCount = 0;
+      for (const mask of Object.values(endSt.terrain.brickSubTiles)) {
+        if (mask < 15) damagedBrickCount++;
+      }
+
+      // Every spawn lane must escape top rows (> 64px) and reach southern half; Stage 2/7/10 must breach bricks
+      if (laneMaxY.L < 80 || laneMaxY.M < 80 || laneMaxY.R < 80) {
+        stageFailures.push(
+          `Stage ${id} spawn stuck: L=${Math.round(laneMaxY.L)},M=${Math.round(laneMaxY.M)},R=${Math.round(laneMaxY.R)}`
+        );
+      }
+      if ((id === 2 || id === 7 || id === 10) && damagedBrickCount < 2) {
+        stageFailures.push(`Stage ${id} expected brick breaching >=2, got ${damagedBrickCount}`);
+      }
+      const maxReachAnyLane = Math.max(laneMaxY.L, laneMaxY.M, laneMaxY.R);
+      if (maxReachAnyLane < 160 && !baseWasAttackedOrDestroyed) {
+        stageFailures.push(`Stage ${id} enemies did not threaten base zone (maxY=${Math.round(maxReachAnyLane)})`);
+      }
+    }
+
+    const passed = stageFailures.length === 0;
+    results.push({
+      id: 'M7_4_T8',
+      name: 'T8 (M7.4.2): Mô phỏng 60Hz thực tế Stage 1–10 – Enemy AI thoát cả 3 spawn, tự phá BRICK (Stage 2/7/10), né STEEL/WATER & áp sát mục tiêu',
+      passed,
+      details: passed ? 'All 10 stages passed 60Hz AI infiltration & brick-breaching' : stageFailures.join(' | '),
+    });
+  }
+
+  // =========================================================================
+  // M7_4_T9 (M7.4.2): P1/P2 Valid Movement & Co-op Ally AI Brick Pocket Escape (Stages 1-10)
+  // =========================================================================
+  {
+    const moveFailures: string[] = [];
+
+    for (let id = 1; id <= TOTAL_CAMPAIGN_STAGES; id++) {
+      // 1. Verify P1 & P2 human movement out of spawn on every stage
+      const pEng = new GameEngine(undefined, undefined, true);
+      pEng.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT', { stageId: id, enforceProgression: false });
+      pEng.setExternalInputP2({ up: true, down: false, left: false, right: false, shoot: false });
+      for (let t = 0; t < 30; t++) {
+        pEng.stepTick({ up: true, down: false, left: false, right: false, shoot: false });
+      }
+      const pSt = pEng.getState();
+      if (pSt.p1.y >= 192 || !pSt.p2 || pSt.p2.y >= 192) {
+        moveFailures.push(`Stage ${id} P1/P2 failed to move UP from spawn (p1.y=${pSt.p1.y}, p2.y=${pSt.p2?.y})`);
+      }
+
+      // 2. Verify Co-op AI (Ally P2) on Stage 2, Stage 7, Stage 10 breaks out of spawn & engages enemies safely
+      if (id === 2 || id === 7 || id === 10) {
+        const aiEng = new GameEngine(undefined, undefined, true);
+        aiEng.startMatch('TWO_PLAYERS_AI', 'DEFAULT', { stageId: id, enforceProgression: false });
+        let minP2Y = 192;
+        let p2Fired = false;
+        for (let t = 0; t < 1800; t++) {
+          (aiEng as any).state.terrain.isBaseDestroyed = false;
+          aiEng.stepTick(IDLE_INPUT);
+          const st = aiEng.getState();
+          if (st.p2 && st.p2.y < minP2Y) minP2Y = st.p2.y;
+          if (st.bullets.some((b) => b.ownerId === 'p2')) p2Fired = true;
+        }
+        if (minP2Y > 96 || !p2Fired) {
+          moveFailures.push(`Stage ${id} Ally P2 stuck in pocket (minY=${Math.round(minP2Y)}, fired=${p2Fired})`);
+        }
+      }
+    }
+
+    const passed = moveFailures.length === 0;
+    results.push({
+      id: 'M7_4_T9',
+      name: 'T9 (M7.4.2): Kiểm tra di chuyển P1/P2 trên cả 10 Stage & Đồng đội AI tự phá gạch thoát kẹt trên Stage 2/7/10 an toàn',
+      passed,
+      details: passed ? 'P1/P2 movement & Ally AI Stage 2/7/10 breakout verified' : moveFailures.join(' | '),
+    });
+  }
+
+  // =========================================================================
+  // M7_4_T10 (M7.4.2): Difficulty Escalation, Stage 8 Copy Fix & Stage vs DEFAULT/EXTREME Separation
+  // =========================================================================
+  {
+    let escalationOk = true;
+    let prevHeavyCount = 0;
+    let prevBasicCount = 99;
+    for (let id = 1; id <= TOTAL_CAMPAIGN_STAGES; id++) {
+      const comp = getCampaignStageSpec(id).enemyComposition;
+      const heavy = comp.POWER + comp.ARMOR;
+      if (heavy <= prevHeavyCount || comp.BASIC > prevBasicCount) {
+        escalationOk = false;
+      }
+      prevHeavyCount = heavy;
+      prevBasicCount = comp.BASIC;
+    }
+
+    const stage8Focus = getCampaignStageSpec(8).terrainFocus;
+    const stage8CopyAccurate =
+      !stage8Focus.includes('tốc độ cao') &&
+      stage8Focus.includes('Power') &&
+      stage8Focus.includes('Armor');
+
+    // Verify Stage selection never alters DEFAULT/EXTREME rules and advanceToNextStage preserves difficulty
+    const uidDiff = 'uid_diff_sep_audit';
+    progMgr.resetForTesting(uidDiff);
+    const engDefault = new GameEngine(undefined, undefined, true);
+    engDefault.startMatch('SOLO', 'DEFAULT', { stageId: 1, uid: uidDiff, enforceProgression: true });
+    const defLivesS1 = engDefault.getState().p1State.lives;
+    const defDurS1 = engDefault.getState().matchDurationSeconds;
+    clearAllEnemiesAndWinStage(engDefault);
+    engDefault.advanceToNextStage();
+    const defPreservedOnS2 =
+      engDefault.getState().currentStageId === 2 &&
+      engDefault.getState().difficulty === 'DEFAULT' &&
+      engDefault.getState().matchDurationSeconds === defDurS1 &&
+      defLivesS1 === 3 &&
+      defDurS1 === MATCH_TIMER_CONFIG.DEFAULT_DURATION_S;
+
+    const engExtreme = new GameEngine(undefined, undefined, true);
+    engExtreme.startMatch('SOLO', 'EXTREME', { stageId: 2, uid: uidDiff, enforceProgression: true });
+    const extLivesSolo = engExtreme.getState().p1State.lives;
+    const extDurSolo = engExtreme.getState().matchDurationSeconds;
+    clearAllEnemiesAndWinStage(engExtreme);
+    engExtreme.advanceToNextStage();
+    const extPreservedOnS3 =
+      engExtreme.getState().currentStageId === 3 &&
+      engExtreme.getState().difficulty === 'EXTREME' &&
+      extLivesSolo === 2 &&
+      extDurSolo === MATCH_TIMER_CONFIG.EXTREME_DURATION_S;
+
+    const passed = escalationOk && stage8CopyAccurate && defPreservedOnS2 && extPreservedOnS3;
+    results.push({
+      id: 'M7_4_T10',
+      name: 'T10 (M7.4.2): Độ khó chiến dịch tăng dần (Power+Armor 8→18), mô tả Stage 8 chính xác & tách biệt tuyệt đối Stage với DEFAULT/EXTREME',
+      passed,
+      details: `escalationOk=${escalationOk}, stage8CopyAccurate=${stage8CopyAccurate}, defPreserved=${defPreservedOnS2}, extPreserved=${extPreservedOnS3}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_4_T11 (M7.4.2): Co-op Online Security (Reject Guest Forged Packets, DataChannel Drop/Reconnect Map Sync & Guest Non-Escalation)
+  // =========================================================================
+  {
+    const hostUid = 'uid_m742_host';
+    const guestUid = 'uid_m742_guest';
+    progMgr.resetForTesting(hostUid);
+    progMgr.resetForTesting(guestUid);
+
+    // Unlock Host up to Stage 7, keep Guest at Stage 1
+    const hostUnlockEng = new GameEngine(undefined, undefined, true);
+    hostUnlockEng.startMatch('SOLO', 'DEFAULT', { stageId: 1, uid: hostUid, enforceProgression: true });
+    for (let s = 1; s <= 6; s++) {
+      clearAllEnemiesAndWinStage(hostUnlockEng);
+      hostUnlockEng.advanceToNextStage();
+    }
+
+    const storage = new InMemoryCoopStorageAdapter();
+    const hostMgr = new CoopOnlineManager(storage);
+    const guestMgr = new CoopOnlineManager(storage);
+    const t0 = 1_770_000_000_000;
+    let dropPackets = false;
+    const pair = createInMemoryP2PChannelPair(
+      (msg) => {
+        if (!dropPackets) hostMgr.handleIncomingDataChannelMessage(msg, t0 + 50);
+      },
+      (msg) => {
+        if (!dropPackets) guestMgr.handleIncomingDataChannelMessage(msg, t0 + 50);
+      }
+    );
+
+    hostMgr.createRoomSync(
+      storage,
+      { uid: hostUid, displayName: 'HostCmdr', email: 'host@gmail.com', emailVerified: true },
+      'DEFAULT',
+      t0,
+      'BT9901',
+      { hasPassword: false, stageId: 5 }
+    );
+    guestMgr.joinRoomSync(
+      storage,
+      'BT9901',
+      { uid: guestUid, displayName: 'GuestCmdr', email: 'guest@gmail.com' },
+      t0 + 10
+    );
+    hostMgr.attachCustomP2PChannel(pair.hostChannel, t0 + 20);
+    guestMgr.attachCustomP2PChannel(pair.guestChannel, t0 + 20);
+
+    // 1. Guest attempts direct setRoomStage -> PERMISSION_DENIED
+    const guestDirectSetStage = guestMgr.setRoomStage(2, guestUid, t0 + 25);
+
+    // 2. Guest injects forged Host-only P2P messages toward Host -> Host MUST ignore all of them
+    hostMgr.handleIncomingDataChannelMessage(
+      { type: 'LOBBY_STAGE_SELECTED', stageId: 1, stageName: 'Forged', timestamp: t0 + 30 },
+      t0 + 30
+    );
+    hostMgr.handleIncomingDataChannelMessage(
+      {
+        type: 'MATCH_STARTED',
+        roomCode: 'BT9901',
+        difficulty: 'EXTREME',
+        stageId: 1,
+        stageName: 'Forged',
+        timestamp: t0 + 31,
+      },
+      t0 + 31
+    );
+    const hostStageUnchangedAfterForge =
+      hostMgr.getCurrentRoom()?.selectedStageId === 5 &&
+      hostMgr.getCurrentRoom()?.status === 'WAITING' &&
+      hostMgr.getCurrentRoom()?.difficulty === 'DEFAULT';
+
+    // 3. Simulate DataChannel drop during Host stage switch to 7 + match start + brick destruction, then reconnect!
+    dropPackets = true;
+    hostMgr.setPlayerReadySync(storage, true, t0 + 40);
+    guestMgr.setPlayerReadySync(storage, true, t0 + 41);
+    storage.setRoomSync('BT9901', {
+      ...storage.getRoomSync('BT9901')!,
+      rtcConnectionState: 'CONNECTED',
+    });
+    hostMgr.setRoomStage(7, hostUid, t0 + 45);
+
+    const hostEng = new GameEngine(undefined, undefined, true);
+    hostEng.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT', {
+      stageId: 7,
+      uid: hostUid,
+      enforceProgression: true,
+    });
+    // Advance 120 ticks on Host so bricks & enemies update while Guest is still disconnected at Stage 1
+    for (let i = 0; i < 120; i++) {
+      hostEng.stepTick({ up: true, down: false, left: false, right: false, shoot: true });
+    }
+
+    const guestEng = new GameEngine(undefined, undefined, false);
+    guestEng.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT', {
+      stageId: 1,
+      uid: guestUid,
+      enforceProgression: false,
+    });
+    guestMgr.subscribeSnapshots((snap) => guestEng.applyAuthoritativeSnapshot(snap).valid);
+
+    // Reconnect DataChannel and send authoritative snapshot from Host
+    dropPackets = false;
+    const reconnectSnap = buildAuthoritativeSnapshot(hostEng.getState(), 5, t0 + 200);
+    guestMgr.handleIncomingDataChannelMessage(
+      { type: 'HOST_SNAPSHOT', snapshot: reconnectSnap },
+      t0 + 200
+    );
+
+    const guestRecoveredSameMap =
+      guestEng.getState().currentStageId === 7 &&
+      guestMgr.getCurrentRoom()?.status === 'PLAYING' &&
+      guestMgr.getCurrentRoom()?.selectedStageId === 7 &&
+      areStageMapsEqual(guestEng.getState().terrain.currentMap, hostEng.getState().terrain.currentMap);
+
+    // 4. Verify Guest personal progression remains at Stage 1 even when Host clears Stage 7
+    clearAllEnemiesAndWinStage(hostEng);
+    guestMgr.handleIncomingDataChannelMessage(
+      {
+        type: 'HOST_SNAPSHOT',
+        snapshot: buildAuthoritativeSnapshot(hostEng.getState(), 6, t0 + 250),
+      },
+      t0 + 250
+    );
+    const hostUnlockedAfterClear = progMgr.getUnlockedStageForUser(hostUid, false);
+    const guestUnlockedAfterHostClear = progMgr.getUnlockedStageForUser(guestUid, false);
+
+    // 5. Verify Firestore lobby document has exact 15 approved keys
+    const lobbyDoc = storage.getRoomSync('BT9901')!;
+    const exact15LobbyKeys = Object.keys(lobbyDoc).length === 15 && !('selectedStageId' in lobbyDoc);
+
+    const passed =
+      !guestDirectSetStage.success &&
+      guestDirectSetStage.errorCode === 'NOT_HOST' &&
+      hostStageUnchangedAfterForge &&
+      guestRecoveredSameMap &&
+      hostUnlockedAfterClear === 8 &&
+      guestUnlockedAfterHostClear === 1 &&
+      exact15LobbyKeys;
+
+    results.push({
+      id: 'M7_4_T11',
+      name: 'T11 (M7.4.2): Bảo mật & phục hồi Co-op Online (Chặn gói tin giả mạo từ Guest, tự đồng bộ bản đồ khi rớt/nối lại DataChannel, không leo thang tiến trình Guest, đúng 15 trường Firestore)',
+      passed,
+      details: `guestSetBlocked=${!guestDirectSetStage.success}, forgeIgnored=${hostStageUnchangedAfterForge}, reconnectMapSync=${guestRecoveredSameMap}, hostUnl=${hostUnlockedAfterClear}, guestUnl=${guestUnlockedAfterHostClear}, exact15Keys=${exact15LobbyKeys}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_4_T12 (M7.4.2): Frozen Rules Integrity & Final State Cleanup
+  // =========================================================================
+  {
+    const firestoreRules = fs.readFileSync(path.resolve(process.cwd(), 'firestore.rules'), 'utf8');
+    const storageRules = fs.readFileSync(path.resolve(process.cwd(), 'storage.rules'), 'utf8');
+
+    const rulesUntouched =
+      firestoreRules.includes("rules_version = '2';") &&
+      !firestoreRules.includes('stage_progression') &&
+      storageRules.includes("rules_version = '2';");
+
     // Clean up test artifacts and restore all 10 active campaign stages
     progMgr.resetForTesting();
     stageMgr.resetForTesting({ seedCampaignStages: true });
-
     const restoredStagesCount = stageMgr.getAllStages().length;
-    const passed = uiWired && restoredStagesCount === 10;
 
+    const passed = rulesUntouched && restoredStagesCount === 10;
     results.push({
-      id: 'M7_4_T7',
-      name: 'T7: Kiểm tra liên kết UI (Stage 1–10 Selector, Lobby Sync, HUD/Modals, Tiến độ Stage) & khôi phục StageManager 10 màn chơi',
+      id: 'M7_4_T12',
+      name: 'T12 (M7.4.2): Bảo toàn tuyệt đối firestore.rules / storage.rules (chưa sửa/chưa publish) & khôi phục 10 Stage chuẩn',
       passed,
-      details: `uiWired=${uiWired}, restoredStagesCount=${restoredStagesCount}`,
+      details: `rulesUntouched=${rulesUntouched}, restoredStagesCount=${restoredStagesCount}`,
     });
   }
 

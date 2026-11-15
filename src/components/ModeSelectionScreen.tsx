@@ -12,6 +12,7 @@ import {
   getRoleNameFrameClasses,
 } from '../core/authManager.ts';
 import { AvatarManager } from '../core/avatarManager.ts';
+import { PlayerStatsManager } from '../core/playerStatsManager.ts';
 import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
 import { CoopOnlineLobbyPanel, type CoopLobbySubView } from './CoopOnlineLobbyModal.tsx';
 import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
@@ -180,9 +181,13 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     CoopOnlineManager.getInstance().isRoomSignalingReady()
   );
   const avatarManager = AvatarManager.getInstance();
+  const playerStatsMgr = PlayerStatsManager.getInstance();
   const effectiveUid = user.uid || firebaseUser?.uid || '';
   const [avatarError, setAvatarError] = useState(false);
   const [, setAvatarTick] = useState(0);
+  const [playerStats, setPlayerStats] = useState(() =>
+    playerStatsMgr.getPlayerStatisticsSnapshot(effectiveUid)
+  );
   const [stageProgress, setStageProgress] = useState(() =>
     StageProgressionManager.getInstance().getUserStageProgressSnapshot(effectiveUid)
   );
@@ -201,6 +206,17 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     syncProg();
     return progMgr.subscribe(syncProg);
   }, [effectiveUid]);
+
+  useEffect(() => {
+    const syncStats = () => {
+      setPlayerStats(playerStatsMgr.getPlayerStatisticsSnapshot(effectiveUid));
+    };
+    syncStats();
+    if (effectiveUid) {
+      void playerStatsMgr.refreshCloudUserStatsOnce(effectiveUid);
+    }
+    return playerStatsMgr.subscribe(syncStats);
+  }, [playerStatsMgr, effectiveUid]);
 
   useEffect(() => {
     const coopMgr = CoopOnlineManager.getInstance();
@@ -378,11 +394,18 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               ) : (
                 <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               )}
-              <span className="font-bold text-amber-300 truncate max-w-[95px] xs:max-w-[125px] sm:max-w-[180px]">
+              <span className="font-bold text-amber-300 truncate max-w-[82px] xs:max-w-[115px] sm:max-w-[175px]">
                 {displayLabel}
               </span>
+              <span
+                data-testid="top-menu-player-level"
+                title={`Level người chơi: ${playerStats.levelSystemLabel}`}
+                className="text-[10px] font-mono font-extrabold tabular-nums px-1.5 py-0.5 rounded bg-amber-950/90 border border-amber-500/40 text-amber-200 shrink-0 whitespace-nowrap"
+              >
+                {playerStats.levelTopMenuBadge}
+              </span>
               {badgeInfo.label && (
-                <span className={`hidden xs:inline-block text-[10px] px-1.5 py-0.2 rounded border font-medium shrink-0 ${badgeInfo.badgeStyle}`}>
+                <span className={`hidden sm:inline-block text-[10px] px-1.5 py-0.2 rounded border font-medium shrink-0 ${badgeInfo.badgeStyle}`}>
                   {badgeInfo.label}
                 </span>
               )}
@@ -795,7 +818,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       className="text-xs text-neutral-300 leading-relaxed mt-3 whitespace-pre-line"
                     >
                       {formatSentenceLineBreaks(
-                        'Có 3 mạng chơi, thời gian trận đấu 120 giây (02:00). Nhịp độ cân bằng, phù hợp chơi thư giãn và rèn kỹ năng chiến đấu.'
+                        'Có 3 mạng chơi, thời gian trận đấu 120 giây. Nhịp độ cân bằng, phù hợp chơi thư giãn và rèn kỹ năng chiến đấu.'
                       )}
                     </p>
                   </div>
@@ -845,7 +868,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       className="text-xs text-neutral-300 leading-relaxed mt-3 whitespace-pre-line"
                     >
                       {formatSentenceLineBreaks(
-                        'Solo có 2 mạng chơi, Co-op (AI / Online) có 1 mạng chơi, giới hạn trận đấu 60 giây (01:00). Xe địch phản ứng nhanh và dồn hỏa lực mạnh vào căn cứ, đòi hỏi phản xạ và chiến thuật cao.'
+                        'Có 2 mạng chơi, thời gian trận đấu 60 giây. Xe địch phản ứng nhanh và dồn hỏa lực mạnh vào căn cứ, đòi hỏi phản xạ và chiến thuật cao.'
                       )}
                     </p>
                   </div>

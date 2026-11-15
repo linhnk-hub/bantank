@@ -55,6 +55,8 @@ import {
   ONLINE_NET_STATS_PREF_EVENT,
   ONLINE_NET_STATS_STORAGE_KEY,
 } from './core/networkStatsPref.ts';
+import { PlayerStatsManager } from './core/playerStatsManager.ts';
+import { SystemAuditLogger } from './core/systemAuditLogger.ts';
 import {
   RotateCcw,
   Pause,
@@ -161,9 +163,12 @@ export default function App() {
     }
   }, [appScreen, currentUser]);
 
-  // Eager audio unlock on mount + browser autoplay gesture fallback if policy requires interaction
+  // Eager audio unlock + static SFX preload + global audit/stats initialization on mount
   useEffect(() => {
+    SystemAuditLogger.getInstance().installGlobalBrowserCaptureListeners();
+    PlayerStatsManager.getInstance();
     SoundManager.getInstance().unlock();
+    void SoundManager.getInstance().preloadStaticActionSfxBinaries();
     const unlockAudio = () => {
       SoundManager.getInstance().unlock();
     };
@@ -418,10 +423,22 @@ export default function App() {
       }
       setIsPaused(false);
       const st = gameEngine.getState();
+      SoundManager.getInstance().stopAllActiveActionSources();
       MusicManager.getInstance().syncPlaybackWithContext(
         st.currentStageId,
         getMusicModeFromEngine(gameEngine)
       );
+      SystemAuditLogger.getInstance().recordEvent({
+        severity: 'INFO',
+        category: 'CAMPAIGN_STAGE_EVENT',
+        eventType: 'MATCH_START',
+        message: `Bắt đầu trận đấu Stage ${st.currentStageId} (${engineMode} • ${difficulty}).`,
+        uid: currentUser?.uid ?? null,
+        stageId: st.currentStageId,
+        gameMode: engineMode,
+        source: 'App.handleStartMatch',
+        outcome: 'SUCCESS',
+      });
       setGameState({ ...st });
       setAppScreen('BATTLE');
     },
@@ -447,7 +464,20 @@ export default function App() {
       }
       setIsPaused(false);
       const st = gameEngine.getState();
+      SoundManager.getInstance().stopAllActiveActionSources();
       MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'TWO_PLAYER');
+      SystemAuditLogger.getInstance().recordEvent({
+        severity: 'INFO',
+        category: 'CAMPAIGN_STAGE_EVENT',
+        eventType: 'MATCH_START',
+        message: `Bắt đầu trận Co-op Online phòng ${room.roomCode} • Stage ${st.currentStageId} (${role}).`,
+        uid: currentUser?.uid ?? null,
+        roomCode: room.roomCode,
+        stageId: st.currentStageId,
+        gameMode: 'TWO_PLAYERS_ONLINE',
+        source: 'App.handleStartOnlineMatch',
+        outcome: 'SUCCESS',
+      });
       setGameState({ ...st });
       setAppScreen('BATTLE');
     },
@@ -502,12 +532,9 @@ export default function App() {
     setReturnToLobbyError(null);
     gameEngine.quitToMenu();
     setIsPaused(false);
+    SoundManager.getInstance().stopAllActiveActionSources();
     const targetScreen = wasTrial || !authManager.getCurrentUser() ? 'WELCOME' : 'MAIN_MENU';
-    if (targetScreen === 'MAIN_MENU') {
-      MusicManager.getInstance().syncMenuPlayback();
-    } else {
-      MusicManager.getInstance().pause();
-    }
+    MusicManager.getInstance().syncMenuPlayback();
     setGameState({ ...gameEngine.getState() });
     setAppScreen(targetScreen);
   }, [authManager, isTrialMode, gameEngine, coopManager]);
@@ -535,6 +562,7 @@ export default function App() {
       clearVirtualTouchInputs();
       gameEngine.quitToMenu();
       setIsPaused(false);
+      SoundManager.getInstance().stopAllActiveActionSources();
       MusicManager.getInstance().syncMenuPlayback();
       setGameState({ ...gameEngine.getState() });
       setSelectedMode('TWO_PLAYERS');
@@ -820,6 +848,36 @@ export default function App() {
       }
     }
   }, [isStageClearModalOpen, gameState, isTrialMode, currentUser?.uid, coopManager]);
+
+  // M7.5.1: Record per-UID completed match outcome (WIN / LOSS) without altering XP/Xu/Rank formulas
+  useEffect(() => {
+    if (isTrialMode || !currentUser?.uid || !gameState) return;
+    if (!isStageClearModalOpen && !isGameOverModalOpen) return;
+    const outcome: 'WIN' | 'LOSS' = isStageClearModalOpen ? 'WIN' : 'LOSS';
+    const stageId = gameState.currentStageId ?? 1;
+    const roomCode =
+      gameState.gameMode === 'TWO_PLAYERS_ONLINE'
+        ? (coopManager.getCurrentRoom()?.roomCode ?? null)
+        : null;
+    const runKey = `${gameState.gameMode}:${roomCode ?? 'local'}:st${stageId}:run${gameState.stageRunSeq}:${outcome}`;
+    PlayerStatsManager.getInstance().recordMatchOutcome({
+      uid: currentUser.uid,
+      runKey,
+      outcome,
+      stageId,
+      gameMode: gameState.gameMode,
+      earnedScoreXp: gameState.score,
+      defeatedByType: gameState.defeatedCounts,
+      roomCode,
+    });
+  }, [
+    isStageClearModalOpen,
+    isGameOverModalOpen,
+    gameState,
+    isTrialMode,
+    currentUser?.uid,
+    coopManager,
+  ]);
 
   const handleProfileUpdated = useCallback(() => {
     setCurrentUser(authManager.getCurrentUser());

@@ -11,6 +11,7 @@ import {
   getRoleNameFrameClasses,
 } from '../core/authManager.ts';
 import { AvatarManager } from '../core/avatarManager.ts';
+import { PlayerStatsManager } from '../core/playerStatsManager.ts';
 import { getSessionBadgeInfo, formatAccountStatusMessage } from './AuthSessionBanner.tsx';
 import {
   Play,
@@ -65,9 +66,13 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   const isSessionActive = session.status === 'ACTIVE';
   const avatarManager = AvatarManager.getInstance();
   const musicManager = MusicManager.getInstance();
+  const playerStatsMgr = PlayerStatsManager.getInstance();
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [avatarError, setAvatarError] = useState(false);
   const [, setAvatarTick] = useState(0);
+  const [playerStats, setPlayerStats] = useState(() =>
+    playerStatsMgr.getPlayerStatisticsSnapshot(user.uid)
+  );
   const [homeVideoConfig, setHomeVideoConfig] = useState<HomeBackgroundVideoConfig | null>(() =>
     musicManager.getHomeVideoConfig()
   );
@@ -134,6 +139,17 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
     });
     return unsub;
   }, [avatarManager, user.uid]);
+
+  useEffect(() => {
+    const syncStats = () => {
+      setPlayerStats(playerStatsMgr.getPlayerStatisticsSnapshot(user.uid));
+    };
+    syncStats();
+    if (user.uid) {
+      void playerStatsMgr.refreshCloudUserStatsOnce(user.uid);
+    }
+    return playerStatsMgr.subscribe(syncStats);
+  }, [playerStatsMgr, user.uid]);
 
   const resolvedAvatarUrl = avatarManager.getEffectivePlayerAvatarUrl({
     uid: user.uid,
@@ -223,11 +239,18 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               ) : (
                 <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               )}
-              <span className="font-bold text-amber-300 truncate max-w-[100px] xs:max-w-[130px] sm:max-w-[190px]">
+              <span className="font-bold text-amber-300 truncate max-w-[88px] xs:max-w-[120px] sm:max-w-[180px]">
                 {displayLabel}
               </span>
+              <span
+                data-testid="top-menu-player-level"
+                title={`Level người chơi: ${playerStats.levelSystemLabel}`}
+                className="text-[10px] font-mono font-extrabold tabular-nums px-1.5 py-0.5 rounded bg-amber-950/90 border border-amber-500/40 text-amber-200 shrink-0 whitespace-nowrap"
+              >
+                {playerStats.levelTopMenuBadge}
+              </span>
               {badgeInfo.label && (
-                <span className={`hidden xs:inline-block text-[10px] px-1.5 py-0.2 rounded border font-medium shrink-0 ${badgeInfo.badgeStyle}`}>
+                <span className={`hidden sm:inline-block text-[10px] px-1.5 py-0.2 rounded border font-medium shrink-0 ${badgeInfo.badgeStyle}`}>
                   {badgeInfo.label}
                 </span>
               )}

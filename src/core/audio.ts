@@ -18,8 +18,9 @@ export interface AudioSettings {
 
 import { ScoreManager } from './scoreManager.ts';
 import { ADMIN_EMAIL, AuthManager, isAdminUser } from './authManager.ts';
-import { doc, getDoc, onSnapshot, setDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
 import { getFirebaseDb, handleFirestoreError } from './firebaseConfig.ts';
+import { SystemAuditLogger } from './systemAuditLogger.ts';
 
 export const DEFAULT_AUDIO_SETTINGS: Readonly<AudioSettings> = {
   bgmEnabled: true,
@@ -102,7 +103,79 @@ export interface CustomActionSoundTrack {
   updatedByEmail: string;
   isActive?: boolean;
   dataUrl?: string;
+  staticRelativeUrl?: string;
 }
+
+export interface StaticActionSfxSpec {
+  actionId: GameActionSoundId;
+  fileName: string;
+  repositoryPath: string;
+  relativeUrl: string;
+  sizeBytes: number;
+  approxDurationSec: number;
+}
+
+/**
+ * M7.5.1 PHẦN 3.2: 7 file SFX tĩnh bắt buộc trong `public/audio/sfx/`
+ */
+export const STATIC_ACTION_SFX_SPECS: Readonly<Record<GameActionSoundId, StaticActionSfxSpec>> = {
+  BASE_EXPLOSION: {
+    actionId: 'BASE_EXPLOSION',
+    fileName: 'die-base.mp3',
+    repositoryPath: 'public/audio/sfx/die-base.mp3',
+    relativeUrl: './audio/sfx/die-base.mp3',
+    sizeBytes: 143269,
+    approxDurationSec: 2.38,
+  },
+  ENEMY_EXPLOSION: {
+    actionId: 'ENEMY_EXPLOSION',
+    fileName: 'die-cpu.mp3',
+    repositoryPath: 'public/audio/sfx/die-cpu.mp3',
+    relativeUrl: './audio/sfx/die-cpu.mp3',
+    sizeBytes: 92928,
+    approxDurationSec: 1.54,
+  },
+  P1_EXPLOSION: {
+    actionId: 'P1_EXPLOSION',
+    fileName: 'die-player.mp3',
+    repositoryPath: 'public/audio/sfx/die-player.mp3',
+    relativeUrl: './audio/sfx/die-player.mp3',
+    sizeBytes: 92928,
+    approxDurationSec: 1.54,
+  },
+  GAME_OVER: {
+    actionId: 'GAME_OVER',
+    fileName: 'game-over.mp3',
+    repositoryPath: 'public/audio/sfx/game-over.mp3',
+    relativeUrl: './audio/sfx/game-over.mp3',
+    sizeBytes: 182016,
+    approxDurationSec: 3.03,
+  },
+  STAGE_CLEAR: {
+    actionId: 'STAGE_CLEAR',
+    fileName: 'game-win.mp3',
+    repositoryPath: 'public/audio/sfx/game-win.mp3',
+    relativeUrl: './audio/sfx/game-win.mp3',
+    sizeBytes: 160496,
+    approxDurationSec: 2.67,
+  },
+  ENEMY_SHOOT: {
+    actionId: 'ENEMY_SHOOT',
+    fileName: 'gun-cpu.mp3',
+    repositoryPath: 'public/audio/sfx/gun-cpu.mp3',
+    relativeUrl: './audio/sfx/gun-cpu.mp3',
+    sizeBytes: 44544,
+    approxDurationSec: 0.74,
+  },
+  P1_SHOOT: {
+    actionId: 'P1_SHOOT',
+    fileName: 'gun-player.mp3',
+    repositoryPath: 'public/audio/sfx/gun-player.mp3',
+    relativeUrl: './audio/sfx/gun-player.mp3',
+    sizeBytes: 61440,
+    approxDurationSec: 1.02,
+  },
+} as const;
 
 const STORAGE_KEYS = {
   BGM_ENABLED: 'bantank_bgm_enabled',
@@ -144,11 +217,15 @@ export class SoundManager {
   // Subscribers for UI synchronization (Top Menu Quick Mute button & Settings Modal)
   private listeners: Set<() => void> = new Set();
 
-  // Admin Custom Action SFX Management (M7.3.10 Section 4 + M7.3.11.6 Realtime Sync)
+  // Static Action SFX Management (M7.5.1 PHẦN 2 & PHẦN 3.2)
   private customActionTracks: Map<GameActionSoundId, CustomActionSoundTrack> = new Map();
   private customActionBuffers: Map<GameActionSoundId, AudioBuffer> = new Map();
-  private activeActionSources: Set<AudioBufferSourceNode> = new Set();
+  private staticSfxRawBuffers: Map<GameActionSoundId, ArrayBuffer> = new Map();
+  private staticSfxPreloadStarted: boolean = false;
+  private activeActionSources: Set<{ stop: () => void; disconnect: () => void }> = new Set();
+  private activeHtmlSfxElements: Set<HTMLAudioElement> = new Set();
   private lastPlayedCustomActionId: GameActionSoundId | null = null;
+  private lastPlayedStaticSfxUrl: string | null = null;
   private previewingInactiveActionSfx: boolean = false;
   private adminRoleOverride: 'ADMIN' | 'MOD' | 'PLAYER' | null = null;
   private unsubCloudActionSfx: (() => void) | null = null;
@@ -157,7 +234,8 @@ export class SoundManager {
 
   private constructor() {
     this.loadSettings();
-    this.loadCustomActionTracksFromStorage();
+    this.registerCanonicalStaticActionTracks();
+    this.preloadStaticActionSfxBinaries();
     this.initCloudActionSfxSubscription();
   }
 
@@ -513,44 +591,146 @@ export class SoundManager {
     this.noiseBuffer = buffer;
   }
 
-  private playCustomActionBufferIfAvailable(actionId: GameActionSoundId): boolean {
-    if (!this.settings.sfxEnabled || this.masterMuted) return true;
-    const track = this.customActionTracks.get(actionId);
-    const buffer = this.customActionBuffers.get(actionId);
-    if (!track && !buffer) return false;
-    if (track && track.isActive === false && !this.previewingInactiveActionSfx) {
-      return false;
-    }
-
-    this.lastPlayedCustomActionId = actionId;
-    if (!this.ctx || !this.sfxGain) {
-      // Headless / test environment where AudioContext is null: custom track is registered
-      return true;
-    }
-    if (!buffer) {
-      return false;
-    }
-
-    try {
-      const source = this.ctx.createBufferSource();
-      source.buffer = buffer;
-      const gain = this.ctx.createGain();
-      gain.gain.setValueAtTime(1.0, this.ctx.currentTime);
-      source.connect(gain);
-      gain.connect(this.sfxGain);
-
-      this.activeActionSources.add(source);
-      source.onended = () => {
-        this.activeActionSources.delete(source);
-      };
-      source.start(0);
-      return true;
-    } catch {
-      return false;
+  private registerCanonicalStaticActionTracks(): void {
+    for (const slot of GAME_ACTION_SOUND_SLOTS) {
+      const spec = STATIC_ACTION_SFX_SPECS[slot.id];
+      this.customActionTracks.set(slot.id, {
+        actionId: slot.id,
+        fileName: spec.fileName,
+        mimeType: 'audio/mpeg',
+        fileSizeBytes: spec.sizeBytes,
+        durationSec: spec.approxDurationSec,
+        updatedAtMs: 0,
+        updatedByEmail: ADMIN_EMAIL,
+        isActive: true,
+        staticRelativeUrl: spec.relativeUrl,
+      });
     }
   }
 
-  private stopAllActiveActionSources(): void {
+  private preloadStaticActionSfxBinaries(): void {
+    if (this.staticSfxPreloadStarted || typeof window === 'undefined' || typeof fetch !== 'function') {
+      return;
+    }
+    this.staticSfxPreloadStarted = true;
+    for (const slot of GAME_ACTION_SOUND_SLOTS) {
+      const spec = STATIC_ACTION_SFX_SPECS[slot.id];
+      void fetch(spec.relativeUrl)
+        .then(async (res) => {
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status} for ${spec.relativeUrl}`);
+          }
+          const ab = await res.arrayBuffer();
+          if (ab.byteLength <= 0) {
+            throw new Error(`Empty SFX file (0 B): ${spec.relativeUrl}`);
+          }
+          this.staticSfxRawBuffers.set(slot.id, ab);
+          if (this.ctx) {
+            try {
+              const decoded = await this.ctx.decodeAudioData(ab.slice(0));
+              this.customActionBuffers.set(slot.id, decoded);
+            } catch (decErr) {
+              SystemAuditLogger.getInstance().recordEvent({
+                severity: 'WARNING',
+                category: 'AUDIO_PLAYBACK_EVENT',
+                eventType: 'SFX_DECODE_WARNING',
+                message: `Không giải mã WebAudio được SFX tĩnh ${spec.fileName}; chuyển sang phát HTMLAudioElement.`,
+                source: 'SoundManager.preloadStaticActionSfxBinaries',
+                outcome: 'FAILURE',
+                error: decErr,
+                metadata: { actionId: slot.id, url: spec.relativeUrl },
+              });
+            }
+          }
+        })
+        .catch((err) => {
+          SystemAuditLogger.getInstance().recordEvent({
+            severity: 'ERROR',
+            category: 'STATIC_ASSET_LOAD_ERROR',
+            eventType: 'STATIC_SFX_FETCH_FAILED',
+            message: `Lỗi tải SFX tĩnh ${spec.relativeUrl}`,
+            source: 'SoundManager.preloadStaticActionSfxBinaries',
+            outcome: 'FAILURE',
+            error: err,
+            metadata: { actionId: slot.id, url: spec.relativeUrl },
+          });
+        });
+    }
+  }
+
+  private playCustomActionBufferIfAvailable(actionId: GameActionSoundId): boolean {
+    if (!this.settings.sfxEnabled || this.masterMuted) return true;
+    const spec = STATIC_ACTION_SFX_SPECS[actionId];
+    const track = this.customActionTracks.get(actionId);
+    const buffer = this.customActionBuffers.get(actionId);
+    if (!track && !buffer && !spec) return false;
+    if (track && track.isActive === false && !this.previewingInactiveActionSfx) {
+      return true; // Explicitly deactivated by Admin -> remain silent without falling back to synth
+    }
+
+    this.lastPlayedCustomActionId = actionId;
+    this.lastPlayedStaticSfxUrl = track?.staticRelativeUrl ?? spec?.relativeUrl ?? null;
+
+    if (!this.ctx || !this.sfxGain) {
+      // Headless / Node test or locked AudioContext: attempt HTMLAudioElement if in browser
+      if (typeof Audio !== 'undefined' && this.lastPlayedStaticSfxUrl) {
+        try {
+          const el = new Audio(this.lastPlayedStaticSfxUrl);
+          el.volume = Math.max(0, Math.min(1, this.settings.sfxVolume));
+          this.activeHtmlSfxElements.add(el);
+          el.onended = () => this.activeHtmlSfxElements.delete(el);
+          void el.play().catch(() => {
+            this.activeHtmlSfxElements.delete(el);
+          });
+          return true;
+        } catch {
+          return true;
+        }
+      }
+      return true;
+    }
+
+    if (buffer) {
+      try {
+        const source = this.ctx.createBufferSource();
+        source.buffer = buffer;
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(1.0, this.ctx.currentTime);
+        source.connect(gain);
+        gain.connect(this.sfxGain);
+
+        this.activeActionSources.add(source);
+        source.onended = () => {
+          this.activeActionSources.delete(source);
+        };
+        source.start(0);
+        return true;
+      } catch {
+        // Fallback to HTMLAudioElement below
+      }
+    }
+
+    if (typeof Audio !== 'undefined' && this.lastPlayedStaticSfxUrl) {
+      try {
+        const el = new Audio(this.lastPlayedStaticSfxUrl);
+        el.volume = Math.max(0, Math.min(1, this.settings.sfxVolume));
+        this.activeHtmlSfxElements.add(el);
+        el.onended = () => this.activeHtmlSfxElements.delete(el);
+        void el.play().catch(() => {
+          this.activeHtmlSfxElements.delete(el);
+        });
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Stops all lingering combat SFX sources immediately (called on mute, match exit, or stage end).
+   */
+  public stopAllActiveActionSources(): void {
     for (const src of this.activeActionSources) {
       try {
         src.stop();
@@ -560,6 +740,15 @@ export class SoundManager {
       }
     }
     this.activeActionSources.clear();
+    for (const el of this.activeHtmlSfxElements) {
+      try {
+        el.pause();
+        el.currentTime = 0;
+      } catch {
+        // Ignore
+      }
+    }
+    this.activeHtmlSfxElements.clear();
   }
 
   // =========================================================================
@@ -1050,8 +1239,17 @@ export class SoundManager {
     return this.lastPlayedCustomActionId;
   }
 
+  public getLastPlayedStaticSfxUrl(): string | null {
+    return this.lastPlayedStaticSfxUrl;
+  }
+
+  public getStaticActionSfxSpec(actionId: GameActionSoundId): StaticActionSfxSpec {
+    return STATIC_ACTION_SFX_SPECS[actionId];
+  }
+
   public clearLastPlayedCustomActionId(): void {
     this.lastPlayedCustomActionId = null;
+    this.lastPlayedStaticSfxUrl = null;
   }
 
   public getCloudActionSfxError(): string | null {
@@ -1131,34 +1329,20 @@ export class SoundManager {
     return { ok: true };
   }
 
+  /**
+   * M7.5.1 PHẦN 2: Mọi chức năng tải lên / thay thế / xóa file SFX từ phía client đã bị vô hiệu hóa.
+   * Hệ thống chỉ sử dụng 7 file SFX tĩnh trong `public/audio/sfx/`.
+   */
   public uploadActionSoundSync(
-    actionId: GameActionSoundId,
-    file: { name: string; type: string; size: number; dataUrl?: string },
-    options?: { autoActivate?: boolean }
+    _actionId: GameActionSoundId,
+    _file: { name: string; type: string; size: number; dataUrl?: string },
+    _options?: { autoActivate?: boolean }
   ): { ok: boolean; error?: string; track?: CustomActionSoundTrack } {
-    const check = this.validateActionSoundFile(actionId, file);
-    if (!check.ok) {
-      return { ok: false, error: check.error };
-    }
-
-    const currentUser = AuthManager.getInstance().getCurrentUser();
-    const durationSec = Math.max(0.15, Math.min(10, Number((file.size / 16000).toFixed(2))));
-    const track: CustomActionSoundTrack = {
-      actionId,
-      fileName: file.name,
-      mimeType: file.type || 'audio/mpeg',
-      fileSizeBytes: file.size,
-      durationSec,
-      updatedAtMs: Date.now(),
-      updatedByEmail: currentUser?.email || ADMIN_EMAIL,
-      isActive: options?.autoActivate ?? true,
-      ...(file.dataUrl ? { dataUrl: file.dataUrl } : {}),
+    return {
+      ok: false,
+      error:
+        'Chức năng tải file SFX lên từ trình duyệt đã bị vô hiệu hóa (M7.5.1). Hệ thống sử dụng 7 file SFX tĩnh trong public/audio/sfx/.',
     };
-
-    this.customActionTracks.set(actionId, track);
-    this.saveCustomActionTracksToStorage();
-    this.notifyListeners();
-    return { ok: true, track };
   }
 
   public replaceActionSoundSync(
@@ -1174,59 +1358,7 @@ export class SoundManager {
     file: File,
     options?: { autoActivate?: boolean }
   ): Promise<{ ok: boolean; error?: string; track?: CustomActionSoundTrack }> {
-    const check = this.validateActionSoundFile(actionId, file);
-    if (!check.ok) {
-      return { ok: false, error: check.error };
-    }
-
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      let durationSec = 0.85;
-
-      const ctx = this.initContext();
-      if (ctx) {
-        try {
-          const decoded = await ctx.decodeAudioData(arrayBuffer.slice(0));
-          durationSec = Number(decoded.duration.toFixed(2));
-          this.customActionBuffers.set(actionId, decoded);
-        } catch {
-          durationSec = Math.max(0.15, Math.min(10, Number((file.size / 16000).toFixed(2))));
-        }
-      }
-
-      let dataUrl: string | undefined;
-      if (file.size <= 2.5 * 1024 * 1024) {
-        dataUrl = await this.arrayBufferToDataUrl(
-          arrayBuffer,
-          file.type || 'audio/mpeg'
-        );
-      }
-
-      const currentUser = AuthManager.getInstance().getCurrentUser();
-      const track: CustomActionSoundTrack = {
-        actionId,
-        fileName: file.name,
-        mimeType: file.type || 'audio/mpeg',
-        fileSizeBytes: file.size,
-        durationSec,
-        updatedAtMs: Date.now(),
-        updatedByEmail: currentUser?.email || ADMIN_EMAIL,
-        isActive: options?.autoActivate ?? false,
-        ...(dataUrl ? { dataUrl } : {}),
-      };
-
-      this.customActionTracks.set(actionId, track);
-      this.saveCustomActionTracksToStorage();
-      await this.syncCustomActionTracksToCloud();
-      this.notifyListeners();
-
-      return { ok: true, track };
-    } catch (err: any) {
-      return {
-        ok: false,
-        error: err?.message || 'Không thể xử lý file âm thanh hành động.',
-      };
-    }
+    return this.uploadActionSoundSync(actionId, file, options);
   }
 
   public async replaceActionSound(
@@ -1234,7 +1366,7 @@ export class SoundManager {
     file: File,
     options?: { autoActivate?: boolean }
   ): Promise<{ ok: boolean; error?: string; track?: CustomActionSoundTrack }> {
-    return this.uploadActionSound(actionId, file, options);
+    return this.uploadActionSoundSync(actionId, file, options);
   }
 
   public activateActionSound(
@@ -1248,25 +1380,22 @@ export class SoundManager {
       };
     }
 
+    const spec = STATIC_ACTION_SFX_SPECS[actionId];
     const existing = this.customActionTracks.get(actionId);
-    if (!existing) {
-      return {
-        ok: false,
-        error: 'Chưa có file âm thanh hành động để kích hoạt.',
-      };
-    }
-
     const currentUser = AuthManager.getInstance().getCurrentUser();
     const updatedTrack: CustomActionSoundTrack = {
-      ...existing,
-      isActive: true,
+      actionId,
+      fileName: existing?.fileName ?? spec.fileName,
+      mimeType: 'audio/mpeg',
+      fileSizeBytes: existing?.fileSizeBytes ?? spec.sizeBytes,
+      durationSec: existing?.durationSec ?? spec.approxDurationSec,
       updatedAtMs: Date.now(),
       updatedByEmail: currentUser?.email || ADMIN_EMAIL,
+      isActive: true,
+      staticRelativeUrl: spec.relativeUrl,
     };
 
     this.customActionTracks.set(actionId, updatedTrack);
-    this.saveCustomActionTracksToStorage();
-    void this.syncCustomActionTracksToCloud();
     this.notifyListeners();
     return { ok: true, track: updatedTrack };
   }
@@ -1282,46 +1411,33 @@ export class SoundManager {
       };
     }
 
+    const spec = STATIC_ACTION_SFX_SPECS[actionId];
     const existing = this.customActionTracks.get(actionId);
-    if (!existing) {
-      return {
-        ok: false,
-        error: 'Chưa có file âm thanh hành động.',
-      };
-    }
-
     const currentUser = AuthManager.getInstance().getCurrentUser();
     const updatedTrack: CustomActionSoundTrack = {
-      ...existing,
-      isActive: false,
+      actionId,
+      fileName: existing?.fileName ?? spec.fileName,
+      mimeType: 'audio/mpeg',
+      fileSizeBytes: existing?.fileSizeBytes ?? spec.sizeBytes,
+      durationSec: existing?.durationSec ?? spec.approxDurationSec,
       updatedAtMs: Date.now(),
       updatedByEmail: currentUser?.email || ADMIN_EMAIL,
+      isActive: false,
+      staticRelativeUrl: spec.relativeUrl,
     };
 
     this.customActionTracks.set(actionId, updatedTrack);
     this.stopAllActiveActionSources();
-    this.saveCustomActionTracksToStorage();
-    void this.syncCustomActionTracksToCloud();
     this.notifyListeners();
     return { ok: true, track: updatedTrack };
   }
 
-  public deleteActionSound(actionId: GameActionSoundId): { ok: boolean; error?: string } {
-    if (!this.canManageActionSounds()) {
-      return {
-        ok: false,
-        error:
-          'Từ chối truy cập: Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền xóa âm thanh hành động.',
-      };
-    }
-
-    this.customActionTracks.delete(actionId);
-    this.customActionBuffers.delete(actionId);
-    this.stopAllActiveActionSources();
-    this.saveCustomActionTracksToStorage();
-    void this.syncCustomActionTracksToCloud();
-    this.notifyListeners();
-    return { ok: true };
+  public deleteActionSound(_actionId: GameActionSoundId): { ok: boolean; error?: string } {
+    return {
+      ok: false,
+      error:
+        'Không thể xóa file SFX tĩnh trong public/audio/sfx/ từ trình duyệt (M7.5.1).',
+    };
   }
 
   public previewActionSound(actionId: GameActionSoundId, allowInactive: boolean = false): void {
@@ -1455,96 +1571,17 @@ export class SoundManager {
     });
   }
 
-  private async syncCustomActionTracksToCloud(): Promise<void> {
-    if (typeof window === 'undefined' || !this.canManageActionSounds()) return;
-    try {
-      const db = getFirebaseDb();
-      const ref = doc(db, 'system_config', 'action_sfx');
-      if (this.lastCloudActionSfxVersion === 0) {
-        try {
-          const existingSnap = await getDoc(ref);
-          if (existingSnap.exists()) {
-            const v = existingSnap.data()?.version;
-            if (typeof v === 'number' && Number.isFinite(v)) {
-              this.lastCloudActionSfxVersion = v;
-            }
-          }
-        } catch {
-          // Ignore pre-read failure if rule check will handle write
-        }
-      }
-      const tracksObj: Record<string, CustomActionSoundTrack> = {};
-      for (const [id, track] of this.customActionTracks.entries()) {
-        const sanitized: CustomActionSoundTrack = {
-          actionId: track.actionId,
-          fileName: track.fileName,
-          mimeType: track.mimeType,
-          fileSizeBytes: track.fileSizeBytes,
-          durationSec: track.durationSec,
-          updatedAtMs: track.updatedAtMs,
-          updatedByEmail: track.updatedByEmail,
-          isActive: track.isActive !== false,
-          ...(track.dataUrl ? { dataUrl: track.dataUrl } : {}),
-        };
-        tracksObj[id] = sanitized;
-      }
-      const nowMs = Date.now();
-      const nextVersion = Math.max(nowMs, this.lastCloudActionSfxVersion + 1);
-      this.lastCloudActionSfxVersion = nextVersion;
-      this.cloudActionSfxError = null;
-      try {
-        await setDoc(ref, {
-          tracks: tracksObj,
-          version: nextVersion,
-          updatedAt: nowMs,
-          updatedBy: ADMIN_EMAIL,
-        });
-      } catch (writeErr) {
-        handleFirestoreError(writeErr, 'write', 'system_config/action_sfx');
-      }
-    } catch (err: any) {
-      const msg = String(err?.message || '');
-      if (msg) {
-        this.cloudActionSfxError = `Không thể đồng bộ Action SFX lên Firestore (/system_config/action_sfx): ${msg}`;
-        this.notifyListeners();
-      }
-    }
-  }
-
-  private loadCustomActionTracksFromStorage(): void {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    try {
-      const raw = window.localStorage.getItem(STORAGE_KEYS.ACTION_SFX_TRACKS);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as Record<string, CustomActionSoundTrack>;
-      if (!parsed || typeof parsed !== 'object') return;
-      for (const slot of GAME_ACTION_SOUND_SLOTS) {
-        const track = parsed[slot.id];
-        if (track && track.actionId === slot.id && track.fileName) {
-          this.customActionTracks.set(slot.id, track);
-        }
-      }
-    } catch {
-      // ignore storage error
-    }
-  }
-
-  private saveCustomActionTracksToStorage(): void {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    if (ScoreManager.isGlobalTrialMode()) return;
-    try {
-      const serialized: Record<string, CustomActionSoundTrack> = {};
-      for (const [id, track] of this.customActionTracks.entries()) {
-        serialized[id] = track;
-      }
-      window.localStorage.setItem(STORAGE_KEYS.ACTION_SFX_TRACKS, JSON.stringify(serialized));
-    } catch {
-      // ignore quota error
-    }
-  }
-
   private async hydrateCustomActionBuffers(): Promise<void> {
     if (!this.ctx) return;
+    for (const [id, rawAb] of this.staticSfxRawBuffers.entries()) {
+      if (this.customActionBuffers.has(id)) continue;
+      try {
+        const decoded = await this.ctx.decodeAudioData(rawAb.slice(0));
+        this.customActionBuffers.set(id, decoded);
+      } catch {
+        // Fallback to HTMLAudioElement playback
+      }
+    }
     for (const [id, track] of this.customActionTracks.entries()) {
       if (this.customActionBuffers.has(id) || !track.dataUrl) continue;
       const ab = this.dataUrlToArrayBuffer(track.dataUrl);

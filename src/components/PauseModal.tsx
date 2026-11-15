@@ -80,7 +80,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
               <h4 className="text-sm font-bold text-white">Xác nhận thoát</h4>
               <p className="text-xs text-neutral-300 mt-1 whitespace-pre-line">
                 {formatSentenceLineBreaks(
-                  'Bạn có chắc chắn muốn thoát trận đấu? Tiến trình hiện tại sẽ bị mất.'
+                  'Bạn có chắc chắn muốn thoát trận đấu?. Dữ liệu sẽ không được ghi nhận.'
                 )}
               </p>
             </div>

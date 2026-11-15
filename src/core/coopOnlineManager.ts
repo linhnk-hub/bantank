@@ -26,6 +26,8 @@ import {
 } from './gameEngine.ts';
 import { getCampaignStageSpec, TOTAL_CAMPAIGN_STAGES } from './campaignStages.ts';
 import { StageProgressionManager } from './stageProgression.ts';
+import { SystemAuditLogger } from './systemAuditLogger.ts';
+import { PlayerStatsManager } from './playerStatsManager.ts';
 import type {
   BulletStructure,
   EnemyTank,
@@ -2681,6 +2683,42 @@ export class CoopOnlineManager {
       this.listenToRoom(roomCode);
       this.notifyListeners();
 
+      const auditLogger = SystemAuditLogger.getInstance();
+      const scopeKey = `room:${roomCode}`;
+      auditLogger.startOperationalScope({
+        scopeKey,
+        scopeType: 'COOP_ROOM',
+        ownerUid: user.uid,
+        roomCode,
+        nowMs: lobbyWriteMs,
+      });
+      auditLogger.appendOperationalEvent({
+        scopeKey,
+        scopeType: 'COOP_ROOM',
+        eventType: 'COOP_ROOM_CREATED',
+        message: `Chủ phòng P1 tạo phòng ${roomCode} (Stage ${this.selectedLobbyStageId})`,
+        uid: user.uid,
+        roomCode,
+        timestampMs: lobbyWriteMs,
+      });
+      auditLogger.recordEvent({
+        severity: 'INFO',
+        category: 'COOP_ROOM_LIFECYCLE',
+        eventType: 'COOP_ROOM_CREATED',
+        message: `Tạo phòng Co-op Online ${roomCode} (Chế độ: ${difficulty}, Stage ${this.selectedLobbyStageId}).`,
+        uid: user.uid,
+        userEmail: user.email ?? null,
+        displayName: cleanHostName,
+        roomCode,
+        stageId: this.selectedLobbyStageId,
+        gameMode: 'TWO_PLAYERS_ONLINE',
+        source: 'CoopOnlineManager.createRoom',
+        outcome: 'SUCCESS',
+        timestampMs: lobbyWriteMs,
+        skipDeduplication: true,
+      });
+      PlayerStatsManager.getInstance().recordCoopRoomParticipation(user.uid, roomCode);
+
       return {
         success: true,
         room: this.currentRoom,
@@ -2833,6 +2871,35 @@ export class CoopOnlineManager {
       this.resetSyncCounters();
       this.listenToRoom(normalized);
       this.notifyListeners();
+
+      const auditLogger = SystemAuditLogger.getInstance();
+      const scopeKey = `room:${normalized}`;
+      auditLogger.appendOperationalEvent({
+        scopeKey,
+        scopeType: 'COOP_ROOM',
+        eventType: 'COOP_ROOM_JOINED',
+        message: `Người chơi P2 tham gia phòng ${normalized}`,
+        uid: user.uid,
+        roomCode: normalized,
+        timestampMs: nowMs,
+      });
+      auditLogger.recordEvent({
+        severity: 'INFO',
+        category: 'COOP_ROOM_LIFECYCLE',
+        eventType: 'COOP_ROOM_JOINED',
+        message: `Tham gia phòng Co-op Online ${normalized} với vai trò P2.`,
+        uid: user.uid,
+        userEmail: user.email ?? null,
+        displayName: getUserDisplayLabel(user),
+        roomCode: normalized,
+        stageId: this.selectedLobbyStageId,
+        gameMode: 'TWO_PLAYERS_ONLINE',
+        source: 'CoopOnlineManager.joinRoom',
+        outcome: 'SUCCESS',
+        timestampMs: nowMs,
+        skipDeduplication: true,
+      });
+      PlayerStatsManager.getInstance().recordCoopRoomParticipation(user.uid, normalized);
 
       return {
         success: true,
@@ -4930,6 +4997,8 @@ export class CoopOnlineManager {
       password?: string;
       difficulty: 'DEFAULT' | 'EXTREME';
       hostUid: string;
+      stageId?: number;
+      stageName?: string;
       timestamp: number;
     } | null
   ): void {
@@ -4948,6 +5017,8 @@ export class CoopOnlineManager {
           password: this.lastCreatedRoomHasPassword ? this.lastCreatedRoomPassword : undefined,
           difficulty: this.currentRoom.difficulty,
           hostUid: this.currentRoom.hostUid,
+          stageId: this.selectedLobbyStageId,
+          stageName: this.selectedLobbyStageName,
           timestamp: nowMs,
         },
         true
@@ -5405,12 +5476,24 @@ export class CoopOnlineManager {
     this.webrtcErrorMessage =
       reason ||
       'Kết nối P2P trực tiếp (WebRTC DataChannel) thất bại. Vui lòng nhấn "Thử kết nối lại P2P" hoặc thoát phòng an toàn.';
+    const failedRoomCode = this.currentRoom?.roomCode ?? null;
     if (this.currentRoom) {
       this.currentRoom = {
         ...this.currentRoom,
         rtcConnectionState: 'FAILED',
       };
     }
+    SystemAuditLogger.getInstance().recordEvent({
+      severity: 'WARNING',
+      category: 'WEBRTC_SYNC_ERROR',
+      eventType: 'WEBRTC_PEER_ERROR',
+      message: this.webrtcErrorMessage,
+      roomCode: failedRoomCode,
+      gameMode: 'TWO_PLAYERS_ONLINE',
+      source: 'CoopOnlineManager.markWebRTCConnectionFailed',
+      outcome: 'FAILURE',
+      errorCode: 'WEBRTC_FAILED',
+    });
     this.notifyListeners();
   }
 
@@ -5555,6 +5638,53 @@ export class CoopOnlineManager {
     this.notifyListeners();
 
     if (!room || !currentRole) return;
+
+    const auditLogger = SystemAuditLogger.getInstance();
+    const scopeKey = `room:${room.roomCode}`;
+    const actorUid = currentRole === 'HOST' ? room.hostUid : room.guestUid;
+    const isRoomClosing =
+      currentRole === 'HOST' ||
+      room.status === 'PLAYING' ||
+      room.status === 'FINISHED' ||
+      room.status === 'ABANDONED' ||
+      room.status === 'EXPIRED';
+
+    auditLogger.appendOperationalEvent({
+      scopeKey,
+      scopeType: 'COOP_ROOM',
+      eventType: isRoomClosing ? 'COOP_ROOM_CLOSED' : 'COOP_ROOM_LEFT',
+      message: reason || `${currentRole} rời phòng ${room.roomCode}`,
+      uid: actorUid ?? null,
+      roomCode: room.roomCode,
+      timestampMs: nowMs,
+    });
+    auditLogger.recordEvent({
+      severity: 'INFO',
+      category: 'COOP_ROOM_LIFECYCLE',
+      eventType: isRoomClosing ? 'COOP_ROOM_CLOSED' : 'COOP_ROOM_LEFT',
+      message:
+        reason ||
+        (isRoomClosing
+          ? `Đóng phòng Co-op Online ${room.roomCode} (${currentRole}).`
+          : `Rời phòng chờ Co-op Online ${room.roomCode} (${currentRole}).`),
+      uid: actorUid ?? null,
+      roomCode: room.roomCode,
+      gameMode: 'TWO_PLAYERS_ONLINE',
+      source: 'CoopOnlineManager.leaveRoom',
+      outcome: 'SUCCESS',
+      timestampMs: nowMs,
+      skipDeduplication: true,
+    });
+
+    if (isRoomClosing) {
+      auditLogger.markOperationalScopeEnded(scopeKey, nowMs);
+      void auditLogger.archiveAndCleanupOperationalLog(scopeKey, {
+        markEndedNow: true,
+        nowMs,
+        internalSystemTrigger: true,
+      });
+    }
+
     if (
       room.status === 'FINISHED' ||
       room.status === 'ABANDONED' ||

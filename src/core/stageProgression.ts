@@ -5,6 +5,7 @@
 
 import { ENEMY_CONFIG } from './constants.ts';
 import { TOTAL_CAMPAIGN_STAGES } from './campaignStages.ts';
+import { SystemAuditLogger } from './systemAuditLogger.ts';
 
 export type ProgressionGameMode = 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE';
 
@@ -525,6 +526,25 @@ export class StageProgressionManager {
     };
 
     this.saveRecord(updatedRec);
+    if (newlyUnlockedStage !== null) {
+      SystemAuditLogger.getInstance().recordEvent({
+        severity: 'INFO',
+        category: 'CAMPAIGN_STAGE_EVENT',
+        eventType: 'STAGE_UNLOCKED',
+        message: `Mở khóa Stage ${newlyUnlockedStage} sau khi hoàn thành Stage ${proof.stageId} (${proof.gameMode}).`,
+        uid: cleanUid,
+        stageId: newlyUnlockedStage,
+        gameMode: proof.gameMode,
+        source: 'StageProgressionManager.verifyAndRecordStageClear',
+        outcome: 'SUCCESS',
+        skipDeduplication: true,
+        metadata: {
+          clearedStageId: proof.stageId,
+          newlyUnlockedStage,
+          completedStagesCount: nextCompleted.length,
+        },
+      });
+    }
     this.notifyListeners();
     return {
       accepted: true,

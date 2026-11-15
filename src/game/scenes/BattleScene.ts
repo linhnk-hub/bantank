@@ -14,6 +14,7 @@ import {
 import { GameEngine, NEUTRAL_INPUT } from '../../core/gameEngine.ts';
 import { generateTileTextures } from '../textureGenerator.ts';
 import { SoundManager } from '../../core/audio.ts';
+import { MusicManager } from '../../core/musicManager.ts';
 import { CoopOnlineManager } from '../../core/coopOnlineManager.ts';
 
 interface ActiveVisualEffect {
@@ -453,6 +454,7 @@ export class BattleScene extends Phaser.Scene {
       this.stopBackgroundHostTimer();
       this.resetLocalInputState();
       this.resetGuestVisualSmoothing();
+      SoundManager.getInstance().stopAllActiveActionSources();
       if (this.unsubOnlineSnapshots) {
         this.unsubOnlineSnapshots();
         this.unsubOnlineSnapshots = undefined;
@@ -1086,10 +1088,12 @@ export class BattleScene extends Phaser.Scene {
         SoundManager.getInstance().resumeBgm();
       } else if (state.matchState === 'STAGE_CLEAR') {
         this.resetLocalInputState();
+        MusicManager.getInstance().stopAllCustomSources();
         SoundManager.getInstance().stopBgm();
         SoundManager.getInstance().playStageClear();
       } else if (state.matchState === 'GAME_OVER') {
         this.resetLocalInputState();
+        MusicManager.getInstance().stopAllCustomSources();
         SoundManager.getInstance().stopBgm();
         SoundManager.getInstance().playGameOver();
       }

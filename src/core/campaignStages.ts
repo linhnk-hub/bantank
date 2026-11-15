@@ -368,7 +368,7 @@ export const CAMPAIGN_STAGE_SPECS: readonly CampaignStageSpec[] = [
     orderIndex: 8,
     name: 'Stage 8 – HÀNH LANG TỬ THỦ',
     shortTitle: 'HÀNH LANG TỬ THỦ',
-    terrainFocus: 'Hành lang dọc tốc độ cao gây áp lực trực diện căn cứ',
+    terrainFocus: 'Hành lang dọc hẹp với hỏa lực Power và thiết giáp Armor áp sát trực diện căn cứ',
     map: STAGE_8_MAP,
     enemyComposition: STAGE_8_COMP,
     enemyQueue: buildCampaignEnemyQueue(STAGE_8_COMP),

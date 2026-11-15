@@ -198,3 +198,179 @@ export function findPathAStar(
 
   return path;
 }
+
+export interface BrickBreachPathOptions {
+  forbidBaseDefenseBricks?: boolean;
+  brickStepCost?: number;
+}
+
+/**
+ * Weighted A* fallback used ONLY when no open walkable path reaches the target
+ * (e.g. brick-enclosed pockets on Stages 2, 7, 10).
+ * - Open tiles (EMPTY, GRASS, ICE, destroyed BRICK): cost 1
+ * - Partially damaged BRICK (0 < mask < 15): cost 3 (prefer finishing half-broken brick)
+ * - Intact BRICK (mask === 15): cost 6 (breach minimum number of bricks)
+ * - STEEL, WATER, BASE: strictly impassable
+ */
+export function findPathWithBrickBreachAStar(
+  startPixel: { x: number; y: number },
+  targetPixel: { x: number; y: number },
+  terrain: RuntimeTerrainState,
+  blockedTanks?: Array<{ x: number; y: number; id: string }>,
+  selfId?: string,
+  options?: BrickBreachPathOptions
+): Array<{ x: number; y: number }> {
+  const startC = Math.max(0, Math.min(12, Math.round(startPixel.x / 16)));
+  const startR = Math.max(0, Math.min(12, Math.round(startPixel.y / 16)));
+  const targetC = Math.max(0, Math.min(12, Math.round(targetPixel.x / 16)));
+  const targetR = Math.max(0, Math.min(12, Math.round(targetPixel.y / 16)));
+
+  if (startC === targetC && startR === targetR) {
+    return [{ x: targetC * 16, y: targetR * 16 }];
+  }
+
+  const blockedTiles = new Set<string>();
+  if (blockedTanks) {
+    for (const t of blockedTanks) {
+      if (selfId && t.id === selfId) continue;
+      const tc = Math.round(t.x / 16);
+      const tr = Math.round(t.y / 16);
+      if (tc !== targetC || tr !== targetR) {
+        blockedTiles.add(`${tr}_${tc}`);
+      }
+    }
+  }
+
+  const intactBrickCost = options?.brickStepCost ?? 6;
+  const forbidBaseBricks = Boolean(options?.forbidBaseDefenseBricks);
+
+  const openList: PathNode[] = [];
+  const closedSet = new Set<string>();
+
+  const startNode: PathNode = {
+    c: startC,
+    r: startR,
+    g: 0,
+    h: Math.abs(startC - targetC) + Math.abs(startR - targetR),
+    f: Math.abs(startC - targetC) + Math.abs(startR - targetR),
+    parent: null,
+  };
+
+  openList.push(startNode);
+
+  const neighbors = [
+    { dc: 0, dr: -1 },
+    { dc: 0, dr: 1 },
+    { dc: -1, dr: 0 },
+    { dc: 1, dr: 0 },
+  ];
+
+  let iterations = 0;
+  const MAX_ITERATIONS = 300;
+  let bestNode = startNode;
+
+  while (openList.length > 0 && iterations < MAX_ITERATIONS) {
+    iterations++;
+
+    let bestIndex = 0;
+    for (let i = 1; i < openList.length; i++) {
+      if (openList[i].f < openList[bestIndex].f) {
+        bestIndex = i;
+      }
+    }
+
+    const current = openList.splice(bestIndex, 1)[0];
+    closedSet.add(`${current.r}_${current.c}`);
+
+    if (current.h < bestNode.h) {
+      bestNode = current;
+    }
+
+    if (current.c === targetC && current.r === targetR) {
+      bestNode = current;
+      break;
+    }
+
+    for (const n of neighbors) {
+      const nextC = current.c + n.dc;
+      const nextR = current.r + n.dr;
+      if (nextC < 0 || nextC >= MAP_DIMENSIONS.COLS || nextR < 0 || nextR >= MAP_DIMENSIONS.ROWS) {
+        continue;
+      }
+
+      const nextKey = `${nextR}_${nextC}`;
+      if (closedSet.has(nextKey)) continue;
+
+      const isTarget = nextC === targetC && nextR === targetR;
+      if (!isTarget && blockedTiles.has(nextKey)) continue;
+
+      let stepCost = 1;
+      if (!isTarget) {
+        const tileType = terrain.currentMap[nextR][nextC];
+        if (
+          tileType === TILE_TYPES.EMPTY ||
+          tileType === TILE_TYPES.GRASS ||
+          tileType === TILE_TYPES.ICE
+        ) {
+          stepCost = 1;
+        } else if (tileType === TILE_TYPES.BRICK) {
+          const mask = getBrickMask(terrain, nextR, nextC);
+          if (mask === 0) {
+            stepCost = 1;
+          } else if (forbidBaseBricks && nextR >= 11) {
+            // Prevent Ally AI from planning brick breaches on base-level rows where friendly-fire guard blocks lateral shots
+            continue;
+          } else {
+            stepCost = mask < 15 ? 3 : intactBrickCost;
+          }
+        } else {
+          // STEEL, WATER, BASE are impassable
+          continue;
+        }
+      }
+
+      const tentativeG = current.g + stepCost;
+      const existingOpen = openList.find((node) => node.c === nextC && node.r === nextR);
+
+      if (!existingOpen) {
+        const h = Math.abs(nextC - targetC) + Math.abs(nextR - targetR);
+        openList.push({
+          c: nextC,
+          r: nextR,
+          g: tentativeG,
+          h,
+          f: tentativeG + h,
+          parent: current,
+        });
+      } else if (tentativeG < existingOpen.g) {
+        existingOpen.g = tentativeG;
+        existingOpen.f = tentativeG + existingOpen.h;
+        existingOpen.parent = current;
+      }
+    }
+  }
+
+  if ((startC !== targetC || startR !== targetR) && bestNode.c === startC && bestNode.r === startR) {
+    return [];
+  }
+
+  const path: Array<{ x: number; y: number }> = [];
+  let curr: PathNode | null = bestNode;
+  while (curr !== null) {
+    path.unshift({ x: curr.c * 16, y: curr.r * 16 });
+    curr = curr.parent;
+  }
+
+  // Keep startNode in path if the tank is halfway inside a partially broken BRICK tile (startR, startC)
+  // so it finishes clearing (startR, startC) before turning onto the next tile.
+  const startIsRemainingBrick =
+    terrain.currentMap[startR]?.[startC] === TILE_TYPES.BRICK &&
+    getBrickMask(terrain, startR, startC) > 0 &&
+    (Math.abs(startPixel.x - startC * 16) > 1 || Math.abs(startPixel.y - startR * 16) > 1);
+
+  if (path.length > 1 && !startIsRemainingBrick) {
+    path.shift();
+  }
+
+  return path;
+}

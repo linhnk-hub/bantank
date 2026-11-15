@@ -390,7 +390,13 @@ export class EnemyManager {
             aiDecision.shouldShoot = true;
           }
 
-          if (hitOtherEnemy || (!isAimingAtTarget && !(facingBrick && readyToShoot))) {
+          const isBreachingPathBrick =
+            !hitOtherEnemy &&
+            facingBrick &&
+            enemy.path.length > 0 &&
+            (enemy.stuckTimer || 0) < 3.2;
+
+          if (hitOtherEnemy || (!isAimingAtTarget && !isBreachingPathBrick && !(facingBrick && readyToShoot))) {
             enemy.path = [];
             enemy.consecutiveBlockCount = (enemy.consecutiveBlockCount || 0) + 1;
 
@@ -413,6 +419,11 @@ export class EnemyManager {
       // An enemy is legitimately allowed to stand still while engaging an aligned combat target (Player/Eagle)
       // or actively aiming with a ready shot
       const otherEnemiesForStuck = this.activeEnemies.filter((e) => e.id !== enemy.id);
+      const hitOtherEnemyForStuck = checkTankVsTanks(
+        enemy.id,
+        getTankHitbox(enemy.x, enemy.y),
+        otherEnemiesForStuck
+      );
       const alignedWithP1ForStuck =
         !targetPlayerIsDead &&
         (enemy.debugLog?.losToP1 ?? false) &&
@@ -432,7 +443,7 @@ export class EnemyManager {
         (enemy.debugLog?.isAligned ?? false) &&
         ((alignedWithP1ForStuck || alignedWithEagleForStuck) ||
           ((enemy.aimTimer || 0) > 0 && enemy.shootCooldown <= 0 && !enemyHasBullet)) &&
-        !checkTankVsTanks(enemy.id, getTankHitbox(enemy.x, enemy.y), otherEnemiesForStuck);
+        !hitOtherEnemyForStuck;
       const prevPos = enemy.lastStuckPos ?? { x: enemy.x, y: enemy.y };
       const distFromLastPos = Math.hypot(enemy.x - prevPos.x, enemy.y - prevPos.y);
 
@@ -443,8 +454,14 @@ export class EnemyManager {
         enemy.lastStuckPos = { x: enemy.x, y: enemy.y };
       }
 
-      // If stuck for >= 0.75 seconds, trigger unstuck resolution
-      if ((enemy.stuckTimer || 0) >= 0.75) {
+      const isActivelyBreachingBrick =
+        !hitOtherEnemyForStuck &&
+        enemy.path.length > 0 &&
+        isFacingBrickObstacle(enemy, terrain);
+      const stuckThresholdS = isActivelyBreachingBrick ? 3.2 : 0.75;
+
+      // If stuck beyond threshold, trigger unstuck resolution
+      if ((enemy.stuckTimer || 0) >= stuckThresholdS) {
         // First check if facing a destructible brick tile and ready to shoot
         if (
           isFacingBrickObstacle(enemy, terrain) &&

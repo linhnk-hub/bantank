@@ -19,7 +19,7 @@ import {
   intersectAABB,
 } from '../physics.ts';
 import { getBrickMask } from '../terrain.ts';
-import { findPathAStar } from './pathfinding.ts';
+import { findPathAStar, findPathWithBrickBreachAStar } from './pathfinding.ts';
 
 const ALL_DIRS: readonly Direction[] = ['UP', 'DOWN', 'LEFT', 'RIGHT'] as const;
 
@@ -268,10 +268,12 @@ export class AllyAIController {
         : vertDir ?? horizDir;
     const secondary = primary === horizDir ? vertDir : horizDir;
 
-    if (primary && this.canMoveInDirection(p2, primary, terrain, p1, enemies, 2)) {
+    const primaryProbe = Math.max(1, Math.min(2, Math.floor(Math.max(Math.abs(dx), Math.abs(dy)) || 1)));
+    if (primary && this.canMoveInDirection(p2, primary, terrain, p1, enemies, primaryProbe)) {
       return primary;
     }
-    if (secondary && this.canMoveInDirection(p2, secondary, terrain, p1, enemies, 2)) {
+    const secProbe = Math.max(1, Math.min(2, Math.floor(Math.min(Math.abs(dx), Math.abs(dy)) || 1)));
+    if (secondary && this.canMoveInDirection(p2, secondary, terrain, p1, enemies, secProbe)) {
       return secondary;
     }
     return primary;
@@ -444,45 +446,69 @@ export class AllyAIController {
     const currentDirBlocked = !this.canMoveInDirection(p2, this.currentDir, terrain, p1, aliveEnemies, 2);
 
     // Recompute A* path when target changes, map changes, path is empty, path cooldown expires, or blocked
+    const computeTacticalPath = (): Array<{ x: number; y: number }> => {
+      const openPath = findPathAStar(
+        { x: p2.x, y: p2.y },
+        { x: targetX, y: targetY },
+        terrain,
+        blockedTanks,
+        p2.id
+      );
+      const destC = Math.max(0, Math.min(12, Math.round(targetX / 16)));
+      const destR = Math.max(0, Math.min(12, Math.round(targetY / 16)));
+      const lastOpen = openPath.length > 0 ? openPath[openPath.length - 1] : null;
+      const openReachesNearDest =
+        lastOpen !== null &&
+        Math.abs(Math.round(lastOpen.x / 16) - destC) +
+          Math.abs(Math.round(lastOpen.y / 16) - destR) <=
+          1;
+      if (openReachesNearDest) {
+        return openPath;
+      }
+      const breachPath = findPathWithBrickBreachAStar(
+        { x: p2.x, y: p2.y },
+        { x: targetX, y: targetY },
+        terrain,
+        blockedTanks,
+        p2.id,
+        { forbidBaseDefenseBricks: true, brickStepCost: 6 }
+      );
+      return breachPath.length > 0 ? breachPath : openPath;
+    };
+
     if (
       this.pathCooldown <= 0 ||
       this.path.length === 0 ||
       targetTileKey !== this.lastTargetTileKey ||
       mapChanged ||
-      currentDirBlocked
+      (currentDirBlocked && !this.isFacingDestructibleBrick(p2, this.currentDir, terrain))
     ) {
-      this.path = findPathAStar(
-        { x: p2.x, y: p2.y },
-        { x: targetX, y: targetY },
-        terrain,
-        blockedTanks,
-        p2.id
-      );
+      this.path = computeTacticalPath();
       this.lastTargetTileKey = targetTileKey;
       this.pathCooldown = 0.35;
     }
 
+    const isSafelyBreachingPathBrick =
+      this.path.length > 0 &&
+      this.isFacingDestructibleBrick(p2, this.currentDir, terrain) &&
+      !this.isFriendlyInLineOfFire(p2, this.currentDir, p1, terrain);
+    const stuckLimitS = isSafelyBreachingPathBrick ? 2.4 : 0.45;
+
     // 5. Resolve final movement direction using A* waypoints + stuck recovery
-    if (this.stuckTimer >= 0.45) {
+    if (this.stuckTimer >= stuckLimitS) {
       // Stuck recovery: pick alternative open direction and reset path
       this.currentDir = this.pickUnstuckDirection(p2, targetX, targetY, terrain, p1, aliveEnemies);
       this.changeDirCooldown = 0.4;
       this.stuckTimer = 0;
       this.lastStuckPos = { x: p2.x, y: p2.y };
-      this.path = findPathAStar(
-        { x: p2.x, y: p2.y },
-        { x: targetX, y: targetY },
-        terrain,
-        blockedTanks,
-        p2.id
-      );
+      this.path = computeTacticalPath();
     } else if (this.changeDirCooldown <= 0 || currentDirBlocked) {
       let chosenDir: Direction | null = null;
 
-      // Consume reached A* waypoints
+      // Consume reached A* waypoints (<= 1px tolerance keeps 4px bullet centered across both 8px brick sub-tiles)
       while (this.path.length > 0) {
         const wp = this.path[0];
-        if (Math.abs(wp.x - p2.x) <= 2 && Math.abs(wp.y - p2.y) <= 2) {
+        if (Math.abs(wp.x - p2.x) <= 1 && Math.abs(wp.y - p2.y) <= 1) {
           this.path.shift();
         } else {
           break;
@@ -492,7 +518,12 @@ export class AllyAIController {
       if (this.path.length > 0) {
         const nextWp = this.path[0];
         const wpDir = this.getDirectionTowardWaypoint(p2, nextWp, terrain, p1, aliveEnemies);
-        if (wpDir && (this.canMoveInDirection(p2, wpDir, terrain, p1, aliveEnemies, 2) || this.isFacingDestructibleBrick(p2, wpDir, terrain))) {
+        if (
+          wpDir &&
+          (this.canMoveInDirection(p2, wpDir, terrain, p1, aliveEnemies, 2) ||
+            (this.isFacingDestructibleBrick(p2, wpDir, terrain) &&
+              !this.isFriendlyInLineOfFire(p2, wpDir, p1, terrain)))
+        ) {
           chosenDir = wpDir;
         }
       }

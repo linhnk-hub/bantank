@@ -59,6 +59,7 @@ import {
   setVerifiedServerRoleForUid,
 } from './authManager.ts';
 import { SessionManager } from './sessionManager.ts';
+import { SystemAuditLogger } from './systemAuditLogger.ts';
 
 export const AVATAR_LIMITS = {
   MAX_FILE_SIZE_BYTES: 5 * 1024 * 1024, // 5 MiB (5,242,880 bytes)
@@ -107,7 +108,173 @@ export interface AvatarCatalogItem {
   createdAtMs: number;
   updatedAtMs: number;
   updatedBy: string;
+  isStaticPublicAsset?: boolean;
 }
+
+/**
+ * M7.5.1 PHẦN 3.3: 11 file Avatar tĩnh bắt buộc trong `public/avatar/` (`ava01.png` .. `ava11.png`).
+ */
+export const STATIC_PUBLIC_AVATAR_CATALOG: readonly AvatarCatalogItem[] = [
+  {
+    avatarId: 'ava01',
+    name: 'Chiến Binh 01',
+    storagePath: './avatar/ava01.png',
+    contentType: 'image/png',
+    fileSize: 806035,
+    version: 1,
+    sortOrder: 1,
+    isActive: true,
+    createdAtMs: 1_760_000_000_000,
+    updatedAtMs: 1_760_000_000_000,
+    updatedBy: SUPER_ADMIN_EMAIL,
+    isStaticPublicAsset: true,
+  },
+  {
+    avatarId: 'ava02',
+    name: 'Chiến Binh 02',
+    storagePath: './avatar/ava02.png',
+    contentType: 'image/png',
+    fileSize: 896815,
+    version: 1,
+    sortOrder: 2,
+    isActive: true,
+    createdAtMs: 1_760_000_000_000,
+    updatedAtMs: 1_760_000_000_000,
+    updatedBy: SUPER_ADMIN_EMAIL,
+    isStaticPublicAsset: true,
+  },
+  {
+    avatarId: 'ava03',
+    name: 'Chiến Binh 03',
+    storagePath: './avatar/ava03.png',
+    contentType: 'image/png',
+    fileSize: 851610,
+    version: 1,
+    sortOrder: 3,
+    isActive: true,
+    createdAtMs: 1_760_000_000_000,
+    updatedAtMs: 1_760_000_000_000,
+    updatedBy: SUPER_ADMIN_EMAIL,
+    isStaticPublicAsset: true,
+  },
+  {
+    avatarId: 'ava04',
+    name: 'Chiến Binh 04',
+    storagePath: './avatar/ava04.png',
+    contentType: 'image/png',
+    fileSize: 899193,
+    version: 1,
+    sortOrder: 4,
+    isActive: true,
+    createdAtMs: 1_760_000_000_000,
+    updatedAtMs: 1_760_000_000_000,
+    updatedBy: SUPER_ADMIN_EMAIL,
+    isStaticPublicAsset: true,
+  },
+  {
+    avatarId: 'ava05',
+    name: 'Chiến Binh 05',
+    storagePath: './avatar/ava05.png',
+    contentType: 'image/png',
+    fileSize: 840519,
+    version: 1,
+    sortOrder: 5,
+    isActive: true,
+    createdAtMs: 1_760_000_000_000,
+    updatedAtMs: 1_760_000_000_000,
+    updatedBy: SUPER_ADMIN_EMAIL,
+    isStaticPublicAsset: true,
+  },
+  {
+    avatarId: 'ava06',
+    name: 'Chiến Binh 06',
+    storagePath: './avatar/ava06.png',
+    contentType: 'image/png',
+    fileSize: 902495,
+    version: 1,
+    sortOrder: 6,
+    isActive: true,
+    createdAtMs: 1_760_000_000_000,
+    updatedAtMs: 1_760_000_000_000,
+    updatedBy: SUPER_ADMIN_EMAIL,
+    isStaticPublicAsset: true,
+  },
+  {
+    avatarId: 'ava07',
+    name: 'Chiến Binh 07',
+    storagePath: './avatar/ava07.png',
+    contentType: 'image/png',
+    fileSize: 874837,
+    version: 1,
+    sortOrder: 7,
+    isActive: true,
+    createdAtMs: 1_760_000_000_000,
+    updatedAtMs: 1_760_000_000_000,
+    updatedBy: SUPER_ADMIN_EMAIL,
+    isStaticPublicAsset: true,
+  },
+  {
+    avatarId: 'ava08',
+    name: 'Chiến Binh 08',
+    storagePath: './avatar/ava08.png',
+    contentType: 'image/png',
+    fileSize: 850036,
+    version: 1,
+    sortOrder: 8,
+    isActive: true,
+    createdAtMs: 1_760_000_000_000,
+    updatedAtMs: 1_760_000_000_000,
+    updatedBy: SUPER_ADMIN_EMAIL,
+    isStaticPublicAsset: true,
+  },
+  {
+    avatarId: 'ava09',
+    name: 'Chiến Binh 09',
+    storagePath: './avatar/ava09.png',
+    contentType: 'image/png',
+    fileSize: 853939,
+    version: 1,
+    sortOrder: 9,
+    isActive: true,
+    createdAtMs: 1_760_000_000_000,
+    updatedAtMs: 1_760_000_000_000,
+    updatedBy: SUPER_ADMIN_EMAIL,
+    isStaticPublicAsset: true,
+  },
+  {
+    avatarId: 'ava10',
+    name: 'Chiến Binh 10',
+    storagePath: './avatar/ava10.png',
+    contentType: 'image/png',
+    fileSize: 924098,
+    version: 1,
+    sortOrder: 10,
+    isActive: true,
+    createdAtMs: 1_760_000_000_000,
+    updatedAtMs: 1_760_000_000_000,
+    updatedBy: SUPER_ADMIN_EMAIL,
+    isStaticPublicAsset: true,
+  },
+  {
+    avatarId: 'ava11',
+    name: 'Chiến Binh 11',
+    storagePath: './avatar/ava11.png',
+    contentType: 'image/png',
+    fileSize: 744019,
+    version: 1,
+    sortOrder: 11,
+    isActive: true,
+    createdAtMs: 1_760_000_000_000,
+    updatedAtMs: 1_760_000_000_000,
+    updatedBy: SUPER_ADMIN_EMAIL,
+    isStaticPublicAsset: true,
+  },
+] as const;
+
+const STATIC_AVATAR_BY_ID = new Map<string, AvatarCatalogItem>(
+  STATIC_PUBLIC_AVATAR_CATALOG.map((item) => [item.avatarId, item])
+);
+const LOCAL_AVATAR_CHOICE_PREFIX = 'bantank_m751_user_avatar_v1_';
 
 export interface UserProfileAvatarMetadata {
   uid: string;
@@ -3736,19 +3903,85 @@ export class AvatarManager {
   private listeners = new Set<AvatarListener>();
 
   public constructor() {
-    // Đồng bộ lịch sử version & pending upload giữa nhiều tab trình duyệt (M7.3.7 Mục II.1.1)
+    this.seedStaticPublicAvatars();
     if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
       window.addEventListener('storage', (ev) => {
         if (
           !ev.key ||
           ev.key === 'bantank_m7_3_5_5_pending_uploads_v1' ||
-          ev.key === 'bantank_m7_3_5_5_used_paths_v1'
+          ev.key === 'bantank_m7_3_5_5_used_paths_v1' ||
+          ev.key.startsWith(LOCAL_AVATAR_CHOICE_PREFIX)
         ) {
           void this.syncVersionAndPathHistoryFromAllSources().then(() => {
             this.notify();
           });
         }
       });
+    }
+  }
+
+  private seedStaticPublicAvatars(): void {
+    for (const staticItem of STATIC_PUBLIC_AVATAR_CATALOG) {
+      this.resolvedStorageUrls.set(staticItem.storagePath, staticItem.storagePath);
+      if (!this.catalogItems.some((c) => c.avatarId === staticItem.avatarId)) {
+        this.catalogItems.push({ ...staticItem });
+      }
+    }
+    this.catalogItems.sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.avatarId.localeCompare(b.avatarId)
+    );
+  }
+
+  private loadPersistedUserAvatarChoice(
+    uid: string
+  ): { avatarType: PlayerAvatarType; avatarId: string | null; updatedAtMs: number } | null {
+    if (!uid || typeof window === 'undefined' || !window.localStorage) return null;
+    try {
+      const raw = window.localStorage.getItem(`${LOCAL_AVATAR_CHOICE_PREFIX}${uid}`);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as {
+        avatarType?: string;
+        avatarId?: string | null;
+        updatedAtMs?: number;
+      };
+      if (parsed.avatarType === 'google') {
+        return {
+          avatarType: 'google',
+          avatarId: null,
+          updatedAtMs: Number(parsed.updatedAtMs || 0),
+        };
+      }
+      if (
+        parsed.avatarType === 'catalog' &&
+        typeof parsed.avatarId === 'string' &&
+        STATIC_AVATAR_BY_ID.has(parsed.avatarId)
+      ) {
+        return {
+          avatarType: 'catalog',
+          avatarId: parsed.avatarId,
+          updatedAtMs: Number(parsed.updatedAtMs || 0),
+        };
+      }
+    } catch {
+      // Ignore parse errors
+    }
+    return null;
+  }
+
+  private savePersistedUserAvatarChoice(
+    uid: string,
+    avatarType: PlayerAvatarType,
+    avatarId: string | null,
+    updatedAtMs: number
+  ): void {
+    if (!uid || typeof window === 'undefined' || !window.localStorage) return;
+    try {
+      window.localStorage.setItem(
+        `${LOCAL_AVATAR_CHOICE_PREFIX}${uid}`,
+        JSON.stringify({ avatarType, avatarId, updatedAtMs })
+      );
+    } catch {
+      // Ignore quota errors
     }
   }
 
@@ -4201,6 +4434,9 @@ export class AvatarManager {
     if (!storagePath || this.failedStoragePaths.has(storagePath)) {
       return null;
     }
+    if (storagePath.startsWith('./avatar/')) {
+      return storagePath;
+    }
     const currentUser = AuthManager.getInstance().getCurrentUser();
     if (!currentUser || !validatePersonalGmailUser(currentUser).isValid) {
       return null;
@@ -4214,6 +4450,7 @@ export class AvatarManager {
   }
 
   public isCatalogItemUrlLoading(storagePath: string): boolean {
+    if (storagePath && storagePath.startsWith('./avatar/')) return false;
     return Boolean(storagePath && this.inflightUrlFetches.has(storagePath));
   }
 
@@ -4221,21 +4458,13 @@ export class AvatarManager {
     return Boolean(storagePath && this.failedStoragePaths.has(storagePath));
   }
 
-  /**
-   * Giải mã `storagePath` sang URL hiển thị (M7.3.5.3 Mục IV):
-   * - Tuyệt đối không lưu `downloadURL` hoặc token trong Firestore hay `localStorage`.
-   * - Không coi URL token là cơ chế xác thực Firebase.
-   * - Hai chế độ rõ ràng:
-   *   1. `STRICT_BLOB`: Chỉ tải trực tiếp qua Firebase Storage SDK (`getBlob(fileRef)`), yêu cầu CORS trên bucket.
-   *      Mọi lượt tải bytes đều được kiểm tra bởi `allow get` trong `storage.rules`. Nếu `getBlob` thất bại, KHÔNG fallback sang download URL.
-   *   2. `COMPAT_DOWNLOAD_URL` (mặc định hiện tại để không làm hỏng hiển thị ảnh trên PC, điện thoại, tablet khi chưa bật CORS Production):
-   *      Cho phép sử dụng `getDownloadURL(fileRef)` (hoặc fallback khi `getBlob` bị chặn CORS).
-   *      Ghi chú bảo mật: `COMPAT_DOWNLOAD_URL` có mức bảo mật thấp hơn `STRICT_BLOB` vì các lượt tải bytes qua download URL
-   *      chứa capability token không được Firebase Storage Rules đánh giá lại.
-   */
   private async resolveStoragePathToUrl(storagePath: string): Promise<string | null> {
     if (!storagePath || this.failedStoragePaths.has(storagePath)) {
       return null;
+    }
+    if (storagePath.startsWith('./avatar/')) {
+      this.resolvedStorageUrls.set(storagePath, storagePath);
+      return storagePath;
     }
     const currentUser = AuthManager.getInstance().getCurrentUser();
     if (!currentUser || !validatePersonalGmailUser(currentUser).isValid) {
@@ -4391,14 +4620,24 @@ export class AvatarManager {
           }
         });
 
-        items.sort((a, b) => a.sortOrder - b.sortOrder || a.avatarId.localeCompare(b.avatarId));
-        this.catalogItems = items;
-        // M7.3.5.5 Mục III.B2: Tổng hợp lịch sử version và đường dẫn từ cả 3 nguồn
+        const mergedById = new Map<string, AvatarCatalogItem>();
+        for (const staticItem of STATIC_PUBLIC_AVATAR_CATALOG) {
+          mergedById.set(staticItem.avatarId, { ...staticItem });
+        }
+        for (const remoteItem of items) {
+          if (!mergedById.has(remoteItem.avatarId)) {
+            mergedById.set(remoteItem.avatarId, remoteItem);
+          }
+        }
+        const mergedList = Array.from(mergedById.values()).sort(
+          (a, b) => a.sortOrder - b.sortOrder || a.avatarId.localeCompare(b.avatarId)
+        );
+        this.catalogItems = mergedList;
         void this.syncVersionAndPathHistoryFromAllSources(items);
         this.notify();
       },
       () => {
-        // Không văng lỗi ra giao diện nếu chưa có quyền đọc
+        this.seedStaticPublicAvatars();
       }
     );
   }
@@ -4415,6 +4654,7 @@ export class AvatarManager {
     this.subscribedCatalogAuthUid = null;
     this.urlCache.revokeAll();
     this.resolvedStorageUrls.clear();
+    this.seedStaticPublicAvatars();
   }
 
   public observeUserMetadata(uid: string | null | undefined): void {
@@ -4558,21 +4798,35 @@ export class AvatarManager {
 
   public getUserMetadata(uid: string | null | undefined): UserProfileAvatarMetadata | null {
     if (!uid) return null;
-    return this.userMetadataCache.get(uid) ?? null;
+    const cached = this.userMetadataCache.get(uid) ?? null;
+    const localChoice = this.loadPersistedUserAvatarChoice(uid);
+    if (localChoice && (!cached || localChoice.updatedAtMs >= cached.avatarUpdatedAtMs)) {
+      const merged: UserProfileAvatarMetadata = {
+        uid,
+        displayName: cached?.displayName ?? null,
+        avatarType: localChoice.avatarType,
+        avatarId: localChoice.avatarId,
+        avatarUpdatedAtMs: localChoice.updatedAtMs,
+      };
+      this.userMetadataCache.set(uid, merged);
+      return merged;
+    }
+    return cached;
   }
 
   /**
    * Trả về URL hiển thị avatar hiệu lực cho người chơi (Menu chính, Hồ sơ chỉ huy, Lobby Co-op Online):
-   * - Tự động fallback về `photoURL` của Google nếu avatar danh mục bị ẩn (`isActive == false`) hoặc lỗi tải ảnh.
+   * - Ưu tiên lựa chọn Avatar tĩnh (`./avatar/ava01.png` .. `./avatar/ava11.png`) hoặc Ảnh Google của đúng `uid`.
    */
   public getEffectiveAvatarUrl(
     uid: string | null | undefined,
     fallbackPhotoUrl?: string | null
   ): string | null {
+    this.seedStaticPublicAvatars();
     if (uid) {
       this.ensureUserAvatarSubscribed(uid);
     }
-    const meta = uid ? this.userMetadataCache.get(uid) ?? null : null;
+    const meta = uid ? this.getUserMetadata(uid) : null;
     return resolvePlayerAvatarUrl({
       uid,
       userMeta: meta,
@@ -4728,13 +4982,24 @@ export class AvatarManager {
           ? verifiedData.displayName.trim()
           : existingMeta?.displayName ?? currentUser.displayName ?? null;
 
+      const nowMs = Date.now();
+      this.savePersistedUserAvatarChoice(currentUser.uid, 'google', null, nowMs);
       this.lastFirestoreDiagnostic = null;
       this.userMetadataCache.set(currentUser.uid, {
         uid: currentUser.uid,
         displayName: verifiedDisplayName,
         avatarType: 'google',
         avatarId: null,
-        avatarUpdatedAtMs: Date.now(),
+        avatarUpdatedAtMs: nowMs,
+      });
+      SystemAuditLogger.getInstance().recordEvent({
+        severity: 'INFO',
+        category: 'CLIENT_LIFECYCLE',
+        eventType: 'AVATAR_CHANGED',
+        message: 'Người chơi chuyển ảnh đại diện về Ảnh Google.',
+        uid: currentUser.uid,
+        source: 'AvatarManager.selectGoogleAvatar',
+        outcome: 'SUCCESS',
       });
       this.notify();
       return {
@@ -4760,13 +5025,12 @@ export class AvatarManager {
   }
 
   /**
-   * Người chơi chọn một avatar đang hoạt động (`isActive === true`) trong Danh mục Avatar chung.
-   * Tách biệt với quyền chỉnh `displayName` và bảo đảm UID bất biến (M7.3.5.3 Mục V & M7.3.6 Mục III):
-   * chỉ ghi `['avatarType', 'avatarId', 'avatarUpdatedAt']` qua `setDoc(..., payload, { merge: true })`
-   * để không đưa `uid` vào `affectedKeys()` và không tự ý thêm `uid` vào hồ sơ cũ không có trường `uid`.
-   * Chỉ báo thành công sau khi đọc lại từ Firestore (`getDoc`) xác nhận lưu thành công.
+   * Người chơi chọn một avatar đang hoạt động (`ava01`..`ava11` trong `public/avatar/` hoặc mục catalog đang active).
+   * Lưu gắn chặt theo `uid` và đồng bộ lên `/users/{uid}` nếu tài liệu `/avatar_catalog/{avatarId}` tồn tại trên Firestore
+   * (tương thích 100% với `firestore.rules` đang đóng băng trong M7.5.1).
    */
   public async selectCatalogAvatar(avatarId: string): Promise<AvatarOperationResult> {
+    this.seedStaticPublicAvatars();
     const auth = AuthManager.getInstance();
     const currentUser = auth.getCurrentUser();
     if (!currentUser || !validatePersonalGmailUser(currentUser).isValid) {
@@ -4804,6 +5068,62 @@ export class AvatarManager {
       };
     }
 
+    const nowMs = Date.now();
+    const existingMeta = this.getUserMetadata(currentUser.uid);
+
+    // Nếu là 1 trong 11 Avatar tĩnh trong public/avatar/ (ava01..ava11):
+    // Lưu ngay theo UID và chỉ ghi Firestore nếu /avatar_catalog/{cleanId} đã được khai báo trên Firestore.
+    if (targetItem.isStaticPublicAsset || STATIC_AVATAR_BY_ID.has(cleanId)) {
+      this.savePersistedUserAvatarChoice(currentUser.uid, 'catalog', cleanId, nowMs);
+      this.lastFirestoreDiagnostic = null;
+      this.userMetadataCache.set(currentUser.uid, {
+        uid: currentUser.uid,
+        displayName: existingMeta?.displayName ?? currentUser.displayName ?? null,
+        avatarType: 'catalog',
+        avatarId: cleanId,
+        avatarUpdatedAtMs: nowMs,
+      });
+
+      const db = getFirebaseDb();
+      if (db) {
+        try {
+          const catSnap = await getDoc(doc(db, 'avatar_catalog', cleanId));
+          if (catSnap.exists() && catSnap.data()?.isActive === true) {
+            await setDoc(
+              doc(db, 'users', currentUser.uid),
+              {
+                avatarType: 'catalog',
+                avatarId: cleanId,
+                avatarUpdatedAt: serverTimestamp(),
+              },
+              { merge: true }
+            );
+          }
+        } catch {
+          // Bỏ qua lỗi ghi phụ nếu /avatar_catalog/{cleanId} chưa có trên Production Firestore
+        }
+      }
+
+      SystemAuditLogger.getInstance().recordEvent({
+        severity: 'INFO',
+        category: 'CLIENT_LIFECYCLE',
+        eventType: 'AVATAR_CHANGED',
+        message: `Người chơi chọn Avatar tĩnh ${cleanId} (${targetItem.storagePath}).`,
+        uid: currentUser.uid,
+        source: 'AvatarManager.selectCatalogAvatar',
+        outcome: 'SUCCESS',
+        metadata: { avatarId: cleanId, storagePath: targetItem.storagePath },
+      });
+
+      this.notify();
+      return {
+        success: true,
+        avatarType: 'catalog',
+        avatarId: cleanId,
+        avatarUrl: targetItem.storagePath,
+      };
+    }
+
     const db = getFirebaseDb();
     if (!db) {
       this.recordFirestoreDiagnostic(
@@ -4819,7 +5139,6 @@ export class AvatarManager {
       };
     }
 
-    const existingMeta = this.userMetadataCache.get(currentUser.uid);
     const userDocPath = `/users/${currentUser.uid}`;
     const userRef = doc(db, 'users', currentUser.uid);
     const payload: Record<string, unknown> = {
@@ -4984,99 +5303,20 @@ export class AvatarManager {
   // ==========================================================================
 
   /**
-   * Bước 1 (Super Admin): Chọn file ảnh từ thiết bị, kiểm tra định dạng JPEG/PNG/WebP,
-   * dung lượng <= 5 MB, magic bytes, giải mã thử bằng `createImageBitmap` (<= 2048x2048 px)
-   * và tạo URL xem trước cục bộ trước khi upload.
+   * M7.5.1 PHẦN 2: Gỡ và chặn toàn bộ luồng upload / thay thế / xóa file Avatar từ trình duyệt.
+   * Không cho phép tải file mới lên Firebase Storage và không xóa dữ liệu đang có trên Storage.
    */
   public async stageCatalogAvatarFileForAdmin(
-    file: File
+    _file: File
   ): Promise<AvatarOperationResult & { staged?: StagedCatalogAvatarFile; error?: string }> {
-    if (!isSuperAdminUser(AuthManager.getInstance().getCurrentUser())) {
-      const msg = `Chỉ Admin duy nhất (${SUPER_ADMIN_EMAIL}) mới có quyền quản trị danh mục avatar.`;
-      return {
-        success: false,
-        errorCode: 'NOT_SUPER_ADMIN',
-        error: msg,
-        message: msg,
-      };
-    }
-
-    try {
-      const arrayBuffer = await file.arrayBuffer();
-      const validation = validateCatalogAvatarFileClientSide({
-        fileName: file.name,
-        mimeType: file.type,
-        sizeBytes: file.size,
-        arrayBuffer,
-      });
-
-      if (!validation.valid || !validation.contentType || !validation.format) {
-        const msg = validation.errorMessage || 'File ảnh không hợp lệ.';
-        return {
-          success: false,
-          errorCode: validation.errorCode || 'INVALID_FILE',
-          error: msg,
-          message: msg,
-        };
-      }
-
-      const bitmapResult = await decodeAndVerifyAvatarBitmapInBrowser(
-        arrayBuffer,
-        validation.contentType
-      );
-      if (!bitmapResult.valid) {
-        const msg = bitmapResult.errorMessage || 'Không thể giải mã hình ảnh.';
-        return {
-          success: false,
-          errorCode: 'BITMAP_DECODE_FAILED',
-          error: msg,
-          message: msg,
-        };
-      }
-
-      this.clearStagedCatalogFile();
-
-      let previewObjectUrl: string | null = null;
-      if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
-        try {
-          const blob = new Blob([arrayBuffer], { type: validation.contentType });
-          previewObjectUrl = URL.createObjectURL(blob);
-        } catch {
-          previewObjectUrl = null;
-        }
-      }
-
-      const stagedObj: StagedCatalogAvatarFile = {
-        fileName: file.name,
-        sanitizedFileName: generateUniqueCatalogFileName(file.name, validation.contentType),
-        contentType: validation.contentType,
-        format: validation.format,
-        sizeBytes: validation.sizeBytes,
-        width: bitmapResult.width,
-        height: bitmapResult.height,
-        totalPixels: bitmapResult.width * bitmapResult.height,
-        arrayBuffer,
-        previewObjectUrl,
-      };
-      this.stagedCatalogFile = stagedObj;
-      this.notify();
-
-      return {
-        success: true,
-        staged: stagedObj,
-        message: `Hợp lệ: ${validation.format} • ${bitmapResult.width}×${bitmapResult.height}px • ${(
-          validation.sizeBytes / 1024
-        ).toFixed(1)} KB. Sẵn sàng tải lên Firebase Storage.`,
-      };
-    } catch {
-      const msg = 'Không thể đọc dữ liệu file ảnh từ thiết bị.';
-      return {
-        success: false,
-        errorCode: 'READ_FILE_ERROR',
-        error: msg,
-        message: msg,
-      };
-    }
+    const msg =
+      'Chức năng tải file Avatar lên từ trình duyệt đã bị vô hiệu hóa (M7.5.1). Hệ thống sử dụng 11 Avatar tĩnh trong public/avatar/.';
+    return {
+      success: false,
+      errorCode: 'STATIC_AVATAR_ONLY',
+      error: msg,
+      message: msg,
+    };
   }
 
   public async stageCatalogAvatarFile(
@@ -5089,7 +5329,7 @@ export class AvatarManager {
     this.cancelCurrentUpload();
   }
 
-  public async uploadStagedCatalogAvatar(params: {
+  public async uploadStagedCatalogAvatar(_params: {
     name: string;
     sortOrder: number;
     isActive: boolean;
@@ -5097,783 +5337,51 @@ export class AvatarManager {
     avatarId?: string;
     applyToSuperAdminProfile?: boolean;
   }): Promise<AvatarOperationResult> {
-    // M7.3.7 Mục II.1.3: Nếu có bản ghi upload bị gián đoạn (UPLOAD_INDETERMINATE) và người dùng
-    // chọn file tải lên lại, tự động kế thừa avatarId của bản ghi gián đoạn để tạo phiên bản kế tiếp (v2, v3...)
-    // thay vì bị kẹt ở v1.
-    const activePending = this.getPendingMetadataSync();
-    const isRecoveringIndeterminate = Boolean(
-      activePending &&
-        activePending.status === 'UPLOAD_INDETERMINATE' &&
-        (!params.replaceAvatarId || params.replaceAvatarId.trim() === activePending.avatarId)
-    );
-
-    if (isRecoveringIndeterminate && activePending) {
-      this.usedOrIndeterminateStoragePaths.add(activePending.storagePath);
-      const prevVer = this.highestKnownVersionByAvatarId.get(activePending.avatarId) ?? 0;
-      if (activePending.version > prevVer) {
-        this.highestKnownVersionByAvatarId.set(activePending.avatarId, activePending.version);
-      }
-      try {
-        await this.persistentPendingStore.recordUsedOrIndeterminatePath({
-          storagePath: activePending.storagePath,
-          avatarId: activePending.avatarId,
-          version: activePending.version,
-          uploadOperationId: activePending.uploadOperationId,
-          recordedAt: activePending.createdAt,
-        });
-      } catch {
-        // Ignore
-      }
-    }
-
-    const derivedId =
-      (params.replaceAvatarId && params.replaceAvatarId.trim()) ||
-      (params.avatarId && params.avatarId.trim()) ||
-      (isRecoveringIndeterminate && activePending ? activePending.avatarId : '') ||
-      `tank_${Date.now().toString(36)}`;
-
-    const derivedName =
-      (params.name && params.name.trim()) ||
-      (isRecoveringIndeterminate && activePending ? activePending.name : '');
-
-    return this.adminUploadStagedCatalogAvatar({
-      avatarId: derivedId,
-      name: derivedName,
-      sortOrder: params.sortOrder,
-      isActive: params.isActive,
-      applyToSuperAdminProfile: params.applyToSuperAdminProfile,
-    });
+    return {
+      success: false,
+      errorCode: 'STATIC_AVATAR_ONLY',
+      message:
+        'Chức năng tải file Avatar lên Firebase Storage đã bị vô hiệu hóa (M7.5.1). Hệ thống sử dụng 11 Avatar tĩnh trong public/avatar/.',
+    };
   }
 
-  /**
-   * M7.3.9 Mục 1: Tải ảnh đại diện trực tiếp từ thiết bị cho Super Admin (`linhnk.online@gmail.com`)
-   * và áp dụng ngay làm ảnh đại diện cá nhân của Super Admin.
-   * - Kiểm tra định dạng (JPEG/PNG/WebP), dung lượng (<= 5MB), kích thước pixel và quyền Super Admin.
-   * - Tải lên Firebase Storage, lấy URL hiển thị, lưu metadata vào Firestore `/avatar_catalog/{avatarId}`
-   *   và cập nhật `/users/{uid}` của Super Admin.
-   * - Nếu xảy ra lỗi ở bất kỳ bước nào: giữ nguyên avatar cũ và trả về thông báo lỗi tiếng Việt rõ ràng.
-   */
   public async uploadAndApplySuperAdminAvatar(
-    file: File,
-    customDisplayName?: string
+    _file: File,
+    _customDisplayName?: string
   ): Promise<AvatarOperationResult> {
-    const auth = AuthManager.getInstance();
-    const currentUser = auth.getCurrentUser();
-    if (!currentUser || !isSuperAdminUser(currentUser)) {
-      return {
-        success: false,
-        errorCode: 'NOT_SUPER_ADMIN',
-        message: `Chỉ Admin duy nhất (${SUPER_ADMIN_EMAIL}) mới có quyền tải ảnh đại diện lên hệ thống.`,
-      };
-    }
-
-    // Lưu lại trạng thái avatar hiện tại của Super Admin để bảo toàn tuyệt đối nếu upload thất bại
-    const previousUserMeta = this.userMetadataCache.get(currentUser.uid)
-      ? { ...this.userMetadataCache.get(currentUser.uid)! }
-      : null;
-
-    const stageRes = await this.stageCatalogAvatarFileForAdmin(file);
-    if (!stageRes.success || !stageRes.staged) {
-      if (previousUserMeta) {
-        this.userMetadataCache.set(currentUser.uid, previousUserMeta);
-      }
-      return {
-        success: false,
-        errorCode: stageRes.errorCode || 'INVALID_FILE',
-        message: stageRes.message || stageRes.error || 'File ảnh không hợp lệ.',
-      };
-    }
-
-    const baseName =
-      (customDisplayName && customDisplayName.trim()) ||
-      file.name.replace(/\.[^.]+$/, '').replace(/[_-]+/g, ' ').trim() ||
-      'Avatar Super Admin';
-
-    const uploadRes = await this.uploadStagedCatalogAvatar({
-      name: baseName.slice(0, 60),
-      sortOrder: 0,
-      isActive: true,
-      applyToSuperAdminProfile: true,
-    });
-
-    if (!uploadRes.success) {
-      if (previousUserMeta) {
-        this.userMetadataCache.set(currentUser.uid, previousUserMeta);
-        this.notify();
-      }
-      return uploadRes;
-    }
-
-    return uploadRes;
+    return {
+      success: false,
+      errorCode: 'STATIC_AVATAR_ONLY',
+      message:
+        'Chức năng tải file Avatar lên Firebase Storage đã bị vô hiệu hóa (M7.5.1). Hệ thống sử dụng 11 Avatar tĩnh trong public/avatar/.',
+    };
   }
 
-  /**
-   * Bước 2 (Super Admin): Upload ảnh đã kiểm tra lên Firebase Storage (`avatar_catalog/{avatarId}/v{version}/{uuid_fileName}`)
-   * rồi ghi metadata vào Firestore (`/avatar_catalog/{avatarId}`) (M7.3.5.3, M7.3.5.5, M7.3.7 Mục II & M7.3.9 Mục 1):
-   * - Tổng hợp lịch sử `version` và `storagePath` từ cả 3 nguồn (Firestore catalog, pending records bền vững, used paths bền vững).
-   * - Cấp phát `storagePath` mới, duy nhất bằng `allocateUniqueCatalogStoragePath()` kèm tên file gắn UUID,
-   *   `uploadOperationId` (UUID duy nhất) và tăng `version` (`v{nextVersion}`).
-   * - Lưu và xác nhận bản ghi `UPLOAD_IN_PROGRESS` vào bộ nhớ bền vững (IndexedDB / localStorage) TRƯỚC KHI gọi `uploadBytesResumable`.
-   * - Ngay sau khi Storage hoàn tất tải lên, thực hiện xác minh 5 bước (`verifyStorageObjectBeforeMetadataActivation`)
-   *   trước khi chuyển sang `UPLOAD_CONFIRMED_METADATA_PENDING` và ghi Firestore metadata.
-   */
-  public async adminUploadStagedCatalogAvatar(params: {
+  public async adminUploadStagedCatalogAvatar(_params: {
     avatarId: string;
     name: string;
     sortOrder: number;
     isActive: boolean;
     applyToSuperAdminProfile?: boolean;
   }): Promise<AvatarOperationResult> {
-    const auth = AuthManager.getInstance();
-    const currentUser = auth.getCurrentUser();
-    if (!currentUser || !isSuperAdminUser(currentUser)) {
-      return {
-        success: false,
-        errorCode: 'NOT_SUPER_ADMIN',
-        message: `Chỉ Admin duy nhất (${SUPER_ADMIN_EMAIL}) được phép upload danh mục avatar.`,
-      };
-    }
-
-    if (this.isUploadingCatalog) {
-      return {
-        success: false,
-        errorCode: 'UPLOAD_IN_PROGRESS',
-        message: 'Đang có tiến trình upload ảnh khác, vui lòng chờ hoàn tất.',
-      };
-    }
-
-    const staged = this.stagedCatalogFile;
-    if (!staged) {
-      return {
-        success: false,
-        errorCode: 'NO_STAGED_FILE',
-        message: 'Vui lòng chọn một file ảnh hợp lệ trước khi tải lên.',
-      };
-    }
-
-    const cleanId = (params.avatarId || '')
-      .trim()
-      .replace(/[^A-Za-z0-9_-]+/g, '_')
-      .replace(/^_+|_+$/g, '')
-      .slice(0, 64);
-
-    if (!AVATAR_LIMITS.AVATAR_ID_REGEX.test(cleanId)) {
-      return {
-        success: false,
-        errorCode: 'INVALID_AVATAR_ID',
-        message: 'Mã Avatar (avatarId) chỉ được chứa chữ cái, chữ số, dấu gạch dưới (_) hoặc gạch ngang (-).',
-      };
-    }
-
-    const cleanName = (params.name || '').trim().slice(0, 80);
-    if (!cleanName) {
-      return {
-        success: false,
-        errorCode: 'INVALID_NAME',
-        message: 'Vui lòng nhập tên hiển thị cho avatar trong danh mục.',
-      };
-    }
-
-    const safeSortOrder = Math.max(0, Math.min(100_000, Math.floor(Number(params.sortOrder) || 0)));
-
-    const db = getFirebaseDb();
-    const storage = getFirebaseStorage();
-    if (!db || !storage) {
-      return {
-        success: false,
-        errorCode: 'FIREBASE_UNAVAILABLE',
-        message: 'Chưa khởi tạo được kết nối Firebase Storage hoặc Cloud Firestore.',
-      };
-    }
-
-    this.isUploadingCatalog = true;
-    this.uploadProgressPercent = 1;
-    this.uploadUiStatus = 'UPLOADING';
-    this.notify();
-
-    let uploadedStoragePath: string | null = null;
-    let allocatedStoragePath: string | null = null;
-    let inProgressRecord: PendingCatalogMetadataSync | null = null;
-
-    try {
-      // Kiểm tra tài liệu hiện có trong /avatar_catalog/{avatarId} để tăng version và tránh tái sử dụng path cũ
-      const docRef = doc(db, 'avatar_catalog', cleanId);
-      const existingSnap = await getDoc(docRef);
-      const isUpdate = existingSnap.exists();
-      const existingData = isUpdate ? existingSnap.data() : null;
-      const previousStoragePath =
-        existingData && typeof existingData.storagePath === 'string'
-          ? existingData.storagePath
-          : null;
-
-      // M7.3.5.5 & M7.3.7 Mục II.1.1: Tổng hợp lịch sử version và đường dẫn từ cả 3 nguồn trước khi cấp version mới
-      const extraCatalogRecords: Array<Record<string, unknown>> = [];
-      if (existingData) {
-        extraCatalogRecords.push({
-          ...existingData,
-          avatarId: cleanId,
-        });
-      }
-      await this.syncVersionAndPathHistoryFromAllSources(extraCatalogRecords);
-
-      const existingVer =
-        existingData && typeof existingData.version === 'number'
-          ? Math.floor(existingData.version)
-          : 0;
-      const highestKnownVer = this.highestKnownVersionByAvatarId.get(cleanId) ?? 0;
-
-      const allocated = allocateUniqueCatalogStoragePath({
-        avatarId: cleanId,
-        existingVersion: existingVer,
-        highestKnownVersion: highestKnownVer,
-        rawFileName: staged.fileName,
-        contentType: staged.contentType,
-        usedStoragePaths: this.usedOrIndeterminateStoragePaths,
-        useUuidFileName: true,
-      });
-      const nextVersion = allocated.version;
-      const storagePath = allocated.storagePath;
-      const allocatedFileName = allocated.fileName;
-      const uploadOperationId = generateCatalogFileUuid();
-      const nowMs = Date.now();
-      allocatedStoragePath = storagePath;
-
-      // Quy tắc 1: Lưu và xác nhận bản ghi pending (UPLOAD_IN_PROGRESS) vào bộ nhớ bền vững TRƯỚC KHI bắt đầu upload
-      inProgressRecord = {
-        ownerUid: currentUser.uid,
-        avatarId: cleanId,
-        name: cleanName,
-        storagePath,
-        fileName: allocatedFileName,
-        contentType: staged.contentType,
-        fileSize: staged.sizeBytes,
-        version: nextVersion,
-        sortOrder: safeSortOrder,
-        isActive: Boolean(params.isActive),
-        updatedBy: SUPER_ADMIN_EMAIL,
-        isUpdate,
-        uploadOperationId,
-        createdAt: nowMs,
-        status: 'UPLOAD_IN_PROGRESS',
-        failedAtMs: nowMs,
-        errorMessage: '',
-      };
-
-      try {
-        await this.persistentPendingStore.savePendingRecord(inProgressRecord);
-        await this.persistentPendingStore.recordUsedOrIndeterminatePath({
-          storagePath,
-          avatarId: cleanId,
-          version: nextVersion,
-          uploadOperationId,
-          recordedAt: nowMs,
-        });
-        const verifiedSaved = await this.persistentPendingStore.getPendingRecord(cleanId);
-        if (
-          !verifiedSaved ||
-          verifiedSaved.uploadOperationId !== uploadOperationId ||
-          verifiedSaved.storagePath !== storagePath ||
-          verifiedSaved.status !== 'UPLOAD_IN_PROGRESS'
-        ) {
-          throw new Error('Không xác nhận được bản ghi UPLOAD_IN_PROGRESS sau khi lưu.');
-        }
-      } catch (persistErr: any) {
-        this.uploadUiStatus = 'FAILED_NEEDS_NEW_VERSION';
-        return {
-          success: false,
-          errorCode: 'PENDING_STORE_WRITE_FAILED',
-          message: `Không thể ghi bản ghi phục hồi pending vào bộ nhớ bền vững trước khi upload (${
-            persistErr?.message || 'Lỗi lưu trữ cục bộ'
-          }). Đã dừng ngay trước khi tải ảnh lên Storage.`,
-        };
-      }
-
-      // Khóa ngay đường dẫn và version này trong bộ nhớ để không bao giờ tái sử dụng hoặc ghi đè
-      this.usedOrIndeterminateStoragePaths.add(storagePath);
-      this.highestKnownVersionByAvatarId.set(cleanId, Math.max(highestKnownVer, nextVersion));
-      this.pendingMetadataSync = inProgressRecord;
-      this.notify();
-
-      const fileRef = storageRef(storage, storagePath);
-      const blob = new Blob([staged.arrayBuffer], { type: staged.contentType });
-      const expectedCustomMetadata = {
-        uploadOperationId,
-        avatarId: cleanId,
-        version: String(nextVersion),
-        ownerUid: currentUser.uid,
-      };
-
-      const uploadTask = uploadBytesResumable(fileRef, blob, {
-        contentType: staged.contentType,
-        cacheControl: 'public, max-age=31536000, immutable',
-        customMetadata: expectedCustomMetadata,
-      });
-      this.currentUploadTask = uploadTask;
-
-      await new Promise<void>((resolve, reject) => {
-        uploadTask.on(
-          'state_changed',
-          (snapshot) => {
-            if (snapshot.totalBytes > 0) {
-              this.uploadProgressPercent = Math.max(
-                1,
-                Math.min(95, Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 95))
-              );
-              this.notify();
-            }
-          },
-          (error) => reject(error),
-          () => resolve()
-        );
-      });
-
-      this.uploadProgressPercent = 96;
-      this.uploadUiStatus = 'VERIFYING';
-      this.notify();
-
-      // M7.3.7 Mục II.1.2 & M7.3.9 Mục 1: Xác minh object trên Storage (ưu tiên getMetadata, fallback sang snapshot.metadata nếu getMetadata bị chặn CORS/Rules)
-      let uploadedMeta: {
-        size?: number;
-        contentType?: string | null;
-        customMetadata?: Record<string, string> | null;
-      } | null = null;
-      try {
-        uploadedMeta = await getMetadata(fileRef);
-      } catch {
-        const snapMeta = uploadTask.snapshot?.metadata;
-        if (snapMeta) {
-          uploadedMeta = {
-            size: typeof snapMeta.size === 'number' ? snapMeta.size : staged.sizeBytes,
-            contentType: snapMeta.contentType || staged.contentType,
-            customMetadata: snapMeta.customMetadata || expectedCustomMetadata,
-          };
-        }
-      }
-
-      const verifyCheck = verifyStorageObjectBeforeMetadataActivation({
-        storagePath,
-        expectedAvatarId: cleanId,
-        expectedVersion: nextVersion,
-        expectedUploadOperationId: uploadOperationId,
-        expectedFileSize: staged.sizeBytes,
-        expectedContentType: staged.contentType,
-        objectExists: Boolean(uploadedMeta),
-        actualSize: uploadedMeta?.size ?? staged.sizeBytes,
-        actualContentType: uploadedMeta?.contentType ?? staged.contentType,
-        customMetadata: uploadedMeta?.customMetadata ?? expectedCustomMetadata,
-        imageDecodable: staged.width > 0 && staged.height > 0,
-      });
-
-      if (!verifyCheck.verified) {
-        const failedVerifyRecord: PendingCatalogMetadataSync = {
-          ...inProgressRecord,
-          status: 'UPLOAD_INDETERMINATE',
-          failedAtMs: Date.now(),
-          errorMessage: verifyCheck.message,
-        };
-        await this.persistentPendingStore.savePendingRecord(failedVerifyRecord);
-        this.pendingMetadataSync = failedVerifyRecord;
-        this.uploadUiStatus = 'FAILED_NEEDS_NEW_VERSION';
-        this.notify();
-        return {
-          success: false,
-          avatarId: cleanId,
-          version: nextVersion,
-          storagePath,
-          pendingStatus: 'UPLOAD_INDETERMINATE',
-          errorCode: verifyCheck.reasonCode || 'STORAGE_VERIFY_FAILED',
-          message: `Xác minh ảnh sau upload không đạt (${verifyCheck.message}). Đã khóa v${nextVersion}; vui lòng chọn lại file để tải lên v${
-            nextVersion + 1
-          }.`,
-        };
-      }
-
-      uploadedStoragePath = storagePath;
-
-      // Quy tắc 2: Chỉ sau khi xác minh đầy đủ object trên Storage mới chuyển sang UPLOAD_CONFIRMED_METADATA_PENDING
-      const confirmedPendingRecord: PendingCatalogMetadataSync = {
-        ...inProgressRecord,
-        status: 'UPLOAD_CONFIRMED_METADATA_PENDING',
-        failedAtMs: Date.now(),
-        errorMessage: '',
-      };
-      await this.persistentPendingStore.savePendingRecord(confirmedPendingRecord);
-      this.pendingMetadataSync = confirmedPendingRecord;
-      this.notify();
-
-      // Ghi metadata vào Firestore /avatar_catalog/{avatarId}
-      const firestorePayload: Record<string, unknown> = {
-        avatarId: cleanId,
-        name: cleanName,
-        storagePath,
-        contentType: staged.contentType,
-        fileSize: staged.sizeBytes,
-        version: nextVersion,
-        sortOrder: safeSortOrder,
-        isActive: Boolean(params.isActive),
-        createdAt:
-          isUpdate && existingData?.createdAt ? existingData.createdAt : serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        updatedBy: SUPER_ADMIN_EMAIL,
-      };
-
-      try {
-        await setDoc(docRef, firestorePayload);
-      } catch (firestoreErr: any) {
-        const errMsg = firestoreErr?.message || String(firestoreErr);
-        if (firestoreErr?.code === 'permission-denied') {
-          try {
-            await deleteObject(fileRef);
-          } catch {
-            // Ignore cleanup failure
-          }
-          await this.persistentPendingStore.deletePendingRecord(cleanId);
-          this.pendingMetadataSync = null;
-          this.uploadUiStatus = 'FAILED_NEEDS_NEW_VERSION';
-          this.notify();
-          return {
-            success: false,
-            errorCode: 'FIRESTORE_PERMISSION_DENIED',
-            message:
-              'Firestore Security Rules từ chối ghi metadata /avatar_catalog. Đã thu hồi file vừa tải lên Storage.',
-          };
-        }
-
-        const failedSyncRecord: PendingCatalogMetadataSync = {
-          ...confirmedPendingRecord,
-          status: 'UPLOAD_CONFIRMED_METADATA_PENDING',
-          failedAtMs: Date.now(),
-          errorMessage: errMsg,
-        };
-        await this.persistentPendingStore.savePendingRecord(failedSyncRecord);
-        this.pendingMetadataSync = failedSyncRecord;
-        this.notify();
-        return {
-          success: false,
-          avatarId: cleanId,
-          version: nextVersion,
-          storagePath,
-          uploadOperationId,
-          pendingStatus: 'UPLOAD_CONFIRMED_METADATA_PENDING',
-          metadataSynced: false,
-          requiresMetadataRetry: true,
-          errorCode: 'FIRESTORE_SYNC_FAILED_AFTER_UPLOAD',
-          message:
-            'Đã tải ảnh và xác minh trên Firebase Storage thành công nhưng chưa ghi được metadata vào Firestore. Vui lòng bấm "Hoàn tất đồng bộ Metadata" (không cần upload lại ảnh).',
-        };
-      }
-
-      // Quy tắc 4: Chỉ xóa bản ghi pending khỏi bộ nhớ bền vững sau khi đọc lại từ Firestore và xác nhận khớp
-      const verifySnap = await getDoc(docRef);
-      const verifyData = verifySnap.exists() ? verifySnap.data() : null;
-      if (
-        verifyData &&
-        verifyData.avatarId === cleanId &&
-        verifyData.storagePath === storagePath &&
-        verifyData.version === nextVersion
-      ) {
-        await this.persistentPendingStore.deletePendingRecord(cleanId);
-        this.pendingMetadataSync = null;
-      }
-
-      if (previousStoragePath && previousStoragePath !== storagePath) {
-        try {
-          await deleteObject(storageRef(storage, previousStoragePath));
-          this.urlCache.revokePath(previousStoragePath);
-          this.resolvedStorageUrls.delete(previousStoragePath);
-        } catch {
-          // Ignore old file cleanup error
-        }
-      }
-
-      // M7.3.9 Mục 1: Cập nhật ngay danh mục trong bộ nhớ và lấy URL hiển thị để giao diện đổi ảnh tức thì
-      const newCatalogItem: AvatarCatalogItem = {
-        avatarId: cleanId,
-        name: cleanName,
-        storagePath,
-        contentType: staged.contentType,
-        fileSize: staged.sizeBytes,
-        version: nextVersion,
-        sortOrder: safeSortOrder,
-        isActive: Boolean(params.isActive),
-        createdAtMs: nowMs,
-        updatedAtMs: nowMs,
-        updatedBy: SUPER_ADMIN_EMAIL,
-      };
-      const existingCatalogIdx = this.catalogItems.findIndex((i) => i.avatarId === cleanId);
-      if (existingCatalogIdx >= 0) {
-        this.catalogItems[existingCatalogIdx] = newCatalogItem;
-      } else {
-        this.catalogItems.push(newCatalogItem);
-      }
-
-      let resolvedUrl = await this.resolveStoragePathToUrl(storagePath);
-      if (!resolvedUrl) {
-        try {
-          const directUrl = await getDownloadURL(fileRef);
-          if (directUrl) {
-            this.resolvedStorageUrls.set(storagePath, directUrl);
-            this.failedStoragePaths.delete(storagePath);
-            resolvedUrl = directUrl;
-          }
-        } catch {
-          // Ignore fallback error
-        }
-      }
-
-      this.clearStagedCatalogFile();
-
-      // Nếu avatar đang kích hoạt và được yêu cầu áp dụng cho hồ sơ Super Admin (mặc định true khi Super Admin tải ảnh mới)
-      const shouldApplyToProfile =
-        Boolean(params.isActive) && params.applyToSuperAdminProfile !== false;
-      if (shouldApplyToProfile) {
-        try {
-          await this.selectCatalogAvatar(cleanId);
-        } catch {
-          // Không làm hỏng kết quả upload catalog nếu cập nhật hồ sơ cá nhân gặp lỗi tạm thời
-        }
-      }
-
-      this.uploadProgressPercent = 100;
-      this.uploadUiStatus = 'SUCCESS';
-      this.notify();
-
-      return {
-        success: true,
-        avatarId: cleanId,
-        avatarType: shouldApplyToProfile ? 'catalog' : undefined,
-        avatarUrl: resolvedUrl,
-        version: nextVersion,
-        storagePath,
-        uploadOperationId,
-        metadataSynced: true,
-        message:
-          isUpdate || nextVersion > 1
-            ? `Đã tải lên và áp dụng ảnh đại diện "${cleanName}" (v${nextVersion}) thành công.`
-            : `Đã tải lên và áp dụng ảnh đại diện "${cleanName}" (v1) thành công.`,
-      };
-    } catch (err: any) {
-      const code = err?.code || '';
-      if (code === 'storage/canceled') {
-        if (inProgressRecord && !uploadedStoragePath) {
-          const indeterminateOnCancel: PendingCatalogMetadataSync = {
-            ...inProgressRecord,
-            status: 'UPLOAD_INDETERMINATE',
-            failedAtMs: Date.now(),
-            errorMessage: 'Tiến trình upload đã bị hủy giữa chừng (UPLOAD_INDETERMINATE).',
-          };
-          try {
-            await this.persistentPendingStore.savePendingRecord(indeterminateOnCancel);
-            this.pendingMetadataSync = indeterminateOnCancel;
-          } catch {
-            // Ignore
-          }
-        }
-        this.uploadUiStatus = 'INTERRUPTED';
-        return {
-          success: false,
-          errorCode: 'UPLOAD_CANCELED',
-          message: 'Đã hủy tiến trình tải ảnh lên Firebase Storage.',
-        };
-      }
-      if (code === 'storage/unauthorized' || code === 'permission-denied') {
-        if (inProgressRecord && !uploadedStoragePath) {
-          try {
-            await this.persistentPendingStore.deletePendingRecord(cleanId);
-            this.pendingMetadataSync = null;
-          } catch {
-            // Ignore
-          }
-        }
-        this.uploadUiStatus = 'FAILED_NEEDS_NEW_VERSION';
-        return {
-          success: false,
-          errorCode: 'STORAGE_PERMISSION_DENIED',
-          message:
-            'Firebase Storage từ chối quyền ghi (HTTP 403). Vui lòng kiểm tra tài khoản Super Admin hoặc quy tắc storage.rules trên Firebase Console.',
-        };
-      }
-
-      // Khi upload gặp lỗi mạng giữa chừng mà chưa xác nhận hoàn tất -> chuyển sang UPLOAD_INDETERMINATE
-      if (inProgressRecord && !uploadedStoragePath) {
-        const indeterminateRecord: PendingCatalogMetadataSync = {
-          ...inProgressRecord,
-          status: 'UPLOAD_INDETERMINATE',
-          failedAtMs: Date.now(),
-          errorMessage: `Upload v${inProgressRecord.version} bị gián đoạn (${code || err?.message || 'Lỗi kết nối'}). Đã khóa v${inProgressRecord.version}; chọn lại file để tải lên v${inProgressRecord.version + 1}.`,
-        };
-        try {
-          await this.persistentPendingStore.savePendingRecord(indeterminateRecord);
-          this.pendingMetadataSync = indeterminateRecord;
-        } catch {
-          // Ignore
-        }
-      }
-      this.uploadUiStatus = 'FAILED_NEEDS_NEW_VERSION';
-      return {
-        success: false,
-        avatarId: allocatedStoragePath ? cleanId : undefined,
-        storagePath: allocatedStoragePath ?? undefined,
-        pendingStatus: uploadedStoragePath
-          ? 'UPLOAD_CONFIRMED_METADATA_PENDING'
-          : 'UPLOAD_INDETERMINATE',
-        errorCode: code || 'STORAGE_UPLOAD_ERROR',
-        message: `Không thể tải ảnh lên Firebase Storage (${code || err?.message || 'Lỗi kết nối'}). Phiên bản cũ đã được khóa an toàn; vui lòng chọn file để tải lên phiên bản kế tiếp.`,
-      };
-    } finally {
-      this.currentUploadTask = null;
-      this.isUploadingCatalog = false;
-      this.uploadProgressPercent = 0;
-      this.notify();
-    }
+    return {
+      success: false,
+      errorCode: 'STATIC_AVATAR_ONLY',
+      message:
+        'Chức năng tải file Avatar lên Firebase Storage đã bị vô hiệu hóa (M7.5.1). Hệ thống sử dụng 11 Avatar tĩnh trong public/avatar/.',
+    };
   }
 
-  /**
-   * Đồng bộ lại metadata Firestore cho file đã upload thành công lên Storage trước đó (M7.3.5.5 Mục III.B2):
-   * - Kiểm tra `ownerUid === currentUser.uid`.
-   * - Chỉ cho phép retry khi `pending.status === 'UPLOAD_CONFIRMED_METADATA_PENDING'`
-   *   (không cho phép tạo metadata catalog cho object `UPLOAD_INDETERMINATE` chưa xác minh).
-   * - Chỉ gọi `setDoc` trên Firestore với `storagePath` đã tạo, không gọi `uploadBytes` lại.
-   * - Chỉ xóa bản ghi pending khỏi bộ nhớ bền vững sau khi đọc lại (`getDoc`) từ Firestore và xác nhận khớp.
-   */
   public async retryPendingCatalogMetadataSync(): Promise<AvatarOperationResult> {
-    const currentUser = AuthManager.getInstance().getCurrentUser();
-    if (!currentUser || !AuthManager.getInstance().isSuperAdmin()) {
-      return {
-        success: false,
-        errorCode: 'NOT_SUPER_ADMIN',
-        message: 'Chỉ Super Admin được phép thực hiện thao tác này.',
-      };
-    }
-
-    if (!this.pendingMetadataSync) {
-      await this.recoverPendingUploadsOnStartup();
-    }
-
-    const pending = this.pendingMetadataSync;
-    if (!pending) {
-      return {
-        success: false,
-        errorCode: 'NO_PENDING_SYNC',
-        message: 'Không có metadata chờ đồng bộ lại.',
-      };
-    }
-
-    if (pending.ownerUid !== currentUser.uid) {
-      return {
-        success: false,
-        errorCode: 'PENDING_OWNER_MISMATCH',
-        message:
-          'Tài khoản hiện tại không khớp với ownerUid của bản ghi pending. Không được phép thực hiện retry.',
-      };
-    }
-
-    if (pending.status !== 'UPLOAD_CONFIRMED_METADATA_PENDING') {
-      return {
-        success: false,
-        avatarId: pending.avatarId,
-        version: pending.version,
-        storagePath: pending.storagePath,
-        pendingStatus: pending.status,
-        errorCode: 'PENDING_UPLOAD_NOT_CONFIRMED',
-        message:
-          'Bản ghi upload trước đó bị ngắt giữa chừng (UPLOAD_INDETERMINATE) và không xác minh được object hoàn chỉnh trên Storage. Vui lòng chọn ảnh để tải lên mới (hệ thống sẽ tự động cấp version + 1).',
-      };
-    }
-
-    const db = getFirebaseDb();
-    if (!db) {
-      return {
-        success: false,
-        errorCode: 'FIRESTORE_UNAVAILABLE',
-        message: 'Chưa kết nối được dịch vụ Cloud Firestore.',
-      };
-    }
-
-    try {
-      const docRef = doc(db, 'avatar_catalog', pending.avatarId);
-      const existingSnap = await getDoc(docRef);
-      const existingData = existingSnap.exists() ? existingSnap.data() : null;
-
-      await setDoc(docRef, {
-        avatarId: pending.avatarId,
-        name: pending.name,
-        storagePath: pending.storagePath,
-        contentType: pending.contentType,
-        fileSize: pending.fileSize,
-        version: pending.version,
-        sortOrder: pending.sortOrder,
-        isActive: pending.isActive,
-        createdAt:
-          existingData && existingData.createdAt ? existingData.createdAt : serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        updatedBy: SUPER_ADMIN_EMAIL,
-      });
-
-      // Quy tắc 4: Đọc lại từ Firestore và xác nhận khớp với bản ghi vừa ghi trước khi xóa bản ghi pending bền vững
-      const verifySnap = await getDoc(docRef);
-      const verifyData = verifySnap.exists() ? verifySnap.data() : null;
-      if (
-        !verifyData ||
-        verifyData.avatarId !== pending.avatarId ||
-        verifyData.storagePath !== pending.storagePath ||
-        verifyData.version !== pending.version
-      ) {
-        return {
-          success: false,
-          errorCode: 'FIRESTORE_READBACK_MISMATCH',
-          message:
-            'Đã gửi lệnh ghi Firestore nhưng đọc lại chưa khớp dữ liệu. Bản ghi pending vẫn được giữ lại để thử lại an toàn.',
-        };
-      }
-
-      await this.persistentPendingStore.deletePendingRecord(pending.avatarId);
-      this.pendingMetadataSync = null;
-      this.clearStagedCatalogFile();
-      void this.resolveStoragePathToUrl(pending.storagePath);
-      this.notify();
-
-      return {
-        success: true,
-        avatarId: pending.avatarId,
-        version: pending.version,
-        storagePath: pending.storagePath,
-        uploadOperationId: pending.uploadOperationId,
-        metadataSynced: true,
-        message: `Đã đồng bộ metadata cho "${pending.name}" (v${pending.version}) thành công.`,
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        errorCode: err?.code || 'FIRESTORE_SYNC_ERROR',
-        message: 'Đồng bộ lại metadata thất bại. Vui lòng kiểm tra kết nối mạng và thử lại.',
-      };
-    }
+    return {
+      success: false,
+      errorCode: 'STATIC_AVATAR_ONLY',
+      message: 'Đồng bộ upload từ trình duyệt đã bị vô hiệu hóa (M7.5.1).',
+    };
   }
 
-  /**
-   * Xử lý hủy thông báo bản ghi pending (Lưu ý M7.3.5.5 Mục III.B2 Quy tắc 5:
-   * Nếu ở trạng thái UPLOAD_INDETERMINATE thì giữ nguyên path/version trong lịch sử đã dùng,
-   * tuyệt đối KHÔNG xóa object trên Storage, KHÔNG tái sử dụng path).
-   */
   public async discardPendingCatalogUpload(): Promise<void> {
-    const pending = this.pendingMetadataSync;
     this.pendingMetadataSync = null;
-    if (pending) {
-      this.usedOrIndeterminateStoragePaths.add(pending.storagePath);
-      const prevVer = this.highestKnownVersionByAvatarId.get(pending.avatarId) ?? 0;
-      if (pending.version > prevVer) {
-        this.highestKnownVersionByAvatarId.set(pending.avatarId, pending.version);
-      }
-      await this.persistentPendingStore.recordUsedOrIndeterminatePath({
-        storagePath: pending.storagePath,
-        avatarId: pending.avatarId,
-        version: pending.version,
-        uploadOperationId: pending.uploadOperationId,
-        recordedAt: pending.createdAt,
-      });
-      await this.persistentPendingStore.deletePendingRecord(pending.avatarId);
-    }
     this.notify();
   }
 
@@ -5888,208 +5396,25 @@ export class AvatarManager {
     }
   }
 
-  /**
-   * Super Admin cập nhật trạng thái hoạt động (`isActive`), tên hiển thị (`name`) hoặc thứ tự (`sortOrder`)
-   * của một avatar trong danh mục.
-   */
-  public async updateCatalogItemMetadata(params: {
+  public async updateCatalogItemMetadata(_params: {
     avatarId: string;
     name?: string;
     sortOrder?: number;
     isActive?: boolean;
   }): Promise<AvatarOperationResult> {
-    if (!AuthManager.getInstance().isSuperAdmin()) {
-      return {
-        success: false,
-        errorCode: 'NOT_SUPER_ADMIN',
-        message: 'Chỉ Super Admin được phép chỉnh sửa danh mục avatar.',
-      };
-    }
-
-    const db = getFirebaseDb();
-    if (!db) {
-      return {
-        success: false,
-        errorCode: 'FIRESTORE_UNAVAILABLE',
-        message: 'Chưa kết nối được dịch vụ Cloud Firestore.',
-      };
-    }
-
-    try {
-      const docRef = doc(db, 'avatar_catalog', params.avatarId);
-      const snap = await getDoc(docRef);
-      if (!snap.exists()) {
-        return {
-          success: false,
-          errorCode: 'NOT_FOUND',
-          message: 'Không tìm thấy avatar trong danh mục.',
-        };
-      }
-      const data = snap.data();
-      const nextName =
-        typeof params.name === 'string' && params.name.trim().length > 0
-          ? params.name.trim().slice(0, 80)
-          : (data.name as string);
-      const nextSortOrder =
-        typeof params.sortOrder === 'number' && Number.isFinite(params.sortOrder)
-          ? Math.max(0, Math.min(100_000, Math.floor(params.sortOrder)))
-          : (data.sortOrder as number);
-      const nextIsActive =
-        typeof params.isActive === 'boolean' ? params.isActive : Boolean(data.isActive);
-
-      await setDoc(docRef, {
-        avatarId: data.avatarId,
-        name: nextName,
-        storagePath: data.storagePath,
-        contentType: data.contentType,
-        fileSize: data.fileSize,
-        version: data.version,
-        sortOrder: nextSortOrder,
-        isActive: nextIsActive,
-        createdAt: data.createdAt || serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        updatedBy: SUPER_ADMIN_EMAIL,
-      });
-
-      return {
-        success: true,
-        avatarId: params.avatarId,
-        message: `Đã cập nhật cấu hình cho "${nextName}".`,
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        errorCode: err?.code || 'FIRESTORE_UPDATE_ERROR',
-        message: 'Không thể cập nhật metadata danh mục avatar.',
-      };
-    }
+    return {
+      success: false,
+      errorCode: 'STATIC_AVATAR_ONLY',
+      message: 'Danh mục Avatar tĩnh public/avatar/ được quản lý cố định trong mã nguồn (M7.5.1).',
+    };
   }
 
-  /**
-   * Super Admin xóa hẳn một avatar khỏi danh mục (M7.3.5.1 Mục IV):
-   * - Ưu tiên khuyến nghị ẩn (`isActive = false`).
-   * - Kiểm tra trên `/users` bằng truy vấn có điều kiện theo `avatarId` kèm `limit(1)`
-   *   (`where('avatarType', '==', 'catalog'), where('avatarId', '==', avatarId), limit(1)`)
-   *   để tuyệt đối không đọc toàn bộ collection `/users`.
-   * - Nếu không còn người chơi nào sử dụng:
-   *   1. Chuyển `isActive = false` trên Firestore `/avatar_catalog/{avatarId}` trước để khóa lựa chọn mới.
-   *   2. Kiểm tra lại `limit(1)` để phòng ngừa race condition.
-   *   3. Xóa file trên Firebase Storage trước (`deleteObject` - bỏ qua nếu `storage/object-not-found`).
-   *      Nếu xóa Storage thất bại vì lỗi khác -> dừng lại và giữ nguyên tài liệu Firestore ở trạng thái `isActive = false`
-   *      để không bao giờ phát sinh trạng thái lệch giữa file Storage và metadata Firestore.
-   *   4. Chỉ sau khi file trên Storage đã xóa thành công mới gọi `deleteDoc` trên Firestore `/avatar_catalog/{avatarId}`.
-   */
-  public async deleteCatalogItem(avatarId: string): Promise<AvatarOperationResult> {
-    if (!AuthManager.getInstance().isSuperAdmin()) {
-      return {
-        success: false,
-        errorCode: 'NOT_SUPER_ADMIN',
-        message: 'Chỉ Super Admin được phép xóa avatar khỏi danh mục.',
-      };
-    }
-
-    const db = getFirebaseDb();
-    const storage = getFirebaseStorage();
-    if (!db || !storage) {
-      return {
-        success: false,
-        errorCode: 'FIREBASE_UNAVAILABLE',
-        message: 'Chưa kết nối được dịch vụ Firebase.',
-      };
-    }
-
-    try {
-      const docRef = doc(db, 'avatar_catalog', avatarId);
-      const snap = await getDoc(docRef);
-      if (!snap.exists()) {
-        return {
-          success: false,
-          errorCode: 'NOT_FOUND',
-          message: 'Avatar không tồn tại trong danh mục.',
-        };
-      }
-      const data = snap.data();
-      const storagePath = typeof data.storagePath === 'string' ? data.storagePath : '';
-
-      // Kiểm tra xem có người chơi nào đang chọn avatar này hay không với limit(1) (tối đa 1 document read)
-      const usersQuery = query(
-        collection(db, 'users'),
-        where('avatarType', '==', 'catalog'),
-        where('avatarId', '==', avatarId),
-        limit(1)
-      );
-      const activeUsersSnap = await getDocs(usersQuery);
-      if (!activeUsersSnap.empty) {
-        return {
-          success: false,
-          errorCode: 'AVATAR_IN_USE',
-          message:
-            'Không thể xóa hẳn vì đang có người chơi sử dụng avatar này. Hãy chuyển trạng thái sang "Ẩn" (isActive = false) để người chơi tự động chuyển về ảnh Google.',
-        };
-      }
-
-      // Bước 1: Nếu avatar đang active, chuyển về isActive = false trước để ngăn người chơi chọn mới trong lúc đang xóa
-      if (data.isActive !== false) {
-        await setDoc(docRef, {
-          avatarId: data.avatarId,
-          name: data.name,
-          storagePath: data.storagePath,
-          contentType: data.contentType,
-          fileSize: data.fileSize,
-          version: data.version,
-          sortOrder: data.sortOrder,
-          isActive: false,
-          createdAt: data.createdAt || serverTimestamp(),
-          updatedAt: serverTimestamp(),
-          updatedBy: SUPER_ADMIN_EMAIL,
-        });
-
-        // Kiểm tra lại với limit(1) sau khi đã khóa isActive = false
-        const recheckSnap = await getDocs(usersQuery);
-        if (!recheckSnap.empty) {
-          return {
-            success: false,
-            errorCode: 'AVATAR_IN_USE',
-            message:
-              'Vừa có người chơi chọn avatar này. Hệ thống đã chuyển avatar sang trạng thái "Ẩn" (isActive = false) thay vì xóa hẳn.',
-          };
-        }
-      }
-
-      // Bước 2: Xóa file trên Firebase Storage trước khi xóa metadata Firestore
-      if (storagePath) {
-        try {
-          await deleteObject(storageRef(storage, storagePath));
-          this.urlCache.revokePath(storagePath);
-          this.resolvedStorageUrls.delete(storagePath);
-          this.failedStoragePaths.delete(storagePath);
-        } catch (storageErr: any) {
-          const storageCode = storageErr?.code || '';
-          if (storageCode !== 'storage/object-not-found') {
-            return {
-              success: false,
-              errorCode: storageCode || 'STORAGE_DELETE_ERROR',
-              message:
-                'Không thể xóa file ảnh trên Firebase Storage. Avatar đã được chuyển sang trạng thái "Ẩn" (isActive = false) và giữ lại metadata để tránh lệch trạng thái.',
-            };
-          }
-        }
-      }
-
-      // Bước 3: Xóa tài liệu metadata trên Firestore sau khi file Storage đã được dọn sạch
-      await deleteDoc(docRef);
-
-      return {
-        success: true,
-        avatarId,
-        message: 'Đã xóa hoàn toàn avatar khỏi Firebase Storage và Firestore.',
-      };
-    } catch (err: any) {
-      return {
-        success: false,
-        errorCode: err?.code || 'DELETE_CATALOG_ERROR',
-        message: 'Không thể xóa avatar khỏi danh mục. Vui lòng thử lại.',
-      };
-    }
+  public async deleteCatalogItem(_avatarId: string): Promise<AvatarOperationResult> {
+    return {
+      success: false,
+      errorCode: 'STATIC_AVATAR_ONLY',
+      message:
+        'Không xóa dữ liệu trên Firebase Storage và không xóa Avatar tĩnh từ giao diện client (M7.5.1).',
+    };
   }
 }

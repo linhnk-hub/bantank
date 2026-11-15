@@ -96,6 +96,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [, setRoleTick] = useState(0);
+  const [hostAvatarBroken, setHostAvatarBroken] = useState(false);
+  const [guestAvatarBroken, setGuestAvatarBroken] = useState(false);
 
   const onOnlineMatchStartedRef = useRef(onOnlineMatchStarted);
   const onDifficultyChangeRef = useRef(onDifficultyChange);
@@ -164,8 +166,16 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
     });
 
     handleRoomTransition(coopManager.getCurrentRoom(), coopManager.getRole());
+    const unsubAvatar = avatarManager.subscribe(() => {
+      setHostAvatarBroken(false);
+      setGuestAvatarBroken(false);
+      setRoleTick((t) => t + 1);
+    });
 
-    return unsub;
+    return () => {
+      unsub();
+      unsubAvatar();
+    };
   }, [coopManager, avatarManager]);
 
   // Fail-safe cho Guest (P2) khi cả hai đã Sẵn sàng: chủ động đồng bộ trạng thái phòng từ máy chủ đề phòng snapshot/P2P bị trễ
@@ -1016,76 +1026,111 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
       })()}
 
       {/* 2 Player Slots */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {/* Slot P1: Host */}
-        <div className="p-3.5 rounded-xl bg-neutral-950/80 border border-amber-500/40 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-full bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
-              <UserCheck className="w-4 h-4" />
-            </div>
-            <div className="min-w-0">
-              <div className="text-[10px] font-black uppercase tracking-wider text-amber-400">
-                P1 (Chủ phòng)
-              </div>
-              <div
-                className={`mt-0.5 inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-900 text-xs font-bold text-white truncate max-w-[165px] ${hostFrameClasses}`}
-              >
-                <span className="truncate">{room.hostDisplayName}</span>
-              </div>
-            </div>
-          </div>
-          <span
-            className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border shrink-0 ${
-              room.hostReady
-                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
-                : 'bg-neutral-900 text-neutral-400 border-neutral-700'
-            }`}
-          >
-            {room.hostReady ? 'Đã sẵn sàng' : 'Chưa sẵn sàng'}
-          </span>
-        </div>
+      {(() => {
+        const hostAvatarUrl = avatarManager.getEffectivePlayerAvatarUrl({
+          uid: room.hostUid,
+          photoURL: role === 'HOST' ? user?.photoURL : null,
+        });
+        const guestAvatarUrl = room.guestUid
+          ? avatarManager.getEffectivePlayerAvatarUrl({
+              uid: room.guestUid,
+              photoURL: role === 'GUEST' ? user?.photoURL : null,
+            })
+          : null;
 
-        {/* Slot P2: Guest */}
-        <div
-          className={`p-3.5 rounded-xl bg-neutral-950/80 border flex items-center justify-between gap-2 ${
-            room.guestUid ? 'border-emerald-500/40' : 'border-dashed border-neutral-800'
-          }`}
-        >
-          {room.guestUid ? (
-            <>
+        return (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Slot P1: Host */}
+            <div className="p-3.5 rounded-xl bg-neutral-950/80 border border-amber-500/40 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-300 shrink-0">
-                  <Users className="w-4 h-4" />
+                <div className="w-9 h-9 rounded-full bg-amber-500/20 border border-amber-500/40 overflow-hidden flex items-center justify-center text-amber-300 shrink-0">
+                  {hostAvatarUrl && !hostAvatarBroken ? (
+                    <img
+                      src={hostAvatarUrl}
+                      alt={room.hostDisplayName}
+                      data-testid="coop-lobby-host-avatar"
+                      className="w-full h-full object-cover"
+                      onError={() => setHostAvatarBroken(true)}
+                    />
+                  ) : (
+                    <UserCheck className="w-4 h-4" />
+                  )}
                 </div>
                 <div className="min-w-0">
-                  <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
-                    P2 (Đồng đội)
+                  <div className="text-[10px] font-black uppercase tracking-wider text-amber-400">
+                    P1 (Chủ phòng)
                   </div>
                   <div
-                    className={`mt-0.5 inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-900 text-xs font-bold text-white truncate max-w-[165px] ${guestFrameClasses}`}
+                    className={`mt-0.5 inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-900 text-xs font-bold text-white truncate max-w-[165px] ${hostFrameClasses}`}
                   >
-                    <span className="truncate">{room.guestDisplayName || 'Chiến Binh P2'}</span>
+                    <span className="truncate">{room.hostDisplayName}</span>
                   </div>
                 </div>
               </div>
               <span
                 className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border shrink-0 ${
-                  room.guestReady
+                  room.hostReady
                     ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
                     : 'bg-neutral-900 text-neutral-400 border-neutral-700'
                 }`}
               >
-                {room.guestReady ? 'Đã sẵn sàng' : 'Chưa sẵn sàng'}
+                {room.hostReady ? 'Đã sẵn sàng' : 'Chưa sẵn sàng'}
               </span>
-            </>
-          ) : (
-            <div className="flex items-center gap-2.5 text-neutral-500 py-1">
-              <Loader2 className="w-4 h-4 animate-spin text-sky-400" />
-              <span className="text-xs">Đang chờ P2 tham gia phòng...</span>
             </div>
-          )}
-        </div>
-      </div>
+
+            {/* Slot P2: Guest */}
+            <div
+              className={`p-3.5 rounded-xl bg-neutral-950/80 border flex items-center justify-between gap-2 ${
+                room.guestUid ? 'border-emerald-500/40' : 'border-dashed border-neutral-800'
+              }`}
+            >
+              {room.guestUid ? (
+                <>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-500/40 overflow-hidden flex items-center justify-center text-emerald-300 shrink-0">
+                      {guestAvatarUrl && !guestAvatarBroken ? (
+                        <img
+                          src={guestAvatarUrl}
+                          alt={room.guestDisplayName || 'Chiến Binh P2'}
+                          data-testid="coop-lobby-guest-avatar"
+                          className="w-full h-full object-cover"
+                          onError={() => setGuestAvatarBroken(true)}
+                        />
+                      ) : (
+                        <Users className="w-4 h-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
+                        P2 (Đồng đội)
+                      </div>
+                      <div
+                        className={`mt-0.5 inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-900 text-xs font-bold text-white truncate max-w-[165px] ${guestFrameClasses}`}
+                      >
+                        <span className="truncate">{room.guestDisplayName || 'Chiến Binh P2'}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <span
+                    className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border shrink-0 ${
+                      room.guestReady
+                        ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
+                        : 'bg-neutral-900 text-neutral-400 border-neutral-700'
+                    }`}
+                  >
+                    {room.guestReady ? 'Đã sẵn sàng' : 'Chưa sẵn sàng'}
+                  </span>
+                </>
+              ) : (
+                <div className="flex items-center gap-2.5 text-neutral-500 py-1">
+                  <Loader2 className="w-4 h-4 animate-spin text-sky-400" />
+                  <span className="text-xs">Đang chờ P2 tham gia phòng...</span>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Action Buttons */}
       <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-neutral-800">

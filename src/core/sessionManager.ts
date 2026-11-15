@@ -12,6 +12,7 @@ import {
 } from 'firebase/firestore';
 import { getFirebaseDb, handleFirestoreError } from './firebaseConfig.ts';
 import { AuthManager } from './authManager.ts';
+import { PlayerStatsManager } from './playerStatsManager.ts';
 
 export const SESSION_TIMINGS = {
   MIN_HEARTBEAT_SERVER_S: 120, // Strict server rule: request.time >= lastActiveAt + 120s
@@ -43,7 +44,10 @@ export type SessionStateStatus =
   | 'DISPLACED'
   | 'EXPIRED';
 
+export type SessionStatus = SessionStateStatus | 'SIGNED_OUT';
+
 export interface SessionStateSnapshot {
+  uid: string | null;
   status: SessionStateStatus;
   sessionId: string | null;
   deviceId: string;
@@ -212,6 +216,7 @@ export class SessionManager {
 
   public getSnapshot(): SessionStateSnapshot {
     return {
+      uid: this.currentUid,
       status: this.status,
       sessionId: this.currentSessionId,
       deviceId: this.deviceId,
@@ -654,6 +659,13 @@ export class SessionManager {
               this.status = 'DISPLACED';
               this.statusMessage =
                 'Từ chối đăng nhập: Tài khoản này đang hoạt động trên thiết bị khác. Đăng xuất trên thiết bị khác hoặc chờ thử lại sau 15 phút.';
+              PlayerStatsManager.getInstance().recordSessionTermination({
+                uid,
+                sessionId: null,
+                deviceId: this.deviceId,
+                reason: 'SECOND_DEVICE_CONFLICT_REJECTED',
+                note: this.statusMessage,
+              });
               this.notify();
               return { success: false, message: this.statusMessage };
             }
@@ -801,7 +813,7 @@ export class SessionManager {
         // Network or connection error: pause gameplay safely without sign out
         this.status = 'CONNECTION_LOST_UNVERIFIED';
         this.statusMessage =
-          'Trận đấu đang tạm dừng.';
+          'Hệ thống tạm dừng do không có ghi nhận hoạt động.';
         if (this.onPauseGameCallback) this.onPauseGameCallback();
         this.notify();
       }
@@ -847,8 +859,17 @@ export class SessionManager {
       }
 
       if (data.deviceId !== this.deviceId) {
+        const displacedUid = this.currentUid;
+        const displacedSessionId = this.currentSessionId;
         this.status = 'DISPLACED';
         this.statusMessage = 'Tài khoản đang được đăng nhập trên một thiết bị khác.';
+        PlayerStatsManager.getInstance().recordSessionTermination({
+          uid: displacedUid,
+          sessionId: displacedSessionId,
+          deviceId: this.deviceId,
+          reason: 'SESSION_DISPLACED',
+          note: this.statusMessage,
+        });
         this.terminateSessionLocally();
         return;
       }
@@ -858,8 +879,17 @@ export class SessionManager {
         if (data.deviceId === this.deviceId && data.isActive === true && data.sessionId) {
           this.currentSessionId = data.sessionId;
         } else {
+          const displacedUid = this.currentUid;
+          const displacedSessionId = this.currentSessionId;
           this.status = 'DISPLACED';
           this.statusMessage = 'Kết nối máy chủ bị gián đoạn. Vui lòng đăng nhập lại.';
+          PlayerStatsManager.getInstance().recordSessionTermination({
+            uid: displacedUid,
+            sessionId: displacedSessionId,
+            deviceId: this.deviceId,
+            reason: 'SESSION_DISPLACED',
+            note: this.statusMessage,
+          });
           this.terminateSessionLocally();
           return;
         }
@@ -1035,7 +1065,7 @@ export class SessionManager {
     } catch (err: any) {
       this.status = 'HEARTBEAT_REJECTED_UNCLASSIFIED';
       this.statusMessage =
-        'Yêu cầu gia hạn kết nối chưa được máy chủ chấp thuận. Trận đấu đang tạm dừng.';
+        'Yêu cầu gia hạn kết nối chưa được máy chủ chấp thuận.';
       this.notify();
       return { success: false, message: this.statusMessage };
     }
@@ -1064,7 +1094,7 @@ export class SessionManager {
       return {
         success: false,
         message:
-          'Yêu cầu đã gửi nhưng chưa thể xác nhận phản hồi từ máy chủ. Vui lòng thử lại khi có mạng.',
+          'Yêu cầu đã gửi nhưng chưa thể xác nhận phản hồi từ máy chủ.',
       };
     }
 
@@ -1080,14 +1110,18 @@ export class SessionManager {
     this.idleRemainingSeconds = 0;
     this.status = 'PAUSED_IDLE';
     this.statusMessage =
-      'Kết nối đã hết hạn sau 15 phút không hoạt động. Vui lòng đăng nhập lại.';
-    this.releaseSessionAndSignOut();
+      'Kết nối đã hết hạn sau 15 phút không hoạt động.';
+    void this.releaseSessionAndSignOut('SESSION_IDLE_EXPIRED_15M');
   }
 
-  public async releaseSessionAndSignOut(): Promise<void> {
-    if (this.currentUid && this.currentSessionId) {
+  public async releaseSessionAndSignOut(
+    reason: 'LOGOUT' | 'SESSION_IDLE_EXPIRED_15M' = 'LOGOUT'
+  ): Promise<void> {
+    const endingUid = this.currentUid;
+    const endingSessionId = this.currentSessionId;
+    if (endingUid && endingSessionId) {
       try {
-        const sessionDocRef = doc(this.db, 'user_sessions', this.currentUid);
+        const sessionDocRef = doc(this.db, 'user_sessions', endingUid);
         await updateDoc(sessionDocRef, {
           isActive: false,
           lastActiveAt: serverTimestamp(),
@@ -1095,6 +1129,18 @@ export class SessionManager {
       } catch (e) {
         console.warn('[SessionManager] releaseSession error:', e);
       }
+    }
+    if (endingUid) {
+      PlayerStatsManager.getInstance().recordSessionTermination({
+        uid: endingUid,
+        sessionId: endingSessionId,
+        deviceId: this.deviceId,
+        reason,
+        note:
+          reason === 'SESSION_IDLE_EXPIRED_15M'
+            ? 'Kết nối đã hết hạn sau 15 phút không hoạt động.'
+            : 'Đăng xuất chủ động khỏi tài khoản.',
+      });
     }
     this.broadcastTabSync('SESSION_LOGOUT');
     this.terminateSessionLocally(true);

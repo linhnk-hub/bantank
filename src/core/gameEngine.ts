@@ -1957,6 +1957,9 @@ export class GameEngine {
         Array.isArray(snapshot.currentStageMap[0]) &&
         snapshot.currentStageMap[0].length === 13
       ) {
+        if (this.stageManager.getStage(snapshot.currentStageId)) {
+          this.stageManager.setCurrentStage(snapshot.currentStageId);
+        }
         this.state.terrain = createRuntimeTerrainState(snapshot.currentStageMap);
       } else {
         const targetStage = this.stageManager.getStage(snapshot.currentStageId);

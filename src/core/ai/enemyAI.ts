@@ -14,7 +14,7 @@ import {
 } from '../types.ts';
 import { getBrickMask } from '../terrain.ts';
 import { getTankHitbox, checkHitboxVsTerrain, checkTankVsTanks } from '../physics.ts';
-import { findPathAStar, isTileWalkable } from './pathfinding.ts';
+import { findPathAStar, findPathWithBrickBreachAStar, isTileWalkable } from './pathfinding.ts';
 import { scoreAndSelectTarget } from './targetScoring.ts';
 import { defaultPRNG } from '../utils/prng.ts';
 
@@ -717,13 +717,35 @@ export function updateEnemyAI(
 
   // 5. A* Pathfinding (Throttled by pathCooldown)
   if (enemy.pathCooldown <= 0) {
-    enemy.path = findPathAStar(
+    const openPath = findPathAStar(
       { x: enemy.x, y: enemy.y },
       navDestination,
       terrain,
       otherTanks,
       enemy.id
     );
+    const destC = Math.max(0, Math.min(12, Math.round(navDestination.x / 16)));
+    const destR = Math.max(0, Math.min(12, Math.round(navDestination.y / 16)));
+    const lastOpenWp = openPath.length > 0 ? openPath[openPath.length - 1] : null;
+    const openReachesNearDest =
+      lastOpenWp !== null &&
+      Math.abs(Math.round(lastOpenWp.x / 16) - destC) +
+        Math.abs(Math.round(lastOpenWp.y / 16) - destR) <=
+        1;
+
+    if (openReachesNearDest || inEagleSiegeLane) {
+      enemy.path = openPath;
+    } else {
+      const breachPath = findPathWithBrickBreachAStar(
+        { x: enemy.x, y: enemy.y },
+        navDestination,
+        terrain,
+        otherTanks,
+        enemy.id,
+        { brickStepCost: 6 }
+      );
+      enemy.path = breachPath.length > 0 ? breachPath : openPath;
+    }
     enemy.pathCooldown = AI_CONFIG.PATH_RECOMPUTE_THROTTLE_S;
   }
 
