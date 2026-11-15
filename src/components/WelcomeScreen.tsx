@@ -237,7 +237,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           >
             <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
             <span>
-              Đang tải video intro{homeVideoConfig.fileName ? ` (${homeVideoConfig.fileName})` : ''}...
+              Đang tải Video intro
             </span>
           </div>
         )}
