@@ -2038,7 +2038,7 @@ export function classifyUserProfileFirestoreError(err: unknown): {
     return {
       errorCode: 'UNAUTHENTICATED',
       firestoreCode: rawCode || 'unauthenticated',
-      userMessage: 'Phiên đăng nhập Google đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.',
+      userMessage: 'Phiên đăng nhập đã hết hạn hoặc không hợp lệ. Vui lòng đăng nhập lại.',
     };
   }
 

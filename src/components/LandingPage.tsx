@@ -130,7 +130,7 @@ export const LANDING_PAGE_FEATURES: readonly LandingPageFeatureItem[] = [
     description:
       'Hỗ trợ vào chơi thử ngay lập tức không cần đăng nhập tài khoản, cùng bộ điều khiển âm lượng hiệu ứng tiếng nổ và nhạc nền riêng biệt.',
     highlights: [
-      'Chế độ Chơi thử (Trial Mode): Trải nghiệm ngay Màn 1 mà không cần đăng nhập Google',
+      'Chế độ Chơi thử (Trial Mode): Trải nghiệm ngay Màn 1 mà không cần đăng nhập',
       'Tùy chỉnh độc lập âm lượng hiệu ứng chiến đấu (SFX) và âm lượng nhạc nền',
       'Giao diện tối ưu hóa tốc độ tải trang và tương thích mọi trình duyệt hiện đại',
     ],

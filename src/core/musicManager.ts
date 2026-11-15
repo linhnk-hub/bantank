@@ -719,7 +719,7 @@ export function formatMusicCloudError(
 
   if (isPermissionError) {
     const authEmail = parsed?.authInfo?.email ? ` (tài khoản hiện tại: ${parsed.authInfo.email})` : '';
-    return `Từ chối quyền Firestore tại "/${targetPath.replace(/^\/+/, '')}" (${parsed?.operationType || 'write'}) khi ${stepLabel}${authEmail}: ${underlyingMsg}. Vui lòng đảm bảo đã đăng nhập Google đúng tài khoản Admin (${ADMIN_EMAIL}) và Publish Firestore Rules mới nhất.`;
+    return `Từ chối quyền Firestore tại "/${targetPath.replace(/^\/+/, '')}" (${parsed?.operationType || 'write'}) khi ${stepLabel}${authEmail}: ${underlyingMsg}. Vui lòng đảm bảo đã đăng nhập đúng tài khoản Admin (${ADMIN_EMAIL}) và Publish Firestore Rules mới nhất.`;
   }
 
   if (

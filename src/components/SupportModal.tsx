@@ -44,7 +44,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
             </div>
             <div>
               <h2 id="support-modal-title" className="text-sm font-black uppercase tracking-wider text-white">
-                Hướng Dẫn
+                Hướng dẫn
               </h2>
             </div>
           </div>
@@ -63,7 +63,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
           <div className="bg-neutral-950/70 border border-neutral-800 rounded-xl p-3.5 space-y-2">
             <div className="flex items-center gap-2 text-amber-400 font-black uppercase tracking-wider">
               <Shield className="w-4 h-4 shrink-0" />
-              <span>1. Luật chơi &amp; Mục tiêu chiến dịch</span>
+              <span>1. Luật chơi &amp; Mục tiêu</span>
             </div>
             <ul className="space-y-1.5 text-neutral-300 pl-1">
               <li className="flex items-start gap-2">
@@ -71,7 +71,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
                 <span className="whitespace-pre-line">
                   <strong>Bảo vệ căn cứ Đại bàng:</strong>{' '}
                   {formatSentenceLineBreaks(
-                    'Căn cứ nằm ở chính giữa cạnh dưới bản đồ. Nếu Đại Bàng bị trúng đạn của xe địch, trận đấu sẽ kết thúc ngay lập tức (Game Over).'
+                    'Căn cứ nằm ở chính giữa cạnh dưới bản đồ. Nếu Đại bàng bị trúng đạn của xe địch, trận đấu sẽ kết thúc ngay lập tức (Game Over).'
                   )}
                 </span>
               </li>
@@ -139,7 +139,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
               <div className="p-3 rounded-lg bg-neutral-900 border border-neutral-800 space-y-1.5">
                 <div className="flex items-center gap-1.5 text-amber-400 font-bold">
                   <Tablet className="w-3.5 h-3.5 shrink-0" />
-                  <span>Cảm Ứng Tablet</span>
+                  <span>Cảm ứng Tablet</span>
                 </div>
                 <ul className="space-y-1 text-[11px] text-neutral-300">
                   <li>• <strong>Cụm điều khiển lớn:</strong> Tự động mở rộng kích thước cần gạt Joystick và nút Khai Hỏa phù hợp màn hình lớn.</li>
@@ -153,7 +153,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
           <div className="bg-neutral-950/70 border border-neutral-800 rounded-xl p-3.5 space-y-2.5">
             <div className="flex items-center gap-2 text-amber-400 font-black uppercase tracking-wider">
               <Users className="w-4 h-4 shrink-0" />
-              <span>3. Các Chế Độ Chiến Đấu</span>
+              <span>3. Các chế độ chơi</span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px]">
               <div className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800">
@@ -162,7 +162,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
                   <span>SOLO</span>
                 </div>
                 <p className="text-neutral-400">
-                  Chiến đấu độc lập điều khiển Chiến xa P1 bảo vệ căn cứ và vượt qua các màn chơi.
+                  Chiến đấu độc lập điều khiển chiến xa bảo vệ căn cứ và vượt qua các màn chơi.
                 </p>
               </div>
               <div className="p-2.5 rounded-lg bg-neutral-900 border border-neutral-800">
@@ -180,7 +180,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
                   <span>CO-OP ONLINE</span>
                 </div>
                 <p className="text-neutral-400">
-                  Tạo phòng hoặc nhập mã phòng 6 ký tự để phối hợp cùng 1 người chơi thật thứ hai qua Internet.
+                  Tạo phòng hoặc nhập mã phòng 6 ký tự để phối hợp cùng người chơi P2 qua Internet.
                 </p>
               </div>
             </div>
@@ -194,7 +194,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
             </div>
             <ul className="space-y-1 text-[11px] text-neutral-300">
               <li className="whitespace-pre-line">
-                • <strong>Không mở được cửa sổ đăng nhập Google:</strong>{' '}
+                • <strong>Không mở được cửa sổ đăng nhập:</strong>{' '}
                 {formatSentenceLineBreaks(
                   'Hãy kiểm tra và cho phép trình duyệt mở cửa sổ bật lên (Popup) trên trang bantank.online.'
                 )}
@@ -208,7 +208,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
               <li className="whitespace-pre-line">
                 • <strong>Không tìm thấy phòng Co-op Online:</strong>{' '}
                 {formatSentenceLineBreaks(
-                  'Đảm bảo cả 2 người chơi nhập đúng mã phòng BTxxxx, phòng chưa bắt đầu trận và chưa quá 15 phút chờ.'
+                  'Đảm bảo cả 2 người chơi nhập đúng mã phòng, chưa bắt đầu trận và chưa quá 15 phút chờ.'
                 )}
               </li>
             </ul>
@@ -221,7 +221,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
             onClick={onClose}
             className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs uppercase tracking-wider transition-all shadow active:scale-95"
           >
-            Đã Hiểu &amp; Đóng
+            Đã hiểu &amp; Đóng
           </button>
         </div>
       </div>
