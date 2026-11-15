@@ -552,20 +552,26 @@ export function resolveUserRole(
 }
 
 /**
- * Chuẩn hóa màu viền/khung tên người chơi theo mô hình 3 vai trò (`ADMIN`, `MOD`, `PLAYER`):
- * - Admin (`ADMIN`): khung tên nổi bật (`border-emerald-500`)
- * - Mod (`MOD`): khung tên màu xanh dương (`border-sky-500`)
- * - Người chơi thường (`PLAYER`): khung tên mặc định (`border-neutral-700/80`)
+ * Khung tên người chơi thống nhất màu trung tính (không phân biệt khung màu theo vai trò).
  */
-export function getRoleNameFrameClasses(role: UserRoleType | string): string {
+export function getRoleNameFrameClasses(_role: UserRoleType | string): string {
+  return 'border border-neutral-700/80';
+}
+
+/**
+ * Ký hiệu thu nhỏ kiểu Trademark viết lên trên tên theo vai trò:
+ * - ADMIN: 'A'
+ * - MOD: 'M'
+ * - PLAYER: null
+ */
+export function getRoleTrademarkBadge(role: UserRoleType | string): 'A' | 'M' | null {
   switch (role) {
     case 'ADMIN':
-      return 'border-2 border-emerald-500 ring-1 ring-emerald-500/40 shadow-sm shadow-emerald-500/20';
+      return 'A';
     case 'MOD':
-      return 'border-2 border-sky-500 ring-1 ring-sky-500/40 shadow-sm shadow-sky-500/20';
-    case 'PLAYER':
+      return 'M';
     default:
-      return 'border border-neutral-700/80';
+      return null;
   }
 }
 
@@ -574,6 +580,7 @@ export function getRoleDisplayInfo(role: UserRoleType | string): {
   label: string;
   frameClass: string;
   colorNameVi: string;
+  trademarkBadge: 'A' | 'M' | null;
 } {
   switch (role) {
     case 'ADMIN':
@@ -581,14 +588,16 @@ export function getRoleDisplayInfo(role: UserRoleType | string): {
         role: 'ADMIN',
         label: 'Admin',
         frameClass: getRoleNameFrameClasses('ADMIN'),
-        colorNameVi: 'Xanh lá',
+        colorNameVi: 'Mặc định',
+        trademarkBadge: 'A',
       };
     case 'MOD':
       return {
         role: 'MOD',
         label: 'Mod',
         frameClass: getRoleNameFrameClasses('MOD'),
-        colorNameVi: 'Xanh dương',
+        colorNameVi: 'Mặc định',
+        trademarkBadge: 'M',
       };
     case 'PLAYER':
     default:
@@ -597,6 +606,7 @@ export function getRoleDisplayInfo(role: UserRoleType | string): {
         label: 'Người chơi',
         frameClass: getRoleNameFrameClasses('PLAYER'),
         colorNameVi: 'Mặc định',
+        trademarkBadge: null,
       };
   }
 }
@@ -1818,9 +1828,8 @@ export class AuthManager {
 
     this.signInInFlightPromise = (async (): Promise<AuthValidationResult> => {
       const provider = new GoogleAuthProvider();
-      if (options?.forceAccountSelection) {
-        provider.setCustomParameters({ prompt: 'select_account' });
-      }
+      // Luôn hiển thị bộ chọn tài khoản Google để người chơi dễ dàng chọn lại hoặc đổi tài khoản sau khi đăng xuất
+      provider.setCustomParameters({ prompt: 'select_account' });
 
       try {
         this.trialModeActive = false;
@@ -1985,13 +1994,32 @@ export class AuthManager {
     }
   }
 
+  private static signOutHooks: Set<() => void> = new Set();
+
+  public static registerSignOutHook(cb: () => void): () => void {
+    AuthManager.signOutHooks.add(cb);
+    return () => {
+      AuthManager.signOutHooks.delete(cb);
+    };
+  }
+
   public async signOut(): Promise<void> {
     this.trialModeActive = false;
+    this.signInInFlightPromise = null;
+    clearVerifiedServerRoles();
     try {
       await fbSignOut(this.auth);
     } catch (e) {
       console.warn('[AuthManager] signOut error:', e);
     }
     this.currentUser = null;
+    AuthManager.signOutHooks.forEach((cb) => {
+      try {
+        cb();
+      } catch {
+        // Ignore hook errors
+      }
+    });
+    this.notifyListeners(null);
   }
 }

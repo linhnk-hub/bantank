@@ -19,6 +19,7 @@ import {
   setVerifiedServerRoleForUid,
   clearVerifiedServerRoles,
   getRoleNameFrameClasses,
+  getRoleTrademarkBadge,
   getRoleDisplayInfo,
   RBAC_PERMISSION_MATRIX,
   hasRolePermission,
@@ -5386,10 +5387,14 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       otherAdminBlocked === 'PLAYER' &&
       modRole === 'MOD' &&
       spoofedAdminBlocked === 'PLAYER' &&
-      getRoleNameFrameClasses('ADMIN').includes('border-emerald-500') &&
-      getRoleNameFrameClasses('MOD').includes('border-sky-500') &&
+      getRoleNameFrameClasses('ADMIN').includes('border-neutral-700/80') &&
+      getRoleNameFrameClasses('MOD').includes('border-neutral-700/80') &&
       getRoleNameFrameClasses('PLAYER').includes('border-neutral-700/80') &&
-      getRoleDisplayInfo('ADMIN').label === 'Admin';
+      getRoleTrademarkBadge('ADMIN') === 'A' &&
+      getRoleTrademarkBadge('MOD') === 'M' &&
+      getRoleTrademarkBadge('PLAYER') === null &&
+      getRoleDisplayInfo('ADMIN').label === 'Admin' &&
+      getRoleDisplayInfo('ADMIN').trademarkBadge === 'A';
     clearVerifiedServerRoles();
 
     // 3. Hạng mục 3: Kiểm tra đồng bộ Single-BGM giữa MusicManager và SoundManager
@@ -5467,12 +5472,11 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       createEmptyPwRes.success === false &&
       createEmptyPwRes.errorCode === 'INVALID_PASSWORD';
 
-    // Case 4: Khi chưa có phòng công khai nào -> Vào nhanh báo đúng "Hiện chưa có phòng trống"
+    // Case 4: Chức năng Vào nhanh đã tắt -> luôn báo chưa hỗ trợ / chưa có phòng trống
     const quickJoinWhenEmpty = guest1.quickJoinRoomSync(storage, guestUser1, nowMs + 100);
     const quickJoinEmptyMsgOk =
       quickJoinWhenEmpty.success === false &&
-      quickJoinWhenEmpty.errorCode === 'NO_AVAILABLE_PUBLIC_ROOM' &&
-      quickJoinWhenEmpty.message === 'Hiện chưa có phòng trống';
+      quickJoinWhenEmpty.errorCode === 'NO_AVAILABLE_PUBLIC_ROOM';
 
     // Case 1 & 5: Tạo phòng CÓ MẬT KHẨU ("tank2026", độ khó EXTREME) -> tạo thành công, KHÔNG bị Vào nhanh chọn nhầm
     const createProtectedRes = hostA.createRoomSync(
@@ -5539,8 +5543,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       joinProtectedRightPw.room?.guestUid === guestUser1.uid &&
       joinProtectedRightPw.room?.difficulty === 'EXTREME';
 
-    // Case 3, 4, 6, 7: Tạo phòng KHÔNG MẬT KHẨU (công khai) -> Vào nhanh tìm thấy và vào thành công;
-    //                   nếu 2 người cùng bấm Vào nhanh vào 1 phòng trống cuối cùng -> chỉ 1 người vào được, người còn lại nhận lỗi sạch
+    // Case 3, 4, 6, 7: Tạo phòng KHÔNG MẬT KHẨU (công khai) -> Vào nhanh đã tắt nên luôn trả về false,
+    //                   nhưng tham gia bằng mã phòng vẫn hoạt động bình thường (1 người vào được, người còn lại bị chặn khi phòng đã đủ)
     const guest3 = new CoopOnlineManager(storage);
     const createPublicRes = hostB.createRoomSync(
       storage,
@@ -5550,9 +5554,16 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       undefined,
       { hasPassword: false }
     );
-    const publicQuickJoin1 = guest2.quickJoinRoomSync(storage, guestUser2, nowMs + 700);
-    const publicQuickJoin2Race = guest3.quickJoinRoomSync(
+    const publicQuickJoinDisabled = guest2.quickJoinRoomSync(storage, guestUser2, nowMs + 700);
+    const publicCodeJoin1 = guest2.joinRoomSync(
       storage,
+      createPublicRes.room!.roomCode,
+      guestUser2,
+      nowMs + 720
+    );
+    const publicCodeJoin2Race = guest3.joinRoomSync(
+      storage,
+      createPublicRes.room!.roomCode,
       {
         uid: 'uid_guest_3',
         displayName: 'Guest Three',
@@ -5563,11 +5574,12 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const publicRoomAndQuickJoinRaceOk =
       createPublicRes.success === true &&
       createPublicRes.room?.hasPassword === false &&
-      publicQuickJoin1.success === true &&
-      publicQuickJoin1.room?.roomCode === createPublicRes.room?.roomCode &&
-      publicQuickJoin1.room?.guestUid === guestUser2.uid &&
-      publicQuickJoin2Race.success === false &&
-      publicQuickJoin2Race.errorCode === 'NO_AVAILABLE_PUBLIC_ROOM';
+      publicQuickJoinDisabled.success === false &&
+      publicQuickJoinDisabled.errorCode === 'NO_AVAILABLE_PUBLIC_ROOM' &&
+      publicCodeJoin1.success === true &&
+      publicCodeJoin1.room?.roomCode === createPublicRes.room?.roomCode &&
+      publicCodeJoin1.room?.guestUid === guestUser2.uid &&
+      publicCodeJoin2Race.success === false;
 
     const passed =
       passwordValidationOk &&
@@ -5578,9 +5590,9 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
 
     results.push({
       id: 'M7_3_T38',
-      name: 'T38: M7.3.7 (Hạng mục 5) – Tạo phòng Có mật khẩu (mặc định) / Không mật khẩu, Vào nhanh & Vào bằng mã phòng',
+      name: 'T38: M7.3.7 (Hạng mục 5) – Tạo phòng Có mật khẩu (mặc định) / Không mật khẩu, tắt Vào nhanh & Vào bằng mã phòng',
       passed,
-      details: `pwValOk=${passwordValidationOk}, emptyMsgOk=${quickJoinEmptyMsgOk}, protectedRoomOk=${protectedRoomOk}, codePwChecksOk=${joinByCodePasswordChecksOk}, quickJoinRaceOk=${publicRoomAndQuickJoinRaceOk}`,
+      details: `pwValOk=${passwordValidationOk}, quickJoinDisabledOk=${quickJoinEmptyMsgOk}, protectedRoomOk=${protectedRoomOk}, codePwChecksOk=${joinByCodePasswordChecksOk}, codeJoinRaceOk=${publicRoomAndQuickJoinRaceOk}`,
     });
   }
 
@@ -10203,6 +10215,206 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       name: 'T72: M7.3.13 – Mạng Thử thách (Solo 2 / Co-op 1), P1 chết giảm mạng, tạo phòng/rematch khi đủ 5 slot, Ping RTT, ngắt dòng câu & intro-bantank.mp4 mặc định',
       passed,
       details: `livesMatrix=${livesMatrixOk && soloExtLivesOk && coopAiExtLivesOk && coopOnlineExtLivesOk}, p1Death=${p1FirstDeathOk && p1ZeroLivesGameOverOk}, roomRematch=${createdPastSlotsOk && staleOverwriteBlockedOk && finishedPreservedOnLeaveOk}, pingRtt=${pingRttOk}, sentenceFormat=${sentenceFormatOk}, staticVideo=${staticIntroVideoOk}`,
+    });
+  }
+
+  // =========================================================================
+  // M7_3_T73: Xác minh 8 hạng mục mới:
+  //   1. Ký hiệu vai trò A / M viết thu nhỏ trên tên & bỏ khung màu
+  //   2. P1 & P2 đi xuyên qua nhau (TWO_PLAYERS_AI & TWO_PLAYERS_ONLINE)
+  //   3. Thành tích p1Stats / p2Stats tách riêng theo từng người chơi
+  //   4. Chủ phòng P1 mời P2 ra khỏi phòng chờ ("Mời ra" + Firestore rule)
+  //   5. Co-op Online post-stage Ready cả 2P & tự chuyển Stage N -> N+1
+  //   6. Tắt Vào nhanh trong Co-op Online (chỉ vào bằng mã phòng)
+  // =========================================================================
+  {
+    // 1. Role trademark badges
+    const roleBadgeOk =
+      getRoleTrademarkBadge('ADMIN') === 'A' &&
+      getRoleTrademarkBadge('MOD') === 'M' &&
+      getRoleTrademarkBadge('PLAYER') === null &&
+      !getRoleNameFrameClasses('ADMIN').includes('emerald') &&
+      !getRoleNameFrameClasses('MOD').includes('sky');
+
+    // 2. P1 & P2 pass-through in TWO_PLAYERS_ONLINE
+    const engPass = new GameEngine();
+    engPass.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT', { stageId: 1, enforceProgression: false });
+    const passState = engPass.getState() as any;
+    passState.p1.x = 16;
+    passState.p1.y = 160;
+    passState.p2.x = 24;
+    passState.p2.y = 160;
+    passState.enemies = [];
+    for (let i = 0; i < 6; i += 1) {
+      engPass.advanceTime(17, { up: false, down: false, left: false, right: true, shoot: false });
+    }
+    const p1MovedThroughP2Ok = engPass.getState().p1.x > 16;
+
+    // 3. Per-player stats isolation (p1Stats vs p2Stats)
+    const engStats = new GameEngine();
+    engStats.startMatch('TWO_PLAYERS_ONLINE', 'DEFAULT', { stageId: 1, enforceProgression: false });
+    const sMut = engStats.getState() as any;
+    const emMut = (engStats as any).enemyManager;
+    const mkStatEnemy = (id: string, enemyType: 'FAST' | 'POWER', x: number, y: number) => ({
+      id,
+      x,
+      y,
+      direction: 'DOWN' as const,
+      speed: 0,
+      type: 'enemy' as const,
+      enemyType,
+      tier: 1 as const,
+      isAlive: true,
+      isShielded: false,
+      hp: 1,
+      maxHp: 1,
+      scoreValue: enemyType === 'FAST' ? 2 : 3,
+      aiState: 'PATROL' as const,
+      targetPos: null,
+      lastKnownP1Pos: null,
+      lostTargetTimer: 0,
+      searchTimer: 0,
+      path: [],
+      pathCooldown: 0,
+      shootCooldown: 99,
+      aimTimer: 0,
+      aimTime: 0.5,
+      directionHistory: ['DOWN' as const],
+      dirHoldTimer: 1,
+      leadPos: null,
+      leadEvalTimer: 0,
+      lastP1Direction: null,
+      flankOffset: { x: 0, y: 0 },
+      spawnShieldTimer: 0,
+    });
+    const statEnemies = [
+      mkStatEnemy('e_stat_p2', 'FAST', 0, 0),
+      mkStatEnemy('e_stat_p1', 'POWER', 96, 0),
+    ];
+    emMut.activeEnemies = statEnemies;
+    sMut.enemies = statEnemies;
+    sMut.bullets.push(
+      {
+        id: 'b_p2_kill',
+        ownerId: 'p2',
+        ownerType: 'player',
+        x: 2,
+        y: 2,
+        direction: 'DOWN',
+        speed: 160,
+        power: 1,
+      },
+      {
+        id: 'b_p1_kill',
+        ownerId: 'p1',
+        ownerType: 'player',
+        x: 98,
+        y: 2,
+        direction: 'DOWN',
+        speed: 160,
+        power: 1,
+      }
+    );
+    engStats.advanceTime(17, NEUTRAL_INPUT);
+    const stAfter = engStats.getState();
+    const snapAfter = buildAuthoritativeSnapshot(stAfter, 1, Date.now());
+    const perPlayerStatsOk =
+      stAfter.p1Stats?.defeatedCounts.POWER === 1 &&
+      stAfter.p1Stats?.defeatedCounts.FAST === 0 &&
+      stAfter.p1Stats?.score === 3 &&
+      stAfter.p2Stats?.defeatedCounts.FAST === 1 &&
+      stAfter.p2Stats?.defeatedCounts.POWER === 0 &&
+      stAfter.p2Stats?.score === 2 &&
+      stAfter.score === 5 &&
+      snapAfter.p1Stats?.score === 3 &&
+      snapAfter.p2Stats?.score === 2;
+
+    // 4 & 5 & 6. Kick Guest + Post-stage Ready + Next Stage Advance + QuickJoin disabled
+    const storage73 = new InMemoryCoopStorageAdapter();
+    const host73 = new CoopOnlineManager(storage73);
+    const guest73 = new CoopOnlineManager(storage73);
+    const t73 = 1_770_000_000_000;
+    const hUser73 = { uid: 'uid_73_h', displayName: 'Host 73', email: 'h73@gmail.com', emailVerified: true };
+    const gUser73 = { uid: 'uid_73_g', displayName: 'Guest 73', email: 'g73@gmail.com', emailVerified: true };
+
+    const cr73 = host73.createRoomSync(storage73, hUser73, 'DEFAULT', t73, 'BT7301', { hasPassword: false });
+    const qjDisabled73 = guest73.quickJoinRoomSync(storage73, gUser73, t73 + 10);
+    guest73.joinRoomSync(storage73, 'BT7301', gUser73, t73 + 20);
+    const kickRuleRes = evaluateCoopRoomRuleUpdate({
+      authUid: hUser73.uid,
+      isVerifiedPersonalGmail: true,
+      requestTimeMs: t73 + 30,
+      existing: storage73.getRoomSync('BT7301')!,
+      incoming: {
+        ...storage73.getRoomSync('BT7301')!,
+        guestUid: null,
+        guestDisplayName: null,
+        guestReady: false,
+        guestLastActiveAt: null,
+        rtcConnectionState: 'NEW',
+      },
+    });
+    const kickRuleOk = kickRuleRes.allowed && kickRuleRes.matchedBranch === 'HOST_KICK_GUEST';
+    const guestAttemptKick = guest73.kickGuestSync(storage73, t73 + 35);
+    const hostKickRes = host73.kickGuestSync(storage73, t73 + 40);
+    // Simulate Guest receiving kick notification via channel
+    guest73.handleIncomingDataChannelMessage(
+      { type: 'HOST_KICKED_GUEST', reason: 'Bạn đã được chủ phòng mời ra khỏi phòng chờ.', timestamp: t73 + 41 },
+      t73 + 41
+    );
+    const kickFlowOk =
+      cr73.success &&
+      qjDisabled73.success === false &&
+      kickRuleOk &&
+      guestAttemptKick.success === false &&
+      hostKickRes.success &&
+      hostKickRes.room?.status === 'WAITING' &&
+      hostKickRes.room?.guestUid === null &&
+      guest73.getCurrentRoom() === null &&
+      guest73.getLastKickedNotice() === 'Bạn đã được chủ phòng mời ra khỏi phòng chờ.';
+
+    // Re-join & verify post-stage ready sync & stage N -> N+1
+    guest73.clearLastKickedNotice();
+    guest73.joinRoomSync(storage73, 'BT7301', gUser73, t73 + 60);
+    const pair73 = createInMemoryP2PChannelPair(
+      (msg) => host73.handleIncomingDataChannelMessage(msg, t73 + 70),
+      (msg) => guest73.handleIncomingDataChannelMessage(msg, t73 + 70)
+    );
+    host73.attachCustomP2PChannel(pair73.hostChannel, t73 + 70);
+    guest73.attachCustomP2PChannel(pair73.guestChannel, t73 + 70);
+    host73.setPlayerReadySync(storage73, true, t73 + 80);
+    guest73.setPlayerReadySync(storage73, true, t73 + 85);
+    storage73.setRoomSync('BT7301', { ...storage73.getRoomSync('BT7301')!, rtcConnectionState: 'CONNECTED' });
+    host73.startOnlineMatchSync(storage73, hUser73.uid, undefined, t73 + 90);
+
+    host73.setPostStageReady(1, 1, true, t73 + 100);
+    guest73.setPostStageReady(1, 1, true, t73 + 105);
+    const bothPostStageReadyOk =
+      host73.getPostStageReadyState()?.hostReady === true &&
+      host73.getPostStageReadyState()?.guestReady === true &&
+      guest73.getPostStageReadyState()?.hostReady === true &&
+      guest73.getPostStageReadyState()?.guestReady === true;
+
+    host73.advanceHostToNextOnlineStage(2, 2, undefined, t73 + 120);
+    const postStageAdvanceOk =
+      host73.getPostStageReadyState() === null &&
+      guest73.getPostStageReadyState() === null &&
+      guest73.getCurrentRoom()?.selectedStageId === 2 &&
+      host73.getCurrentRoom()?.selectedStageId === 2;
+
+    const passed =
+      roleBadgeOk &&
+      p1MovedThroughP2Ok &&
+      perPlayerStatsOk &&
+      kickFlowOk &&
+      bothPostStageReadyOk &&
+      postStageAdvanceOk;
+
+    results.push({
+      id: 'M7_3_T73',
+      name: 'T73: 8 hạng mục mới – Badge A/M, P1/P2 đi xuyên nhau, XP/thành tích tách riêng, Host mời ra P2, Ready chuyển màn online & tắt Vào nhanh',
+      passed,
+      details: `roleBadge=${roleBadgeOk}, passThrough=${p1MovedThroughP2Ok}, perPlayerStats=${perPlayerStatsOk}, kickFlow=${kickFlowOk}, postStageReady=${bothPostStageReadyOk}, postStageAdvance=${postStageAdvanceOk}`,
     });
   }
 

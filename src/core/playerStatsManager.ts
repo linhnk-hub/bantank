@@ -20,7 +20,7 @@
  *      while `totalXp` continues accumulating.
  */
 
-import { collection, doc, getDoc, getDocs, limit, onSnapshot, query, Timestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, getDocsFromServer, limit, onSnapshot, query, Timestamp } from 'firebase/firestore';
 import { getFirebaseDb } from './firebaseConfig.ts';
 import {
   AuthManager,
@@ -55,6 +55,17 @@ export interface PlayerAuthHistoryRecord {
   note: string;
 }
 
+export interface PersistedMatchEventSummary {
+  outcome: 'WIN' | 'LOSS';
+  earnedXp: number;
+  defeatedByType: {
+    BASIC: number;
+    FAST: number;
+    POWER: number;
+    ARMOR: number;
+  };
+}
+
 export interface PersistedPerUidStats {
   uid: string;
   accumulatedBattleXp: number;
@@ -76,6 +87,7 @@ export interface PersistedPerUidStats {
   lastLogoutAtMs: number | null;
   lastRecordedSessionId: string | null;
   recordedXpEventIds?: string[];
+  eventSummaries?: Record<string, PersistedMatchEventSummary>;
   authHistory: PlayerAuthHistoryRecord[];
 }
 
@@ -378,6 +390,24 @@ export class PlayerStatsManager {
         recordedXpEventIds: Array.isArray(parsed.recordedXpEventIds)
           ? parsed.recordedXpEventIds.map((x) => String(x))
           : [],
+        eventSummaries:
+          parsed.eventSummaries && typeof parsed.eventSummaries === 'object'
+            ? Object.fromEntries(
+                Object.entries(parsed.eventSummaries).map(([evId, s]) => [
+                  evId,
+                  {
+                    outcome: s?.outcome === 'WIN' ? 'WIN' : 'LOSS',
+                    earnedXp: Math.max(0, Number(s?.earnedXp || 0)),
+                    defeatedByType: {
+                      BASIC: Math.max(0, Number(s?.defeatedByType?.BASIC || 0)),
+                      FAST: Math.max(0, Number(s?.defeatedByType?.FAST || 0)),
+                      POWER: Math.max(0, Number(s?.defeatedByType?.POWER || 0)),
+                      ARMOR: Math.max(0, Number(s?.defeatedByType?.ARMOR || 0)),
+                    },
+                  } satisfies PersistedMatchEventSummary,
+                ])
+              )
+            : {},
         authHistory: Array.isArray(parsed.authHistory) ? parsed.authHistory : [],
       };
     } catch {
@@ -385,10 +415,100 @@ export class PlayerStatsManager {
     }
   }
 
+  private mergePerUidStats(
+    disk: PersistedPerUidStats,
+    mem: PersistedPerUidStats
+  ): PersistedPerUidStats {
+    const mergedHistoryMap = new Map<string, PlayerAuthHistoryRecord>();
+    for (const h of [...disk.authHistory, ...mem.authHistory]) {
+      if (h && h.id && !mergedHistoryMap.has(h.id)) {
+        mergedHistoryMap.set(h.id, h);
+      }
+    }
+    const mergedHistory = Array.from(mergedHistoryMap.values())
+      .sort((a, b) => b.timestampMs - a.timestampMs)
+      .slice(0, MAX_AUTH_HISTORY_PER_USER);
+
+    const mergedSummaries: Record<string, PersistedMatchEventSummary> = {
+      ...(disk.eventSummaries ?? {}),
+      ...(mem.eventSummaries ?? {}),
+    };
+    const mergedEventIds = Array.from(
+      new Set([
+        ...(disk.recordedXpEventIds ?? []),
+        ...(mem.recordedXpEventIds ?? []),
+        ...Object.keys(mergedSummaries),
+      ])
+    ).sort();
+
+    let summaryPlayed = 0;
+    let summaryWon = 0;
+    let summaryLost = 0;
+    let summaryXp = 0;
+    let sumB = 0;
+    let sumF = 0;
+    let sumP = 0;
+    let sumA = 0;
+    for (const summary of Object.values(mergedSummaries)) {
+      summaryPlayed += 1;
+      if (summary.outcome === 'WIN') summaryWon += 1;
+      else summaryLost += 1;
+      summaryXp += summary.earnedXp;
+      sumB += summary.defeatedByType.BASIC;
+      sumF += summary.defeatedByType.FAST;
+      sumP += summary.defeatedByType.POWER;
+      sumA += summary.defeatedByType.ARMOR;
+    }
+    const summaryEnemies = sumB + sumF + sumP + sumA;
+
+    const takeDiskTotals =
+      (disk.recordedXpEventIds?.length ?? 0) >= (mem.recordedXpEventIds?.length ?? 0);
+    const baseMatchSource = takeDiskTotals ? disk : mem;
+
+    return {
+      uid: disk.uid,
+      accumulatedBattleXp: Math.max(disk.accumulatedBattleXp, mem.accumulatedBattleXp, summaryXp),
+      highScoreXp: Math.max(disk.highScoreXp, mem.highScoreXp),
+      matchesPlayed: Math.max(disk.matchesPlayed, mem.matchesPlayed, summaryPlayed),
+      matchesWon: Math.max(disk.matchesWon, mem.matchesWon, summaryWon),
+      matchesLost: Math.max(disk.matchesLost, mem.matchesLost, summaryLost),
+      totalEnemiesDefeated: Math.max(
+        disk.totalEnemiesDefeated,
+        mem.totalEnemiesDefeated,
+        summaryEnemies
+      ),
+      defeatedByType: {
+        BASIC: Math.max(disk.defeatedByType.BASIC, mem.defeatedByType.BASIC, sumB),
+        FAST: Math.max(disk.defeatedByType.FAST, mem.defeatedByType.FAST, sumF),
+        POWER: Math.max(disk.defeatedByType.POWER, mem.defeatedByType.POWER, sumP),
+        ARMOR: Math.max(disk.defeatedByType.ARMOR, mem.defeatedByType.ARMOR, sumA),
+      },
+      coopRoomsParticipated: Math.max(disk.coopRoomsParticipated, mem.coopRoomsParticipated),
+      totalLogins: Math.max(disk.totalLogins, mem.totalLogins),
+      firstLoginAtMs:
+        disk.firstLoginAtMs !== null && mem.firstLoginAtMs !== null
+          ? Math.min(disk.firstLoginAtMs, mem.firstLoginAtMs)
+          : (disk.firstLoginAtMs ?? mem.firstLoginAtMs),
+      lastLoginAtMs:
+        disk.lastLoginAtMs !== null && mem.lastLoginAtMs !== null
+          ? Math.max(disk.lastLoginAtMs, mem.lastLoginAtMs)
+          : (disk.lastLoginAtMs ?? mem.lastLoginAtMs),
+      lastLogoutAtMs:
+        disk.lastLogoutAtMs !== null && mem.lastLogoutAtMs !== null
+          ? Math.max(disk.lastLogoutAtMs, mem.lastLogoutAtMs)
+          : (disk.lastLogoutAtMs ?? mem.lastLogoutAtMs),
+      lastRecordedSessionId: baseMatchSource.lastRecordedSessionId,
+      recordedXpEventIds: mergedEventIds,
+      eventSummaries: mergedSummaries,
+      authHistory: mergedHistory,
+    };
+  }
+
   private syncPerUidStatsFromStorage(uid: string): void {
     this.ensureWindowStorageListener();
     if (typeof window === 'undefined' || !window.localStorage) return;
-    const raw = window.localStorage.getItem(`${STATS_STORAGE_PREFIX}${uid}`);
+    const storageKey = `${STATS_STORAGE_PREFIX}${uid}`;
+    const raw = window.localStorage.getItem(storageKey);
     const prevRaw = this.lastKnownStatsRawByUid.get(uid);
     if (raw === prevRaw && this.perUidStore.has(uid)) return;
 
@@ -407,56 +527,25 @@ export class PlayerStatsManager {
       return;
     }
 
-    // Safe commutative merge for multi-tab stats updates
-    const mergedHistoryMap = new Map<string, PlayerAuthHistoryRecord>();
-    for (const h of [...disk.authHistory, ...mem.authHistory]) {
-      if (h && h.id && !mergedHistoryMap.has(h.id)) {
-        mergedHistoryMap.set(h.id, h);
+    const merged = this.mergePerUidStats(disk, mem);
+    const diskNeedsHeal =
+      (merged.recordedXpEventIds?.length ?? 0) > (disk.recordedXpEventIds?.length ?? 0) ||
+      merged.matchesPlayed > disk.matchesPlayed ||
+      merged.authHistory.length > disk.authHistory.length ||
+      merged.totalLogins > disk.totalLogins ||
+      merged.coopRoomsParticipated > disk.coopRoomsParticipated;
+
+    if (diskNeedsHeal) {
+      try {
+        const serialized = JSON.stringify(merged);
+        window.localStorage.setItem(storageKey, serialized);
+        this.perUidStore.set(uid, merged);
+        this.lastKnownStatsRawByUid.set(uid, serialized);
+        return;
+      } catch {
+        // Fall back to RAM merge
       }
     }
-    const mergedHistory = Array.from(mergedHistoryMap.values())
-      .sort((a, b) => b.timestampMs - a.timestampMs)
-      .slice(0, MAX_AUTH_HISTORY_PER_USER);
-
-    const mergedEventIds = Array.from(
-      new Set([...(disk.recordedXpEventIds ?? []), ...(mem.recordedXpEventIds ?? [])])
-    );
-
-    const takeDiskTotals = (disk.recordedXpEventIds?.length ?? 0) >= (mem.recordedXpEventIds?.length ?? 0);
-    const baseMatchSource = takeDiskTotals ? disk : mem;
-
-    const merged: PersistedPerUidStats = {
-      uid,
-      accumulatedBattleXp: Math.max(disk.accumulatedBattleXp, mem.accumulatedBattleXp),
-      highScoreXp: Math.max(disk.highScoreXp, mem.highScoreXp),
-      matchesPlayed: Math.max(disk.matchesPlayed, mem.matchesPlayed),
-      matchesWon: Math.max(disk.matchesWon, mem.matchesWon),
-      matchesLost: Math.max(disk.matchesLost, mem.matchesLost),
-      totalEnemiesDefeated: Math.max(disk.totalEnemiesDefeated, mem.totalEnemiesDefeated),
-      defeatedByType: {
-        BASIC: Math.max(disk.defeatedByType.BASIC, mem.defeatedByType.BASIC),
-        FAST: Math.max(disk.defeatedByType.FAST, mem.defeatedByType.FAST),
-        POWER: Math.max(disk.defeatedByType.POWER, mem.defeatedByType.POWER),
-        ARMOR: Math.max(disk.defeatedByType.ARMOR, mem.defeatedByType.ARMOR),
-      },
-      coopRoomsParticipated: Math.max(disk.coopRoomsParticipated, mem.coopRoomsParticipated),
-      totalLogins: Math.max(disk.totalLogins, mem.totalLogins),
-      firstLoginAtMs:
-        disk.firstLoginAtMs !== null && mem.firstLoginAtMs !== null
-          ? Math.min(disk.firstLoginAtMs, mem.firstLoginAtMs)
-          : (disk.firstLoginAtMs ?? mem.firstLoginAtMs),
-      lastLoginAtMs:
-        disk.lastLoginAtMs !== null && mem.lastLoginAtMs !== null
-          ? Math.max(disk.lastLoginAtMs, mem.lastLoginAtMs)
-          : (disk.lastLoginAtMs ?? mem.lastLoginAtMs),
-      lastLogoutAtMs:
-        disk.lastLogoutAtMs !== null && mem.lastLogoutAtMs !== null
-          ? Math.max(disk.lastLogoutAtMs, mem.lastLogoutAtMs)
-          : (disk.lastLogoutAtMs ?? mem.lastLogoutAtMs),
-      lastRecordedSessionId: baseMatchSource.lastRecordedSessionId,
-      recordedXpEventIds: mergedEventIds,
-      authHistory: mergedHistory,
-    };
 
     this.perUidStore.set(uid, merged);
     this.lastKnownStatsRawByUid.set(uid, raw);
@@ -473,16 +562,28 @@ export class PlayerStatsManager {
   }
 
   private savePerUidStats(record: PersistedPerUidStats): void {
-    this.perUidStore.set(record.uid, record);
+    let toSave = record;
     if (typeof window !== 'undefined' && window.localStorage) {
+      const storageKey = `${STATS_STORAGE_PREFIX}${record.uid}`;
+      const currentDiskRaw = window.localStorage.getItem(storageKey);
+      const prevRaw = this.lastKnownStatsRawByUid.get(record.uid);
+      if (currentDiskRaw !== null && currentDiskRaw !== prevRaw) {
+        const disk = this.parsePersistedStatsRaw(record.uid, currentDiskRaw);
+        if (disk) {
+          toSave = this.mergePerUidStats(disk, record);
+        }
+      }
+      this.perUidStore.set(record.uid, toSave);
       try {
-        const serialized = JSON.stringify(record);
-        window.localStorage.setItem(`${STATS_STORAGE_PREFIX}${record.uid}`, serialized);
+        const serialized = JSON.stringify(toSave);
+        window.localStorage.setItem(storageKey, serialized);
         this.lastKnownStatsRawByUid.set(record.uid, serialized);
       } catch {
         // Ignore quota errors
       }
+      return;
     }
+    this.perUidStore.set(record.uid, toSave);
   }
 
   public ensureUserFirestoreSubscription(uid: string | null | undefined): void {
@@ -958,6 +1059,14 @@ export class PlayerStatsManager {
     record.defeatedByType.ARMOR += a;
     record.totalEnemiesDefeated += b + f + p + a;
     record.recordedXpEventIds = Array.from(new Set([...(record.recordedXpEventIds ?? []), xpEventId]));
+    record.eventSummaries = {
+      ...(record.eventSummaries ?? {}),
+      [xpEventId]: {
+        outcome: params.outcome,
+        earnedXp: safeEarned,
+        defeatedByType: { BASIC: b, FAST: f, POWER: p, ARMOR: a },
+      },
+    };
 
     this.savePerUidStats(record);
 
@@ -1259,7 +1368,12 @@ export class PlayerStatsManager {
         options?.firestoreDocsLoader
           ? await options.firestoreDocsLoader()
           : await (async () => {
-              const snap = await getDocs(query(collection(db!, 'users'), limit(500)));
+              const snap = await getDocsFromServer(query(collection(db!, 'users'), limit(500)));
+              if (snap.metadata?.fromCache) {
+                const cacheErr = new Error('Firestore returned cache-only /users snapshot while offline.') as Error & { code?: string };
+                cacheErr.code = 'unavailable';
+                throw cacheErr;
+              }
               const rows: Array<{ id: string; data: Record<string, unknown> }> = [];
               snap.forEach((docSnap) => {
                 rows.push({

@@ -9,6 +9,7 @@ import {
   getUserDisplayLabel,
   resolveUserRole,
   getRoleNameFrameClasses,
+  getRoleTrademarkBadge,
 } from '../core/authManager.ts';
 import { AvatarManager } from '../core/avatarManager.ts';
 import { PlayerStatsManager } from '../core/playerStatsManager.ts';
@@ -167,9 +168,15 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
     Boolean(user)
   );
 
-  const displayLabel = getUserDisplayLabel(user);
+  const profileMeta = user.uid ? avatarManager.getUserMetadata(user.uid) : null;
+  const effectiveUser = {
+    ...user,
+    displayName: profileMeta?.displayName || user.displayName,
+  };
+  const displayLabel = getUserDisplayLabel(effectiveUser);
   const userRole = resolveUserRole(user);
   const roleFrameClasses = getRoleNameFrameClasses(userRole);
+  const roleTrademarkBadge = getRoleTrademarkBadge(userRole);
 
   // Chỉ hiển thị thông báo lỗi thật sự khi quá trình kết nối phiên thất bại và có thông điệp lỗi cụ thể
   const hasRealSessionFailure =
@@ -239,8 +246,18 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               ) : (
                 <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               )}
-              <span className="font-bold text-amber-300 truncate max-w-[88px] xs:max-w-[120px] sm:max-w-[180px]">
-                {displayLabel}
+              <span className="inline-flex items-baseline font-bold text-amber-300 min-w-0">
+                <span className="truncate max-w-[88px] xs:max-w-[120px] sm:max-w-[180px]">
+                  {displayLabel}
+                </span>
+                {roleTrademarkBadge && (
+                  <sup
+                    data-testid="role-trademark-badge"
+                    className="ml-0.5 text-[9px] font-black leading-none text-amber-300 select-none shrink-0"
+                  >
+                    {roleTrademarkBadge}
+                  </sup>
+                )}
               </span>
               <span
                 data-testid="top-menu-player-level"

@@ -234,13 +234,6 @@ export class AllyAIController {
       return false;
     }
 
-    if (p1 && p1.isAlive) {
-      const p1Box = getTankHitbox(p1.x, p1.y);
-      if (intersectAABB(testBox, p1Box)) {
-        return false;
-      }
-    }
-
     const aliveEnemies = enemies.filter((e) => e.isAlive);
     if (checkTankVsTanks(p2.id, testBox, aliveEnemies)) {
       return false;
@@ -424,9 +417,6 @@ export class AllyAIController {
     this.lastTerrainSignature = terrainSig;
 
     const blockedTanks: Array<{ x: number; y: number; id: string }> = [];
-    if (p1 && p1.isAlive) {
-      blockedTanks.push({ x: p1.x, y: p1.y, id: p1.id });
-    }
     for (const e of aliveEnemies) {
       if (!primaryTarget || e.id !== primaryTarget.id) {
         blockedTanks.push({ x: e.x, y: e.y, id: e.id });

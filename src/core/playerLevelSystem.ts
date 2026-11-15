@@ -382,6 +382,7 @@ export interface LedgerMultiTabConflictInfo {
   reasonCode:
     | 'CONFLICTING_CLOUD_BASELINE'
     | 'CONFLICTING_EVENT_PAYLOAD'
+    | 'CONFLICTING_EVENT_DIGEST'
     | 'STORAGE_TAMPER_OR_CORRUPTED';
   message: string;
   localRevision: number;
@@ -455,7 +456,7 @@ function computeEventDigest(ev: Omit<ValidatedXpLedgerEvent, 'eventDigest'>): st
       ev.gameMode,
       String(ev.deltaXp),
       `${ev.enemyBreakdown.BASIC},${ev.enemyBreakdown.FAST},${ev.enemyBreakdown.POWER},${ev.enemyBreakdown.ARMOR}`,
-      String(ev.timestampMs),
+      ev.roomCode ?? '',
     ].join('|')
   );
 }
@@ -1166,6 +1167,35 @@ export class PlayerLevelManager {
       };
     }
 
+    const diskNeedsHeal =
+      mergeRes.merged.events.length > diskLedger.events.length ||
+      mergeRes.merged.cloudCommittedEventIds.length > diskLedger.cloudCommittedEventIds.length ||
+      (mergeRes.merged.cloudBaselineXp !== null &&
+        (diskLedger.cloudBaselineXp === null ||
+          (mergeRes.merged.lastCloudSyncAtMs ?? 0) > (diskLedger.lastCloudSyncAtMs ?? 0))) ||
+      (mergeRes.merged.hasVerifiedZeroBaselineSession && !diskLedger.hasVerifiedZeroBaselineSession);
+
+    if (diskNeedsHeal && trigger !== 'PRE_WRITE') {
+      const healedUnsigned: Omit<PersistedUserLevelLedger, 'signature'> = {
+        ...mergeRes.merged,
+        revision: Math.max(mergeRes.merged.revision, diskLedger.revision) + 1,
+      };
+      const healedLedger: PersistedUserLevelLedger = {
+        ...healedUnsigned,
+        signature: computeLedgerSignature(healedUnsigned),
+      };
+      try {
+        const serialized = JSON.stringify(healedLedger);
+        window.localStorage.setItem(storageKey, serialized);
+        this.ledgersByUid.set(uid, healedLedger);
+        this.lastKnownStorageRawByUid.set(uid, serialized);
+        this.multiTabConflictsByUid.delete(uid);
+        return { ok: true, changedFromStorage: true, conflictDetected: false };
+      } catch {
+        // Ignore storage error and keep merged ledger in RAM
+      }
+    }
+
     this.ledgersByUid.set(uid, mergeRes.merged);
     this.lastKnownStorageRawByUid.set(uid, diskRaw);
     this.multiTabConflictsByUid.delete(uid);
@@ -1570,7 +1600,8 @@ export class PlayerLevelManager {
 
     const ev = validation.normalizedEvent;
     const reconcileRes = this.reconcileWithPersistedStorage(ev.uid, 'PRE_WRITE');
-    if (reconcileRes.conflictDetected) {
+    const existingActiveConflict = this.multiTabConflictsByUid.get(ev.uid);
+    if (reconcileRes.conflictDetected || existingActiveConflict) {
       const cur = this.getLevelProgressForUid(ev.uid);
       return {
         accepted: false,
@@ -1578,6 +1609,7 @@ export class PlayerLevelManager {
         rejectionCode: 'MULTI_TAB_CONFLICT_DETECTED',
         rejectionMessage:
           reconcileRes.conflictInfo?.message ||
+          existingActiveConflict?.message ||
           'Phát hiện xung đột dữ liệu giữa các tab. Không ghi đè âm thầm.',
         uid: ev.uid,
         eventId: ev.eventId,
@@ -1591,10 +1623,35 @@ export class PlayerLevelManager {
 
     const ledger = this.getOrLoadLedger(ev.uid);
 
-    // Idempotency check across retries, reconnects, and multi-device duplicate deliveries
-    const alreadyInEvents = ledger.events.some((existing) => existing.eventId === ev.eventId);
+    // Idempotency & digest-conflict check across retries, reconnects, and multi-tab collisions
+    const existingEvent = ledger.events.find((existing) => existing.eventId === ev.eventId);
+    if (existingEvent && existingEvent.eventDigest !== ev.eventDigest) {
+      const conflict: LedgerMultiTabConflictInfo = {
+        uid: ev.uid,
+        detectedAtMs: Date.now(),
+        reasonCode: 'CONFLICTING_EVENT_DIGEST',
+        message: `Xung đột eventId=${ev.eventId} giữa các tab (eventDigest không khớp). Không ghi đè âm thầm.`,
+        localRevision: ledger.revision,
+        remoteRevision: ledger.revision,
+      };
+      this.recordMultiTabConflict(conflict);
+      const cur = this.getLevelProgressForUid(ev.uid);
+      return {
+        accepted: false,
+        duplicateIgnored: false,
+        rejectionCode: 'MULTI_TAB_CONFLICT_DETECTED',
+        rejectionMessage: conflict.message,
+        uid: ev.uid,
+        eventId: ev.eventId,
+        previousTotalXp: cur.totalXp,
+        newTotalXp: cur.totalXp,
+        previousLevel: cur.level,
+        newLevel: cur.level,
+        levelChanged: false,
+      };
+    }
     const alreadyInCloudCommitted = ledger.cloudCommittedEventIds.includes(ev.eventId);
-    if (alreadyInEvents || alreadyInCloudCommitted) {
+    if (existingEvent || alreadyInCloudCommitted) {
       const cur = this.getLevelProgressForUid(ev.uid);
       return {
         accepted: true,

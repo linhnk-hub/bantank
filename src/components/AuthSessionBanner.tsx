@@ -9,6 +9,7 @@ import {
   getUserDisplayLabel,
   resolveUserRole,
   getRoleNameFrameClasses,
+  getRoleTrademarkBadge,
 } from '../core/authManager.ts';
 import { SessionManager, type SessionStateSnapshot, type SessionStateStatus } from '../core/sessionManager.ts';
 import { AvatarManager } from '../core/avatarManager.ts';
@@ -159,8 +160,14 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
   );
 
   useEffect(() => {
+    if (user?.uid) {
+      avatarManager.observeUserMetadata(user.uid);
+    }
     const unsubAuth = authManager.subscribe((u) => {
       setUser(u);
+      if (u?.uid) {
+        avatarManager.observeUserMetadata(u.uid);
+      }
       if (u && sessionManager.getSnapshot().status === 'NO_SESSION') {
         sessionManager.acquireSession(u.uid);
       }
@@ -185,7 +192,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
       unsubSession();
       unsubAvatar();
     };
-  }, [authManager, sessionManager, avatarManager, onStartMatchAllowedChange]);
+  }, [authManager, sessionManager, avatarManager, user?.uid, onStartMatchAllowedChange]);
 
   const handleSignIn = async () => {
     setIsProcessing(true);
@@ -265,30 +272,52 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
       <div className="bg-neutral-950/90 border-b border-neutral-800/80 px-3 py-1.5 flex items-center justify-between text-xs text-neutral-300 shrink-0">
         <div className="flex items-center gap-2">
           {user ? (
-            <div
-              className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-neutral-900/90 ${getRoleNameFrameClasses(
-                resolveUserRole(user)
-              )}`}
-            >
-              {effectiveAvatarUrl ? (
-                <img
-                  src={effectiveAvatarUrl}
-                  alt={getUserDisplayLabel(user)}
-                  className="w-5 h-5 rounded-full object-cover border border-amber-500/40 shrink-0"
-                  referrerPolicy="no-referrer"
-                />
-              ) : (
-                <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-              )}
-              <span className="font-bold text-amber-300 truncate max-w-[160px] sm:max-w-[220px]">
-                {getUserDisplayLabel(user)}
-              </span>
-              {badgeInfo.label && (
-                <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
-                  {badgeInfo.label}
-                </span>
-              )}
-            </div>
+            (() => {
+              const profileMeta = user.uid ? avatarManager.getUserMetadata(user.uid) : null;
+              const effectiveUser = {
+                ...user,
+                displayName: profileMeta?.displayName || user.displayName,
+              };
+              const displayLabel = getUserDisplayLabel(effectiveUser);
+              const userRole = resolveUserRole(user);
+              const roleTrademarkBadge = getRoleTrademarkBadge(userRole);
+              return (
+                <div
+                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg bg-neutral-900/90 ${getRoleNameFrameClasses(
+                    userRole
+                  )}`}
+                >
+                  {effectiveAvatarUrl ? (
+                    <img
+                      src={effectiveAvatarUrl}
+                      alt={displayLabel}
+                      className="w-5 h-5 rounded-full object-cover border border-amber-500/40 shrink-0"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : (
+                    <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  )}
+                  <span className="inline-flex items-baseline font-bold text-amber-300 min-w-0">
+                    <span className="truncate max-w-[160px] sm:max-w-[220px]">
+                      {displayLabel}
+                    </span>
+                    {roleTrademarkBadge && (
+                      <sup
+                        data-testid="role-trademark-badge"
+                        className="ml-0.5 text-[9px] font-black leading-none text-amber-300 select-none shrink-0"
+                      >
+                        {roleTrademarkBadge}
+                      </sup>
+                    )}
+                  </span>
+                  {badgeInfo.label && (
+                    <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
+                      {badgeInfo.label}
+                    </span>
+                  )}
+                </div>
+              );
+            })()
           ) : isTrialMode ? (
             <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-amber-950/70 border border-amber-500/40 text-amber-300 font-bold">
               <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />

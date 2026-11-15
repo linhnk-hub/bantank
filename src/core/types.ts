@@ -252,6 +252,17 @@ export interface SnapshotValidationResult {
   appliedSnapshotSeq?: number;
 }
 
+export interface PlayerCombatStats {
+  score: number;
+  stageScore: number;
+  defeatedCounts: {
+    BASIC: number;
+    FAST: number;
+    POWER: number;
+    ARMOR: number;
+  };
+}
+
 export interface GameCoreState {
   tickCount: number;
   stageRunSeq: number;
@@ -271,6 +282,8 @@ export interface GameCoreState {
     POWER: number;
     ARMOR: number;
   };
+  p1Stats?: PlayerCombatStats;
+  p2Stats?: PlayerCombatStats | null;
   currentStageId: number;
   currentStageName: string;
   currentStageVersion?: number;

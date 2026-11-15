@@ -91,9 +91,25 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         ? 'Mạng còn lại của Đồng đội AI:'
         : 'Mạng còn lại của P2:';
 
-  const counts = state.defeatedCounts || { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 };
+  const isOnlineGuest = isCoopOnline && effectiveOnlineRole === 'GUEST';
+  const localStats = isOnlineGuest
+    ? (state.p2Stats ?? {
+        score: 0,
+        stageScore: 0,
+        defeatedCounts: { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 },
+      })
+    : (state.p1Stats ?? {
+        score: state.score,
+        stageScore: 0,
+        defeatedCounts: state.defeatedCounts || { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 },
+      });
+  const counts = localStats.defeatedCounts;
   const totalDefeated = counts.BASIC + counts.FAST + counts.POWER + counts.ARMOR;
-  const isNewRecord = state.score >= state.highScore && state.score > 0;
+  const localTotalScore = localStats.score;
+  const localStageScore =
+    counts.BASIC * 1 + counts.FAST * 2 + counts.POWER * 3 + counts.ARMOR * 5;
+  const localPlayerTag = isOnlineGuest ? 'P2' : 'P1';
+  const isNewRecord = localTotalScore >= state.highScore && localTotalScore > 0;
   const isTimeout = Boolean(state.isTimeoutGameOver);
   const isBaseDestroyed = Boolean(state.terrain.isBaseDestroyed);
   const causeBadgeLabel = isTimeout
@@ -129,9 +145,14 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
           {/* Score & Record Display */}
           <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-center space-y-1">
-            <div className="text-[11px] text-neutral-400 font-medium">TỔNG XP TRẬN NÀY</div>
+            <div className="text-[11px] text-neutral-400 font-medium">
+              {isCoop ? `TỔNG XP CỦA BẠN (${localPlayerTag})` : 'TỔNG XP TRẬN NÀY'}
+            </div>
             <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400 tracking-tight">
-              {state.score.toLocaleString()} XP
+              {localTotalScore.toLocaleString()} XP
+            </div>
+            <div className="text-[11px] font-mono text-emerald-300/90 font-semibold">
+              XP màn này: +{localStageScore.toLocaleString()} XP
             </div>
             <div className="flex items-center justify-center gap-1.5 pt-0.5 text-[11px] sm:text-xs">
               <Trophy className="w-3.5 h-3.5 text-amber-500" />
@@ -148,7 +169,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           {/* Statistics Breakdown */}
           <div className="bg-neutral-950/70 border border-neutral-800/80 rounded-xl p-3 space-y-2 text-xs">
             <div className="font-bold text-neutral-300 pb-1 border-b border-neutral-800 flex justify-between gap-2 flex-wrap">
-              <span>THỐNG KÊ CHIẾN TÍCH</span>
+              <span>{isCoop ? `THÀNH TÍCH CỦA BẠN (${localPlayerTag})` : 'THỐNG KÊ CHIẾN TÍCH'}</span>
               <span className="text-amber-400 font-mono">
                 STAGE {state.currentStageId ?? 1}/{TOTAL_CAMPAIGN_STAGES} •{' '}
                 {state.currentStageName || getCampaignStageSpec(state.currentStageId ?? 1).shortTitle}
@@ -189,8 +210,12 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               </div>
 
               <div className="pt-1.5 border-t border-neutral-800/80 flex items-center justify-between font-bold text-amber-400">
-                <span>Tổng tiêu diệt:</span>
-                <span>{totalDefeated} / 30 xe</span>
+                <span>{isCoop ? `Tiêu diệt (${localPlayerTag}):` : 'Tổng tiêu diệt:'}</span>
+                <span>
+                  {isCoop
+                    ? `${totalDefeated} xe (Toàn đội: ${state.totalDefeatedEnemies}/30)`
+                    : `${totalDefeated} / 30 xe`}
+                </span>
               </div>
 
               <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-0.5">

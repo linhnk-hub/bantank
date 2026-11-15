@@ -1240,6 +1240,272 @@ export function runAllM7_5_2Tests(): { results: M752TestResult[] } {
     });
   }
 
+  // =========================================================================
+  // M7_5_2_T17: M7.5.2.3 Regression – Same eventId With Different eventDigest Triggers CONFLICTING_EVENT_DIGEST
+  // =========================================================================
+  {
+    const prevWindow = (globalThis as { window?: unknown }).window;
+    const memStore = new Map<string, string>();
+    const storageListeners = new Set<(ev: StorageEvent) => void>();
+    const mockStorage = {
+      getItem: (k: string) => memStore.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        memStore.set(k, v);
+      },
+      removeItem: (k: string) => {
+        memStore.delete(k);
+      },
+    };
+    (globalThis as { window?: unknown }).window = {
+      localStorage: mockStorage,
+      addEventListener: (type: string, cb: (ev: StorageEvent) => void) => {
+        if (type === 'storage') storageListeners.add(cb);
+      },
+      removeEventListener: (type: string, cb: (ev: StorageEvent) => void) => {
+        if (type === 'storage') storageListeners.delete(cb);
+      },
+    };
+
+    const uidDigest = 'uid_m7523_digest_conflict';
+    let passed = false;
+    let details = '';
+    try {
+      const tab1 = PlayerLevelManager.createIsolatedTabInstanceForTesting();
+      const tab2 = PlayerLevelManager.createIsolatedTabInstanceForTesting();
+
+      tab1.applyFirestoreUserDocument(uidDigest, { uid: uidDigest, totalXp: 0 }, 1_772_200_000_000);
+      tab2.applyFirestoreUserDocument(uidDigest, { uid: uidDigest, totalXp: 0 }, 1_772_200_000_000);
+
+      // Tab 1 records ev_collision_x with 10 XP (BASIC: 10)
+      const g1 = tab1.grantVerifiedBattleXpSync({
+        uid: uidDigest,
+        eventId: 'ev_collision_x',
+        source: 'SOLO_BATTLE',
+        stageId: 1,
+        gameMode: 'SOLO',
+        earnedXp: 10,
+        defeatedByType: { BASIC: 10 },
+        timestampMs: 1_772_200_005_000,
+      });
+      const storageKey = `${LEDGER_STORAGE_PREFIX}${uidDigest}`;
+      const diskAfterTab1 = memStore.get(storageKey);
+
+      // Tab 2 (stale RAM) attempts to write SAME eventId with DIFFERENT digest (25 XP, ARMOR: 5)
+      const g2Conflict = tab2.grantVerifiedBattleXpSync({
+        uid: uidDigest,
+        eventId: 'ev_collision_x',
+        source: 'SOLO_BATTLE',
+        stageId: 1,
+        gameMode: 'SOLO',
+        earnedXp: 25,
+        defeatedByType: { ARMOR: 5 },
+        timestampMs: 1_772_200_006_000,
+      });
+
+      // Subsequent unrelated write on conflicted tab2 MUST remain blocked until conflict is cleared
+      const g2BlockedFollowup = tab2.grantVerifiedBattleXpSync({
+        uid: uidDigest,
+        eventId: 'ev_followup_after_conflict',
+        source: 'SOLO_BATTLE',
+        stageId: 2,
+        gameMode: 'SOLO',
+        earnedXp: 15,
+        defeatedByType: { ARMOR: 3 },
+        timestampMs: 1_772_200_010_000,
+      });
+
+      const conflictInfo = tab2.getMultiTabConflict(uidDigest);
+      const diskAfterConflict = memStore.get(storageKey);
+
+      passed =
+        g1.accepted === true &&
+        g2Conflict.accepted === false &&
+        g2Conflict.duplicateIgnored === false &&
+        g2Conflict.rejectionCode === 'MULTI_TAB_CONFLICT_DETECTED' &&
+        g2BlockedFollowup.accepted === false &&
+        g2BlockedFollowup.rejectionCode === 'MULTI_TAB_CONFLICT_DETECTED' &&
+        conflictInfo?.reasonCode === 'CONFLICTING_EVENT_DIGEST' &&
+        diskAfterConflict === diskAfterTab1;
+
+      details = `g2Code=${g2Conflict.rejectionCode}, reason=${conflictInfo?.reasonCode}, followupCode=${g2BlockedFollowup.rejectionCode}, diskPreserved=${diskAfterConflict === diskAfterTab1}`;
+    } finally {
+      memStore.clear();
+      if (prevWindow !== undefined) {
+        (globalThis as { window?: unknown }).window = prevWindow;
+      } else {
+        delete (globalThis as { window?: unknown }).window;
+      }
+      PlayerLevelManager.getInstance().ensureWindowStorageListener();
+    }
+
+    results.push({
+      id: 'M7_5_2_T17',
+      name: 'M7.5.2.3 Regression: Cùng eventId khác eventDigest phát hiện CONFLICTING_EVENT_DIGEST & khóa ghi đè âm thầm',
+      passed,
+      details,
+    });
+  }
+
+  // =========================================================================
+  // M7_5_2_T18: M7.5.2.3 Regression – Retry With Different timestampMs Still Deduplicates Cleanly & Multi-Tab Stats Summaries Merge
+  // =========================================================================
+  {
+    const prevWindow = (globalThis as { window?: unknown }).window;
+    const memStore = new Map<string, string>();
+    const mockStorage = {
+      getItem: (k: string) => memStore.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        memStore.set(k, v);
+      },
+      removeItem: (k: string) => {
+        memStore.delete(k);
+      },
+    };
+    (globalThis as { window?: unknown }).window = {
+      localStorage: mockStorage,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    };
+
+    const statsMgr = PlayerStatsManager.getInstance();
+    const uidRetryStats = 'uid_m7523_retry_and_stats_merge';
+    let passed = false;
+    let details = '';
+
+    try {
+      statsMgr.clearUidStatsForTesting(uidRetryStats);
+      statsMgr.applyCloudUserDocData(uidRetryStats, { uid: uidRetryStats, totalXp: 0 });
+
+      const eng = new GameEngine(undefined, undefined, true);
+      eng.startMatch('SOLO', 'DEFAULT', { stageId: 1, enforceProgression: false });
+      const ids1 = buildBattleXpIdentifiers({
+        uid: uidRetryStats,
+        gameMode: 'SOLO',
+        matchInstanceId: eng.getState().matchInstanceId!,
+        stageId: 1,
+        stageRunSeq: eng.getState().stageRunSeq,
+        outcome: 'WIN',
+      });
+
+      // Retry of identical match outcome 50ms later (simulates React effect retry without fixed timestampMs)
+      const firstCall = statsMgr.recordMatchOutcome({
+        uid: uidRetryStats,
+        runKey: ids1.runKey,
+        xpEventId: ids1.xpEventId,
+        outcome: 'WIN',
+        stageId: 1,
+        gameMode: 'SOLO',
+        earnedScoreXp: 35,
+        defeatedByType: { ARMOR: 5, POWER: 2, FAST: 2 },
+        timestampMs: 1_772_300_000_000,
+      });
+      const retryLaterCall = statsMgr.recordMatchOutcome({
+        uid: uidRetryStats,
+        runKey: ids1.runKey,
+        xpEventId: ids1.xpEventId,
+        outcome: 'WIN',
+        stageId: 1,
+        gameMode: 'SOLO',
+        earnedScoreXp: 35,
+        defeatedByType: { ARMOR: 5, POWER: 2, FAST: 2 },
+        timestampMs: 1_772_300_000_050,
+      });
+
+      // Simulate concurrent second tab writing an independent match directly to stats storage while RAM still holds only ids1
+      const statsKey = `bantank_m751_player_stats_v1_${uidRetryStats}`;
+      memStore.set(
+        statsKey,
+        JSON.stringify({
+          uid: uidRetryStats,
+          accumulatedBattleXp: 40,
+          highScoreXp: 40,
+          matchesPlayed: 1,
+          matchesWon: 1,
+          matchesLost: 0,
+          totalEnemiesDefeated: 8,
+          defeatedByType: { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 8 },
+          coopRoomsParticipated: 0,
+          totalLogins: 1,
+          firstLoginAtMs: 1_772_300_000_000,
+          lastLoginAtMs: 1_772_300_000_000,
+          lastLogoutAtMs: null,
+          lastRecordedSessionId: null,
+          recordedXpEventIds: ['ev_other_tab_conc'],
+          eventSummaries: {
+            ev_other_tab_conc: {
+              outcome: 'WIN',
+              earnedXp: 40,
+              defeatedByType: { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 8 },
+            },
+          },
+          authHistory: [],
+        })
+      );
+
+      // Snapshot read MUST merge RAM + disk via eventSummaries AND heal localStorage!
+      const mergedSnap = statsMgr.getPlayerStatisticsSnapshot(uidRetryStats);
+      const healedDisk = JSON.parse(memStore.get(statsKey) || '{}') as {
+        matchesPlayed?: number;
+        recordedXpEventIds?: string[];
+      };
+
+      // Follow-up match after retry + multi-tab merge MUST still succeed cleanly
+      eng.advanceToNextStage();
+      const ids2 = buildBattleXpIdentifiers({
+        uid: uidRetryStats,
+        gameMode: 'SOLO',
+        matchInstanceId: eng.getState().matchInstanceId!,
+        stageId: eng.getState().currentStageId,
+        stageRunSeq: eng.getState().stageRunSeq,
+        outcome: 'WIN',
+      });
+      const st2Call = statsMgr.recordMatchOutcome({
+        uid: uidRetryStats,
+        runKey: ids2.runKey,
+        xpEventId: ids2.xpEventId,
+        outcome: 'WIN',
+        stageId: 2,
+        gameMode: 'SOLO',
+        earnedScoreXp: 25,
+        defeatedByType: { ARMOR: 5 },
+        timestampMs: 1_772_300_010_000,
+      });
+
+      passed =
+        firstCall?.accepted === true &&
+        firstCall.duplicateIgnored === false &&
+        retryLaterCall?.accepted === true &&
+        retryLaterCall.duplicateIgnored === true &&
+        mergedSnap.matchesPlayed === 2 &&
+        mergedSnap.matchesWon === 2 &&
+        mergedSnap.totalEnemiesDefeated === 17 &&
+        mergedSnap.defeatedByType.ARMOR === 13 &&
+        healedDisk.matchesPlayed === 2 &&
+        (healedDisk.recordedXpEventIds?.length ?? 0) === 2 &&
+        st2Call?.accepted === true &&
+        st2Call.duplicateIgnored === false &&
+        st2Call.newTotalXp === 60;
+
+      details = `retryIgnored=${retryLaterCall?.duplicateIgnored}, mergedMatches=${mergedSnap.matchesPlayed}, healedDiskMatches=${healedDisk.matchesPlayed}, st2Xp=${st2Call?.newTotalXp}`;
+    } finally {
+      statsMgr.clearUidStatsForTesting(uidRetryStats);
+      memStore.clear();
+      if (prevWindow !== undefined) {
+        (globalThis as { window?: unknown }).window = prevWindow;
+      } else {
+        delete (globalThis as { window?: unknown }).window;
+      }
+      PlayerLevelManager.getInstance().ensureWindowStorageListener();
+    }
+
+    results.push({
+      id: 'M7_5_2_T18',
+      name: 'M7.5.2.3 Regression: Retry khác timestampMs giữ nguyên eventDigest (không khóa nhầm) & merge multi-tab PlayerStatsManager đủ số trận',
+      passed,
+      details,
+    });
+  }
+
   return { results };
 }
 

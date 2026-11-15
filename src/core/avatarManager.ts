@@ -3904,6 +3904,9 @@ export class AvatarManager {
 
   public constructor() {
     this.seedStaticPublicAvatars();
+    AuthManager.registerSignOutHook(() => {
+      this.clearSessionStateOnSignOut();
+    });
     if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
       window.addEventListener('storage', (ev) => {
         if (
@@ -4796,6 +4799,17 @@ export class AvatarManager {
     this.userUnsubscribes.clear();
   }
 
+  public clearSessionStateOnSignOut(): void {
+    this.stopAllSubscriptions();
+    this.userMetadataCache.clear();
+    this.lastFirestoreDiagnostic = null;
+    this.recoveredForUid = null;
+    this.recoveryInflight = null;
+    this.stagedCatalogFile = null;
+    this.pendingMetadataSync = null;
+    this.notify();
+  }
+
   public getUserMetadata(uid: string | null | undefined): UserProfileAvatarMetadata | null {
     if (!uid) return null;
     const cached = this.userMetadataCache.get(uid) ?? null;
@@ -5275,6 +5289,7 @@ export class AvatarManager {
         avatarId,
         avatarUpdatedAtMs: existingMeta?.avatarUpdatedAtMs ?? 0,
       });
+      await auth.updateUserProfile({ displayName: cleanName });
       this.notify();
       return {
         success: true,

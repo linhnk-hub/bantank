@@ -49,6 +49,7 @@ import {
   resolveUserRole,
   getRoleNameFrameClasses,
   getRoleDisplayInfo,
+  getRoleTrademarkBadge,
   RBAC_PERMISSION_MATRIX,
   hasRolePermission,
   getRoleChangeAuditLogs,
@@ -650,12 +651,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span>THÔNG TIN CÁ NHÂN</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  {/* Khung tên người chơi có màu viền phân quyền (M7.3.7 Mục III.2.2) */}
+                  {/* Khung tên người chơi với ký hiệu vai trò thu nhỏ viết lên trên */}
                   <div
                     className={`px-2.5 py-1 rounded-lg bg-neutral-900 flex items-center gap-1.5 ${roleFrameClasses}`}
                   >
-                    <span className="text-xs font-extrabold text-white truncate max-w-[150px]">
-                      {userMeta?.displayName || currentUser.displayName || 'Commander'}
+                    <span className="inline-flex items-baseline text-xs font-extrabold text-white min-w-0">
+                      <span className="truncate max-w-[150px]">
+                        {userMeta?.displayName || currentUser.displayName || 'Commander'}
+                      </span>
+                      {getRoleTrademarkBadge(userRole) && (
+                        <sup
+                          data-testid="role-trademark-badge"
+                          className="ml-0.5 text-[9px] font-black leading-none text-amber-300 select-none shrink-0"
+                        >
+                          {getRoleTrademarkBadge(userRole)}
+                        </sup>
+                      )}
                     </span>
                   </div>
                 </div>
@@ -1560,19 +1571,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </table>
               </div>
 
-              {/* Role Frame Color Legend */}
+              {/* Role Trademark Badge Legend */}
               <div className="space-y-2 pt-1">
                 <div className="text-xs font-bold text-white">
-                  Quy ước màu khung tên hiển thị theo 3 vai trò hệ thống (M7.3.11.4):
+                  Quy ước ký hiệu vai trò viết thu nhỏ phía trên tên người chơi:
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div className="p-2 rounded-xl bg-neutral-900 border-2 border-emerald-500 flex items-center justify-between">
-                    <span className="font-extrabold text-white text-[11px]">Admin</span>
-                    <span className="text-[10px] font-mono text-emerald-300 font-bold">Xanh lá</span>
+                  <div className="p-2 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
+                    <span className="font-extrabold text-white text-[11px]">
+                      Admin
+                      <sup className="ml-0.5 text-[9px] font-black text-amber-300">A</sup>
+                    </span>
+                    <span className="text-[10px] font-mono text-amber-300 font-bold">Ký hiệu A</span>
                   </div>
-                  <div className="p-2 rounded-xl bg-neutral-900 border-2 border-sky-500 flex items-center justify-between">
-                    <span className="font-extrabold text-white text-[11px]">Mod</span>
-                    <span className="text-[10px] font-mono text-sky-300 font-bold">Xanh dương</span>
+                  <div className="p-2 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
+                    <span className="font-extrabold text-white text-[11px]">
+                      Mod
+                      <sup className="ml-0.5 text-[9px] font-black text-amber-300">M</sup>
+                    </span>
+                    <span className="text-[10px] font-mono text-amber-300 font-bold">Ký hiệu M</span>
                   </div>
                   <div className="p-2 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
                     <span className="font-extrabold text-white text-[11px]">User</span>
@@ -1760,9 +1777,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <td className="py-2.5 px-2.5">
                               <div className="flex flex-col gap-0.5">
                                 <span
-                                  className={`inline-block w-fit px-2 py-0.5 rounded bg-neutral-950 text-xs font-extrabold text-white ${accRoleInfo.frameClass}`}
+                                  className={`inline-flex items-baseline w-fit px-2 py-0.5 rounded bg-neutral-950 text-xs font-extrabold text-white ${accRoleInfo.frameClass}`}
                                 >
-                                  {acc.displayName}
+                                  <span>{acc.displayName}</span>
+                                  {accRoleInfo.trademarkBadge && (
+                                    <sup
+                                      data-testid="role-trademark-badge"
+                                      className="ml-0.5 text-[9px] font-black leading-none text-amber-300 select-none"
+                                    >
+                                      {accRoleInfo.trademarkBadge}
+                                    </sup>
+                                  )}
                                 </span>
                                 {acc.nicknameNote && (
                                   <span className="text-[10px] italic text-amber-300/90">

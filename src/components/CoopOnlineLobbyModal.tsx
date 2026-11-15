@@ -21,10 +21,9 @@ import {
   Shield,
   Lock,
   Unlock,
-  Zap,
-  RefreshCw,
   KeyRound,
   Map as MapIcon,
+  UserX,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import {
@@ -35,6 +34,7 @@ import {
 import {
   resolveUserRole,
   getRoleNameFrameClasses,
+  getRoleTrademarkBadge,
 } from '../core/authManager.ts';
 import { AvatarManager } from '../core/avatarManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
@@ -90,7 +90,9 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   const [joinCodeInput, setJoinCodeInput] = useState('');
   const [joinPasswordInput, setJoinPasswordInput] = useState('');
   const [needsPasswordForCode, setNeedsPasswordForCode] = useState<boolean>(false);
-  const [quickJoinEmptyMsg, setQuickJoinEmptyMsg] = useState<string | null>(null);
+  const [kickedNotice, setKickedNotice] = useState<string | null>(() =>
+    coopManager.getLastKickedNotice()
+  );
 
   const [isBusy, setIsBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -150,6 +152,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
     const unsub = coopManager.subscribe((updatedRoom, updatedRole) => {
       setRoom(updatedRoom);
       setRole(updatedRole);
+      setKickedNotice(coopManager.getLastKickedNotice());
       if (updatedRoom) {
         if (updatedRoom.hostUid) {
           void avatarManager.fetchUserMetadataOnce(updatedRoom.hostUid).then(() => {
@@ -198,7 +201,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   const handleConfirmCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
-    setQuickJoinEmptyMsg(null);
+    coopManager.clearLastKickedNotice();
+    setKickedNotice(null);
     setIsBusy(true);
     try {
       onDifficultyChange?.(createDifficulty);
@@ -215,28 +219,11 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
     }
   };
 
-  const handleQuickJoinRoom = async () => {
-    setErrorMsg(null);
-    setQuickJoinEmptyMsg(null);
-    setIsBusy(true);
-    try {
-      const res = await coopManager.quickJoinRoom(user);
-      if (!res.success) {
-        if (res.errorCode === 'NO_AVAILABLE_PUBLIC_ROOM') {
-          setQuickJoinEmptyMsg(res.message || 'Hiện chưa có phòng trống');
-        } else {
-          setErrorMsg(res.message || 'Không thể vào nhanh lúc này.');
-        }
-      }
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
   const handleJoinRoomByCode = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
-    setQuickJoinEmptyMsg(null);
+    coopManager.clearLastKickedNotice();
+    setKickedNotice(null);
     setIsBusy(true);
     try {
       const res = await coopManager.joinRoom(joinCodeInput, user, Date.now(), {
@@ -247,6 +234,20 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
           setNeedsPasswordForCode(true);
         }
         setErrorMsg(res.message || 'Không thể tham gia phòng.');
+      }
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleKickGuest = async () => {
+    if (!room || role !== 'HOST' || !room.guestUid) return;
+    setErrorMsg(null);
+    setIsBusy(true);
+    try {
+      const res = await coopManager.kickGuest();
+      if (!res.success) {
+        setErrorMsg(res.message || 'Không thể mời P2 ra khỏi phòng.');
       }
     } finally {
       setIsBusy(false);
@@ -300,7 +301,6 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
       await coopManager.leaveRoom();
       setSubView('MAIN');
       setErrorMsg(null);
-      setQuickJoinEmptyMsg(null);
     } finally {
       setIsBusy(false);
     }
@@ -333,6 +333,28 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   ) {
     return (
       <div className="space-y-4">
+        {kickedNotice && (
+          <div
+            data-testid="coop-lobby-kicked-notice"
+            className="p-3 rounded-xl bg-amber-950/75 border border-amber-500/50 text-amber-200 text-xs flex items-center justify-between gap-2"
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="whitespace-pre-line">{formatSentenceLineBreaks(kickedNotice)}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                coopManager.clearLastKickedNotice();
+                setKickedNotice(null);
+              }}
+              className="px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-white font-bold text-[11px] shrink-0 whitespace-nowrap cursor-pointer"
+            >
+              Đóng
+            </button>
+          </div>
+        )}
+
         {room && (room.status === 'ABANDONED' || room.status === 'EXPIRED') && (
           <div className="p-3 rounded-xl bg-amber-950/60 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-2">
             <span className="whitespace-pre-line">
@@ -382,7 +404,6 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                   type="button"
                   onClick={() => {
                     setErrorMsg(null);
-                    setQuickJoinEmptyMsg(null);
                     setSubView('CREATE');
                   }}
                   className="w-full py-3 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.99] cursor-pointer"
@@ -407,7 +428,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     2. THAM GIA PHÒNG
                   </h3>
                   <p className="text-xs text-neutral-300 leading-relaxed">
-                    Chọn <strong>Vào nhanh</strong> để ghép vào phòng công khai đang chờ, hoặc <strong>Vào bằng mã phòng</strong> định dạng <span className="font-mono text-sky-300 font-bold">BTxxxx</span>.
+                    Nhập <strong>Mã phòng</strong> định dạng <span className="font-mono text-sky-300 font-bold">BTxxxx</span> (và mật khẩu nếu phòng có khóa) để tham gia phối hợp cùng đồng đội.
                   </p>
                 </div>
 
@@ -415,7 +436,6 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                   type="button"
                   onClick={() => {
                     setErrorMsg(null);
-                    setQuickJoinEmptyMsg(null);
                     setSubView('JOIN');
                   }}
                   className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.99] cursor-pointer"
@@ -652,140 +672,88 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
           </form>
         )}
 
-        {/* LUỒNG 2: THAM GIA PHÒNG (M7.3.7 MỤC VI.5.3: A. VÀO NHANH / B. VÀO BẰNG MÃ PHÒNG) */}
+        {/* LUỒNG 2: THAM GIA PHÒNG BẰNG MÃ PHÒNG (VÀO NHANH ĐÃ TẮT) */}
         {subView === 'JOIN' && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* A. VÀO NHANH */}
-              <div className="p-5 rounded-2xl bg-neutral-900/95 border border-emerald-500/40 flex flex-col justify-between space-y-4 shadow-xl">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
-                      <Zap className="w-5 h-5" />
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/30">
-                      Phòng Công Khai
-                    </span>
+          <div className="max-w-lg mx-auto">
+            <form
+              onSubmit={handleJoinRoomByCode}
+              className="p-5 rounded-2xl bg-neutral-900/95 border border-sky-500/40 flex flex-col justify-between space-y-4 shadow-xl"
+            >
+              <div className="space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400">
+                    <LogIn className="w-5 h-5" />
                   </div>
-                  <h3 className="text-base font-black uppercase tracking-wider text-white">
-                    A. VÀO NHANH
-                  </h3>
-                  <p className="text-xs text-neutral-300 leading-relaxed">
-                    Tự động tìm và vào ngay phòng công khai (không mật khẩu) đang ở trạng thái chờ.
-                  </p>
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-sky-950 text-sky-300 border border-sky-500/30">
+                    Định dạng BTxxxx
+                  </span>
+                </div>
+                <h3 className="text-base font-black uppercase tracking-wider text-white">
+                  VÀO BẰNG MÃ PHÒNG
+                </h3>
 
-                  {quickJoinEmptyMsg && (
-                    <div className="p-3 rounded-xl bg-amber-950/70 border border-amber-500/50 text-amber-200 text-xs flex items-center justify-between gap-2">
-                      <span className="font-bold">{quickJoinEmptyMsg}</span>
-                      <button
-                        type="button"
-                        disabled={isBusy}
-                        onClick={handleQuickJoinRoom}
-                        className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-[11px] flex items-center gap-1 shrink-0 cursor-pointer"
-                      >
-                        <RefreshCw className={`w-3 h-3 ${isBusy ? 'animate-spin' : ''}`} />
-                        <span>Thử lại</span>
-                      </button>
-                    </div>
-                  )}
+                <div>
+                  <label className="block text-[10px] text-neutral-400 mb-1 uppercase font-bold">
+                    Mã phòng (BTxxxx — BT + 4 chữ số từ 0-9):
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={6}
+                    value={joinCodeInput}
+                    onChange={(e) => {
+                      const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+                      if (raw.length === 0) {
+                        setJoinCodeInput('');
+                        return;
+                      }
+                      if (raw === 'B') {
+                        setJoinCodeInput('B');
+                        return;
+                      }
+                      const body = raw.startsWith('BT') ? raw.slice(2) : raw.replace(/^B/, '');
+                      const digits = body.replace(/[^0-9]/g, '').slice(0, 4);
+                      setJoinCodeInput(`BT${digits}`);
+                    }}
+                    placeholder="VD: BT4829"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-neutral-700 focus:border-sky-400 focus:outline-none text-center font-mono text-sm font-black tracking-[0.25em] text-sky-300 uppercase placeholder:tracking-normal placeholder:font-sans placeholder:text-xs placeholder:text-neutral-600"
+                  />
                 </div>
 
-                <button
-                  type="button"
-                  disabled={isBusy}
-                  onClick={handleQuickJoinRoom}
-                  className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.99] disabled:opacity-50 cursor-pointer"
-                >
-                  {isBusy ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Zap className="w-4 h-4" />
-                  )}
-                  <span>VÀO PHÒNG</span>
-                </button>
+                <div>
+                  <label className="block text-[10px] text-neutral-400 mb-1 uppercase font-bold flex items-center justify-between">
+                    <span>Mật khẩu phòng (Nếu phòng có khóa):</span>
+                    {needsPasswordForCode && (
+                      <span className="text-amber-300 font-mono">Bắt buộc nhập mật khẩu</span>
+                    )}
+                  </label>
+                  <input
+                    type="password"
+                    maxLength={32}
+                    value={joinPasswordInput}
+                    onChange={(e) => setJoinPasswordInput(e.target.value)}
+                    placeholder="Để trống nếu là phòng Không mật khẩu"
+                    className={`w-full px-3.5 py-2 rounded-xl bg-neutral-950 border text-xs font-mono text-white focus:outline-none ${
+                      needsPasswordForCode
+                        ? 'border-amber-500 focus:border-amber-400'
+                        : 'border-neutral-700 focus:border-sky-400'
+                    }`}
+                  />
+                </div>
               </div>
 
-              {/* B. VÀO BẰNG MÃ PHÒNG */}
-              <form
-                onSubmit={handleJoinRoomByCode}
-                className="p-5 rounded-2xl bg-neutral-900/95 border border-sky-500/40 flex flex-col justify-between space-y-4 shadow-xl"
+              <button
+                type="submit"
+                disabled={isBusy || !/^BT[0-9]{4}$/.test(joinCodeInput.trim())}
+                className="w-full py-3 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.99] disabled:opacity-50 cursor-pointer"
               >
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400">
-                      <LogIn className="w-5 h-5" />
-                    </div>
-                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-sky-950 text-sky-300 border border-sky-500/30">
-                      Định dạng BTxxxx
-                    </span>
-                  </div>
-                  <h3 className="text-base font-black uppercase tracking-wider text-white">
-                    B. VÀO BẰNG MÃ PHÒNG
-                  </h3>
-
-                  <div>
-                    <label className="block text-[10px] text-neutral-400 mb-1 uppercase font-bold">
-                      Mã phòng (BTxxxx — BT + 4 chữ số từ 0-9):
-                    </label>
-                    <input
-                      type="text"
-                      maxLength={6}
-                      value={joinCodeInput}
-                      onChange={(e) => {
-                        const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-                        if (raw.length === 0) {
-                          setJoinCodeInput('');
-                          return;
-                        }
-                        if (raw === 'B') {
-                          setJoinCodeInput('B');
-                          return;
-                        }
-                        const body = raw.startsWith('BT') ? raw.slice(2) : raw.replace(/^B/, '');
-                        const digits = body.replace(/[^0-9]/g, '').slice(0, 4);
-                        setJoinCodeInput(`BT${digits}`);
-                      }}
-                      placeholder="VD: BT4829"
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-neutral-700 focus:border-sky-400 focus:outline-none text-center font-mono text-sm font-black tracking-[0.25em] text-sky-300 uppercase placeholder:tracking-normal placeholder:font-sans placeholder:text-xs placeholder:text-neutral-600"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] text-neutral-400 mb-1 uppercase font-bold flex items-center justify-between">
-                      <span>Mật khẩu phòng (Nếu phòng có khóa):</span>
-                      {needsPasswordForCode && (
-                        <span className="text-amber-300 font-mono">Bắt buộc nhập mật khẩu</span>
-                      )}
-                    </label>
-                    <input
-                      type="password"
-                      maxLength={32}
-                      value={joinPasswordInput}
-                      onChange={(e) => setJoinPasswordInput(e.target.value)}
-                      placeholder="Để trống nếu là phòng Không mật khẩu"
-                      className={`w-full px-3.5 py-2 rounded-xl bg-neutral-950 border text-xs font-mono text-white focus:outline-none ${
-                        needsPasswordForCode
-                          ? 'border-amber-500 focus:border-amber-400'
-                          : 'border-neutral-700 focus:border-sky-400'
-                      }`}
-                    />
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={isBusy || !/^BT[0-9]{4}$/.test(joinCodeInput.trim())}
-                  className="w-full py-3 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.99] disabled:opacity-50 cursor-pointer"
-                >
-                  {isBusy ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <LogIn className="w-4 h-4" />
-                  )}
-                  <span>XÁC NHẬN VÀO PHÒNG</span>
-                </button>
-              </form>
-            </div>
+                {isBusy ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <LogIn className="w-4 h-4" />
+                )}
+                <span>XÁC NHẬN VÀO PHÒNG</span>
+              </button>
+            </form>
           </div>
         )}
       </div>
@@ -810,6 +778,14 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   });
   const hostFrameClasses = getRoleNameFrameClasses(hostRole);
   const guestFrameClasses = getRoleNameFrameClasses(guestRole);
+  const hostTrademarkBadge = getRoleTrademarkBadge(hostRole);
+  const guestTrademarkBadge = getRoleTrademarkBadge(guestRole);
+  const resolvedHostName =
+    avatarManager.getUserMetadata(room.hostUid)?.displayName || room.hostDisplayName;
+  const resolvedGuestName =
+    (room.guestUid ? avatarManager.getUserMetadata(room.guestUid)?.displayName : null) ||
+    room.guestDisplayName ||
+    'Chiến Binh P2';
 
   // Thông điệp trạng thái phòng chờ chính xác theo tiến trình thực tế (Sửa lỗi Hạng mục 6 - Mục VII.6.1 & VII.6.2)
   const lobbyStatusSummaryText = !bothPresent
@@ -1061,14 +1037,22 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     P1 (Chủ phòng)
                   </div>
                   <div
-                    className={`mt-0.5 inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-900 text-xs font-bold text-white truncate max-w-[165px] ${hostFrameClasses}`}
+                    className={`mt-0.5 inline-flex items-baseline px-2 py-0.5 rounded-md bg-neutral-900 text-xs font-bold text-white max-w-[165px] ${hostFrameClasses}`}
                   >
-                    <span className="truncate">{room.hostDisplayName}</span>
+                    <span className="truncate">{resolvedHostName}</span>
+                    {hostTrademarkBadge && (
+                      <sup
+                        data-testid="role-trademark-badge"
+                        className="ml-0.5 text-[9px] font-black leading-none text-amber-300 select-none shrink-0"
+                      >
+                        {hostTrademarkBadge}
+                      </sup>
+                    )}
                   </div>
                 </div>
               </div>
               <span
-                className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border shrink-0 ${
+                className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border shrink-0 whitespace-nowrap ${
                   room.hostReady
                     ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
                     : 'bg-neutral-900 text-neutral-400 border-neutral-700'
@@ -1091,7 +1075,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                       {guestAvatarUrl && !guestAvatarBroken ? (
                         <img
                           src={guestAvatarUrl}
-                          alt={room.guestDisplayName || 'Chiến Binh P2'}
+                          alt={resolvedGuestName}
                           data-testid="coop-lobby-guest-avatar"
                           className="w-full h-full object-cover"
                           onError={() => setGuestAvatarBroken(true)}
@@ -1105,21 +1089,44 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                         P2 (Đồng đội)
                       </div>
                       <div
-                        className={`mt-0.5 inline-flex items-center px-2 py-0.5 rounded-md bg-neutral-900 text-xs font-bold text-white truncate max-w-[165px] ${guestFrameClasses}`}
+                        className={`mt-0.5 inline-flex items-baseline px-2 py-0.5 rounded-md bg-neutral-900 text-xs font-bold text-white max-w-[165px] ${guestFrameClasses}`}
                       >
-                        <span className="truncate">{room.guestDisplayName || 'Chiến Binh P2'}</span>
+                        <span className="truncate">{resolvedGuestName}</span>
+                        {guestTrademarkBadge && (
+                          <sup
+                            data-testid="role-trademark-badge"
+                            className="ml-0.5 text-[9px] font-black leading-none text-amber-300 select-none shrink-0"
+                          >
+                            {guestTrademarkBadge}
+                          </sup>
+                        )}
                       </div>
                     </div>
                   </div>
-                  <span
-                    className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border shrink-0 ${
-                      room.guestReady
-                        ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
-                        : 'bg-neutral-900 text-neutral-400 border-neutral-700'
-                    }`}
-                  >
-                    {room.guestReady ? 'Đã sẵn sàng' : 'Chưa sẵn sàng'}
-                  </span>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span
+                      className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border shrink-0 whitespace-nowrap ${
+                        room.guestReady
+                          ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
+                          : 'bg-neutral-900 text-neutral-400 border-neutral-700'
+                      }`}
+                    >
+                      {room.guestReady ? 'Đã sẵn sàng' : 'Chưa sẵn sàng'}
+                    </span>
+                    {role === 'HOST' && room.status === 'WAITING' && (
+                      <button
+                        type="button"
+                        data-testid="coop-lobby-kick-guest-btn"
+                        disabled={isBusy}
+                        onClick={handleKickGuest}
+                        title="Mời người chơi P2 ra khỏi phòng"
+                        className="px-2.5 py-1 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 font-bold text-[10px] uppercase flex items-center gap-1 shrink-0 whitespace-nowrap transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                      >
+                        <UserX className="w-3 h-3 shrink-0" />
+                        <span>Mời ra</span>
+                      </button>
+                    )}
+                  </div>
                 </>
               ) : (
                 <div className="flex items-center gap-2.5 text-neutral-500 py-1">

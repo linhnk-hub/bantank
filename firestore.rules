@@ -875,6 +875,33 @@ service cloud.firestore {
         ]);
     }
 
+    // Nhánh 1b: Host (P1) mời Người chơi 2 (Guest) ra khỏi phòng chờ WAITING
+    // - Giải phóng guestUid/guestDisplayName/guestReady/guestLastActiveAt về null/false
+    // - Đặt lại rtcConnectionState == 'NEW' và disconnectReason == null để phòng tiếp tục nhận P2 mới
+    function isCoopHostKickGuestAction() {
+      return request.auth.uid == existing().hostUid
+        && isWaitingRoomNotExpired()
+        && incoming().status == 'WAITING'
+        && existing().guestUid != null
+        && incoming().guestUid == null
+        && incoming().guestDisplayName == null
+        && incoming().guestReady == false
+        && incoming().guestLastActiveAt == null
+        && incoming().hostReady == existing().hostReady
+        && incoming().rtcConnectionState == 'NEW'
+        && incoming().disconnectReason == null
+        && isHostTimestampUpdateValid()
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'guestUid',
+          'guestDisplayName',
+          'guestReady',
+          'guestLastActiveAt',
+          'hostLastActiveAt',
+          'rtcConnectionState',
+          'disconnectReason'
+        ]);
+    }
+
     // Nhánh 2: Guest (P2) tham gia vào phòng đang WAITING, chưa hết hạn, chưa có Guest và đã có private/signaling
     // - Guest chỉ được cập nhật guestUid, guestDisplayName, guestReady và guestLastActiveAt
     // - Bắt buộc giữ nguyên rtcConnectionState và disconnectReason (chỉ Host được quyền cập nhật rtcConnectionState)
@@ -1059,6 +1086,7 @@ service cloud.firestore {
         && isImmutableCoopCoreUnchanged()
         && (
           isCoopHostUpdateAction(roomCode)
+          || isCoopHostKickGuestAction()
           || isCoopGuestJoinAction(roomCode)
           || isCoopGuestReadyOrStateAction()
           || isCoopGuestLeaveAction()

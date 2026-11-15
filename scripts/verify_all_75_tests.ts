@@ -1344,15 +1344,20 @@ async function verifyM735SharedAvatarCatalogAsyncSuite() {
     );
   }
 
-  // 23. M7.3.7: Kiểm tra tách tab SettingsModal, bỏ nút Tiếp tục trùng lặp trên ModeSelectionScreen,
-  //     màu khung tên theo quyền, và giao diện Tạo phòng / Tham gia phòng (Vào nhanh / Vào bằng mã phòng): PASS
+  // 23. Kiểm tra tách tab SettingsModal, bỏ nút Tiếp tục trùng lặp trên ModeSelectionScreen,
+  //     ký hiệu vai trò A/M thu nhỏ, tắt Vào nhanh & tính năng mới Co-op Online / Stats / Google account chooser: PASS
   const authSessionBannerSrc = fsMod.readFileSync(
     pathMod.resolve(process.cwd(), 'src/components/AuthSessionBanner.tsx'),
+    'utf-8'
+  );
+  const authMgrSrc = fsMod.readFileSync(
+    pathMod.resolve(process.cwd(), 'src/core/authManager.ts'),
     'utf-8'
   );
   if (
     modeSelectionSrc.includes('TIẾP TỤC CHỌN ĐỘ KHÓ') ||
     modeSelectionSrc.includes('XÁC NHẬN (') ||
+    modeSelectionSrc.includes('Vào nhanh') ||
     !settingsModalSrc.includes('Tài khoản cá nhân') ||
     !settingsModalSrc.includes('Cài đặt hình ảnh') ||
     !settingsModalSrc.includes('Cài đặt âm thanh') ||
@@ -1362,15 +1367,22 @@ async function verifyM735SharedAvatarCatalogAsyncSuite() {
     !coopLobbySrc.includes('2. THAM GIA PHÒNG') ||
     !coopLobbySrc.includes('Có mật khẩu') ||
     !coopLobbySrc.includes('Không mật khẩu') ||
-    !coopLobbySrc.includes('A. VÀO NHANH') ||
-    !coopLobbySrc.includes('B. VÀO BẰNG MÃ PHÒNG') ||
-    !mainMenuSrc.includes('getRoleNameFrameClasses') ||
-    !modeSelectionSrc.includes('getRoleNameFrameClasses') ||
-    !authSessionBannerSrc.includes('getRoleNameFrameClasses') ||
-    !coopLobbySrc.includes('getRoleNameFrameClasses')
+    coopLobbySrc.includes('A. VÀO NHANH') ||
+    !coopLobbySrc.includes('VÀO BẰNG MÃ PHÒNG') ||
+    !coopLobbySrc.includes('coop-lobby-kick-guest-btn') ||
+    !coopLobbySrc.includes('Mời ra') ||
+    !stageClearSrc.includes('stageclear-next-ready-btn') ||
+    !stageClearSrc.includes('p2Stats') ||
+    !gameOverSrc.includes('p2Stats') ||
+    !authMgrSrc.includes("prompt: 'select_account'") ||
+    !mainMenuSrc.includes('getRoleTrademarkBadge') ||
+    !modeSelectionSrc.includes('getRoleTrademarkBadge') ||
+    !authSessionBannerSrc.includes('getRoleTrademarkBadge') ||
+    !coopLobbySrc.includes('getRoleTrademarkBadge') ||
+    !settingsModalSrc.includes('getRoleTrademarkBadge')
   ) {
     throw new Error(
-      'Case 23 failed: M7.3.7 UI components must satisfy all tab separation, duplicate button removal, role frame, and Co-op room flow requirements'
+      'Case 23 failed: UI components must satisfy tab separation, Quick Join removal, Kick P2, Post-stage Ready, per-player stats, A/M trademark badges, and select_account prompt'
     );
   }
 

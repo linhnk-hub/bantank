@@ -140,7 +140,12 @@ export const M3Hud: React.FC<M3HudProps> = ({
           <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-neutral-950 border border-neutral-800">
             <Trophy className="w-4 h-4 text-amber-400" />
             <span className="text-neutral-400 font-mono">XP:</span>
-            <span className="text-amber-400 font-black font-mono text-sm">{state.score} XP</span>
+            <span className="text-amber-400 font-black font-mono text-sm">
+              {(state.gameMode === 'TWO_PLAYERS_ONLINE' && effectiveOnlineRole === 'GUEST'
+                ? state.p2Stats?.score ?? 0
+                : state.p1Stats?.score ?? state.score)}{' '}
+              XP
+            </span>
           </div>
 
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-neutral-950 border border-neutral-800 text-[11px]">

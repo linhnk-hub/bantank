@@ -31,12 +31,14 @@ import {
 } from './core/constants.ts';
 import { validateStageMap } from './core/mapValidator.ts';
 import { GameEngine } from './core/gameEngine.ts';
+import { TOTAL_CAMPAIGN_STAGES } from './core/campaignStages.ts';
 import { StageProgressionManager } from './core/stageProgression.ts';
 import {
   CoopOnlineManager,
   COOP_ONLINE_CONFIG,
   type CoopRoomDocument,
   type CoopPlayerRole,
+  type CoopPostStageReadyState,
 } from './core/coopOnlineManager.ts';
 import { useOrientation } from './hooks/useOrientation.ts';
 import { useViewportLayout } from './hooks/useViewportLayout.ts';
@@ -44,6 +46,7 @@ import type { GameCoreState, InputState } from './core/types.ts';
 import { AuthSessionBanner } from './components/AuthSessionBanner.tsx';
 import { SessionManager } from './core/sessionManager.ts';
 import { AuthManager, isSuperAdminUser } from './core/authManager.ts';
+import { AvatarManager } from './core/avatarManager.ts';
 import { WelcomeScreen } from './components/WelcomeScreen.tsx';
 import { MainMenuScreen } from './components/MainMenuScreen.tsx';
 import { ModeSelectionScreen } from './components/ModeSelectionScreen.tsx';
@@ -114,11 +117,21 @@ export default function App() {
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTabId>('ACCOUNT');
   const [isMatchAllowed, setIsMatchAllowed] = useState<boolean>(false);
   const [isTrialMode, setIsTrialMode] = useState<boolean>(() => authManager.isTrialMode());
+  const [postStageReady, setPostStageReady] = useState<CoopPostStageReadyState | null>(() =>
+    coopManager.getPostStageReadyState()
+  );
 
-  // Sync live peer Ping & online network telemetry toggle preference
+  // Sync live peer Ping, post-stage ready status & online network telemetry toggle preference
   useEffect(() => {
     const unsubPing = coopManager.subscribe(() => {
       setPeerPingMs(coopManager.getPeerPingMs());
+    });
+    const unsubPostStageReady = coopManager.subscribePostStageReady((nextReady) => {
+      setPostStageReady(nextReady);
+    });
+    const unsubAvatar = AvatarManager.getInstance().subscribe(() => {
+      setCurrentUser(authManager.getCurrentUser());
+      setProfileRevision((r) => r + 1);
     });
     const handlePrefEvent = () => {
       setShowOnlineNetStats(getShowOnlineNetStatsPreference());
@@ -132,10 +145,12 @@ export default function App() {
     window.addEventListener('storage', handleStorage);
     return () => {
       unsubPing();
+      unsubPostStageReady();
+      unsubAvatar();
       window.removeEventListener(ONLINE_NET_STATS_PREF_EVENT, handlePrefEvent);
       window.removeEventListener('storage', handleStorage);
     };
-  }, [coopManager]);
+  }, [coopManager, authManager]);
 
   // Desktop PC detection: screen width >= 1024px with fine pointer (mouse/trackpad)
   const [isDesktop, setIsDesktop] = useState<boolean>(() => {
@@ -351,11 +366,11 @@ export default function App() {
     const unsubPeerLeave = coopManager.subscribePeerLeave((event) => {
       const engState = gameEngine.getState();
       if (engState.gameMode !== 'TWO_PLAYERS_ONLINE') return;
-      if (engState.isGameOver || engState.isStageClear || engState.matchState === 'MENU') return;
+      if (engState.isGameOver || engState.matchState === 'MENU') return;
       const leftPlayer = event.role === 'HOST' ? 'P1' : 'P2';
       gameEngine.handlePeerPlayerLeft(leftPlayer);
       setGameState({ ...gameEngine.getState() });
-      if (event.role === 'HOST') {
+      if (event.role === 'HOST' && !engState.isStageClear) {
         setOnlineDisconnectMsg(event.message);
       }
     });
@@ -452,6 +467,7 @@ export default function App() {
       setOnlineDisconnectMsg(null);
       setIsReturningToLobby(false);
       setReturnToLobbyError(null);
+      coopManager.clearPostStageReadyState();
       setDifficulty(room.difficulty);
       const stageId = room.selectedStageId ?? 1;
       const startRes = gameEngine.startMatch('TWO_PLAYERS_ONLINE', room.difficulty, {
@@ -561,6 +577,7 @@ export default function App() {
       }
       setOnlineDisconnectMsg(null);
       clearVirtualTouchInputs();
+      coopManager.clearPostStageReadyState();
       gameEngine.quitToMenu();
       setIsPaused(false);
       SoundManager.getInstance().stopAllActiveActionSources();
@@ -598,11 +615,14 @@ export default function App() {
     setAuthProcessing(true);
     try {
       await coopManager.leaveRoom();
+      coopManager.clearPostStageReadyState();
       setOnlineDisconnectMsg(null);
       gameEngine.quitToMenu();
       MusicManager.getInstance().pause();
       setIsPaused(false);
+      AvatarManager.getInstance().clearSessionStateOnSignOut();
       await sessionManager.releaseSessionAndSignOut();
+      setCurrentUser(null);
       setAppScreen('WELCOME');
       setLogoutSuccessNotice('Bạn đã đăng xuất an toàn.');
       setAuthErrorMsg(null);
@@ -639,17 +659,25 @@ export default function App() {
       handleQuitToMenu();
       return;
     }
-    if (!gameEngine.advanceToNextStage()) {
+    const prevMode = gameEngine.getState().gameMode;
+    const advanced = gameEngine.advanceToNextStage();
+    if (!advanced) {
+      if (prevMode === 'TWO_PLAYERS_ONLINE') {
+        return;
+      }
       gameEngine.restartStage();
     }
     setIsPaused(false);
     const st = gameEngine.getState();
+    if (prevMode === 'TWO_PLAYERS_ONLINE' && advanced) {
+      coopManager.advanceHostToNextOnlineStage(st.currentStageId, st.stageRunSeq, st);
+    }
     MusicManager.getInstance().syncPlaybackWithContext(
       st.currentStageId,
       getMusicModeFromEngine(gameEngine)
     );
     setGameState({ ...st });
-  }, [authManager, isTrialMode, handleQuitToMenu, gameEngine, getMusicModeFromEngine]);
+  }, [authManager, isTrialMode, handleQuitToMenu, gameEngine, getMusicModeFromEngine, coopManager]);
 
   const handleResetGame = useCallback(() => {
     gameEngine.restartStage();
@@ -850,22 +878,112 @@ export default function App() {
     }
   }, [isStageClearModalOpen, gameState, isTrialMode, currentUser?.uid, coopManager]);
 
-  // M7.5.1 & M7.5.2: Record per-UID completed match outcome (WIN / LOSS) with exact enemy XP breakdown (zero bonus XP)
+  const hasTeammateLeft = Boolean(
+    gameState &&
+      (gameState.peerLeaveNotice ||
+        gameState.p2State?.hasLeftMatch ||
+        (isCoopOnlineMatch &&
+          coopManager.hasPeerActivelyLeft(localOnlineRole === 'HOST' ? 'GUEST' : 'HOST')))
+  );
+
+  const handleTogglePostStageReady = useCallback(() => {
+    const st = gameEngine.getState();
+    if (st.gameMode !== 'TWO_PLAYERS_ONLINE') return;
+    const role = coopManager.getLocalRole();
+    const cur = coopManager.getPostStageReadyState();
+    const stageId = st.currentStageId ?? 1;
+    const seq = st.stageRunSeq;
+    const isMatching = Boolean(cur && cur.stageId === stageId && cur.stageRunSeq === seq);
+    const currentReady = isMatching
+      ? role === 'GUEST'
+        ? Boolean(cur?.guestReady)
+        : Boolean(cur?.hostReady)
+      : false;
+    coopManager.setPostStageReady(stageId, seq, !currentReady);
+  }, [gameEngine, coopManager]);
+
+  const guestSyncedStageMusicRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (
+      appScreen !== 'BATTLE' ||
+      !gameState ||
+      gameState.gameMode !== 'TWO_PLAYERS_ONLINE' ||
+      coopManager.getLocalRole() !== 'GUEST'
+    ) {
+      guestSyncedStageMusicRef.current = null;
+      return;
+    }
+    const stg = gameState.currentStageId ?? 1;
+    if (guestSyncedStageMusicRef.current !== stg) {
+      guestSyncedStageMusicRef.current = stg;
+      MusicManager.getInstance().syncPlaybackWithContext(stg, 'TWO_PLAYER');
+    }
+  }, [appScreen, gameState?.gameMode, gameState?.currentStageId, coopManager]);
+
+  const autoAdvancedStageKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !isStageClearModalOpen ||
+      !gameState ||
+      gameState.gameMode !== 'TWO_PLAYERS_ONLINE' ||
+      coopManager.getLocalRole() !== 'HOST' ||
+      hasTeammateLeft
+    ) {
+      return;
+    }
+    const stageId = gameState.currentStageId ?? 1;
+    if (stageId >= TOTAL_CAMPAIGN_STAGES) return;
+    if (
+      !postStageReady ||
+      postStageReady.stageId !== stageId ||
+      postStageReady.stageRunSeq !== gameState.stageRunSeq ||
+      !postStageReady.hostReady ||
+      !postStageReady.guestReady
+    ) {
+      return;
+    }
+    const advKey = `${stageId}:${gameState.stageRunSeq}`;
+    if (autoAdvancedStageKeyRef.current === advKey) return;
+    autoAdvancedStageKeyRef.current = advKey;
+    handleNextStageOrReplay();
+  }, [
+    isStageClearModalOpen,
+    gameState,
+    postStageReady,
+    coopManager,
+    hasTeammateLeft,
+    handleNextStageOrReplay,
+  ]);
+
+  // M7.5.1 & M7.5.2: Record per-UID completed match outcome (WIN / LOSS) with exact per-player enemy XP breakdown (zero bonus XP)
   useEffect(() => {
     if (isTrialMode || !currentUser?.uid || !gameState) return;
     if (!isStageClearModalOpen && !isGameOverModalOpen) return;
     const outcome: 'WIN' | 'LOSS' = isStageClearModalOpen ? 'WIN' : 'LOSS';
     const stageId = gameState.currentStageId ?? 1;
+    const isOnlineGuest =
+      gameState.gameMode === 'TWO_PLAYERS_ONLINE' && coopManager.getLocalRole() === 'GUEST';
     const roomCode =
       gameState.gameMode === 'TWO_PLAYERS_ONLINE'
         ? (coopManager.getCurrentRoom()?.roomCode ?? null)
         : null;
-    const counts = gameState.defeatedCounts || { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 };
+    const localPlayerStats = isOnlineGuest
+      ? gameState.p2Stats
+      : gameState.p1Stats;
+    const counts = localPlayerStats?.defeatedCounts ??
+      (isOnlineGuest
+        ? { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 }
+        : gameState.defeatedCounts || { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 });
     const stageEarnedXp =
       (counts.BASIC || 0) * 1 +
       (counts.FAST || 0) * 2 +
       (counts.POWER || 0) * 3 +
       (counts.ARMOR || 0) * 5;
+    const localTotalXp = localPlayerStats
+      ? localPlayerStats.score
+      : isOnlineGuest
+        ? 0
+        : gameState.score;
     const matchInstanceId = gameState.matchInstanceId || gameEngine.getMatchInstanceId();
     const { runKey, xpEventId } = buildBattleXpIdentifiers({
       uid: currentUser.uid,
@@ -884,7 +1002,7 @@ export default function App() {
       stageId,
       gameMode: gameState.gameMode || 'SOLO',
       earnedScoreXp: stageEarnedXp,
-      runTotalScoreXp: gameState.score,
+      runTotalScoreXp: localTotalXp,
       defeatedByType: counts,
       roomCode,
     });
@@ -1157,7 +1275,12 @@ export default function App() {
               })()}
               <div className="flex items-center gap-1 text-amber-400">
                 <Trophy className="w-3.5 h-3.5" />
-                <span className="font-bold">{gameState?.score ?? 0} XP</span>
+                <span className="font-bold">
+                  {(isCoopOnlineMatch && localOnlineRole === 'GUEST'
+                    ? gameState?.p2Stats?.score ?? 0
+                    : gameState?.p1Stats?.score ?? gameState?.score ?? 0)}{' '}
+                  XP
+                </span>
               </div>
               <div className="flex items-center gap-1 text-rose-400 font-bold" title="Mạng P1">
                 <Heart className="w-3.5 h-3.5 fill-rose-500" />
@@ -1362,7 +1485,12 @@ export default function App() {
               })()}
               <div className="flex items-center gap-1 text-amber-400">
                 <Trophy className="w-3.5 h-3.5" />
-                <span className="font-bold">{gameState?.score ?? 0} XP</span>
+                <span className="font-bold">
+                  {(isCoopOnlineMatch && localOnlineRole === 'GUEST'
+                    ? gameState?.p2Stats?.score ?? 0
+                    : gameState?.p1Stats?.score ?? gameState?.score ?? 0)}{' '}
+                  XP
+                </span>
               </div>
               <div className="flex items-center gap-1 text-rose-400 font-bold" title="Mạng P1">
                 <Heart className="w-3.5 h-3.5 fill-rose-500" />
@@ -1822,6 +1950,9 @@ export default function App() {
         returnToLobbyError={returnToLobbyError}
         isTrialMode={isTrialMode}
         localOnlineRole={localOnlineRole}
+        postStageReady={postStageReady}
+        onTogglePostStageReady={isCoopOnlineMatch ? handleTogglePostStageReady : undefined}
+        hasTeammateLeft={hasTeammateLeft}
       />
     </div>
   );

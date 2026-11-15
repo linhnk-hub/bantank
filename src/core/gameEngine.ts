@@ -14,6 +14,7 @@ import {
 } from './constants.ts';
 import {
   type GameCoreState,
+  type PlayerCombatStats,
   type GuestVisualInterpolationState,
   type SnapshotRejectErrorCode,
   type SnapshotValidationResult,
@@ -58,6 +59,14 @@ export const NEUTRAL_INPUT: Readonly<InputState> = Object.freeze({
   right: false,
   shoot: false,
 });
+
+function createEmptyPlayerCombatStats(carryTotalScore: number = 0): PlayerCombatStats {
+  return {
+    score: carryTotalScore,
+    stageScore: 0,
+    defeatedCounts: { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 },
+  };
+}
 
 let matchInstanceCounter = 0;
 
@@ -513,6 +522,8 @@ export class GameEngine {
       score: this.scoreManager.getTotalScore(),
       highScore: this.scoreManager.getHighScore(),
       defeatedCounts: this.scoreManager.getStageStats(),
+      p1Stats: createEmptyPlayerCombatStats(),
+      p2Stats: this.isCoopMode() ? createEmptyPlayerCombatStats() : null,
       currentStageId: currentStage.id,
       currentStageName: currentStage.name,
       currentStageVersion: currentStage.version ?? 1,
@@ -868,6 +879,8 @@ export class GameEngine {
       score: this.scoreManager.getTotalScore(),
       highScore: this.scoreManager.getHighScore(),
       defeatedCounts: this.scoreManager.getStageStats(),
+      p1Stats: createEmptyPlayerCombatStats(),
+      p2Stats: this.isCoopMode() ? createEmptyPlayerCombatStats() : null,
       currentStageId: stage.id,
       currentStageName: stage.name,
       currentStageVersion: stage.version ?? 1,
@@ -1068,6 +1081,10 @@ export class GameEngine {
       score: this.scoreManager.getTotalScore(),
       highScore: this.scoreManager.getHighScore(),
       defeatedCounts: this.scoreManager.getStageStats(),
+      p1Stats: createEmptyPlayerCombatStats(this.state.p1Stats?.score ?? 0),
+      p2Stats: this.isCoopMode()
+        ? createEmptyPlayerCombatStats(this.state.p2Stats?.score ?? 0)
+        : null,
       currentStageId: stage.id,
       currentStageName: stage.name,
       currentStageVersion: stage.version ?? 1,
@@ -1140,6 +1157,8 @@ export class GameEngine {
       score: this.scoreManager.getTotalScore(),
       highScore: this.scoreManager.getHighScore(),
       defeatedCounts: this.scoreManager.getStageStats(),
+      p1Stats: createEmptyPlayerCombatStats(),
+      p2Stats: this.isCoopMode() ? createEmptyPlayerCombatStats() : null,
       currentStageId: currentStage.id,
       currentStageName: currentStage.name,
       stageElapsedSeconds: 0,
@@ -1331,7 +1350,7 @@ export class GameEngine {
           this.state.p2State.respawnTimer -= dt;
         } else if (this.state.p2State.lives > 0) {
           const p2SpawnBox = getTankHitbox(144, 192);
-          const otherTanks = [this.state.p1, ...this.state.enemies];
+          const otherTanks = [...this.state.enemies];
           const isOccupiedByTank = checkTankVsTanks('p2_respawn_probe', p2SpawnBox, otherTanks);
           const isOccupiedByBullet = this.state.bullets.some((b) =>
             intersectAABB(p2SpawnBox, getBulletHitbox(b.x, b.y))
@@ -1369,15 +1388,14 @@ export class GameEngine {
     }
 
     // 2. P1 Tank Movement & Continuous Shooting (disabled when dead or in Spectator mode)
+    // P1 & P2 tanks can pass through each other in Co-op modes to prevent close-quarters collision lock
     if (
       this.state.p1.isAlive &&
       !this.state.p1State.isDead &&
       !this.state.p1State.isSpectator &&
       !this.state.p1State.hasLeftMatch
     ) {
-      const obstaclesForP1 = (this.state.p2 && this.state.p2.isAlive && !this.state.p2State?.isDead)
-        ? [...this.state.enemies, this.state.p2]
-        : this.state.enemies;
+      const obstaclesForP1 = this.state.enemies;
       updateTankMovement(this.state.p1, input, this.state.terrain, obstaclesForP1);
 
       // Continuous fire: if shoot button is held down and no P1 bullet is active, immediately fire!
@@ -1425,7 +1443,7 @@ export class GameEngine {
         shoot: false,
       };
 
-      const obstaclesForP2 = [this.state.p1, ...this.state.enemies];
+      const obstaclesForP2 = this.state.enemies;
       updateTankMovement(this.state.p2, p2MoveInput, this.state.terrain, obstaclesForP2);
 
       if (
@@ -1456,9 +1474,7 @@ export class GameEngine {
       !this.state.p2State.isSpectator &&
       !this.state.p2State.hasLeftMatch
     ) {
-      const obstaclesForP2 = (this.state.p1 && this.state.p1.isAlive && !this.state.p1State.isDead)
-        ? [this.state.p1, ...this.state.enemies]
-        : this.state.enemies;
+      const obstaclesForP2 = this.state.enemies;
       updateTankMovement(this.state.p2, this.externalInputP2, this.state.terrain, obstaclesForP2);
 
       const p2HasBullet = this.state.bullets.some((b) => b.ownerId === 'p2');
@@ -1562,6 +1578,22 @@ export class GameEngine {
             this.state.score = this.scoreManager.getTotalScore();
             this.state.highScore = this.scoreManager.getHighScore();
             this.state.defeatedCounts = this.scoreManager.getStageStats();
+            const earnedPts = ENEMY_CONFIG.SPECS[enemy.enemyType]?.score ?? 0;
+            if (pb.ownerId === 'p2') {
+              if (!this.state.p2Stats) {
+                this.state.p2Stats = createEmptyPlayerCombatStats();
+              }
+              this.state.p2Stats.score += earnedPts;
+              this.state.p2Stats.stageScore += earnedPts;
+              this.state.p2Stats.defeatedCounts[enemy.enemyType] += 1;
+            } else {
+              if (!this.state.p1Stats) {
+                this.state.p1Stats = createEmptyPlayerCombatStats();
+              }
+              this.state.p1Stats.score += earnedPts;
+              this.state.p1Stats.stageScore += earnedPts;
+              this.state.p1Stats.defeatedCounts[enemy.enemyType] += 1;
+            }
             this.emitCombatEvent('TANK_EXPLOSION', enemy.x + 8, enemy.y + 8);
           } else {
             // Hit but not destroyed: emit impact spark at hit location
@@ -1935,10 +1967,7 @@ export class GameEngine {
 
     const nextHitbox = getTankHitbox(nextX, nextY);
     const terrainColl = checkHitboxVsTerrain(nextHitbox, this.state.terrain, { forBullet: false });
-    const obstacles =
-      this.state.p1.isAlive && !this.state.p1State.isDead
-        ? [this.state.p1, ...this.state.enemies]
-        : this.state.enemies;
+    const obstacles = this.state.enemies;
     const tankColl = checkTankVsTanks('p2', nextHitbox, obstacles);
 
     if (!terrainColl.collides && !tankColl) {
@@ -2052,6 +2081,36 @@ export class GameEngine {
     this.state.score = snapshot.score;
     this.state.highScore = snapshot.highScore;
     this.state.defeatedCounts = { ...snapshot.defeatedCounts };
+    this.state.p1Stats = snapshot.p1Stats
+      ? {
+          score: Number(snapshot.p1Stats.score) || 0,
+          stageScore: Number(snapshot.p1Stats.stageScore) || 0,
+          defeatedCounts: {
+            BASIC: Number(snapshot.p1Stats.defeatedCounts?.BASIC) || 0,
+            FAST: Number(snapshot.p1Stats.defeatedCounts?.FAST) || 0,
+            POWER: Number(snapshot.p1Stats.defeatedCounts?.POWER) || 0,
+            ARMOR: Number(snapshot.p1Stats.defeatedCounts?.ARMOR) || 0,
+          },
+        }
+      : {
+          score: snapshot.score,
+          stageScore: 0,
+          defeatedCounts: { ...snapshot.defeatedCounts },
+        };
+    this.state.p2Stats = snapshot.p2Stats
+      ? {
+          score: Number(snapshot.p2Stats.score) || 0,
+          stageScore: Number(snapshot.p2Stats.stageScore) || 0,
+          defeatedCounts: {
+            BASIC: Number(snapshot.p2Stats.defeatedCounts?.BASIC) || 0,
+            FAST: Number(snapshot.p2Stats.defeatedCounts?.FAST) || 0,
+            POWER: Number(snapshot.p2Stats.defeatedCounts?.POWER) || 0,
+            ARMOR: Number(snapshot.p2Stats.defeatedCounts?.ARMOR) || 0,
+          },
+        }
+      : snapshot.p2
+        ? createEmptyPlayerCombatStats()
+        : null;
     this.state.currentStageId = snapshot.currentStageId;
     this.state.currentStageName = snapshot.currentStageName;
     this.state.currentStageVersion =

@@ -10,6 +10,7 @@ import {
   getUserDisplayLabel,
   resolveUserRole,
   getRoleNameFrameClasses,
+  getRoleTrademarkBadge,
 } from '../core/authManager.ts';
 import { AvatarManager } from '../core/avatarManager.ts';
 import { PlayerStatsManager } from '../core/playerStatsManager.ts';
@@ -269,9 +270,15 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   };
 
   const isSessionActive = session.status === 'ACTIVE';
-  const displayLabel = getUserDisplayLabel(user);
+  const profileMeta = effectiveUid ? avatarManager.getUserMetadata(effectiveUid) : null;
+  const effectiveUser = {
+    ...user,
+    displayName: profileMeta?.displayName || user.displayName,
+  };
+  const displayLabel = getUserDisplayLabel(effectiveUser);
   const userRole = resolveUserRole(user);
   const roleFrameClasses = getRoleNameFrameClasses(userRole);
+  const roleTrademarkBadge = getRoleTrademarkBadge(userRole);
 
   const badgeInfo = getSessionBadgeInfo(
     session.status,
@@ -394,8 +401,18 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               ) : (
                 <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               )}
-              <span className="font-bold text-amber-300 truncate max-w-[82px] xs:max-w-[115px] sm:max-w-[175px]">
-                {displayLabel}
+              <span className="inline-flex items-baseline font-bold text-amber-300 min-w-0">
+                <span className="truncate max-w-[82px] xs:max-w-[115px] sm:max-w-[175px]">
+                  {displayLabel}
+                </span>
+                {roleTrademarkBadge && (
+                  <sup
+                    data-testid="role-trademark-badge"
+                    className="ml-0.5 text-[9px] font-black leading-none text-amber-300 select-none shrink-0"
+                  >
+                    {roleTrademarkBadge}
+                  </sup>
+                )}
               </span>
               <span
                 data-testid="top-menu-player-level"
@@ -626,7 +643,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     <p className="text-xs text-neutral-300 leading-relaxed">
-                      Tạo phòng (có mật khẩu hoặc công khai) hoặc Tham gia phòng (Vào nhanh / Mã phòng) để phối hợp trực tuyến giữa 2 người chơi.
+                      Tạo phòng (có mật khẩu hoặc công khai) hoặc Tham gia phòng bằng mã phòng định dạng BTxxxx để phối hợp trực tuyến giữa 2 người chơi.
                     </p>
                   </div>
 
