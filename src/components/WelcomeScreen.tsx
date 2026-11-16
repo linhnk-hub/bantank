@@ -205,8 +205,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>HỆ THỐNG ĐANG BẢO TRÌ</span>
               </div>
-              <p className="text-xs sm:text-sm text-amber-100 font-medium leading-relaxed">
-                {maintenanceNoticeText}
+              <p className="text-xs sm:text-sm text-amber-100 font-medium leading-relaxed whitespace-pre-line">
+                {formatSentenceLineBreaks(maintenanceNoticeText)}
               </p>
               <div className="pt-1 flex justify-center">
                 <button
@@ -223,8 +223,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             </div>
           )}
 
-          {/* Google Sign-in Call To Action & Trial Mode Button (Compact width + animated gradient shift) */}
-          <div className="w-full max-w-[260px] flex flex-col items-center gap-2.5 px-2 mb-4">
+          {/* Google Sign-in Call To Action & Trial Mode Button (Compact width + animated gradient shift + yellow-to-red login text) */}
+          <div className="w-full max-w-[260px] flex flex-col items-center gap-2.5 px-2 mt-2.5 mb-4">
             <button
               type="button"
               data-testid="welcome-google-signin-btn"
@@ -261,7 +261,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                   </svg>
                 </span>
               )}
-              <span className="tracking-wide uppercase">
+              <span
+                data-testid="welcome-signin-gradient-text"
+                className="tracking-wide uppercase font-black bg-gradient-to-b from-yellow-200 via-amber-400 to-red-500 bg-clip-text text-transparent [filter:drop-shadow(0_1.5px_1px_rgba(0,0,0,0.95))_drop-shadow(0_-0.5px_1px_rgba(0,0,0,0.9))_drop-shadow(1px_0_1px_rgba(0,0,0,0.9))_drop-shadow(-1px_0_1px_rgba(0,0,0,0.9))]"
+              >
                 {isProcessing ? 'ĐANG KẾT NỐI...' : 'ĐĂNG NHẬP'}
               </span>
             </button>

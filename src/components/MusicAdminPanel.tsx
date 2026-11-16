@@ -315,8 +315,8 @@ export const MusicAdminPanel: React.FC = () => {
               Media Tĩnh Chuẩn Hóa
             </span>
           </div>
-          <p className="text-[11px] text-neutral-400">
-            Sử dụng trực tiếp bộ file BGM tĩnh (<code>public/audio/bgm/</code>), 7 file SFX tĩnh (<code>public/audio/sfx/</code>) và video Intro nền (<code>intro-bantank.mp4</code>). Đã khóa tải file mới từ trình duyệt.
+          <p className="text-[11px] text-neutral-400 whitespace-pre-line">
+            Sử dụng trực tiếp bộ file BGM tĩnh (<code>public/audio/bgm/</code>), 7 file SFX tĩnh (<code>public/audio/sfx/</code>) và video Intro nền (<code>intro-bantank.mp4</code>).{'\n'}Đã khóa tải file mới từ trình duyệt.
           </p>
         </div>
         {sharedMediaConfig && (
@@ -343,7 +343,7 @@ export const MusicAdminPanel: React.FC = () => {
             ) : (
               <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
             )}
-            <span className="break-words">
+            <span className="break-words whitespace-pre-line">
               {sharedSyncError || actionSfxError || homeVideoError || statusMsg?.text}
             </span>
           </div>

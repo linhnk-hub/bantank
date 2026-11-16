@@ -5,6 +5,7 @@
 
 import React, { useEffect } from 'react';
 import { CheckCircle2, AlertTriangle, Info, X } from 'lucide-react';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 
 export interface ConfirmationPopupModalProps {
   isOpen: boolean;
@@ -115,7 +116,9 @@ export const ConfirmationPopupModal: React.FC<ConfirmationPopupModalProps> = ({
               ) : (
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
               )}
-              <span className="break-words">{msg}</span>
+              <span className="break-words whitespace-pre-line">
+                {formatSentenceLineBreaks(msg)}
+              </span>
             </div>
           ))}
         </div>

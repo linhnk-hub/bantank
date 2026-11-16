@@ -321,19 +321,28 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
         </div>
       </header>
 
-      {/* Main Container - Top Aligned */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-2 sm:px-4 pt-2 sm:pt-5 pb-5 max-w-4xl mx-auto w-full">
-        <div className="w-full max-w-md flex flex-col items-center text-center">
-          {/* Emblem Banner — M7.3.10 Unified 200% Standard (320x320) */}
-          <div className="mb-3">
-            <div className="flex justify-center items-center p-0 m-0">
-              <GameLogo />
-            </div>
+      {/* Main Container - Preserves exact Logo, Slogan, Color Format & Button Structure of WelcomeScreen */}
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-2 sm:px-4 pt-1 sm:pt-3 pb-4 max-w-4xl mx-auto w-full">
+        <div className="flex flex-col items-center text-center max-w-2xl w-full">
+          {/* Official Game Logo Hero — M7.3.10 Unified 200% Standard (320x320) */}
+          <div className="flex justify-center items-center p-0 m-0">
+            <GameLogo />
           </div>
+
+          {/* Slogan Banner Image (/slogan.png) — zero outer margin/padding on all 4 sides */}
+          <h1 className="inline-flex items-center justify-center p-0 m-0 leading-none">
+            <img
+              src="/slogan.png"
+              alt="Chiến trường huyền thoại"
+              data-testid="main-menu-slogan-image"
+              className="block w-auto max-w-[280px] sm:max-w-[380px] h-auto object-contain p-0 m-0 drop-shadow-lg select-none pointer-events-none"
+              draggable={false}
+            />
+          </h1>
 
           {/* Real Error Alert Card (Only shown if an actual failure occurred, M7.3.4 V.2) */}
           {hasRealSessionFailure && (
-            <div className="w-full mb-5 p-4 rounded-xl bg-rose-950/80 border border-rose-700/80 text-rose-200 text-left flex flex-col gap-2.5 shadow-lg animate-fade-in">
+            <div className="w-full max-w-md mt-2.5 mb-3 p-4 rounded-xl bg-rose-950/80 border border-rose-700/80 text-rose-200 text-left flex flex-col gap-2.5 shadow-lg animate-fade-in">
               <div className="flex items-center gap-2 font-bold text-xs sm:text-sm text-rose-300">
                 <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
                 <span>Không thể xác nhận phiên tài khoản</span>
@@ -355,40 +364,45 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             </div>
           )}
 
-          {/* Primary Action Button: "CHỌN CHẾ ĐỘ CHƠI" & Unified CÀI ĐẶT / HỖ TRỢ */}
-          <div className="w-full flex flex-col items-center gap-3">
+          {/* Primary Action Button: "CHỌN CHẾ ĐỘ CHƠI" & Unified CÀI ĐẶT / HƯỚNG DẪN (Same compact width + gradient format as WelcomeScreen) */}
+          <div className="w-full max-w-[260px] flex flex-col items-center gap-2.5 px-2 mt-2.5 mb-4">
             <button
               type="button"
+              data-testid="main-menu-play-btn"
               onClick={isSessionActive ? onPlay : onRetryAcquire}
               disabled={isProcessing}
-              className={`w-full py-4 px-8 rounded-2xl font-black text-base sm:text-lg tracking-wider uppercase transition-all shadow-2xl flex items-center justify-center gap-3 transform active:scale-98 ${
-                !isProcessing
-                  ? 'bg-gradient-to-r from-amber-400 via-amber-500 to-yellow-500 hover:from-amber-300 hover:to-yellow-400 text-black shadow-amber-500/30 cursor-pointer'
-                  : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
+              className={`w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-orange-600 via-red-600 to-orange-500 bg-[length:200%_100%] bg-left hover:bg-right text-white font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-lg shadow-orange-600/30 hover:shadow-red-600/45 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 border border-orange-400/70 ${
+                isProcessing
+                  ? 'opacity-60 cursor-not-allowed'
+                  : 'cursor-pointer'
               }`}
             >
-              <Play className="w-5 h-5 fill-black" />
-              <span>CHỌN CHẾ ĐỘ CHƠI</span>
+              <Play className="w-4 h-4 fill-yellow-300 text-amber-400 drop-shadow shrink-0" />
+              <span
+                data-testid="main-menu-play-gradient-text"
+                className="tracking-wide uppercase font-black bg-gradient-to-b from-yellow-200 via-amber-400 to-red-500 bg-clip-text text-transparent [filter:drop-shadow(0_1.5px_1px_rgba(0,0,0,0.95))_drop-shadow(0_-0.5px_1px_rgba(0,0,0,0.9))_drop-shadow(1px_0_1px_rgba(0,0,0,0.9))_drop-shadow(-1px_0_1px_rgba(0,0,0,0.9))]"
+              >
+                CHỌN CHẾ ĐỘ CHƠI
+              </span>
             </button>
 
-            {/* M7.3.4 V.3 & V.5: Unified CÀI ĐẶT and HỖ TRỢ right below CHỌN CHẾ ĐỘ CHƠI */}
-            <div className="w-full grid grid-cols-2 gap-3">
+            <div className="w-full grid grid-cols-2 gap-2.5">
               <button
                 type="button"
                 onClick={onOpenSettings}
-                className="py-3 px-4 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 hover:border-amber-500/50 text-neutral-100 font-extrabold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow active:scale-95 cursor-pointer"
+                className="w-full py-3 px-3 rounded-2xl bg-gradient-to-r from-neutral-900 via-zinc-700 to-neutral-950 bg-[length:200%_100%] bg-left hover:bg-right text-neutral-100 hover:text-amber-300 font-extrabold text-xs sm:text-sm whitespace-nowrap border border-zinc-600/80 hover:border-amber-400/60 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-black/40 cursor-pointer"
               >
-                <Settings className="w-4 h-4 text-amber-400" />
-                <span>CÀI ĐẶT</span>
+                <Settings className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="tracking-wide uppercase">CÀI ĐẶT</span>
               </button>
 
               <button
                 type="button"
                 onClick={onOpenSupport}
-                className="py-3 px-4 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 hover:border-sky-500/50 text-neutral-100 font-extrabold text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow active:scale-95 cursor-pointer"
+                className="w-full py-3 px-3 rounded-2xl bg-gradient-to-r from-neutral-900 via-zinc-700 to-neutral-950 bg-[length:200%_100%] bg-left hover:bg-right text-neutral-100 hover:text-amber-300 font-extrabold text-xs sm:text-sm whitespace-nowrap border border-zinc-600/80 hover:border-amber-400/60 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-black/40 cursor-pointer"
               >
-                <HelpCircle className="w-4 h-4 text-sky-400" />
-                <span>HƯỚNG DẪN</span>
+                <HelpCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                <span className="tracking-wide uppercase">HƯỚNG DẪN</span>
               </button>
             </div>
           </div>

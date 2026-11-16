@@ -5390,11 +5390,11 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       getRoleNameFrameClasses('ADMIN').includes('border-neutral-700/80') &&
       getRoleNameFrameClasses('MOD').includes('border-neutral-700/80') &&
       getRoleNameFrameClasses('PLAYER').includes('border-neutral-700/80') &&
-      getRoleTrademarkBadge('ADMIN') === 'Ⓐ' &&
-      getRoleTrademarkBadge('MOD') === 'Ⓜ' &&
+      getRoleTrademarkBadge('ADMIN') === 'AD' &&
+      getRoleTrademarkBadge('MOD') === 'MOD' &&
       getRoleTrademarkBadge('PLAYER') === null &&
       getRoleDisplayInfo('ADMIN').label === 'Admin' &&
-      getRoleDisplayInfo('ADMIN').trademarkBadge === 'Ⓐ';
+      getRoleDisplayInfo('ADMIN').trademarkBadge === 'AD';
     clearVerifiedServerRoles();
 
     // 3. Hạng mục 3: Kiểm tra đồng bộ Single-BGM giữa MusicManager và SoundManager
@@ -10232,8 +10232,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   {
     // 1. Role trademark badges
     const roleBadgeOk =
-      getRoleTrademarkBadge('ADMIN') === 'Ⓐ' &&
-      getRoleTrademarkBadge('MOD') === 'Ⓜ' &&
+      getRoleTrademarkBadge('ADMIN') === 'AD' &&
+      getRoleTrademarkBadge('MOD') === 'MOD' &&
       getRoleTrademarkBadge('PLAYER') === null &&
       !getRoleNameFrameClasses('ADMIN').includes('emerald') &&
       !getRoleNameFrameClasses('MOD').includes('sky');

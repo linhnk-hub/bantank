@@ -2162,7 +2162,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </table>
               </div>
 
-              {/* Role Trademark Badge Legend (Ký hiệu Ⓐ và Ⓜ) */}
+              {/* Role Trademark Badge Legend */}
               <div className="space-y-2 pt-1">
                 <div className="text-xs font-bold text-white">
                   Quy ước ký hiệu chức danh viết thu nhỏ phía trên tên người chơi:
@@ -2171,16 +2171,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="p-2 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
                     <span className="font-extrabold text-white text-[11px]">
                       Admin
-                      <sup className="ml-0.5 text-[9px] font-black text-amber-300">Ⓐ</sup>
+                      <sup className="ml-0.5 text-[9px] font-black text-amber-300">
+                        {getRoleTrademarkBadge('ADMIN')}
+                      </sup>
                     </span>
-                    <span className="text-[10px] font-mono text-amber-300 font-bold">Ký hiệu Ⓐ</span>
+                    <span className="text-[10px] font-mono text-amber-300 font-bold">
+                      Ký hiệu {getRoleTrademarkBadge('ADMIN')}
+                    </span>
                   </div>
                   <div className="p-2 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
                     <span className="font-extrabold text-white text-[11px]">
                       Mod
-                      <sup className="ml-0.5 text-[9px] font-black text-amber-300">Ⓜ</sup>
+                      <sup className="ml-0.5 text-[9px] font-black text-amber-300">
+                        {getRoleTrademarkBadge('MOD')}
+                      </sup>
                     </span>
-                    <span className="text-[10px] font-mono text-amber-300 font-bold">Ký hiệu Ⓜ</span>
+                    <span className="text-[10px] font-mono text-amber-300 font-bold">
+                      Ký hiệu {getRoleTrademarkBadge('MOD')}
+                    </span>
                   </div>
                   <div className="p-2 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
                     <span className="font-extrabold text-white text-[11px]">User</span>
@@ -2775,12 +2783,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <div
                   data-testid="maintenance-preview-message"
-                  className="text-xs font-bold text-white leading-relaxed"
+                  className="text-xs font-bold text-white leading-relaxed whitespace-pre-line"
                 >
                   &ldquo;
-                  {buildMaintenanceNoticeMessage(
-                    new Date(maintStartInput).getTime(),
-                    new Date(maintEndInput).getTime()
+                  {formatSentenceLineBreaks(
+                    buildMaintenanceNoticeMessage(
+                      new Date(maintStartInput).getTime(),
+                      new Date(maintEndInput).getTime()
+                    )
                   )}
                   &rdquo;
                 </div>

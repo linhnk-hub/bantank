@@ -539,8 +539,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       </div>
                     </div>
 
-                    <p className="text-xs text-neutral-300 leading-relaxed">
-                      Người chơi P1 độc lập tác chiến, tiêu diệt toàn bộ quân địch và bảo vệ căn cứ Đại bàng.
+                    <p className="text-xs text-neutral-300 leading-relaxed whitespace-pre-line">
+                      {formatSentenceLineBreaks(
+                        'Người chơi P1 độc lập tác chiến, tiêu diệt toàn bộ quân địch và bảo vệ căn cứ Đại bàng.'
+                      )}
                     </p>
                   </div>
 
@@ -601,8 +603,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       </div>
                     </div>
 
-                    <p className="text-xs text-neutral-300 leading-relaxed">
-                      Người chơi P1 và đồng đội P2 (do AI điều khiển) cùng nhau tiêu diệt toàn bộ quân địch và bảo vệ căn cứ Đại bàng.
+                    <p className="text-xs text-neutral-300 leading-relaxed whitespace-pre-line">
+                      {formatSentenceLineBreaks(
+                        'Người chơi P1 và đồng đội P2 (do AI điều khiển) cùng nhau tiêu diệt toàn bộ quân địch và bảo vệ căn cứ Đại bàng.'
+                      )}
                     </p>
                   </div>
 
@@ -663,8 +667,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       </div>
                     </div>
 
-                    <p className="text-xs text-neutral-300 leading-relaxed">
-                      Tạo phòng (có mật khẩu hoặc công khai) hoặc Tham gia phòng bằng mã phòng định dạng BTxxxx để phối hợp trực tuyến giữa 2 người chơi.
+                    <p className="text-xs text-neutral-300 leading-relaxed whitespace-pre-line">
+                      {formatSentenceLineBreaks(
+                        'Tạo phòng (có mật khẩu hoặc công khai) hoặc Tham gia phòng bằng mã phòng định dạng BTxxxx để phối hợp trực tuyến giữa 2 người chơi.'
+                      )}
                     </p>
                   </div>
 
@@ -828,8 +834,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     {stageSelectError && (
-                      <div className="p-2.5 rounded-lg bg-rose-950/80 border border-rose-700/70 text-rose-200 text-[11px] font-medium">
-                        {stageSelectError}
+                      <div className="p-2.5 rounded-lg bg-rose-950/80 border border-rose-700/70 text-rose-200 text-[11px] font-medium whitespace-pre-line">
+                        {formatSentenceLineBreaks(stageSelectError)}
                       </div>
                     )}
                   </section>

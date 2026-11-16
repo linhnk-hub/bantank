@@ -34,6 +34,7 @@ import {
 } from '../core/stageManager.ts';
 import { hasRolePermission, type UserRole } from '../core/rbacMatrix.ts';
 import { ConfirmationPopupModal } from './ConfirmationPopupModal.tsx';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 
 interface StageEditorPanelProps {
   actorRole: UserRole;
@@ -461,8 +462,10 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
               <Layers className="w-4 h-4" />
               Quản lý màn chơi (Stage) &amp; Thiết kế bản đồ 13×13
             </div>
-            <p className="text-[11px] text-zinc-400 mt-0.5">
-              Stage 1 chính thức được bảo vệ nguyên trạng. Màn chơi mới tạo ở trạng thái Bản nháp cho đến khi bấm Kích hoạt.
+            <p className="text-[11px] text-zinc-400 mt-0.5 whitespace-pre-line">
+              {formatSentenceLineBreaks(
+                'Stage 1 chính thức được bảo vệ nguyên trạng. Màn chơi mới tạo ở trạng thái Bản nháp cho đến khi bấm Kích hoạt.'
+              )}
             </p>
           </div>
           {canEditStages && (
@@ -494,7 +497,7 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                 ) : (
                   <AlertTriangle className="w-3.5 h-3.5 text-rose-400 shrink-0 mt-0.5" />
                 )}
-                <span>{msg}</span>
+                <span className="whitespace-pre-line">{formatSentenceLineBreaks(msg)}</span>
               </div>
             ))}
           </div>
@@ -680,8 +683,8 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
             <div className="p-2.5 rounded bg-amber-950/40 border border-amber-700/50 text-[11px] text-amber-200 flex items-center justify-between gap-2">
               <div className="flex items-center gap-1.5">
                 <Shield className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>
-                  Đây là <strong>Stage 1 chính thức</strong> của hệ thống và được khóa bảo vệ nguyên trạng. Để thiết kế màn chơi mới, hãy nhấn nút <strong>"Thêm màn chơi"</strong>.
+                <span className="whitespace-pre-line">
+                  Đây là <strong>Stage 1 chính thức</strong> của hệ thống và được khóa bảo vệ nguyên trạng.{'\n'}Để thiết kế màn chơi mới, hãy nhấn nút <strong>&quot;Thêm màn chơi&quot;</strong>.
                 </span>
               </div>
               {canEditStages && (
@@ -715,71 +718,61 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
 
           {/* Palette & Editor Toolbar */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
-            {/* Left column: 7-Tile Palette + Quick Actions */}
+            {/* Left column: Top Draggable 7-Tile Cluster + Quick Actions */}
             <div className="lg:col-span-5 space-y-3">
-              <div className="text-[11px] font-bold text-zinc-300 uppercase tracking-wider">
-                Bảng công cụ 7 loại địa hình (Kéo thả hoặc Chọn để vẽ)
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 select-none">
-                {PALETTE_TILES.map((tile) => {
-                  const isSelected = selectedTileCode === tile.code;
-                  const canDragTile = canEditStages && !currentManagedStage.isOfficialStage1;
-                  return (
-                    <div
-                      key={tile.code}
-                      data-testid={`palette-row-${tile.code}`}
-                      className="p-1.5 rounded-lg border border-zinc-800/80 bg-zinc-950/75 flex items-center gap-2 select-none"
-                    >
+              <div
+                data-testid="palette-draggable-cluster"
+                className="p-3 rounded-xl bg-zinc-950/90 border border-zinc-800 space-y-2.5 select-none"
+              >
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
+                    Cụm vật liệu kéo &amp; thả (7 loại địa hình)
+                  </div>
+                  <span className="text-[10px] font-mono text-zinc-400">
+                    Đang chọn:{' '}
+                    <strong className="text-amber-300">
+                      {TILE_METADATA[selectedTileCode]?.vietnameseName} ({selectedTileCode})
+                    </strong>
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-2 select-none">
+                  {PALETTE_TILES.map((tile) => {
+                    const isSelected = selectedTileCode === tile.code;
+                    const canDragTile = canEditStages && !currentManagedStage.isOfficialStage1;
+                    return (
                       <button
+                        key={tile.code}
                         type="button"
                         draggable={canDragTile}
                         onDragStart={(e) => {
                           e.dataTransfer.effectAllowed = 'copy';
                           e.dataTransfer.setData('text/plain', String(tile.code));
                           if (e.dataTransfer.setDragImage) {
-                            e.dataTransfer.setDragImage(e.currentTarget, 18, 18);
+                            e.dataTransfer.setDragImage(e.currentTarget, 20, 20);
                           }
                           setSelectedTileCode(tile.code);
                         }}
                         onClick={() => setSelectedTileCode(tile.code)}
                         data-testid={`palette-tile-${tile.code}`}
-                        title={`Chọn hoặc kéo thả: ${tile.vnName} (${tile.code})`}
-                        className={`shrink-0 w-[96px] px-2 py-1.5 rounded-md border flex items-center gap-1.5 text-left transition-all select-none ${
+                        aria-label={`${tile.vnName} (${tile.code})`}
+                        title={`${tile.vnName} (${tile.codeLabel})`}
+                        className={`w-11 h-11 rounded-lg border-2 flex items-center justify-center transition-all select-none shrink-0 ${
                           canDragTile ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'
                         } ${
                           isSelected
-                            ? 'bg-amber-500/20 border-amber-400 ring-2 ring-amber-400/60 shadow-sm'
+                            ? 'bg-amber-500/25 border-amber-400 ring-2 ring-amber-400/70 scale-105 shadow-md'
                             : 'bg-zinc-900 border-zinc-700 hover:border-zinc-500'
                         }`}
                       >
                         <span
-                          className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center text-[8px] font-black ${tile.bgClass} ${tile.borderClass}`}
+                          className={`w-7 h-7 rounded border flex items-center justify-center text-xs font-black pointer-events-none ${tile.bgClass} ${tile.borderClass}`}
                         >
                           {tile.code === TILE_TYPES.BASE ? '🦅' : ''}
                         </span>
-                        <span
-                          className={`text-[10px] font-bold truncate ${
-                            isSelected ? 'text-amber-200' : 'text-zinc-100'
-                          }`}
-                        >
-                          {tile.vnName}
-                        </span>
                       </button>
-
-                      <div
-                        data-testid={`palette-note-${tile.code}`}
-                        className="min-w-0 flex-1 select-none pointer-events-none"
-                      >
-                        <div className="text-[9px] font-mono text-zinc-400 truncate">
-                          {tile.codeLabel}
-                        </div>
-                        <div className="text-[9px] text-zinc-500 leading-tight line-clamp-2">
-                          {tile.shortDesc}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Editor Action Buttons */}
@@ -1016,6 +1009,42 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                   <span className="font-mono text-zinc-500">Căn cứ chuẩn: [12,6]</span>
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* Separate Bottom Explanation Cluster: Material Name on Same Row as Explanation Note */}
+          <div
+            data-testid="palette-notes-cluster"
+            className="p-3 rounded-xl bg-zinc-950/90 border border-zinc-800 space-y-2 select-none pointer-events-none"
+          >
+            <div className="text-[11px] font-bold text-amber-300 uppercase tracking-wider">
+              Ghi chú giải thích 7 loại vật liệu địa hình
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              {PALETTE_TILES.map((tile) => (
+                <div
+                  key={tile.code}
+                  data-testid={`palette-row-${tile.code}`}
+                  className="px-2.5 py-1.5 rounded-lg bg-zinc-900/85 border border-zinc-800/80 flex items-center gap-2 text-[11px] select-none pointer-events-none"
+                >
+                  <span
+                    className={`w-3.5 h-3.5 rounded border shrink-0 flex items-center justify-center text-[8px] font-black ${tile.bgClass} ${tile.borderClass}`}
+                  >
+                    {tile.code === TILE_TYPES.BASE ? '🦅' : ''}
+                  </span>
+                  <div
+                    data-testid={`palette-note-${tile.code}`}
+                    className="min-w-0 flex-1 flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 select-none pointer-events-none"
+                  >
+                    <span className="font-bold text-amber-300 shrink-0">
+                      {tile.vnName} ({tile.codeLabel}):
+                    </span>
+                    <span className="text-zinc-300 whitespace-pre-line">
+                      {formatSentenceLineBreaks(tile.shortDesc)}
+                    </span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </div>

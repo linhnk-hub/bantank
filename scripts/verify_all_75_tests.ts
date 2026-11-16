@@ -1902,15 +1902,33 @@ async function verifyUiAndStageCloudSyncSuite() {
     throw new Error('SessionAlertModal disconnect title update check failed');
   }
 
-  // 3. StageEditorPanel separates clickable/draggable material tile from passive note text
+  // 3. StageEditorPanel separates top clickable/draggable material cluster from bottom note cluster
   const stageEditorSrc = readSrc('src/components/StageEditorPanel.tsx');
+  const welcomeScreenSrc = readSrc('src/components/WelcomeScreen.tsx');
+  const mainMenuScreenSrc = readSrc('src/components/MainMenuScreen.tsx');
+  const confirmPopupSrc = readSrc('src/components/ConfirmationPopupModal.tsx');
   if (
+    !stageEditorSrc.includes('data-testid="palette-draggable-cluster"') ||
     !stageEditorSrc.includes('data-testid={`palette-tile-${tile.code}`}') ||
+    !stageEditorSrc.includes('data-testid="palette-notes-cluster"') ||
     !stageEditorSrc.includes('data-testid={`palette-note-${tile.code}`}') ||
     !stageEditorSrc.includes('select-none pointer-events-none') ||
-    !stageEditorSrc.includes('syncCatalogToCloud')
+    !stageEditorSrc.includes('syncCatalogToCloud') ||
+    stageEditorSrc.indexOf('data-testid="palette-draggable-cluster"') >
+      stageEditorSrc.indexOf('data-testid="palette-notes-cluster"')
   ) {
     throw new Error('StageEditorPanel material palette separation or cloud sync check failed');
+  }
+  if (
+    !welcomeScreenSrc.includes('data-testid="welcome-signin-gradient-text"') ||
+    !welcomeScreenSrc.includes('from-yellow-200 via-amber-400 to-red-500 bg-clip-text text-transparent') ||
+    !mainMenuScreenSrc.includes('data-testid="main-menu-slogan-image"') ||
+    !mainMenuScreenSrc.includes('src="/slogan.png"') ||
+    !mainMenuScreenSrc.includes('max-w-[260px]') ||
+    !mainMenuScreenSrc.includes('data-testid="main-menu-play-gradient-text"') ||
+    !confirmPopupSrc.includes('formatSentenceLineBreaks')
+  ) {
+    throw new Error('WelcomeScreen / MainMenuScreen / ConfirmationPopupModal consistency check failed');
   }
 
   // 4. End-to-End Stage 2 Edit -> Activate -> Cloud Sync -> Other Player StageManager & GameEngine

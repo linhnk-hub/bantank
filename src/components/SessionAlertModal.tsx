@@ -6,6 +6,7 @@
 import React from 'react';
 import { SessionManager, type SessionStateSnapshot } from '../core/sessionManager.ts';
 import { formatAccountStatusMessage } from './AuthSessionBanner.tsx';
+import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { ShieldAlert, WifiOff, RefreshCw, LogOut, Clock, Play } from 'lucide-react';
 
 export interface SessionAlertModalProps {
@@ -66,17 +67,19 @@ export const SessionAlertModal: React.FC<SessionAlertModalProps> = ({
             {!isIdleWarning && session.status === 'HEARTBEAT_REJECTED_UNCLASSIFIED' && 'Bảo vệ tài khoản người dùng'}
           </h3>
           {isIdleWarning ? (
-            <p className="text-xs sm:text-sm text-neutral-300 mt-2 leading-relaxed">
-              Bạn đã không thao tác trong hơn 14 phút. Game sẽ tự động kết thúc sau{' '}
+            <p className="text-xs sm:text-sm text-neutral-300 mt-2 leading-relaxed whitespace-pre-line">
+              Bạn đã không thao tác trong hơn 14 phút.{'\n'}Game sẽ tự động kết thúc sau{' '}
               <strong className="text-amber-400 font-mono text-base">
                 {session.idleRemainingSeconds ?? 60} giây
               </strong>{' '}
-              nữa để bảo vệ tài khoản. Nhấn <strong>"Tiếp tục phiên"</strong> để duy trì đăng nhập.
+              nữa để bảo vệ tài khoản.{'\n'}Nhấn <strong>&quot;Tiếp tục phiên&quot;</strong> để duy trì đăng nhập.
             </p>
           ) : (
-            <p className="text-xs sm:text-sm text-neutral-300 mt-2 leading-relaxed">
-              {formatAccountStatusMessage(session.message, session.status) ||
-                'Không thể xác minh kết nối bảo mật tài khoản. Trận đấu đang tạm dừng để bảo vệ tài khoản.'}
+            <p className="text-xs sm:text-sm text-neutral-300 mt-2 leading-relaxed whitespace-pre-line">
+              {formatSentenceLineBreaks(
+                formatAccountStatusMessage(session.message, session.status) ||
+                  'Không thể xác minh kết nối bảo mật tài khoản. Trận đấu đang tạm dừng để bảo vệ tài khoản.'
+              )}
             </p>
           )}
         </div>

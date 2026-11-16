@@ -63,6 +63,7 @@ import { PlayerStatsManager } from './core/playerStatsManager.ts';
 import { buildBattleXpIdentifiers } from './core/playerLevelSystem.ts';
 import { SystemAuditLogger } from './core/systemAuditLogger.ts';
 import { DifficultyConfigManager } from './core/difficultyManager.ts';
+import { formatSentenceLineBreaks } from './core/textFormat.ts';
 import {
   MaintenanceManager,
   buildMaintenanceNoticeMessage,
@@ -1139,7 +1140,7 @@ export default function App() {
         </div>
         <div className="p-5 space-y-3 text-center">
           <p className="text-xs sm:text-sm text-neutral-100 font-semibold leading-relaxed whitespace-pre-line">
-            {maintenanceInterruptAlert}
+            {formatSentenceLineBreaks(maintenanceInterruptAlert)}
           </p>
         </div>
         <div className="px-5 py-3.5 border-t border-neutral-800 bg-neutral-950/90 flex items-center justify-center">
@@ -1350,7 +1351,7 @@ export default function App() {
         <div className="bg-red-950/95 border-b border-red-700 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-red-200 z-40">
           <div className="flex items-center gap-2 font-bold">
             <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-            <span>{onlineDisconnectMsg}</span>
+            <span className="whitespace-pre-line">{formatSentenceLineBreaks(onlineDisconnectMsg)}</span>
           </div>
           <div className="flex items-center gap-2">
             <button
