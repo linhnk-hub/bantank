@@ -149,6 +149,12 @@ export function getAvailableSettingsTabsForRole(
     },
   ];
 
+  tabs.push({
+    id: 'AUDIO_SETTINGS',
+    label: 'ÂM THANH',
+    adminOnly: false,
+  });
+
   if (hasRolePermission(effectiveRole, 'MANAGE_AVATAR_CATALOG')) {
     tabs.push({
       id: 'IMAGE_SETTINGS',
@@ -156,12 +162,6 @@ export function getAvailableSettingsTabsForRole(
       adminOnly: true,
     });
   }
-
-  tabs.push({
-    id: 'AUDIO_SETTINGS',
-    label: 'ÂM THANH',
-    adminOnly: false,
-  });
 
   if (hasRolePermission(effectiveRole, 'MANAGE_STAGES')) {
     tabs.push({
@@ -182,7 +182,7 @@ export function getAvailableSettingsTabsForRole(
   if (hasRolePermission(effectiveRole, 'VIEW_ACCOUNT_LIST')) {
     tabs.push({
       id: 'USER_ACCOUNTS',
-      label: 'DS TÀI KHOẢN',
+      label: 'TÀI KHOẢN',
       adminOnly: true,
     });
   }
