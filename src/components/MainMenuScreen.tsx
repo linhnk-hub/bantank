@@ -39,6 +39,8 @@ import { MusicManager, type HomeBackgroundVideoConfig } from '../core/musicManag
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { useLanguage } from '../core/i18n.ts';
 
+export type LobbyCardMode = 'SOLO' | 'COOP_AI' | 'COOP_ONLINE';
+
 export interface MainMenuScreenProps {
   user: {
     uid?: string;
@@ -51,6 +53,9 @@ export interface MainMenuScreenProps {
   session: SessionStateSnapshot;
   isProcessing: boolean;
   onPlay: () => void;
+  onConfirmMode?: (mode: LobbyCardMode) => void;
+  selectedLobbyMode?: LobbyCardMode;
+  onSelectLobbyMode?: (mode: LobbyCardMode) => void;
   onSignOut: () => Promise<void>;
   onRetryAcquire: () => Promise<void>;
   difficulty?: 'DEFAULT' | 'EXTREME';
@@ -106,6 +111,9 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   session,
   isProcessing,
   onPlay,
+  onConfirmMode,
+  selectedLobbyMode: controlledLobbyMode,
+  onSelectLobbyMode,
   onSignOut,
   onRetryAcquire,
   onOpenSettings,
@@ -114,7 +122,35 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   isSuperAdmin = false,
 }) => {
   const { t } = useLanguage();
-  const isSessionActive = session.status === 'ACTIVE';
+  const isSessionDisplacedOrExpired =
+    session.status === 'DISPLACED' ||
+    session.status === 'PAUSED_IDLE' ||
+    session.status === 'EXPIRED';
+  const isSessionActive = !isSessionDisplacedOrExpired;
+  const [localSelectedMode, setLocalSelectedMode] = useState<LobbyCardMode>(
+    controlledLobbyMode || 'SOLO'
+  );
+  const selectedModeCard: LobbyCardMode = controlledLobbyMode ?? localSelectedMode;
+
+  const handleSelectModeCard = (mode: LobbyCardMode) => {
+    setLocalSelectedMode(mode);
+    onSelectLobbyMode?.(mode);
+  };
+
+  const handleConfirmSelectedMode = (modeToConfirm: LobbyCardMode = selectedModeCard) => {
+    if (session.status === 'NO_SESSION') {
+      void onRetryAcquire();
+    }
+    if (isSessionDisplacedOrExpired) {
+      void onRetryAcquire();
+      return;
+    }
+    if (onConfirmMode) {
+      onConfirmMode(modeToConfirm);
+    } else {
+      onPlay();
+    }
+  };
   const avatarManager = AvatarManager.getInstance();
   const musicManager = MusicManager.getInstance();
   const playerStatsMgr = PlayerStatsManager.getInstance();
@@ -238,22 +274,26 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
     session.status !== 'ACQUIRING' &&
     Boolean(session.message && session.message.trim().length > 0);
 
-  // Keyboard shortcut: Space or Enter starts mode selection if session is ACTIVE
+  // Keyboard shortcut: Space or Enter confirms selected mode if session is allowed
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.code === 'Space' || e.code === 'Enter') && isSessionActive && !isProcessing) {
+        const activeTag = (document.activeElement?.tagName || '').toUpperCase();
+        if (activeTag === 'BUTTON' || activeTag === 'INPUT' || activeTag === 'SELECT') {
+          return;
+        }
         e.preventDefault();
-        onPlay();
+        handleConfirmSelectedMode(selectedModeCard);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isSessionActive, isProcessing, onPlay]);
+  }, [isSessionActive, isProcessing, selectedModeCard]);
 
   const effectiveVideoSrc = musicManager.getHomeVideoPlaybackSrc() || homeVideoUrl;
 
   return (
-    <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-[#050510] text-[#EAF4FF] font-body select-none overflow-x-hidden overflow-y-auto pb-[max(4.5rem,env(safe-area-inset-bottom))]">
+    <div className="relative min-h-[100dvh] w-full flex flex-col justify-between bg-[#050510] text-[#EAF4FF] font-body select-none overflow-x-hidden pb-[max(5rem,env(safe-area-inset-bottom))]">
       {/* Home Background Video (.mp4 with configurable opacity, blur & loop — reuses cached video from WelcomeScreen) */}
       {homeVideoConfig?.isEnabled && effectiveVideoSrc && (
         <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
@@ -488,97 +528,144 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             </div>
           )}
 
-          {/* Primary Action Button: "CHỌN CHẾ ĐỘ CHƠI" & Unified CÀI ĐẶT / HƯỚNG DẪN (Same compact width + white-to-red gradient format as WelcomeScreen) */}
-          <div className="w-full max-w-[260px] flex flex-col items-center gap-2.5 px-2 mt-2.5 mb-3">
+          {/* Unified Neo-Retro Mode Selection Cards (3-Column Responsive Grid — Full Portrait & Landscape Visibility, 1-Tap Selection) */}
+          <div
+            data-testid="lobby-mode-scroll-snap"
+            className="w-full max-w-md grid grid-cols-3 gap-2 sm:gap-2.5 px-1 mt-3"
+          >
+            <button
+              type="button"
+              data-testid="lobby-mode-card-solo"
+              aria-pressed={selectedModeCard === 'SOLO'}
+              onClick={() => handleSelectModeCard('SOLO')}
+              className={`min-h-[84px] p-2 sm:p-2.5 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
+                selectedModeCard === 'SOLO'
+                  ? 'border-2 border-[#FFB800] bg-[#120e05]/95 ring-2 ring-[#FFB800]/30 shadow-[0_0_16px_rgba(255,184,0,0.28)]'
+                  : 'border border-[#687386]/50 hover:border-[#FFB800]/70 opacity-90'
+              }`}
+            >
+              <div className="flex items-center justify-between text-[#FFB800] mb-1">
+                <User className="w-3.5 h-3.5 shrink-0" />
+                <span className="font-hud text-xs font-bold">1P</span>
+              </div>
+              <div>
+                <div className="font-btn text-xs sm:text-sm font-extrabold text-[#EAF4FF] leading-tight">
+                  SOLO
+                </div>
+                <div className="text-[10px] text-[#EAF4FF]/75 leading-tight mt-0.5">
+                  {t('Tác chiến đơn', 'Single Player')}
+                </div>
+              </div>
+              <div
+                className={`mt-1.5 text-[9px] font-btn font-black uppercase tracking-wider px-1.5 py-0.5 text-center ${
+                  selectedModeCard === 'SOLO'
+                    ? 'bg-[#FFB800] text-[#050510]'
+                    : 'bg-[#050510] text-[#FFB800] border border-[#FFB800]/40'
+                }`}
+              >
+                {selectedModeCard === 'SOLO'
+                  ? t('ĐANG CHỌN', 'SELECTED')
+                  : t('CHẠM CHỌN', 'SELECT')}
+              </div>
+            </button>
+
+            <button
+              type="button"
+              data-testid="lobby-mode-card-coop-ai"
+              aria-pressed={selectedModeCard === 'COOP_AI'}
+              onClick={() => handleSelectModeCard('COOP_AI')}
+              className={`min-h-[84px] p-2 sm:p-2.5 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
+                selectedModeCard === 'COOP_AI'
+                  ? 'border-2 border-[#00F0FF] bg-[#051624]/95 ring-2 ring-[#00F0FF]/30 shadow-[0_0_16px_rgba(0,240,255,0.28)]'
+                  : 'border border-[#687386]/50 hover:border-[#00F0FF]/70 opacity-90'
+              }`}
+            >
+              <div className="flex items-center justify-between text-[#00F0FF] mb-1">
+                <Bot className="w-3.5 h-3.5 shrink-0" />
+                <span className="font-hud text-xs font-bold">P1+AI</span>
+              </div>
+              <div>
+                <div className="font-btn text-xs sm:text-sm font-extrabold text-[#EAF4FF] leading-tight">
+                  CO-OP AI
+                </div>
+                <div className="text-[10px] text-[#EAF4FF]/75 leading-tight mt-0.5">
+                  {t('Đồng đội AI', 'Ally AI Co-op')}
+                </div>
+              </div>
+              <div
+                className={`mt-1.5 text-[9px] font-btn font-black uppercase tracking-wider px-1.5 py-0.5 text-center ${
+                  selectedModeCard === 'COOP_AI'
+                    ? 'bg-[#00F0FF] text-[#050510]'
+                    : 'bg-[#050510] text-[#00F0FF] border border-[#00F0FF]/40'
+                }`}
+              >
+                {selectedModeCard === 'COOP_AI'
+                  ? t('ĐANG CHỌN', 'SELECTED')
+                  : t('CHẠM CHỌN', 'SELECT')}
+              </div>
+            </button>
+
+            <button
+              type="button"
+              data-testid="lobby-mode-card-coop-online"
+              aria-pressed={selectedModeCard === 'COOP_ONLINE'}
+              onClick={() => handleSelectModeCard('COOP_ONLINE')}
+              className={`min-h-[84px] p-2 sm:p-2.5 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
+                selectedModeCard === 'COOP_ONLINE'
+                  ? 'border-2 border-[#FFB800] bg-[#120e05]/95 ring-2 ring-[#FFB800]/30 shadow-[0_0_16px_rgba(255,184,0,0.28)]'
+                  : 'border border-[#687386]/50 hover:border-[#FFB800]/70 opacity-90'
+              }`}
+            >
+              <div className="flex items-center justify-between text-[#FFB800] mb-1">
+                <Globe className="w-3.5 h-3.5 shrink-0" />
+                <span className="font-hud text-xs font-bold">2P P2P</span>
+              </div>
+              <div>
+                <div className="font-btn text-[11px] sm:text-xs font-extrabold text-[#EAF4FF] leading-tight">
+                  CO-OP ONLINE
+                </div>
+                <div className="text-[10px] text-[#EAF4FF]/75 leading-tight mt-0.5">
+                  {t('2 Người Online', 'Online 2P')}
+                </div>
+              </div>
+              <div
+                className={`mt-1.5 text-[9px] font-btn font-black uppercase tracking-wider px-1.5 py-0.5 text-center ${
+                  selectedModeCard === 'COOP_ONLINE'
+                    ? 'bg-[#FFB800] text-[#050510]'
+                    : 'bg-[#050510] text-[#FFB800] border border-[#FFB800]/40'
+                }`}
+              >
+                {selectedModeCard === 'COOP_ONLINE'
+                  ? t('ĐANG CHỌN', 'SELECTED')
+                  : t('CHẠM CHỌN', 'SELECT')}
+              </div>
+            </button>
+          </div>
+
+          {/* Primary Neo-Retro Mode Confirmation CTA (Single-Tap Confirm for Selected Mode) */}
+          <div className="w-full max-w-[260px] flex flex-col items-center gap-2 px-2 mt-3 mb-3">
             <button
               type="button"
               data-testid="main-menu-play-btn"
-              onClick={isSessionActive ? onPlay : onRetryAcquire}
+              onClick={() => handleConfirmSelectedMode(selectedModeCard)}
               disabled={isProcessing}
-              className={`w-full min-h-[48px] py-3 px-4 rounded-xl bg-gradient-to-r from-white via-red-600 to-white bg-[length:200%_100%] bg-left hover:bg-right text-white font-btn font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-lg shadow-red-600/30 hover:shadow-red-600/50 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 border border-red-400/80 ${
+              className={`w-full min-h-[48px] py-3 px-4 neo-clip-corner bg-[#FFB800] hover:bg-[#ffc933] active:translate-y-[1px] text-[#050510] font-btn font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-[0_0_20px_rgba(255,184,0,0.4)] hover:shadow-[0_0_26px_rgba(255,184,0,0.65)] transition-all duration-200 flex items-center justify-center gap-2 border-2 border-[#EAF4FF]/85 touch-manipulation ${
                 isProcessing
                   ? 'opacity-60 cursor-not-allowed'
                   : 'cursor-pointer'
               }`}
             >
-              <Play className="w-4 h-4 fill-red-600 text-red-700 drop-shadow-sm shrink-0" />
+              <Play className="w-4 h-4 fill-[#050510] text-[#050510] shrink-0" />
               <span
                 data-testid="main-menu-play-gradient-text"
-                className="tracking-wide uppercase drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.85)]"
+                className="tracking-wider uppercase font-black"
               >
-                {t('CHỌN CHẾ ĐỘ CHƠI', 'SELECT GAME MODE')}
+                {selectedModeCard === 'SOLO'
+                  ? t('XÁC NHẬN — VÀO SOLO', 'CONFIRM — ENTER SOLO')
+                  : selectedModeCard === 'COOP_AI'
+                    ? t('XÁC NHẬN — CO-OP AI', 'CONFIRM — CO-OP AI')
+                    : t('XÁC NHẬN — CO-OP ONLINE', 'CONFIRM — CO-OP ONLINE')}
               </span>
-            </button>
-
-            <div className="w-full grid grid-cols-2 gap-2.5">
-              <button
-                type="button"
-                onClick={onOpenSettings}
-                className="w-full min-h-[48px] py-3 px-2.5 rounded-xl bg-gradient-to-r from-neutral-900 via-zinc-700 to-neutral-950 bg-[length:200%_100%] bg-left hover:bg-right text-[#EAF4FF] hover:text-[#FFB800] font-btn font-extrabold text-[11px] sm:text-xs whitespace-nowrap border border-[#687386]/80 hover:border-[#FFB800]/60 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-black/40 cursor-pointer"
-              >
-                <Settings className="w-3.5 h-3.5 text-[#FFB800] shrink-0" />
-                <span className="tracking-wide uppercase">{t('CÀI ĐẶT', 'SETTINGS')}</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={onOpenSupport}
-                className="w-full min-h-[48px] py-3 px-2.5 rounded-xl bg-gradient-to-r from-neutral-900 via-zinc-700 to-neutral-950 bg-[length:200%_100%] bg-left hover:bg-right text-[#EAF4FF] hover:text-[#00F0FF] font-btn font-extrabold text-[11px] sm:text-xs whitespace-nowrap border border-[#687386]/80 hover:border-[#00F0FF]/60 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-black/40 cursor-pointer"
-              >
-                <HelpCircle className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
-                <span className="tracking-wide uppercase">{t('HƯỚNG DẪN', 'GUIDE')}</span>
-              </button>
-            </div>
-          </div>
-
-          {/* Swipeable Horizontal Mode Cards Preview (CSS Scroll Snap) */}
-          <div
-            data-testid="lobby-mode-scroll-snap"
-            className="w-full max-w-md flex items-stretch gap-2.5 overflow-x-auto snap-x snap-mandatory px-2 py-1 no-scrollbar"
-          >
-            <button
-              type="button"
-              onClick={isSessionActive ? onPlay : onRetryAcquire}
-              className="snap-center shrink-0 w-[135px] sm:w-[140px] p-2.5 neo-bevel-card hover:border-[#FFB800] text-left transition-all cursor-pointer"
-            >
-              <div className="flex items-center justify-between text-[#FFB800] mb-1">
-                <User className="w-3.5 h-3.5" />
-                <span className="font-hud text-xs">1P</span>
-              </div>
-              <div className="font-btn text-xs font-extrabold text-[#EAF4FF]">SOLO</div>
-              <div className="text-[10px] text-[#687386] truncate">
-                {t('Tác chiến đơn', 'Single Player')}
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={isSessionActive ? onPlay : onRetryAcquire}
-              className="snap-center shrink-0 w-[135px] sm:w-[140px] p-2.5 neo-bevel-card hover:border-[#00F0FF] text-left transition-all cursor-pointer"
-            >
-              <div className="flex items-center justify-between text-[#00F0FF] mb-1">
-                <Bot className="w-3.5 h-3.5" />
-                <span className="font-hud text-xs">P1+AI</span>
-              </div>
-              <div className="font-btn text-xs font-extrabold text-[#EAF4FF]">CO-OP AI</div>
-              <div className="text-[10px] text-[#687386] truncate">
-                {t('Đồng đội AI', 'Ally AI Co-op')}
-              </div>
-            </button>
-
-            <button
-              type="button"
-              onClick={isSessionActive ? onPlay : onRetryAcquire}
-              className="snap-center shrink-0 w-[135px] sm:w-[140px] p-2.5 neo-bevel-card hover:border-[#FFB800] text-left transition-all cursor-pointer"
-            >
-              <div className="flex items-center justify-between text-[#FFB800] mb-1">
-                <Globe className="w-3.5 h-3.5" />
-                <span className="font-hud text-xs">2P P2P</span>
-              </div>
-              <div className="font-btn text-xs font-extrabold text-[#EAF4FF]">CO-OP ONLINE</div>
-              <div className="text-[10px] text-[#687386] truncate">
-                {t('2 Người Online', 'Online 2-Player')}
-              </div>
             </button>
           </div>
         </div>
@@ -600,7 +687,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
         )}
 
       {/* Footer */}
-      <footer className="relative z-10 w-full border-t border-[#687386]/30 bg-[#050510]/85 px-4 py-2.5 text-center text-xs text-[#687386]">
+      <footer className="relative z-10 w-full border-t border-[#687386]/30 bg-[#050510]/85 px-4 py-2.5 text-center text-xs text-[#687386] shrink-0">
         <div className="max-w-4xl mx-auto flex items-center justify-center gap-3 flex-wrap">
           <span className="text-[#EAF4FF]/80">© 2026 Bắn Tank Online</span>
           <span>•</span>

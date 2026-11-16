@@ -720,6 +720,8 @@
         // HỆ THỐNG ĐA NGÔN NGỮ (VI | EN) CHO TOÀN BỘ ĐIỀU KHOẢN PHÁP LÝ
         // =====================================================================
         var LANG_STORAGE_KEY = 'bantank_lang_pref_v1';
+        var VI_TITLE = 'Chính sách quyền riêng tư – Bắn Tank Online';
+        var EN_TITLE = 'Privacy Policy – Bắn Tank Online';
         var EN_DICTIONARY = {
           'CHIẾN TRƯỜNG HUYỀN THOẠI': 'LEGENDARY BATTLEFIELD',
           'Giới thiệu': 'Overview',
@@ -731,10 +733,12 @@
           'Chơi ngay': 'Play Now',
           'Chơi thử ngay': 'Try Now',
           'Tài liệu pháp lý công khai • Bắn Tank Online': 'Public Legal Document • Bắn Tank Online',
-          'Chính sách': 'Privacy',
+          'Chính sách': 'Official',
           'Ngày có hiệu lực: 11/11/2026': 'Effective Date: 11/11/2026',
           'Phiên bản 1.0': 'Version 1.0',
           'tôn trọng quyền riêng tư của người chơi. Chính sách này giải thích những loại thông tin có thể được xử lý khi bạn đăng nhập, chơi game và sử dụng các tính năng trực tuyến; mục đích sử dụng; cách bảo vệ và lựa chọn của bạn.': 'respects player privacy. This policy explains what categories of information may be processed when you sign in, play the game, and use online features; the purposes of processing; how data is protected; and your choices.',
+          'Khi sử dụng trò chơi, bạn xác nhận đã đọc chính sách này. Khách truy cập có thể xem toàn bộ trang chủ giới thiệu, đọc chính sách này hoặc trải nghiệm chế độ': 'By using the game, you acknowledge that you have read this policy. Visitors may browse the entire public home page, read this policy, or play',
+          'mà không cần đăng nhập tài khoản. Nếu không đồng ý với chính sách này, vui lòng ngừng sử dụng trò chơi.': 'without signing in to an account. If you do not agree with this policy, please discontinue use of the game.',
           'Thông tin chúng tôi xử lý': 'Information We Process',
           'Tùy theo tính năng bạn sử dụng, Bắn Tank Online có thể xử lý các nhóm thông tin sau:': 'Depending on the features you use, Bắn Tank Online may process the following categories of information:',
           'Thông tin đăng nhập:': 'Sign-in Information:',
@@ -747,6 +751,7 @@
           'thông tin bạn tạo hoặc gửi khi sử dụng bạn bè, clan, lời mời, tin nhắn hoặc tính năng tương tác khác, nếu các tính năng đó được bật.': 'information you create or send when using friends, clans, invitations, messages, or other interactive features, if enabled.',
           'Dữ liệu kỹ thuật và an toàn:': 'Technical and Security Data:',
           'trạng thái phiên đăng nhập, thông tin thiết bị/phiên cần thiết để quản lý đăng nhập, phát hiện sử dụng bất thường, duy trì kết nối và xử lý lỗi. Nhà cung cấp hạ tầng có thể tự xử lý một số nhật ký kỹ thuật theo tài liệu và chính sách riêng của họ.': 'login session status, device/session metadata required to manage sign-in, detect abnormal usage, maintain connectivity, and troubleshoot errors. Infrastructure providers may process technical logs under their own documentation and policies.',
+          'Chúng tôi': 'We',
           'không yêu cầu bạn cung cấp mật khẩu Google': 'never ask for your Google password',
           '. Việc xác thực được thực hiện thông qua cơ chế đăng nhập chính thức của Google và Firebase Authentication.': '. Authentication is handled exclusively through official Google Sign-In and Firebase Authentication.',
           'Mục đích sử dụng thông tin': 'Purposes of Processing Information',
@@ -758,7 +763,9 @@
           'Phản hồi yêu cầu hỗ trợ và thực hiện nghĩa vụ pháp lý hợp lệ (nếu có).': 'Respond to support inquiries and fulfill applicable legal obligations (if any).',
           'Đăng nhập Google và dịch vụ Firebase': 'Google Sign-In and Firebase Services',
           'Trò chơi sử dụng dịch vụ Google/Firebase, bao gồm Firebase Authentication để xác thực tài khoản và Cloud Firestore để lưu trữ, đồng bộ dữ liệu cần thiết cho trò chơi.': 'The game uses Google/Firebase services, including Firebase Authentication for account authentication and Cloud Firestore to store and synchronize essential gameplay data.',
+          'Khi bạn chọn đăng nhập, Google xử lý thông tin đăng nhập theo': 'When you choose to sign in, Google processes sign-in credentials under the',
           'Chính sách quyền riêng tư của Google': 'Google Privacy Policy',
+          '. Firebase xử lý dữ liệu theo': '. Firebase processes data in accordance with',
           'Thông tin quyền riêng tư và bảo mật của Firebase': 'Firebase Privacy and Security Documentation',
           'Việc sử dụng các dịch vụ này có thể khiến dữ liệu được xử lý trên hệ thống máy chủ của Google theo cấu hình dịch vụ, điều khoản và chính sách áp dụng của Google.': 'Using these services may result in data being processed on Google server infrastructure in accordance with applicable Google service configurations, terms, and policies.',
           'Chia sẻ thông tin': 'Information Sharing',
@@ -788,9 +795,21 @@
           'Chúng tôi có thể cập nhật chính sách này khi trò chơi thay đổi tính năng, cách xử lý dữ liệu hoặc yêu cầu pháp lý. Bản cập nhật sẽ được đăng tại trang này cùng ngày có hiệu lực mới. Bạn nên kiểm tra trang định kỳ.': 'We may update this policy when game features, data practices, or legal requirements change. Updates will be posted on this page with a revised effective date. Please review this page periodically.',
           'Thông tin liên hệ': 'Contact Information',
           'Nếu có câu hỏi, yêu cầu truy cập, chỉnh sửa hoặc xóa dữ liệu, vui lòng liên hệ:': 'If you have questions or requests regarding data access, correction, or deletion, please contact:',
+          'Email hỗ trợ:': 'Support Email:',
+          'Website chính thức:': 'Official Website:',
           '← Quay lại trang chủ Bắn Tank Online': '← Back to Bắn Tank Online Home',
           'Chơi thử Màn 1': 'Play Stage 1 Trial',
+          'Trò chơi bắn xe tăng chiến thuật 2D trực tuyến trên trình duyệt web. Hỗ trợ chơi đơn (Solo), phối hợp đồng đội AI, chơi trực tuyến 2 người (Co-op Online) và chế độ Chơi thử không cần đăng nhập.': '2D tactical tank battle game playable directly in your web browser. Supports Solo, AI Ally Co-op, 2-Player Online Co-op, and instant Trial Mode without sign-in.',
+          'Trang chủ chính thức:': 'Official Website:',
+          'Danh mục trang chủ': 'Home Navigation',
+          'Giới thiệu trò chơi': 'Game Overview',
+          'Tính năng nổi bật': 'Key Features',
+          'Các chế độ chơi': 'Game Modes',
+          'Hướng dẫn bắt đầu': 'Getting Started',
+          'Pháp lý & Hỗ trợ người chơi': 'Legal & Player Support',
           'Chính sách quyền riêng tư': 'Privacy Policy',
+          'Liên hệ hỗ trợ:': 'Support Contact:',
+          'Việc xác thực tài khoản được thực hiện thông qua Google OAuth & Firebase Authentication. Khách truy cập có thể xem toàn bộ thông tin giới thiệu và Chính sách quyền riêng tư mà không cần đăng nhập.': 'Account authentication is powered by Google OAuth & Firebase Authentication. Visitors can view all game information and the Privacy Policy without signing in.',
           'Trang chủ': 'Home',
           'Lên đầu trang ↑': 'Back to top ↑'
         };
@@ -800,12 +819,17 @@
           var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
           var node;
           while ((node = walker.nextNode())) {
-            var trimmed = (node.nodeValue || '').trim();
-            if (trimmed && EN_DICTIONARY[trimmed]) {
+            var raw = node.nodeValue || '';
+            var normalizedKey = raw.replace(/\s+/g, ' ').trim();
+            if (normalizedKey && EN_DICTIONARY[normalizedKey]) {
+              var leadMatch = raw.match(/^\s*/);
+              var trailMatch = raw.match(/\s*$/);
+              var lead = leadMatch ? leadMatch[0] : '';
+              var trail = trailMatch ? trailMatch[0] : '';
               trackedTextNodes.push({
                 node: node,
-                vi: node.nodeValue,
-                en: node.nodeValue.replace(trimmed, EN_DICTIONARY[trimmed])
+                vi: raw,
+                en: lead + EN_DICTIONARY[normalizedKey] + trail
               });
             }
           }
@@ -815,6 +839,7 @@
         function applyLanguage(lang) {
           var normalized = lang === 'en' ? 'en' : 'vi';
           document.documentElement.setAttribute('lang', normalized);
+          document.title = normalized === 'en' ? EN_TITLE : VI_TITLE;
           try {
             window.localStorage.setItem(LANG_STORAGE_KEY, normalized);
           } catch (e) {}

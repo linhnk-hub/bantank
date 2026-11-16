@@ -6,6 +6,7 @@
 import React, { useEffect, useState } from 'react';
 import { Music } from 'lucide-react';
 import { SoundManager } from '../core/audio.ts';
+import { MusicManager } from '../core/musicManager.ts';
 
 export interface QuickAudioToggleButtonProps {
   compact?: boolean;
@@ -14,36 +15,60 @@ export interface QuickAudioToggleButtonProps {
 }
 
 /**
- * Top Menu Quick BGM Mute/Unmute Toggle Button
+ * Top Menu Quick BGM Mute/Unmute Toggle Button (Neo-Retro V1.0)
  * - Accessible labels: "Tắt nhạc nền" (when BGM is ON) and "Bật nhạc nền" (when BGM is OFF)
- * - Immediately mutes/restores background music (BGM) while keeping gunshots & combat SFX audible
+ * - Reflects real-time BGM status: playing, awaiting interaction (autoplay blocked), or muted
  */
 export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
   compact = false,
-  showLabelOnDesktop = false,
   className = '',
 }) => {
   const soundManager = SoundManager.getInstance();
+  const musicManager = MusicManager.getInstance();
   const [isBgmMuted, setIsBgmMuted] = useState<boolean>(() => soundManager.isBgmMuted());
+  const [isAwaitingUnlock, setIsAwaitingUnlock] = useState<boolean>(() =>
+    musicManager.isAwaitingAutoplayUnlock()
+  );
 
   useEffect(() => {
-    setIsBgmMuted(soundManager.isBgmMuted());
-    const unsub = soundManager.subscribe(() => {
+    const syncState = () => {
       setIsBgmMuted(soundManager.isBgmMuted());
-    });
-    return unsub;
-  }, [soundManager]);
+      setIsAwaitingUnlock(musicManager.isAwaitingAutoplayUnlock());
+    };
+    syncState();
+    const unsubSound = soundManager.subscribe(syncState);
+    const unsubMusic = musicManager.subscribe(syncState);
+    return () => {
+      unsubSound();
+      unsubMusic();
+    };
+  }, [soundManager, musicManager]);
 
   const handleToggle = () => {
     soundManager.unlock();
+    if (!soundManager.isBgmMuted() && musicManager.isAwaitingAutoplayUnlock()) {
+      musicManager.unlockFromUserGesture();
+      setIsBgmMuted(soundManager.isBgmMuted());
+      setIsAwaitingUnlock(musicManager.isAwaitingAutoplayUnlock());
+      return;
+    }
     soundManager.toggleBgmMute();
+    musicManager.onVolumeOrToggleChanged();
     setIsBgmMuted(soundManager.isBgmMuted());
+    setIsAwaitingUnlock(musicManager.isAwaitingAutoplayUnlock());
   };
 
   const accessibleLabel = isBgmMuted ? 'Bật nhạc nền' : 'Tắt nhạc nền';
   const titleText = isBgmMuted
     ? 'Bật nhạc nền (tiếng súng vẫn đang bật)'
-    : 'Tắt nhạc nền (vẫn giữ âm thanh tiếng súng)';
+    : isAwaitingUnlock
+      ? 'Chạm để phát nhạc nền (đang chờ tương tác)'
+      : 'Tắt nhạc nền (vẫn giữ âm thanh tiếng súng)';
+  const bgmStateAttr = isBgmMuted
+    ? 'muted'
+    : isAwaitingUnlock
+      ? 'awaiting-interaction'
+      : 'playing';
 
   return (
     <button
@@ -53,17 +78,22 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
       aria-pressed={isBgmMuted}
       title={titleText}
       data-testid="top-menu-audio-toggle-btn"
+      data-bgm-state={bgmStateAttr}
       className={
         compact
-          ? `flex items-center justify-center gap-1 px-2 py-0.5 rounded-lg border text-xs font-semibold transition-all shadow cursor-pointer active:scale-95 ${
+          ? `flex items-center justify-center gap-1 min-w-[36px] min-h-[36px] px-2 py-1 rounded border text-xs font-btn font-bold transition-all shadow cursor-pointer active:scale-95 touch-manipulation ${
               isBgmMuted
-                ? 'bg-rose-950/80 border-rose-700/80 text-rose-300 hover:bg-rose-900/80'
-                : 'bg-neutral-900 border-neutral-700 text-emerald-400 hover:border-amber-500 hover:text-amber-300'
+                ? 'bg-[#200510]/90 border-[#FF0055]/75 text-[#FF0055] hover:bg-[#2d0717]'
+                : isAwaitingUnlock
+                  ? 'bg-[#0b0d1e] border-[#FFB800]/80 text-[#FFB800] hover:border-[#00F0FF] animate-pulse'
+                  : 'bg-[#0b0d1e] border-[#00F0FF]/60 text-[#00F0FF] hover:border-[#FFB800] hover:text-[#FFB800]'
             } ${className}`.trim()
-          : `flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-xs font-semibold transition-all shadow cursor-pointer active:scale-95 ${
+          : `flex items-center justify-center gap-1.5 min-w-[36px] min-h-[36px] px-2.5 py-1.5 rounded border text-xs font-btn font-bold transition-all shadow cursor-pointer active:scale-95 touch-manipulation ${
               isBgmMuted
-                ? 'bg-rose-950/80 border-rose-700/80 text-rose-300 hover:bg-rose-900/80'
-                : 'bg-neutral-800 hover:bg-neutral-700 border-neutral-700 text-emerald-400 hover:border-amber-500/60'
+                ? 'bg-[#200510]/90 border-[#FF0055]/75 text-[#FF0055] hover:bg-[#2d0717]'
+                : isAwaitingUnlock
+                  ? 'bg-[#0b0d1e] border-[#FFB800]/80 text-[#FFB800] hover:border-[#00F0FF] animate-pulse'
+                  : 'bg-[#0b0d1e] hover:bg-[#10142b] border-[#00F0FF]/60 text-[#00F0FF] hover:border-[#FFB800] hover:text-[#FFB800]'
             } ${className}`.trim()
       }
     >
@@ -73,12 +103,14 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
           data-testid="top-menu-music-muted-icon"
           aria-hidden="true"
         >
-          <Music className="w-3.5 h-3.5 text-rose-400 opacity-85" />
-          <span className="pointer-events-none absolute w-[15px] h-[1.75px] bg-rose-400 -rotate-45 rounded-full shadow-[0_0_0_1px_rgba(24,24,27,0.9)]" />
+          <Music className="w-3.5 h-3.5 text-[#FF0055] opacity-90" />
+          <span className="pointer-events-none absolute w-[15px] h-[1.75px] bg-[#FF0055] -rotate-45 rounded-full shadow-[0_0_0_1px_rgba(5,5,16,0.95)]" />
         </span>
       ) : (
         <Music
-          className="w-3.5 h-3.5 text-emerald-400 shrink-0"
+          className={`w-3.5 h-3.5 shrink-0 ${
+            isAwaitingUnlock ? 'text-[#FFB800]' : 'text-[#00F0FF]'
+          }`}
           data-testid="top-menu-music-active-icon"
           aria-hidden="true"
         />
@@ -86,3 +118,4 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
     </button>
   );
 };
+

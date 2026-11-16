@@ -71,6 +71,8 @@ export interface ModeSelectionScreenProps {
   onSelectedModeChange?: (mode: GameModeType) => void;
   twoPlayerOption?: TwoPlayerOption;
   onTwoPlayerOptionChange?: (opt: TwoPlayerOption) => void;
+  initialFlowStep?: SelectionFlowStep;
+  initialCardMode?: SelectionCardMode;
   isSuperAdmin?: boolean;
 }
 
@@ -147,6 +149,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   onSelectedModeChange,
   twoPlayerOption: controlledTwoPlayerOption,
   onTwoPlayerOptionChange,
+  initialFlowStep,
+  initialCardMode,
   isSuperAdmin = false,
 }) => {
   const { t } = useLanguage();
@@ -160,6 +164,9 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       activeRoom.status !== 'EXPIRED'
     ) {
       return 'COOP_ONLINE';
+    }
+    if (initialCardMode) {
+      return initialCardMode;
     }
     if (controlledMode === 'TWO_PLAYERS') {
       return controlledTwoPlayerOption === 'P2_REAL' ? 'COOP_ONLINE' : 'COOP_AI';
@@ -176,6 +183,9 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       activeRoom.status !== 'EXPIRED'
     ) {
       return 'COOP_ONLINE_LOBBY';
+    }
+    if (initialFlowStep) {
+      return initialFlowStep;
     }
     return 'SELECT_MODE';
   };
@@ -296,7 +306,11 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     }
   };
 
-  const isSessionActive = session.status === 'ACTIVE';
+  const isSessionDisplacedOrExpired =
+    session.status === 'DISPLACED' ||
+    session.status === 'PAUSED_IDLE' ||
+    session.status === 'EXPIRED';
+  const isSessionActive = !isSessionDisplacedOrExpired;
   const profileMeta = effectiveUid ? avatarManager.getUserMetadata(effectiveUid) : null;
   const effectiveUser = {
     ...user,
@@ -393,10 +407,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   };
 
   return (
-    <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-[#050510] text-[#EAF4FF] select-none overflow-x-hidden overflow-y-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <div className="relative min-h-[100dvh] w-full flex flex-col justify-between bg-[#050510] text-[#EAF4FF] select-none overflow-x-hidden pb-[max(1.5rem,env(safe-area-inset-bottom))]">
       {/* Background Ambience */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(255,184,0,0.16),rgba(0,240,255,0.05),rgba(5,5,16,0))] pointer-events-none" />
-      <div className="absolute inset-0 bg-grid-pattern opacity-35 pointer-events-none" />
+      <div className="fixed inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(255,184,0,0.16),rgba(0,240,255,0.05),rgba(5,5,16,0))] pointer-events-none" />
+      <div className="fixed inset-0 bg-grid-pattern opacity-35 pointer-events-none" />
 
       {/* Top Header Bar — Sticky Top Menu with Safe Area, Quick Audio Mute/Unmute, VI | EN Language Selector */}
       <header className="sticky top-0 z-40 w-full border-b border-[#00F0FF]/25 bg-[#050510]/95 backdrop-blur-md px-2.5 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 shrink-0 shadow-[0_4px_20px_rgba(0,0,0,0.75)]">
@@ -506,18 +520,89 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
              =================================================================== */}
           {flowStep === 'SELECT_MODE' && (
             <>
-              <div className="mb-6 flex flex-col items-center">
-                <h1 className="font-btn text-[clamp(1.35rem,5.5vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-[#FFB800] to-amber-600 tracking-wide sm:tracking-wider drop-shadow-lg uppercase">
+              <div className="mb-4 flex flex-col items-center">
+                <h1 className="font-btn text-[clamp(1.25rem,5vw,2.25rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-[#FFB800] to-amber-600 tracking-wide sm:tracking-wider drop-shadow-lg uppercase">
                   {t('CHỌN CHẾ ĐỘ CHƠI', 'SELECT GAME MODE')}
                 </h1>
+              </div>
+
+              {/* Compact 3-Column Mode Quick-Selector Bar (Always 100% visible side-by-side in Portrait & Landscape) */}
+              <div
+                data-testid="mode-select-quick-tabs"
+                className="w-full max-w-2xl grid grid-cols-3 gap-2 mb-4"
+              >
+                <button
+                  type="button"
+                  data-testid="mode-quick-tab-solo"
+                  aria-pressed={cardMode === 'SOLO'}
+                  onClick={() => handleSelectCardMode('SOLO')}
+                  className={`min-h-[48px] px-2 py-2 neo-bevel-card font-btn font-black text-xs sm:text-sm uppercase tracking-wider transition-all cursor-pointer touch-manipulation flex items-center justify-center gap-1.5 ${
+                    cardMode === 'SOLO'
+                      ? 'border-2 border-[#FFB800] bg-[#FFB800] text-[#050510] shadow-[0_0_16px_rgba(255,184,0,0.35)]'
+                      : 'border border-[#687386]/50 text-[#EAF4FF] hover:border-[#FFB800]/70'
+                  }`}
+                >
+                  <User className="w-3.5 h-3.5 shrink-0" />
+                  <span>SOLO</span>
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="mode-quick-tab-coop-ai"
+                  aria-pressed={cardMode === 'COOP_AI'}
+                  onClick={() => handleSelectCardMode('COOP_AI')}
+                  className={`min-h-[48px] px-2 py-2 neo-bevel-card font-btn font-black text-xs sm:text-sm uppercase tracking-wider transition-all cursor-pointer touch-manipulation flex items-center justify-center gap-1.5 ${
+                    cardMode === 'COOP_AI'
+                      ? 'border-2 border-[#00F0FF] bg-[#00F0FF] text-[#050510] shadow-[0_0_16px_rgba(0,240,255,0.35)]'
+                      : 'border border-[#687386]/50 text-[#EAF4FF] hover:border-[#00F0FF]/70'
+                  }`}
+                >
+                  <Bot className="w-3.5 h-3.5 shrink-0" />
+                  <span>CO-OP AI</span>
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="mode-quick-tab-coop-online"
+                  aria-pressed={cardMode === 'COOP_ONLINE'}
+                  onClick={() => handleSelectCardMode('COOP_ONLINE')}
+                  className={`min-h-[48px] px-2 py-2 neo-bevel-card font-btn font-black text-[11px] sm:text-sm uppercase tracking-wider transition-all cursor-pointer touch-manipulation flex items-center justify-center gap-1.5 ${
+                    cardMode === 'COOP_ONLINE'
+                      ? 'border-2 border-[#FFB800] bg-[#FFB800] text-[#050510] shadow-[0_0_16px_rgba(255,184,0,0.35)]'
+                      : 'border border-[#687386]/50 text-[#EAF4FF] hover:border-[#FFB800]/70'
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5 shrink-0" />
+                  <span>CO-OP ONLINE</span>
+                </button>
+              </div>
+
+              {/* Primary Confirm / Accept Selected Mode Button (Immediate 1-Tap Confirmation) */}
+              <div className="w-full max-w-md mb-4">
+                <button
+                  type="button"
+                  data-testid="mode-select-primary-confirm-btn"
+                  onClick={(e) => handleConfirmCardMode(cardMode, e)}
+                  className="font-btn w-full min-h-[48px] py-3 px-5 neo-clip-corner bg-[#FFB800] hover:bg-[#ffc933] active:translate-y-[1px] text-[#050510] font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all cursor-pointer shadow-[0_0_20px_rgba(255,184,0,0.4)] border-2 border-[#EAF4FF]/85 touch-manipulation"
+                >
+                  <span>
+                    {cardMode === 'SOLO'
+                      ? t('Xác nhận chế độ: SOLO', 'Confirm Mode: SOLO')
+                      : cardMode === 'COOP_AI'
+                        ? t('Xác nhận chế độ: CO-OP AI', 'Confirm Mode: CO-OP AI')
+                        : t('Xác nhận chế độ: CO-OP ONLINE', 'Confirm Mode: CO-OP ONLINE')}
+                  </span>
+                  <ArrowRight className="w-4 h-4 shrink-0" />
+                </button>
               </div>
 
               {/* 3 Mode Cards */}
               <div className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                 {/* 1. SOLO */}
                 <div
+                  data-testid="mode-card-solo"
                   onClick={() => handleSelectCardMode('SOLO')}
-                  className={`relative p-5 rounded-lg border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
+                  className={`relative p-4 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation text-left flex flex-col justify-between ${
                     cardMode === 'SOLO'
                       ? 'bg-[#120e05]/90 border-[#FFB800] ring-2 ring-[#FFB800]/30 shadow-[0_0_24px_rgba(255,184,0,0.2)]'
                       : 'bg-[#0b0d1e]/90 border-[#687386]/40 hover:border-[#FFB800]/60 opacity-95'
@@ -567,8 +652,9 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   <div className="mt-4 pt-3 border-t border-neutral-800/80">
                     <button
                       type="button"
+                      data-testid="mode-confirm-solo-btn"
                       onClick={(e) => handleConfirmCardMode('SOLO', e)}
-                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow ${
+                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer touch-manipulation shadow ${
                         cardMode === 'SOLO'
                           ? 'bg-[#FFB800] hover:bg-amber-400 text-[#050510] shadow-[#FFB800]/25'
                           : 'bg-[#050510] hover:bg-[#FFB800]/20 text-[#FFB800] border border-[#FFB800]/40'
@@ -582,23 +668,24 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
                 {/* 2. CO-OP AI */}
                 <div
+                  data-testid="mode-card-coop-ai"
                   onClick={() => handleSelectCardMode('COOP_AI')}
-                  className={`relative p-5 rounded-lg border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
+                  className={`relative p-4 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation text-left flex flex-col justify-between ${
                     cardMode === 'COOP_AI'
-                      ? 'bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/30 shadow-2xl shadow-emerald-500/20'
-                      : 'bg-[#0b0d1e]/90 border-[#687386]/40 hover:border-emerald-500/60 opacity-95'
+                      ? 'bg-[#051624]/90 border-[#00F0FF] ring-2 ring-[#00F0FF]/30 shadow-[0_0_24px_rgba(0,240,255,0.2)]'
+                      : 'bg-[#0b0d1e]/90 border-[#687386]/40 hover:border-[#00F0FF]/60 opacity-95'
                   }`}
                 >
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <span className="font-btn inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
-                        <Bot className="w-3 h-3 text-emerald-400" />
+                      <span className="font-btn inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-bold bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/40">
+                        <Bot className="w-3 h-3 text-[#00F0FF]" />
                         <span>{t('P1 + ĐỒNG ĐỘI AI', 'P1 + AI ALLY')}</span>
                       </span>
                       <div
                         className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                           cardMode === 'COOP_AI'
-                            ? 'border-emerald-400 bg-emerald-500'
+                            ? 'border-[#00F0FF] bg-[#00F0FF]'
                             : 'border-[#687386] bg-[#050510]'
                         }`}
                       >
@@ -607,7 +694,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20 shrink-0 flex items-center gap-1">
+                      <div className="p-2 rounded bg-[#00F0FF]/10 border border-[#00F0FF]/30 shrink-0 flex items-center gap-1">
                         <RetroTankIconP1 className="w-7 h-7" />
                         <RetroTankIconP2 className="w-7 h-7" />
                       </div>
@@ -615,7 +702,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                         <h2 className="font-btn text-lg font-black text-[#EAF4FF] tracking-wide">
                           CO-OP AI
                         </h2>
-                        <p className="text-[11px] text-emerald-300 font-medium">
+                        <p className="text-[11px] text-[#00F0FF] font-medium">
                           {t('Phối hợp cùng đồng đội AI', 'Team up with AI partner')}
                         </p>
                       </div>
@@ -634,11 +721,12 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   <div className="mt-4 pt-3 border-t border-neutral-800/80">
                     <button
                       type="button"
+                      data-testid="mode-confirm-coop-ai-btn"
                       onClick={(e) => handleConfirmCardMode('COOP_AI', e)}
-                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow ${
+                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer touch-manipulation shadow ${
                         cardMode === 'COOP_AI'
-                          ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/25'
-                          : 'bg-[#050510] hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          ? 'bg-[#00F0FF] hover:bg-cyan-300 text-[#050510] shadow-[#00F0FF]/25'
+                          : 'bg-[#050510] hover:bg-[#00F0FF]/20 text-[#00F0FF] border border-[#00F0FF]/40'
                       }`}
                     >
                       <span>{t('Xác nhận', 'Confirm')}</span>
@@ -649,8 +737,9 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
                 {/* 3. CO-OP ONLINE */}
                 <div
+                  data-testid="mode-card-coop-online"
                   onClick={() => handleSelectCardMode('COOP_ONLINE')}
-                  className={`relative p-5 rounded-lg border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
+                  className={`relative p-4 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation text-left flex flex-col justify-between ${
                     cardMode === 'COOP_ONLINE'
                       ? 'bg-[#051624]/90 border-[#00F0FF] ring-2 ring-[#00F0FF]/30 shadow-[0_0_24px_rgba(0,240,255,0.2)]'
                       : 'bg-[#0b0d1e]/90 border-[#687386]/40 hover:border-[#00F0FF]/60 opacity-95'
@@ -701,8 +790,9 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   <div className="mt-4 pt-3 border-t border-neutral-800/80">
                     <button
                       type="button"
+                      data-testid="mode-confirm-coop-online-btn"
                       onClick={(e) => handleConfirmCardMode('COOP_ONLINE', e)}
-                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow ${
+                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer touch-manipulation shadow ${
                         cardMode === 'COOP_ONLINE'
                           ? 'bg-[#00F0FF] hover:bg-cyan-300 text-[#050510] shadow-[#00F0FF]/25'
                           : 'bg-[#050510] hover:bg-[#00F0FF]/20 text-[#00F0FF] border border-[#00F0FF]/40'

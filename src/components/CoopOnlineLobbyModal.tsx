@@ -41,6 +41,7 @@ import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { StageProgressionManager } from '../core/stageProgression.ts';
 import { StageManager } from '../core/stageManager.ts';
 import { StageMapMiniPreview } from './StageMapMiniPreview.tsx';
+import { useLanguage } from '../core/i18n.ts';
 
 export type CoopLobbySubView = 'MAIN' | 'CREATE' | 'JOIN';
 
@@ -63,6 +64,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   subView: controlledSubView,
   onSubViewChange,
 }) => {
+  const { t } = useLanguage();
   const coopManager = CoopOnlineManager.getInstance();
   const avatarManager = AvatarManager.getInstance();
   const [room, setRoom] = useState<CoopRoomDocument | null>(() => coopManager.getCurrentRoom());
@@ -391,66 +393,74 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* 1. TẠO PHÒNG */}
-              <div className="p-5 rounded-2xl bg-neutral-900/90 border-2 border-sky-500/40 hover:border-sky-400 transition-all flex flex-col justify-between space-y-4 shadow-xl">
+              <div className="p-5 rounded-lg neo-bevel-card bg-[#0b0d1e]/95 border-2 border-[#00F0FF]/50 hover:border-[#00F0FF] transition-all flex flex-col justify-between space-y-4 shadow-xl">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="w-11 h-11 rounded-xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400">
+                    <div className="w-11 h-11 rounded bg-[#00F0FF]/15 border border-[#00F0FF]/40 flex items-center justify-center text-[#00F0FF]">
                       <PlusCircle className="w-6 h-6" />
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-sky-950 text-sky-300 border border-sky-500/30">
-                      Chủ Phòng • P1
+                    <span className="font-btn text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded bg-[#051624] text-[#00F0FF] border border-[#00F0FF]/40">
+                      {t('Chủ Phòng • P1', 'Room Host • P1')}
                     </span>
                   </div>
-                  <h3 className="text-base sm:text-lg font-black uppercase tracking-wider text-white">
-                    1. TẠO PHÒNG
+                  <h3 className="font-btn text-base sm:text-lg font-black uppercase tracking-wider text-[#EAF4FF]">
+                    {t('1. TẠO PHÒNG', '1. CREATE ROOM')}
                   </h3>
-                  <p className="text-xs text-neutral-300 leading-relaxed">
-                    Thiết lập độ khó chiến dịch (Giải trí / Thử thách) và chế độ bảo mật phòng (Có mật khẩu hoặc Không mật khẩu).
+                  <p className="text-xs text-[#EAF4FF]/80 leading-relaxed">
+                    {t(
+                      'Thiết lập độ khó chiến dịch (Giải trí / Thử thách) và chế độ bảo mật phòng (Có mật khẩu hoặc Không mật khẩu).',
+                      'Configure campaign difficulty (Casual / Challenge) and room security mode (Password-protected or Public).'
+                    )}
                   </p>
                 </div>
 
                 <button
                   type="button"
+                  data-testid="coop-lobby-open-create-btn"
                   onClick={() => {
                     setErrorMsg(null);
                     setSubView('CREATE');
                   }}
-                  className="w-full py-3 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.99] cursor-pointer"
+                  className="font-btn w-full min-h-[48px] py-3 px-4 neo-clip-corner bg-[#00F0FF] hover:bg-cyan-300 text-[#050510] font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.99] cursor-pointer touch-manipulation"
                 >
                   <PlusCircle className="w-4 h-4" />
-                  <span>TẠO PHÒNG</span>
+                  <span>{t('TẠO PHÒNG', 'CREATE ROOM')}</span>
                 </button>
               </div>
 
               {/* 2. THAM GIA PHÒNG */}
-              <div className="p-5 rounded-2xl bg-neutral-900/90 border-2 border-emerald-500/40 hover:border-emerald-400 transition-all flex flex-col justify-between space-y-4 shadow-xl">
+              <div className="p-5 rounded-lg neo-bevel-card bg-[#0b0d1e]/95 border-2 border-[#FFB800]/50 hover:border-[#FFB800] transition-all flex flex-col justify-between space-y-4 shadow-xl">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="w-11 h-11 rounded-xl bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-400">
+                    <div className="w-11 h-11 rounded bg-[#FFB800]/15 border border-[#FFB800]/40 flex items-center justify-center text-[#FFB800]">
                       <LogIn className="w-6 h-6" />
                     </div>
-                    <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-500/30">
-                      Đồng Đội • P2
+                    <span className="font-btn text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded bg-[#120e05] text-[#FFB800] border border-[#FFB800]/40">
+                      {t('Đồng Đội • P2', 'Partner • P2')}
                     </span>
                   </div>
-                  <h3 className="text-base sm:text-lg font-black uppercase tracking-wider text-white">
-                    2. THAM GIA PHÒNG
+                  <h3 className="font-btn text-base sm:text-lg font-black uppercase tracking-wider text-[#EAF4FF]">
+                    {t('2. THAM GIA PHÒNG', '2. JOIN ROOM')}
                   </h3>
-                  <p className="text-xs text-neutral-300 leading-relaxed">
-                    Nhập <strong>Mã phòng</strong> định dạng <span className="font-mono text-sky-300 font-bold">BTxxxx</span> (và mật khẩu nếu phòng có khóa) để tham gia phối hợp cùng đồng đội.
+                  <p className="text-xs text-[#EAF4FF]/80 leading-relaxed">
+                    {t(
+                      'Nhập Mã phòng định dạng BTxxxx (và mật khẩu nếu phòng có khóa) để tham gia phối hợp cùng đồng đội.',
+                      'Enter a BTxxxx room code (and password if locked) to join and fight alongside your partner.'
+                    )}
                   </p>
                 </div>
 
                 <button
                   type="button"
+                  data-testid="coop-lobby-open-join-btn"
                   onClick={() => {
                     setErrorMsg(null);
                     setSubView('JOIN');
                   }}
-                  className="w-full py-3 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-black font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.99] cursor-pointer"
+                  className="font-btn w-full min-h-[48px] py-3 px-4 neo-clip-corner bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.99] cursor-pointer touch-manipulation"
                 >
                   <LogIn className="w-4 h-4" />
-                  <span>THAM GIA PHÒNG</span>
+                  <span>{t('THAM GIA PHÒNG', 'JOIN ROOM')}</span>
                 </button>
               </div>
             </div>

@@ -567,7 +567,7 @@ export function resolveUserRole(
  * Khung tên người chơi thống nhất màu trung tính (không phân biệt khung màu theo vai trò).
  */
 export function getRoleNameFrameClasses(_role: UserRoleType | string): string {
-  return 'border border-neutral-700/80';
+  return 'border border-neutral-700/80 border-[#00F0FF]/50 shadow-[0_0_10px_rgba(0,240,255,0.12)]';
 }
 
 /**

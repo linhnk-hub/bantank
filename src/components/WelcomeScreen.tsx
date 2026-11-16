@@ -7,6 +7,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, Gamepad2, Loader2, ShieldAlert, Wrench } from 'lucide-react';
 import { GameLogo } from './GameLogo.tsx';
 import { LanguageSelector } from './LanguageSelector.tsx';
+import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
+import { SoundManager } from '../core/audio.ts';
 import { MusicManager, type HomeBackgroundVideoConfig } from '../core/musicManager.ts';
 import {
   MaintenanceManager,
@@ -58,6 +60,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
 
   useEffect(() => {
     musicManager.preloadStaticHomeVideoOnce();
+    SoundManager.getInstance().unlock();
+    musicManager.syncMenuPlayback();
   }, [musicManager]);
 
   useEffect(() => {
@@ -112,7 +116,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   const effectiveVideoSrc = musicManager.getHomeVideoPlaybackSrc() || homeVideoUrl;
 
   return (
-    <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-[#050510] text-[#EAF4FF] font-body select-none overflow-x-hidden overflow-y-auto pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+    <div className="relative min-h-[100dvh] w-full flex flex-col justify-between bg-[#050510] text-[#EAF4FF] font-body select-none overflow-x-hidden pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]">
       {/* Intro Background Video (preloaded immediately on page load, blurred & looped automatically) */}
       {homeVideoConfig?.isEnabled && effectiveVideoSrc && (
         <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
@@ -166,16 +170,17 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       )}
 
       {/* Background Ambience: Neo-Retro tactical grid and radial glow */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(255,184,0,0.16),rgba(5,5,16,0))] pointer-events-none" />
-      <div className="absolute inset-0 bg-grid-pattern opacity-20 pointer-events-none" />
+      <div className="fixed inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(255,184,0,0.16),rgba(5,5,16,0))] pointer-events-none" />
+      <div className="fixed inset-0 bg-grid-pattern opacity-20 pointer-events-none" />
 
-      {/* Top Language Bar (VI | EN) */}
-      <div className="relative z-20 max-w-4xl mx-auto w-full px-3 sm:px-4 pt-1 flex items-center justify-end">
+      {/* Top Controls Bar: Music Toggle + Language Selector (VI | EN) */}
+      <div className="relative z-20 max-w-4xl mx-auto w-full px-3 sm:px-4 pt-1 flex items-center justify-end gap-2 shrink-0">
+        <QuickAudioToggleButton compact />
         <LanguageSelector compact />
       </div>
 
       {/* Notifications: Logout notice / Error alert */}
-      <div className="relative z-20 max-w-xl mx-auto w-full px-3 sm:px-4 pt-1 sm:pt-2">
+      <div className="relative z-20 max-w-xl mx-auto w-full px-3 sm:px-4 pt-1 sm:pt-2 shrink-0">
         {successMessage && (
           <div className="mb-2 p-3.5 neo-bevel-card border border-[#00F0FF]/60 text-[#EAF4FF] text-xs sm:text-sm flex items-center justify-between shadow-xl animate-fade-in">
             <div className="flex items-center gap-2.5">
@@ -212,7 +217,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       </div>
 
       {/* Main Welcome Content */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-2 sm:px-4 pt-1 sm:pt-2 pb-4 max-w-4xl mx-auto w-full">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-2 sm:px-4 pt-1 sm:pt-2 pb-4 max-w-4xl mx-auto w-full shrink-0">
         <div className="flex flex-col items-center text-center max-w-2xl w-full">
           {/* Official Game Logo Hero — Unified 200% Standard (320x320) */}
           <div className="flex justify-center items-center p-0 m-0">
@@ -264,24 +269,24 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             </div>
           )}
 
-          {/* Google Sign-in Call To Action & Trial Mode Button (Compact width + white-to-red background gradient) */}
-          <div className="w-full max-w-[260px] flex flex-col items-center gap-2.5 px-2 mt-2.5 mb-4">
+          {/* Neo-Retro V1.0 Google Sign-in & Trial Mode Call To Action Buttons */}
+          <div className="w-full max-w-[260px] flex flex-col items-center gap-2.5 px-2 mt-3 mb-4">
             <button
               type="button"
               data-testid="welcome-google-signin-btn"
               onClick={isMaintenanceActive ? undefined : onSignIn}
               disabled={isProcessing || isMaintenanceActive}
-              className={`w-full min-h-[48px] py-3 px-4 rounded-xl bg-gradient-to-r from-white via-red-600 to-white bg-[length:200%_100%] bg-left hover:bg-right text-white font-btn font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-lg shadow-red-600/30 hover:shadow-red-600/50 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 border border-red-400/80 ${
+              className={`w-full min-h-[48px] py-3 px-4 neo-clip-corner bg-[#FFB800] hover:bg-[#ffc933] active:translate-y-[1px] text-[#050510] font-btn font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-[0_0_20px_rgba(255,184,0,0.4)] hover:shadow-[0_0_26px_rgba(255,184,0,0.65)] transition-all duration-200 flex items-center justify-center gap-2 border-2 border-[#EAF4FF]/85 touch-manipulation ${
                 isMaintenanceActive
                   ? 'opacity-35 grayscale pointer-events-none cursor-not-allowed'
                   : 'disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed'
               }`}
             >
               {isProcessing ? (
-                <div className="w-4 h-4 border-2 border-red-600/40 border-t-red-600 rounded-full animate-spin shrink-0" />
+                <div className="w-4 h-4 border-2 border-[#050510]/40 border-t-[#050510] rounded-full animate-spin shrink-0" />
               ) : (
                 /* Google Official "G" Multi-color SVG on crisp white badge */
-                <span className="w-5 h-5 rounded-full bg-white ring-1 ring-red-200/80 flex items-center justify-center shrink-0 shadow-sm">
+                <span className="w-5 h-5 rounded-full bg-white ring-1 ring-[#050510]/30 flex items-center justify-center shrink-0 shadow-sm">
                   <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
                     <path
                       fill="#4285F4"
@@ -304,11 +309,11 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               )}
               <span
                 data-testid="welcome-signin-gradient-text"
-                className="tracking-wide uppercase drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.85)]"
+                className="tracking-wider uppercase font-black"
               >
                 {isProcessing
                   ? t('ĐANG KẾT NỐI...', 'CONNECTING...')
-                  : t('ĐĂNG NHẬP', 'SIGN IN')}
+                  : t('ĐĂNG NHẬP GOOGLE', 'SIGN IN WITH GOOGLE')}
               </span>
             </button>
 
@@ -318,14 +323,14 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 data-testid="welcome-trial-play-btn"
                 onClick={isMaintenanceActive ? undefined : onStartTrialMode}
                 disabled={isProcessing || isMaintenanceActive}
-                className={`w-full min-h-[48px] py-3 px-4 rounded-xl bg-gradient-to-r from-neutral-900 via-zinc-700 to-neutral-950 bg-[length:200%_100%] bg-left hover:bg-right text-[#EAF4FF] hover:text-[#FFB800] font-btn font-extrabold text-xs sm:text-sm whitespace-nowrap border border-[#687386]/80 hover:border-[#FFB800]/70 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-black/40 ${
+                className={`w-full min-h-[48px] py-3 px-4 neo-clip-corner bg-[#0b0d1e]/95 hover:bg-[#10142b] active:translate-y-[1px] text-[#00F0FF] hover:text-[#FFB800] font-btn font-extrabold text-xs sm:text-sm whitespace-nowrap border-2 border-[#00F0FF]/70 hover:border-[#FFB800] transition-all duration-200 flex items-center justify-center gap-2 shadow-[0_0_16px_rgba(0,240,255,0.2)] touch-manipulation ${
                   isMaintenanceActive
                     ? 'opacity-35 grayscale pointer-events-none cursor-not-allowed'
                     : 'cursor-pointer disabled:opacity-50'
                 }`}
               >
                 <Gamepad2 className="w-4 h-4 text-[#FFB800] shrink-0" />
-                <span className="tracking-wide uppercase">
+                <span className="tracking-wider uppercase font-black">
                   {t('CHƠI THỬ', 'TRIAL PLAY')}
                 </span>
               </button>
@@ -350,7 +355,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         )}
 
       {/* Footer */}
-      <footer className="relative z-10 w-full border-t border-[#687386]/30 bg-[#050510]/85 px-4 py-3 text-center text-xs text-[#687386]">
+      <footer className="relative z-10 w-full border-t border-[#687386]/30 bg-[#050510]/85 px-4 py-3 text-center text-xs text-[#687386] shrink-0">
         <div className="max-w-4xl mx-auto flex items-center justify-center gap-3 flex-wrap">
           <span className="text-[#EAF4FF]/80">© 2026 Bắn Tank Online</span>
           <span>•</span>

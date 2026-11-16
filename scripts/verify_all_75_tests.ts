@@ -1780,15 +1780,15 @@ async function verifyM7313FixesAsyncSuite() {
     throw new Error('public/intro-bantank.mp4 is missing');
   }
 
-  // 3. Google Sign-In & Chơi thử compact width + white-to-red / dark-gray gradient shift styling
+  // 3. Google Sign-In & Chơi thử Neo-Retro V1.0 beveled button styling
   if (
     !welcomeSrc.includes('data-testid="welcome-google-signin-btn"') ||
-    !welcomeSrc.includes('max-w-[260px]') ||
-    !welcomeSrc.includes('from-white via-red-600 to-white') ||
-    !welcomeSrc.includes('from-neutral-900 via-zinc-700 to-neutral-950') ||
-    !welcomeSrc.includes('bg-[length:200%_100%] bg-left hover:bg-right')
+    !welcomeSrc.includes('data-testid="welcome-trial-play-btn"') ||
+    !welcomeSrc.includes('neo-clip-corner') ||
+    !welcomeSrc.includes('bg-[#FFB800]') ||
+    !welcomeSrc.includes('bg-[#0b0d1e]/95')
   ) {
-    throw new Error('WelcomeScreen compact width & gradient button styling check failed');
+    throw new Error('WelcomeScreen Neo-Retro V1.0 button styling check failed');
   }
 
   // 4. App.tsx syncs menu BGM on WELCOME without requiring login
@@ -1924,7 +1924,7 @@ async function verifyUiAndStageCloudSyncSuite() {
     !welcomeScreenSrc.includes('data-testid="welcome-signin-gradient-text"') ||
     !mainMenuScreenSrc.includes('data-testid="main-menu-slogan-image"') ||
     !mainMenuScreenSrc.includes('src="/slogan.png"') ||
-    !mainMenuScreenSrc.includes('max-w-[260px]') ||
+    !mainMenuScreenSrc.includes('max-w-md') ||
     !mainMenuScreenSrc.includes('data-testid="main-menu-play-gradient-text"') ||
     !confirmPopupSrc.includes('formatSentenceLineBreaks') ||
     !textureGenSrc.includes("main: '#dc2626'") ||
@@ -2028,6 +2028,122 @@ async function verifyUiAndStageCloudSyncSuite() {
   console.log('[UI Polish & Stage 2 Cloud Sync E2E] 4/4 PASS');
 }
 
+async function verifyM77NeoRetroUiAndRuntimeSuite() {
+  const fsMod = await import('node:fs');
+  const pathMod = await import('node:path');
+  const readSrc = (rel: string) =>
+    fsMod.readFileSync(pathMod.resolve(process.cwd(), rel), 'utf-8');
+
+  const welcomeSrc = readSrc('src/components/WelcomeScreen.tsx');
+  const mainMenuSrc = readSrc('src/components/MainMenuScreen.tsx');
+  const modeSelectSrc = readSrc('src/components/ModeSelectionScreen.tsx');
+  const settingsSrc = readSrc('src/components/SettingsModal.tsx');
+  const quickAudioSrc = readSrc('src/components/QuickAudioToggleButton.tsx');
+  const musicMgrSrc = readSrc('src/core/musicManager.ts');
+  const appSrc = readSrc('src/App.tsx');
+  const landingHtml = readSrc('public/landing.html');
+  const privacyHtml = readSrc('public/privacy.html');
+  const policyHtml = readSrc('public/policy.html');
+
+  // 1. M7.7.1: Neo-Retro V1.0 UI consistency & removal of duplicate legacy buttons on MainMenuScreen
+  if (
+    !welcomeSrc.includes('QuickAudioToggleButton') ||
+    !welcomeSrc.includes('neo-clip-corner') ||
+    mainMenuSrc.includes('CHỌN CHẾ ĐỘ CHƠI') ||
+    !mainMenuSrc.includes('data-testid="lobby-bottom-nav"') ||
+    !settingsSrc.includes('neo-bevel-card')
+  ) {
+    throw new Error('M7.7.1 UI consistency or duplicate menu removal check failed');
+  }
+
+  // 2. M7.7.2: Complete VI | EN dictionary & localStorage persistence on landing.html, privacy.html, policy.html
+  if (
+    !landingHtml.includes("var LANG_STORAGE_KEY = 'bantank_lang_pref_v1';") ||
+    !landingHtml.includes('Core Objectives & Rules') ||
+    !landingHtml.includes('Desktop Controls (PC)') ||
+    !privacyHtml.includes("var LANG_STORAGE_KEY = 'bantank_lang_pref_v1';") ||
+    !privacyHtml.includes('Information We Process') ||
+    !privacyHtml.includes('Contact Information') ||
+    !policyHtml.includes("var LANG_STORAGE_KEY = 'bantank_lang_pref_v1';") ||
+    !policyHtml.includes('Information We Process')
+  ) {
+    throw new Error('M7.7.2 landing/privacy/policy i18n dictionary check failed');
+  }
+
+  // Verify zero untranslated Vietnamese text nodes in landing.html, privacy.html, policy.html
+  const vietnameseCharRegex = /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđÀÁẠẢÃÂẦẤẬẨẪĂẰẮẶẲẴÈÉẸẺẼÊỀẾỆỂỄÌÍỊỈĨÒÓỌỎÕÔỒỐỘỔỖƠỜỚỢỞỠÙÚỤỦŨƯỪỨỰỬỮỲÝỴỶỸĐ]/;
+  for (const [pageName, html] of [
+    ['landing.html', landingHtml],
+    ['privacy.html', privacyHtml],
+    ['policy.html', policyHtml],
+  ] as const) {
+    const dictMatch = html.match(/var EN_DICTIONARY = (\{[\s\S]*?\});/);
+    if (!dictMatch) {
+      throw new Error(`Missing EN_DICTIONARY in ${pageName}`);
+    }
+    const dictObj = new Function(`return ${dictMatch[1]}`)() as Record<string, string>;
+    const bodyMatch = html.match(/<body[^>]*>([\s\S]*?)<script>/);
+    if (!bodyMatch) {
+      throw new Error(`Missing body in ${pageName}`);
+    }
+    const bodyWithoutComments = bodyMatch[1].replace(/<!--[\s\S]*?-->/g, '');
+    const rawTextNodes = bodyWithoutComments.split(/<[^>]+>/);
+    for (const rawNode of rawTextNodes) {
+      const decoded = rawNode
+        .replace(/&amp;/g, '&')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/\s+/g, ' ')
+        .trim();
+      if (!decoded) continue;
+      // Brand name "Bắn Tank Online" or "Bắn Tank" is preserved intentionally as proper noun
+      if (decoded === 'Bắn Tank Online' || decoded === 'Bắn Tank' || decoded === '© 2026 Bắn Tank Online') {
+        continue;
+      }
+      if (vietnameseCharRegex.test(decoded) && !dictObj[decoded]) {
+        throw new Error(`Untranslated Vietnamese text node in ${pageName}: "${decoded}"`);
+      }
+    }
+  }
+
+  // 3. M7.7.3: Single-tap mode selection & direct confirmation from MainMenuScreen to ModeSelectionScreen
+  if (
+    !mainMenuSrc.includes('data-testid="lobby-mode-card-solo"') ||
+    !mainMenuSrc.includes('data-testid="lobby-mode-card-coop-ai"') ||
+    !mainMenuSrc.includes('data-testid="lobby-mode-card-coop-online"') ||
+    !mainMenuSrc.includes('grid-cols-3') ||
+    !modeSelectSrc.includes('initialFlowStep') ||
+    !modeSelectSrc.includes('initialCardMode') ||
+    !appSrc.includes('modeSelectionInitialStep') ||
+    !appSrc.includes('modeSelectionInitialCard')
+  ) {
+    throw new Error('M7.7.3 mode selection single-tap & direct confirmation check failed');
+  }
+
+  // 4. M7.7.4: Responsive natural vertical scroll on WelcomeScreen & MainMenuScreen
+  if (
+    welcomeSrc.includes('max-h-[100dvh]') ||
+    mainMenuSrc.includes('max-h-[100dvh]') ||
+    !welcomeSrc.includes('min-h-[100dvh]') ||
+    !mainMenuSrc.includes('min-h-[100dvh]')
+  ) {
+    throw new Error('M7.7.4 responsive natural vertical scroll check failed');
+  }
+
+  // 5. M7.7.5: WelcomeScreen BGM autoplay fallback & first-interaction unlock
+  if (
+    !musicMgrSrc.includes('isAwaitingAutoplayUnlock') ||
+    !musicMgrSrc.includes('isBgmActivelyPlaying') ||
+    !musicMgrSrc.includes('unlockFromUserGesture') ||
+    !quickAudioSrc.includes('data-bgm-state')
+  ) {
+    throw new Error('M7.7.5 WelcomeScreen BGM autoplay fallback & unlock check failed');
+  }
+
+  console.log('[M7.7 Neo-Retro UI Consistency & Mobile Runtime Fix E2E] 5/5 PASS');
+}
+
 async function runAllAsyncVerifications() {
   await verifyM733AsyncWorkflow();
   await verifyM735SharedAvatarCatalogAsyncSuite();
@@ -2038,10 +2154,11 @@ async function runAllAsyncVerifications() {
   await verifyM751AsyncEndToEndSuite();
   await verifyM752AsyncLevelConcurrencyAndScanSuite();
   await verifyUiAndStageCloudSyncSuite();
-  const asyncCasesCount = 10 + 23 + 4 + 3 + 4 + 8 + 5 + 3 + 4;
+  await verifyM77NeoRetroUiAndRuntimeSuite();
+  const asyncCasesCount = 10 + 23 + 4 + 3 + 4 + 8 + 5 + 3 + 4 + 5;
   console.log('============================================');
   console.log(`SYNC UNIT TESTS  : ${totalPassed}/${totalTests} PASS (M2-M5: 75 | M6: 136 | M7.1: 35 | M7.2: 10 | M7.3: ${m73Results.length} | M7.4: ${m74Results.length} | M7.5.1: ${m75Results.length} | M7.5.2: ${m752Results.length})`);
-  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Static: 3 | M7.3.12 Fixes: 4 | M7.3.13 Fixes: 8 | M7.5.1 Audit/Archive/Backup: 5 | M7.5.2 Level Concurrency & Scan: 3 | UI & Stage Cloud Sync: 4)`);
+  console.log(`ASYNC E2E CASES  : ${asyncCasesCount}/${asyncCasesCount} PASS (M7.3.3 Audio: 10 | M7.3.5-M7.3.7 Avatar & UI: 23 | M7.3.11 Stage Audio Fix: 4 | Media Static: 3 | M7.3.12 Fixes: 4 | M7.3.13 Fixes: 8 | M7.5.1 Audit/Archive/Backup: 5 | M7.5.2 Level Concurrency & Scan: 3 | UI & Stage Cloud Sync: 4 | M7.7 Neo-Retro & Runtime: 5)`);
   console.log(`GRAND TOTAL SUITE: ${totalPassed + asyncCasesCount}/${totalTests + asyncCasesCount} PASS (0 FAILED, 0 DUPLICATED)`);
   console.log('============================================');
   process.exit(0);

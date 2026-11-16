@@ -796,7 +796,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   return (
     <div
       data-testid="settings-modal-backdrop"
-      className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 bg-black/80 backdrop-blur-md animate-fade-in select-none"
+      className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 bg-[#050510]/88 backdrop-blur-md animate-fade-in select-none"
     >
       <ConfirmationPopupModal
         isOpen={Boolean(popupNotice)}
@@ -808,17 +808,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
       <div
         data-testid="settings-modal-frame"
-        className={`bg-neutral-900 border border-neutral-700 rounded-2xl ${UNIFIED_SETTINGS_MODAL_WIDTH_CLASS} max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-2xl overflow-hidden`}
+        className={`bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-lg ${UNIFIED_SETTINGS_MODAL_WIDTH_CLASS} max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-[0_0_32px_rgba(0,0,0,0.85)] overflow-hidden`}
       >
         {/* Header */}
-        <div className="bg-neutral-950 px-4 py-3 border-b border-neutral-800 flex items-center justify-between shrink-0">
+        <div className="bg-[#050510] px-4 py-3 border-b border-[#687386]/40 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-400">
+            <div className="w-8 h-8 rounded bg-[#FFB800]/15 border border-[#FFB800]/50 flex items-center justify-center text-[#FFB800]">
               <Sliders className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="text-sm font-extrabold text-white flex items-center gap-2 uppercase tracking-wide">
-                CÀI ĐẶT HỆ THỐNG
+              <h2 className="font-btn text-sm font-black text-[#EAF4FF] flex items-center gap-2 uppercase tracking-wider">
+                {t('CÀI ĐẶT HỆ THỐNG', 'SYSTEM SETTINGS')}
               </h2>
             </div>
           </div>
@@ -826,15 +826,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 transition-all active:scale-95 cursor-pointer"
-            title="Đóng cài đặt"
+            className="p-1.5 rounded bg-[#0b0d1e] hover:bg-[#10142b] border border-[#687386]/50 text-[#EAF4FF] hover:text-[#FFB800] transition-all active:scale-95 cursor-pointer"
+            title={t('Đóng cài đặt', 'Close settings')}
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Navigation Tabs (M7.3.9 Mục 3 & 4) */}
-        <div className="bg-neutral-950/90 px-3 py-2 border-b border-neutral-800 flex items-center gap-1.5 overflow-x-auto shrink-0">
+        <div className="bg-[#050510]/95 px-3 py-2 border-b border-[#687386]/40 flex items-center gap-1.5 overflow-x-auto shrink-0">
           {availableTabs.map((tab) => {
             const isSelected = activeTab === tab.id;
             return (
@@ -845,18 +845,36 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   setFeedback(null);
                   setActiveTab(tab.id);
                 }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-extrabold flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer ${
+                className={`font-btn px-3 py-1.5 rounded text-xs font-extrabold flex items-center gap-1.5 whitespace-nowrap transition-all cursor-pointer touch-manipulation ${
                   isSelected
                     ? tab.adminOnly
-                      ? 'bg-red-500/20 text-red-200 border border-red-500 shadow-sm'
-                      : 'bg-amber-500 text-black border border-amber-400 shadow-sm'
+                      ? 'bg-[#FF0055]/20 text-[#FF0055] border border-[#FF0055] shadow-sm'
+                      : 'bg-[#FFB800] text-[#050510] border border-[#EAF4FF]/80 shadow-sm'
                     : tab.adminOnly
-                      ? 'bg-neutral-900 text-red-300/80 border border-red-900/40 hover:border-red-500/50'
-                      : 'bg-neutral-900 text-neutral-300 border border-neutral-800 hover:border-neutral-700'
+                      ? 'bg-[#0b0d1e] text-[#FF0055]/85 border border-[#FF0055]/40 hover:border-[#FF0055]'
+                      : 'bg-[#0b0d1e] text-[#EAF4FF]/85 border border-[#687386]/50 hover:border-[#00F0FF]/70 hover:text-[#00F0FF]'
                 }`}
               >
                 {tab.icon}
-                <span>{tab.label}</span>
+                <span>
+                  {tab.id === 'ACCOUNT'
+                    ? t('Thông tin', 'Profile')
+                    : tab.id === 'IMAGE_SETTINGS'
+                      ? t('Hình ảnh', 'Images')
+                      : tab.id === 'AUDIO_SETTINGS'
+                        ? t('Âm thanh', 'Audio')
+                        : tab.id === 'GAME_MODE_SETTINGS'
+                          ? t('Chế độ chơi', 'Game Modes')
+                          : tab.id === 'ADMIN_OTHER'
+                            ? t('Cấp quyền', 'Permissions')
+                            : tab.id === 'USER_ACCOUNTS'
+                              ? t('Tài khoản', 'Accounts')
+                              : tab.id === 'SYSTEM_LOGS'
+                                ? t('Nhật ký', 'System Logs')
+                                : tab.id === 'MAINTENANCE'
+                                  ? t('Bảo trì', 'Maintenance')
+                                  : tab.label}
+                </span>
               </button>
             );
           })}
@@ -867,17 +885,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* Feedback Banner */}
           {feedback && (
             <div
-              className={`p-3 rounded-xl border flex items-center justify-between gap-2 text-xs ${
+              className={`p-3 rounded border flex items-center justify-between gap-2 text-xs ${
                 feedback.type === 'error'
-                  ? 'bg-rose-950/90 border-rose-800 text-rose-200'
-                  : 'bg-emerald-950/90 border-emerald-800 text-emerald-200'
+                  ? 'bg-[#200510]/90 border-[#FF0055] text-[#EAF4FF]'
+                  : 'bg-[#051624]/90 border-[#00F0FF] text-[#EAF4FF]'
               }`}
             >
               <div className="flex items-center gap-2">
                 {feedback.type === 'error' ? (
-                  <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+                  <AlertCircle className="w-4 h-4 text-[#FF0055] shrink-0" />
                 ) : (
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  <CheckCircle2 className="w-4 h-4 text-[#00F0FF] shrink-0" />
                 )}
                 <span>{feedback.text}</span>
               </div>
@@ -895,25 +913,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               TAB 1: THÔNG TIN (MỌI NGƯỜI CHƠI — CHỈ HIỂN THỊ HÌNH ẢNH AVATAR, KHÔNG CÓ NÚT UPLOAD)
              ========================================================================= */}
           {activeTab === 'ACCOUNT' && currentUser && (
-            <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-4 space-y-4">
-              <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 flex-wrap gap-2">
-                <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
-                  <User className="w-4 h-4 text-amber-400" />
-                  <span>THÔNG TIN CÁ NHÂN</span>
+            <section className="neo-bevel-card bg-[#050510]/85 border border-[#687386]/40 rounded p-4 space-y-4">
+              <div className="flex items-center justify-between border-b border-[#687386]/30 pb-2.5 flex-wrap gap-2">
+                <div className="font-btn flex items-center gap-2 font-bold text-[#FFB800] uppercase tracking-wider">
+                  <User className="w-4 h-4 text-[#FFB800]" />
+                  <span>{t('THÔNG TIN CÁ NHÂN', 'PERSONAL PROFILE')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   {/* Khung tên người chơi với ký hiệu vai trò thu nhỏ viết lên trên */}
                   <div
-                    className={`px-2.5 py-1 rounded-lg bg-neutral-900 flex items-center gap-1.5 ${roleFrameClasses}`}
+                    className={`px-2.5 py-1 rounded bg-[#0b0d1e] flex items-center gap-1.5 ${roleFrameClasses}`}
                   >
-                    <span className="inline-flex items-baseline text-xs font-extrabold text-white min-w-0">
+                    <span className="inline-flex items-baseline text-xs font-extrabold text-[#FFB800] min-w-0">
                       <span className="truncate max-w-[150px]">
                         {userMeta?.displayName || currentUser.displayName || 'Commander'}
                       </span>
                       {getRoleTrademarkBadge(userRole) && (
                         <sup
                           data-testid="role-trademark-badge"
-                          className="ml-0.5 text-[9px] font-black leading-none text-amber-300 select-none shrink-0"
+                          className="ml-0.5 text-[9px] font-black leading-none text-[#FFB800] select-none shrink-0"
                         >
                           {getRoleTrademarkBadge(userRole)}
                         </sup>
@@ -924,16 +942,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Khu vực ẢNH ĐẠI DIỆN NGƯỜI CHƠI — M7.3.11.6 Section 5: Chỉ hiển thị hình ảnh Avatar, không hiển thị tên/phiên bản/trạng thái/đường dẫn và không có nút upload */}
-              <div className="p-4 rounded-2xl bg-neutral-900/90 border border-neutral-800 space-y-4 shadow-inner">
-                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-neutral-800/80 pb-2.5">
-                  <div className="flex items-center gap-2 font-extrabold text-amber-300 text-xs sm:text-sm uppercase tracking-wider">
-                    <Camera className="w-4 h-4 text-amber-400" />
-                    <span>ẢNH ĐẠI DIỆN</span>
+              <div className="p-4 rounded neo-bevel-card bg-[#0b0d1e]/90 border border-[#687386]/40 space-y-4 shadow-inner">
+                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-[#687386]/30 pb-2.5">
+                  <div className="font-btn flex items-center gap-2 font-extrabold text-[#FFB800] text-xs sm:text-sm uppercase tracking-wider">
+                    <Camera className="w-4 h-4 text-[#FFB800]" />
+                    <span>{t('ẢNH ĐẠI DIỆN', 'AVATAR')}</span>
                   </div>
                 </div>
 
                 {/* Current Active Avatar Preview (Image Only + Enlarged Blurred Backdrop) */}
-                <div className="relative overflow-hidden flex items-center justify-center p-4 rounded-2xl bg-neutral-950/80 border border-amber-500/30">
+                <div className="relative overflow-hidden flex items-center justify-center p-4 rounded bg-[#050510]/90 border border-[#FFB800]/40">
                   {effectiveAvatarUrl && !avatarLoadError && (
                     <>
                       <img

@@ -1688,6 +1688,8 @@ export class MusicManager {
   private isCloudSyncInProgress: boolean = false;
   private sharedSyncError: string | null = null;
   private hasPendingAutoplayUnlockListener: boolean = false;
+  private awaitingAutoplayUnlock: boolean = false;
+  private autoplayUnlockHandler: (() => void) | null = null;
   private customBufferDecoder:
     | ((arrayBuffer: ArrayBuffer) => Promise<{
         duration: number;
@@ -4560,6 +4562,73 @@ export class MusicManager {
    * không cưỡng bức phát mà đăng ký lắng nghe tương tác hợp lệ đầu tiên (`pointerdown`, `keydown`, `touchstart`)
    * để tự động mở khóa AudioContext và phát nhạc nền ngay sau tương tác.
    */
+  private removeAutoplayUnlockListeners(): void {
+    if (typeof window === 'undefined' || !this.autoplayUnlockHandler) {
+      this.hasPendingAutoplayUnlockListener = false;
+      return;
+    }
+    const handler = this.autoplayUnlockHandler;
+    window.removeEventListener('pointerdown', handler);
+    window.removeEventListener('pointerup', handler);
+    window.removeEventListener('touchend', handler);
+    window.removeEventListener('click', handler);
+    window.removeEventListener('keydown', handler);
+    this.autoplayUnlockHandler = null;
+    this.hasPendingAutoplayUnlockListener = false;
+  }
+
+  public isAwaitingAutoplayUnlock(): boolean {
+    return this.awaitingAutoplayUnlock;
+  }
+
+  public isBgmActivelyPlaying(): boolean {
+    const bgmEnabled = SoundManager.getInstance().getSettings().bgmEnabled;
+    if (!bgmEnabled || this.isPaused || this.awaitingAutoplayUnlock) {
+      return false;
+    }
+    if (this.currentAudioElement) {
+      return !this.currentAudioElement.paused;
+    }
+    return this.isPlaying;
+  }
+
+  public unlockFromUserGesture(): void {
+    try {
+      SoundManager.getInstance().unlock();
+      if (this.isPaused || !SoundManager.getInstance().getSettings().bgmEnabled) {
+        this.awaitingAutoplayUnlock = false;
+        this.removeAutoplayUnlockListeners();
+        return;
+      }
+      if (this.currentAudioElement && this.currentAudioElement.paused) {
+        const targetVol = SoundManager.getInstance().getSettings().bgmVolume;
+        this.currentAudioElement.volume = Math.max(0, Math.min(1, targetVol));
+        const p = this.currentAudioElement.play();
+        if (p && typeof p.then === 'function') {
+          p.then(() => {
+            this.isPlaying = true;
+            this.awaitingAutoplayUnlock = false;
+            this.removeAutoplayUnlockListeners();
+            this.notify();
+          }).catch(() => {
+            // Browser still requires another gesture type (e.g., touchend/click after touchstart)
+          });
+        } else {
+          this.isPlaying = true;
+          this.awaitingAutoplayUnlock = false;
+          this.removeAutoplayUnlockListeners();
+          this.notify();
+        }
+        return;
+      }
+      if (!this.isPlaying || this.awaitingAutoplayUnlock) {
+        this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
+      }
+    } catch {
+      // Ignore browser policy errors
+    }
+  }
+
   private ensureAutoplayInteractionUnlock(): void {
     if (typeof window === 'undefined' || this.hasPendingAutoplayUnlockListener) {
       return;
@@ -4567,28 +4636,31 @@ export class MusicManager {
     this.hasPendingAutoplayUnlockListener = true;
 
     const handleFirstInteraction = () => {
-      this.hasPendingAutoplayUnlockListener = false;
-      window.removeEventListener('pointerdown', handleFirstInteraction);
-      window.removeEventListener('keydown', handleFirstInteraction);
-      window.removeEventListener('touchstart', handleFirstInteraction);
-
-      try {
-        SoundManager.getInstance().unlock();
-        if (!this.isPaused && SoundManager.getInstance().getSettings().bgmEnabled) {
-          this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
-        }
-      } catch {
-        // Không làm ảnh hưởng gameplay nếu trình duyệt từ chối
-      }
+      this.unlockFromUserGesture();
     };
 
-    window.addEventListener('pointerdown', handleFirstInteraction, { once: true, passive: true });
-    window.addEventListener('keydown', handleFirstInteraction, { once: true, passive: true });
-    window.addEventListener('touchstart', handleFirstInteraction, { once: true, passive: true });
+    this.autoplayUnlockHandler = handleFirstInteraction;
+    window.addEventListener('pointerdown', handleFirstInteraction, { passive: true });
+    window.addEventListener('pointerup', handleFirstInteraction, { passive: true });
+    window.addEventListener('touchend', handleFirstInteraction, { passive: true });
+    window.addEventListener('click', handleFirstInteraction, { passive: true });
+    window.addEventListener('keydown', handleFirstInteraction, { passive: true });
   }
 
   public syncMenuPlayback(): void {
     this.isPaused = false;
+    if (
+      this.activeContext.stageId === 0 &&
+      this.activeContext.mode === 'HOME' &&
+      this.currentAudioElement &&
+      !this.currentAudioElement.paused &&
+      SoundManager.getInstance().getSettings().bgmEnabled
+    ) {
+      this.isPlaying = true;
+      this.awaitingAutoplayUnlock = false;
+      this.notify();
+      return;
+    }
     this.syncPlaybackWithContext(0, 'HOME');
   }
 
@@ -4723,15 +4795,28 @@ export class MusicManager {
         }
       };
 
+      audio.onplaying = () => {
+        this.isPlaying = true;
+        this.awaitingAutoplayUnlock = false;
+        this.removeAutoplayUnlockListeners();
+        this.notify();
+      };
+
       this.activeSources.add(handle);
       const playPromise = audio.play();
-      if (playPromise && typeof playPromise.catch === 'function') {
-        playPromise.catch((playErr: unknown) => {
-          const errName = String((playErr as { name?: string } | null)?.name || '');
-          if (errName === 'NotAllowedError') {
+      if (playPromise && typeof playPromise.then === 'function') {
+        playPromise
+          .then(() => {
+            this.isPlaying = true;
+            this.awaitingAutoplayUnlock = false;
+            this.removeAutoplayUnlockListeners();
+            this.notify();
+          })
+          .catch(() => {
+            this.awaitingAutoplayUnlock = true;
             this.ensureAutoplayInteractionUnlock();
-          }
-        });
+            this.notify();
+          });
       }
     } catch {
       this.stopAllCustomSources();

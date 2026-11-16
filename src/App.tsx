@@ -49,8 +49,12 @@ import { SessionManager } from './core/sessionManager.ts';
 import { AuthManager, isSuperAdminUser } from './core/authManager.ts';
 import { AvatarManager } from './core/avatarManager.ts';
 import { WelcomeScreen } from './components/WelcomeScreen.tsx';
-import { MainMenuScreen } from './components/MainMenuScreen.tsx';
-import { ModeSelectionScreen } from './components/ModeSelectionScreen.tsx';
+import { MainMenuScreen, type LobbyCardMode } from './components/MainMenuScreen.tsx';
+import {
+  ModeSelectionScreen,
+  type SelectionFlowStep,
+  type SelectionCardMode,
+} from './components/ModeSelectionScreen.tsx';
 import { SessionAlertModal } from './components/SessionAlertModal.tsx';
 import { GameLogo } from './components/GameLogo.tsx';
 import { QuickAudioToggleButton } from './components/QuickAudioToggleButton.tsx';
@@ -122,6 +126,11 @@ export default function App() {
   const [difficulty, setDifficulty] = useState<'DEFAULT' | 'EXTREME'>('DEFAULT');
   const [selectedMode, setSelectedMode] = useState<'SOLO' | 'TWO_PLAYERS'>('SOLO');
   const [twoPlayerOption, setTwoPlayerOption] = useState<'P2_AI' | 'P2_REAL'>('P2_AI');
+  const [selectedLobbyMode, setSelectedLobbyMode] = useState<LobbyCardMode>('SOLO');
+  const [modeSelectionInitialStep, setModeSelectionInitialStep] =
+    useState<SelectionFlowStep>('SELECT_MODE');
+  const [modeSelectionInitialCard, setModeSelectionInitialCard] =
+    useState<SelectionCardMode>('SOLO');
   const [profileRevision, setProfileRevision] = useState<number>(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTabId>('ACCOUNT');
@@ -200,12 +209,19 @@ export default function App() {
     void SoundManager.getInstance().preloadStaticActionSfxBinaries();
     const unlockAudio = () => {
       SoundManager.getInstance().unlock();
+      MusicManager.getInstance().unlockFromUserGesture();
     };
     window.addEventListener('pointerdown', unlockAudio, { passive: true });
+    window.addEventListener('pointerup', unlockAudio, { passive: true });
+    window.addEventListener('touchend', unlockAudio, { passive: true });
+    window.addEventListener('click', unlockAudio, { passive: true });
     window.addEventListener('keydown', unlockAudio, { passive: true });
     window.addEventListener('touchstart', unlockAudio, { passive: true });
     return () => {
       window.removeEventListener('pointerdown', unlockAudio);
+      window.removeEventListener('pointerup', unlockAudio);
+      window.removeEventListener('touchend', unlockAudio);
+      window.removeEventListener('click', unlockAudio);
       window.removeEventListener('keydown', unlockAudio);
       window.removeEventListener('touchstart', unlockAudio);
     };
@@ -498,7 +514,14 @@ export default function App() {
       twoPlayerOption?: 'P2_AI' | 'P2_REAL',
       stageId: number = 1
     ) => {
-      if (sessionSnapshot.status !== 'ACTIVE') return;
+      const isDisplacedOrPaused =
+        sessionSnapshot.status === 'DISPLACED' ||
+        sessionSnapshot.status === 'PAUSED_IDLE' ||
+        sessionSnapshot.status === 'EXPIRED';
+      if (isDisplacedOrPaused) return;
+      if (sessionSnapshot.status === 'NO_SESSION' && currentUser?.uid) {
+        void sessionManager.acquireSession(currentUser.uid);
+      }
       setOnlineDisconnectMsg(null);
       const engineMode = mode === 'TWO_PLAYERS' && twoPlayerOption === 'P2_AI' ? 'TWO_PLAYERS_AI' : 'SOLO';
       const startRes = gameEngine.startMatch(engineMode, difficulty, {
@@ -1222,7 +1245,42 @@ export default function App() {
           }}
           session={sessionSnapshot}
           isProcessing={authProcessing}
-          onPlay={() => setAppScreen('MODE_SELECTION')}
+          selectedLobbyMode={selectedLobbyMode}
+          onSelectLobbyMode={(lobbyMode) => {
+            setSelectedLobbyMode(lobbyMode);
+            setModeSelectionInitialCard(lobbyMode);
+            if (lobbyMode === 'SOLO') {
+              setSelectedMode('SOLO');
+            } else if (lobbyMode === 'COOP_AI') {
+              setSelectedMode('TWO_PLAYERS');
+              setTwoPlayerOption('P2_AI');
+            } else {
+              setSelectedMode('TWO_PLAYERS');
+              setTwoPlayerOption('P2_REAL');
+            }
+          }}
+          onConfirmMode={(lobbyMode) => {
+            setSelectedLobbyMode(lobbyMode);
+            setModeSelectionInitialCard(lobbyMode);
+            if (lobbyMode === 'SOLO') {
+              setSelectedMode('SOLO');
+              setModeSelectionInitialStep('SELECT_DIFFICULTY');
+            } else if (lobbyMode === 'COOP_AI') {
+              setSelectedMode('TWO_PLAYERS');
+              setTwoPlayerOption('P2_AI');
+              setModeSelectionInitialStep('SELECT_DIFFICULTY');
+            } else {
+              setSelectedMode('TWO_PLAYERS');
+              setTwoPlayerOption('P2_REAL');
+              setModeSelectionInitialStep('COOP_ONLINE_LOBBY');
+            }
+            setAppScreen('MODE_SELECTION');
+          }}
+          onPlay={() => {
+            setModeSelectionInitialCard(selectedLobbyMode);
+            setModeSelectionInitialStep('SELECT_MODE');
+            setAppScreen('MODE_SELECTION');
+          }}
           onSignOut={handleSignOut}
           onRetryAcquire={handleRetryAcquire}
           difficulty={difficulty}
@@ -1282,7 +1340,7 @@ export default function App() {
             photoURL: currentUser.photoURL,
           }}
           firebaseUser={currentUser}
-          key={`mode_select_${profileRevision}`}
+          key={`mode_select_${profileRevision}_${modeSelectionInitialCard}_${modeSelectionInitialStep}`}
           session={sessionSnapshot}
           isProcessing={authProcessing}
           onBack={() => setAppScreen('MAIN_MENU')}
@@ -1302,6 +1360,8 @@ export default function App() {
           onSelectedModeChange={setSelectedMode}
           twoPlayerOption={twoPlayerOption}
           onTwoPlayerOptionChange={setTwoPlayerOption}
+          initialFlowStep={modeSelectionInitialStep}
+          initialCardMode={modeSelectionInitialCard}
           isSuperAdmin={isSuperAdmin}
         />
 
