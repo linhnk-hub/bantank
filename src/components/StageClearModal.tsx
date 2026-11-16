@@ -195,7 +195,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
             <div className="space-y-1.5 font-mono text-[11px] sm:text-xs">
               <div className="flex items-center justify-between text-neutral-300">
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-neutral-400" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-white border border-neutral-400" />
                   Basic Tank (1 XP):
                 </span>
                 <span>{counts.BASIC} xe = {counts.BASIC * 1} XP</span>
@@ -203,7 +203,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
 
               <div className="flex items-center justify-between text-neutral-300">
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-sky-400" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 border border-blue-300" />
                   Fast Tank (2 XP):
                 </span>
                 <span>{counts.FAST} xe = {counts.FAST * 2} XP</span>
@@ -211,7 +211,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
 
               <div className="flex items-center justify-between text-neutral-300">
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-red-400" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 border border-emerald-300" />
                   Power Tank (3 XP):
                 </span>
                 <span>{counts.POWER} xe = {counts.POWER * 3} XP</span>
@@ -219,7 +219,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
 
               <div className="flex items-center justify-between text-neutral-300">
                 <span className="flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <span className="w-2.5 h-2.5 rounded-full bg-black border-2 border-white" />
                   Armor Tank (5 XP):
                 </span>
                 <span>{counts.ARMOR} xe = {counts.ARMOR * 5} XP</span>

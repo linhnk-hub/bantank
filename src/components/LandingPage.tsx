@@ -82,7 +82,7 @@ export const LANDING_PAGE_FEATURES: readonly LandingPageFeatureItem[] = [
     description:
       'Đối đầu 30 xe tăng địch trong mỗi màn chơi thuộc 4 chủng loại chiến thuật khác nhau, đồng thời bảo vệ Căn cứ Đại Bàng tại trung tâm tuyến dưới bản đồ.',
     highlights: [
-      '4 loại xe địch: Xe Cơ Bản, Xe Trinh Sát Nhanh, Xe Hỏa Lực Mạnh và Xe Thiết Giáp (4 HP)',
+      '4 loại xe địch: Tank Basic màu trắng (1HP, chạy thường), Tank Fast màu xanh biển (1HP, chạy nhanh nhất), Tank Power màu xanh lá cây (2HP, chạy thường), Tank Armor màu đen viền trắng (4HP, chạy chậm nhất)',
       'Địa hình tương tác: Tường gạch phá hủy chi tiết 4x4, tường thép, rừng cây ẩn nấp, sông nước và băng trượt',
       'Khiên bảo vệ bất tử tạm thời khi xuất kích hoặc vừa hồi sinh trên chiến trường',
     ],
@@ -697,16 +697,16 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         <span>Đội hình địch: 30 Xe Tăng</span>
                       </div>
                       <div className="flex items-center gap-1.5">
-                        <span className="px-2 py-1 rounded bg-neutral-900 border border-neutral-700 text-[10px] font-mono text-neutral-300">
+                        <span className="px-2 py-1 rounded bg-white/10 border border-white text-[10px] font-mono text-white">
                           BASIC
                         </span>
-                        <span className="px-2 py-1 rounded bg-neutral-900 border border-neutral-700 text-[10px] font-mono text-sky-300">
+                        <span className="px-2 py-1 rounded bg-blue-950/80 border border-blue-500 text-[10px] font-mono text-blue-300">
                           FAST
                         </span>
-                        <span className="px-2 py-1 rounded bg-neutral-900 border border-neutral-700 text-[10px] font-mono text-amber-300">
+                        <span className="px-2 py-1 rounded bg-emerald-950/80 border border-emerald-500 text-[10px] font-mono text-emerald-300">
                           POWER
                         </span>
-                        <span className="px-2 py-1 rounded bg-neutral-900 border border-neutral-700 text-[10px] font-mono text-rose-300">
+                        <span className="px-2 py-1 rounded bg-black border border-white text-[10px] font-mono text-white">
                           ARMOR
                         </span>
                       </div>
@@ -740,10 +740,10 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       </div>
                     </div>
 
-                    {/* Tuyến dưới: Chiến xa P1, P2 và Căn cứ Đại Bàng */}
+                    {/* Tuyến dưới: Chiến xa P1 (Đỏ), P2 (Vàng) và Căn cứ Đại Bàng */}
                     <div className="relative z-10 grid grid-cols-3 gap-2 items-center pt-2 border-t border-neutral-800/80">
-                      <div className="p-2 rounded-lg bg-amber-500/15 border border-amber-500/40 text-center">
-                        <div className="text-[11px] font-black text-amber-300">CHIẾN XA P1</div>
+                      <div className="p-2 rounded-lg bg-red-500/15 border border-red-500/40 text-center">
+                        <div className="text-[11px] font-black text-red-400">CHIẾN XA P1</div>
                         <div className="text-[10px] text-neutral-400">Người chơi chính</div>
                       </div>
 
@@ -755,8 +755,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         <div className="text-[10px] text-amber-300 font-semibold">Mục tiêu bảo vệ</div>
                       </div>
 
-                      <div className="p-2 rounded-lg bg-emerald-500/15 border border-emerald-500/40 text-center">
-                        <div className="text-[11px] font-black text-emerald-300">CHIẾN XA P2</div>
+                      <div className="p-2 rounded-lg bg-amber-500/15 border border-amber-500/40 text-center">
+                        <div className="text-[11px] font-black text-amber-300">CHIẾN XA P2</div>
                         <div className="text-[10px] text-neutral-400">AI / Đồng đội Online</div>
                       </div>
                     </div>

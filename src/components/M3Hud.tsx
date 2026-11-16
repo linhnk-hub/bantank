@@ -168,17 +168,17 @@ export const M3Hud: React.FC<M3HudProps> = ({
 
           {isCoop && state.p2State && (
             <>
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-emerald-950/60 border border-emerald-800/80">
-                <Heart className="w-4 h-4 text-emerald-400 fill-emerald-400" />
-                <span className="text-emerald-200 font-mono">
+              <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-amber-950/60 border border-amber-700/80">
+                <Heart className="w-4 h-4 text-amber-400 fill-amber-400" />
+                <span className="text-amber-200 font-mono">
                   {state.gameMode === 'TWO_PLAYERS_ONLINE' ? 'MẠNG P2 (ONLINE):' : 'MẠNG P2 (AI):'}
                 </span>
-                <span className="text-emerald-400 font-black font-mono text-sm">{state.p2State.lives}</span>
+                <span className="text-amber-400 font-black font-mono text-sm">{state.p2State.lives}</span>
               </div>
 
               {state.p2State.shieldTimer > 0 && (
-                <div className="flex items-center gap-1 px-2.5 py-1 rounded bg-teal-950/80 border border-teal-700 text-teal-300 font-mono text-[11px] animate-pulse">
-                  <Shield className="w-3.5 h-3.5 text-teal-400" />
+                <div className="flex items-center gap-1 px-2.5 py-1 rounded bg-amber-950/80 border border-amber-600 text-amber-300 font-mono text-[11px] animate-pulse">
+                  <Shield className="w-3.5 h-3.5 text-amber-400" />
                   <span>KHIÊN P2: {state.p2State.shieldTimer.toFixed(1)}s</span>
                 </div>
               )}
@@ -391,12 +391,12 @@ export const M3Hud: React.FC<M3HudProps> = ({
                         <span
                           className={`font-bold ${
                             e.enemyType === 'BASIC'
-                              ? 'text-neutral-300'
+                              ? 'text-white'
                               : e.enemyType === 'FAST'
-                              ? 'text-cyan-400'
+                              ? 'text-blue-400'
                               : e.enemyType === 'POWER'
                               ? 'text-emerald-400'
-                              : 'text-red-400'
+                              : 'px-1 py-0.5 rounded bg-black border border-white text-white'
                           }`}
                         >
                           {e.enemyType === 'BASIC'

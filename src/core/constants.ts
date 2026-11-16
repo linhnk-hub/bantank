@@ -200,32 +200,40 @@ export const ENEMY_CONFIG = {
   ] as const,
   SPECS: {
     BASIC: {
-      speed: 60,
-      hp: 1,
-      score: 1, // 1 XP
+      speed: 60, // Chạy thường (60 px/s)
+      hp: 1,     // 1 HP
+      score: 1,  // 1 XP
       aimTime: 0.35,
       shootCooldown: 1.5,
+      colorNameVi: 'màu trắng',
+      speedTierVi: 'chạy thường',
     },
     FAST: {
-      speed: 90,
-      hp: 1,
-      score: 2, // 2 XP
+      speed: 90, // Chạy nhanh nhất (90 px/s)
+      hp: 1,     // 1 HP
+      score: 2,  // 2 XP
       aimTime: 0.15,
       shootCooldown: 1.2,
+      colorNameVi: 'màu xanh biển',
+      speedTierVi: 'chạy nhanh nhất',
     },
     POWER: {
-      speed: 60,
-      hp: 2,
-      score: 3, // 3 XP
+      speed: 60, // Chạy thường (60 px/s)
+      hp: 2,     // 2 HP
+      score: 3,  // 3 XP
       aimTime: 0.55,
       shootCooldown: 2.0,
+      colorNameVi: 'màu xanh lá cây',
+      speedTierVi: 'chạy thường',
     },
     ARMOR: {
-      speed: 45,
-      hp: 4,
-      score: 5, // 5 XP (Armor is 5 XP, not 4 XP)
+      speed: 45, // Chạy chậm nhất (45 px/s)
+      hp: 4,     // 4 HP
+      score: 5,  // 5 XP (Armor is 5 XP, not 4 XP)
       aimTime: 0.65,
       shootCooldown: 2.5,
+      colorNameVi: 'màu đen viền trắng',
+      speedTierVi: 'chạy chậm nhất',
     },
   } as const,
   // Fixed sequence of 30 enemies
@@ -235,6 +243,68 @@ export const ENEMY_CONFIG = {
     ...Array(5).fill('POWER'),
     ...Array(3).fill('ARMOR'),
   ] as const,
+} as const;
+
+export const TANK_DESIGN_SPECS = {
+  P1: {
+    role: 'P1',
+    colorNameVi: 'màu đỏ',
+    mainHex: '#dc2626',
+    lightHex: '#fca5a5',
+    darkHex: '#991b1b',
+    speed: TANK_CONFIG.SPEED_PX_S,
+    speedTierVi: 'chạy thường',
+  },
+  P2: {
+    role: 'P2',
+    colorNameVi: 'màu vàng',
+    mainHex: '#eab308',
+    lightHex: '#fef08a',
+    darkHex: '#a16207',
+    speed: TANK_CONFIG.SPEED_PX_S,
+    speedTierVi: 'chạy thường',
+  },
+  BASIC: {
+    enemyType: 'BASIC',
+    colorNameVi: 'màu trắng',
+    mainHex: '#ffffff',
+    lightHex: '#ffffff',
+    darkHex: '#cbd5e1',
+    hp: ENEMY_CONFIG.SPECS.BASIC.hp,
+    speed: ENEMY_CONFIG.SPECS.BASIC.speed,
+    speedTierVi: 'chạy thường',
+  },
+  FAST: {
+    enemyType: 'FAST',
+    colorNameVi: 'màu xanh biển',
+    mainHex: '#2563eb',
+    lightHex: '#60a5fa',
+    darkHex: '#1d4ed8',
+    hp: ENEMY_CONFIG.SPECS.FAST.hp,
+    speed: ENEMY_CONFIG.SPECS.FAST.speed,
+    speedTierVi: 'chạy nhanh nhất',
+  },
+  POWER: {
+    enemyType: 'POWER',
+    colorNameVi: 'màu xanh lá cây',
+    mainHex: '#16a34a',
+    lightHex: '#86efac',
+    darkHex: '#14532d',
+    hp: ENEMY_CONFIG.SPECS.POWER.hp,
+    speed: ENEMY_CONFIG.SPECS.POWER.speed,
+    speedTierVi: 'chạy thường',
+  },
+  ARMOR: {
+    enemyType: 'ARMOR',
+    colorNameVi: 'màu đen viền trắng',
+    mainHex: '#09090b',
+    borderHex: '#ffffff',
+    lightHex: '#ffffff',
+    darkHex: '#ffffff',
+    hp: ENEMY_CONFIG.SPECS.ARMOR.hp,
+    speed: ENEMY_CONFIG.SPECS.ARMOR.speed,
+    speedTierVi: 'chạy chậm nhất',
+  },
 } as const;
 
 export const AI_CONFIG = {

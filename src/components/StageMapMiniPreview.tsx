@@ -87,11 +87,11 @@ export const StageMapMiniPreview: React.FC<StageMapMiniPreviewProps> = ({
           )}
         {showSpawns && (
           <>
-            <circle cx={0.5} cy={0.5} r={0.26} fill="#ef4444" />
-            <circle cx={6.5} cy={0.5} r={0.26} fill="#ef4444" />
-            <circle cx={12.5} cy={0.5} r={0.26} fill="#ef4444" />
-            <circle cx={3.5} cy={12.5} r={0.26} fill="#22c55e" />
-            <circle cx={9.5} cy={12.5} r={0.26} fill="#38bdf8" />
+            <circle cx={0.5} cy={0.5} r={0.26} fill="#ffffff" />
+            <circle cx={6.5} cy={0.5} r={0.26} fill="#ffffff" />
+            <circle cx={12.5} cy={0.5} r={0.26} fill="#ffffff" />
+            <circle cx={3.5} cy={12.5} r={0.26} fill="#ef4444" />
+            <circle cx={9.5} cy={12.5} r={0.26} fill="#eab308" />
           </>
         )}
       </svg>

@@ -74,8 +74,36 @@ export interface ModeSelectionScreenProps {
 
 /**
  * Pixel-art Style Retro Tank SVG Icons (NES 1990 style)
+ * Tank P1: Màu đỏ (Red)
+ * Tank P2: Màu vàng (Yellow)
  */
 const RetroTankIconP1: React.FC<{ className?: string }> = ({ className = 'w-12 h-12' }) => (
+  <svg
+    viewBox="0 0 32 32"
+    fill="currentColor"
+    className={className}
+    style={{ shapeRendering: 'crispEdges' }}
+  >
+    <rect x="4" y="6" width="4" height="20" fill="#7F1D1D" />
+    <rect x="4" y="7" width="2" height="3" fill="#F87171" />
+    <rect x="4" y="12" width="2" height="3" fill="#F87171" />
+    <rect x="4" y="17" width="2" height="3" fill="#F87171" />
+    <rect x="4" y="22" width="2" height="3" fill="#F87171" />
+    <rect x="24" y="6" width="4" height="20" fill="#7F1D1D" />
+    <rect x="26" y="7" width="2" height="3" fill="#F87171" />
+    <rect x="26" y="12" width="2" height="3" fill="#F87171" />
+    <rect x="26" y="17" width="2" height="3" fill="#F87171" />
+    <rect x="26" y="22" width="2" height="3" fill="#F87171" />
+    <rect x="8" y="8" width="16" height="16" fill="#DC2626" />
+    <rect x="10" y="10" width="12" height="12" fill="#EF4444" />
+    <rect x="14" y="2" width="4" height="9" fill="#DC2626" />
+    <rect x="15" y="2" width="2" height="8" fill="#FCA5A5" />
+    <rect x="12" y="12" width="8" height="8" fill="#991B1B" />
+    <rect x="14" y="14" width="4" height="4" fill="#FEE2E2" />
+  </svg>
+);
+
+const RetroTankIconP2: React.FC<{ className?: string }> = ({ className = 'w-12 h-12' }) => (
   <svg
     viewBox="0 0 32 32"
     fill="currentColor"
@@ -92,38 +120,12 @@ const RetroTankIconP1: React.FC<{ className?: string }> = ({ className = 'w-12 h
     <rect x="26" y="12" width="2" height="3" fill="#FBBF24" />
     <rect x="26" y="17" width="2" height="3" fill="#FBBF24" />
     <rect x="26" y="22" width="2" height="3" fill="#FBBF24" />
-    <rect x="8" y="8" width="16" height="16" fill="#F59E0B" />
-    <rect x="10" y="10" width="12" height="12" fill="#FBBF24" />
-    <rect x="14" y="2" width="4" height="9" fill="#F59E0B" />
-    <rect x="15" y="2" width="2" height="8" fill="#FDE68A" />
-    <rect x="12" y="12" width="8" height="8" fill="#D97706" />
-    <rect x="14" y="14" width="4" height="4" fill="#FEF3C7" />
-  </svg>
-);
-
-const RetroTankIconP2: React.FC<{ className?: string }> = ({ className = 'w-12 h-12' }) => (
-  <svg
-    viewBox="0 0 32 32"
-    fill="currentColor"
-    className={className}
-    style={{ shapeRendering: 'crispEdges' }}
-  >
-    <rect x="4" y="6" width="4" height="20" fill="#047857" />
-    <rect x="4" y="7" width="2" height="3" fill="#34D399" />
-    <rect x="4" y="12" width="2" height="3" fill="#34D399" />
-    <rect x="4" y="17" width="2" height="3" fill="#34D399" />
-    <rect x="4" y="22" width="2" height="3" fill="#34D399" />
-    <rect x="24" y="6" width="4" height="20" fill="#047857" />
-    <rect x="26" y="7" width="2" height="3" fill="#34D399" />
-    <rect x="26" y="12" width="2" height="3" fill="#34D399" />
-    <rect x="26" y="17" width="2" height="3" fill="#34D399" />
-    <rect x="26" y="22" width="2" height="3" fill="#34D399" />
-    <rect x="8" y="8" width="16" height="16" fill="#10B981" />
-    <rect x="10" y="10" width="12" height="12" fill="#34D399" />
-    <rect x="14" y="2" width="4" height="9" fill="#059669" />
-    <rect x="15" y="2" width="2" height="8" fill="#A7F3D0" />
-    <rect x="12" y="12" width="8" height="8" fill="#047857" />
-    <rect x="14" y="14" width="4" height="4" fill="#D1FAE5" />
+    <rect x="8" y="8" width="16" height="16" fill="#EAB308" />
+    <rect x="10" y="10" width="12" height="12" fill="#FACC15" />
+    <rect x="14" y="2" width="4" height="9" fill="#CA8A04" />
+    <rect x="15" y="2" width="2" height="8" fill="#FEF08A" />
+    <rect x="12" y="12" width="8" height="8" fill="#A16207" />
+    <rect x="14" y="14" width="4" height="4" fill="#FEF9C3" />
   </svg>
 );
 

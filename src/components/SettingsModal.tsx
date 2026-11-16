@@ -1396,20 +1396,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                     <div className="grid grid-cols-2 gap-x-2 gap-y-1 pt-0.5 border-t border-neutral-800/80 text-[10px] font-mono text-neutral-300">
                       <div className="flex items-center justify-between">
-                        <span className="text-neutral-400">Basic:</span>
+                        <span className="text-neutral-300">Basic:</span>
                         <strong className="text-white">{playerStats.defeatedByType.BASIC}</strong>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-neutral-400">Fast:</span>
-                        <strong className="text-sky-300">{playerStats.defeatedByType.FAST}</strong>
+                        <span className="text-blue-400">Fast:</span>
+                        <strong className="text-blue-400">{playerStats.defeatedByType.FAST}</strong>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-neutral-400">Power:</span>
-                        <strong className="text-amber-300">{playerStats.defeatedByType.POWER}</strong>
+                        <span className="text-emerald-400">Power:</span>
+                        <strong className="text-emerald-400">{playerStats.defeatedByType.POWER}</strong>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-neutral-400">Armor:</span>
-                        <strong className="text-rose-300">{playerStats.defeatedByType.ARMOR}</strong>
+                        <span className="text-neutral-300">Armor:</span>
+                        <strong className="px-1 rounded bg-black border border-white text-white">{playerStats.defeatedByType.ARMOR}</strong>
                       </div>
                     </div>
                   </div>

@@ -460,6 +460,23 @@ export function generateTileTextures(scene: Phaser.Scene): void {
   generateEagleExplosionTextures(scene);
 }
 
+export const PLAYER_TANK_PALETTES = {
+  P1: {
+    main: '#dc2626',
+    light: '#fca5a5',
+    dark: '#991b1b',
+    track: '#450a0a',
+    trackLight: '#ef4444',
+  },
+  P2: {
+    main: '#eab308',
+    light: '#fef08a',
+    dark: '#a16207',
+    track: '#713f12',
+    trackLight: '#facc15',
+  },
+} as const;
+
 function generateTankTextures(scene: Phaser.Scene): void {
   const directions: Array<'up' | 'down' | 'left' | 'right'> = ['up', 'down', 'left', 'right'];
 
@@ -474,11 +491,12 @@ function generateTankTextures(scene: Phaser.Scene): void {
     // Transparent background
     ctx.clearRect(0, 0, 16, 16);
 
-    const yellowMain = '#eab308';
-    const yellowLight = '#fef08a';
-    const yellowDark = '#a16207';
-    const trackColor = '#475569';
-    const trackLight = '#94a3b8';
+    // Tank P1: Màu đỏ (Red)
+    const p1Main = PLAYER_TANK_PALETTES.P1.main;
+    const p1Light = PLAYER_TANK_PALETTES.P1.light;
+    const p1Dark = PLAYER_TANK_PALETTES.P1.dark;
+    const trackColor = PLAYER_TANK_PALETTES.P1.track;
+    const trackLight = PLAYER_TANK_PALETTES.P1.trackLight;
 
     if (dir === 'up') {
       // Left track (x: 1..3, y: 2..15)
@@ -498,25 +516,25 @@ function generateTankTextures(scene: Phaser.Scene): void {
       ctx.fillRect(12, 11, 3, 2);
 
       // Tank Body (x: 4..11, y: 4..14)
-      ctx.fillStyle = yellowMain;
+      ctx.fillStyle = p1Main;
       ctx.fillRect(4, 4, 8, 11);
-      ctx.fillStyle = yellowLight;
+      ctx.fillStyle = p1Light;
       ctx.fillRect(4, 4, 8, 1);
       ctx.fillRect(4, 4, 1, 11);
-      ctx.fillStyle = yellowDark;
+      ctx.fillStyle = p1Dark;
       ctx.fillRect(4, 14, 8, 1);
       ctx.fillRect(11, 4, 1, 11);
 
       // Central Turret (x: 5..10, y: 6..11)
-      ctx.fillStyle = yellowDark;
+      ctx.fillStyle = p1Dark;
       ctx.fillRect(5, 6, 6, 6);
-      ctx.fillStyle = yellowLight;
+      ctx.fillStyle = p1Light;
       ctx.fillRect(6, 7, 4, 4);
 
       // Cannon Barrel (x: 7..8, y: 0..6)
-      ctx.fillStyle = yellowLight;
+      ctx.fillStyle = p1Light;
       ctx.fillRect(7, 0, 2, 7);
-      ctx.fillStyle = yellowDark;
+      ctx.fillStyle = p1Dark;
       ctx.fillRect(7, 0, 1, 7);
     } else if (dir === 'down') {
       // Left track
@@ -536,25 +554,25 @@ function generateTankTextures(scene: Phaser.Scene): void {
       ctx.fillRect(12, 10, 3, 2);
 
       // Tank Body
-      ctx.fillStyle = yellowMain;
+      ctx.fillStyle = p1Main;
       ctx.fillRect(4, 1, 8, 11);
-      ctx.fillStyle = yellowLight;
+      ctx.fillStyle = p1Light;
       ctx.fillRect(4, 1, 8, 1);
       ctx.fillRect(4, 1, 1, 11);
-      ctx.fillStyle = yellowDark;
+      ctx.fillStyle = p1Dark;
       ctx.fillRect(4, 11, 8, 1);
       ctx.fillRect(11, 1, 1, 11);
 
       // Central Turret
-      ctx.fillStyle = yellowDark;
+      ctx.fillStyle = p1Dark;
       ctx.fillRect(5, 4, 6, 6);
-      ctx.fillStyle = yellowLight;
+      ctx.fillStyle = p1Light;
       ctx.fillRect(6, 5, 4, 4);
 
       // Cannon Barrel
-      ctx.fillStyle = yellowLight;
+      ctx.fillStyle = p1Light;
       ctx.fillRect(7, 9, 2, 7);
-      ctx.fillStyle = yellowDark;
+      ctx.fillStyle = p1Dark;
       ctx.fillRect(8, 9, 1, 7);
     } else if (dir === 'left') {
       // Top track (x: 2..15, y: 1..3)
@@ -574,25 +592,25 @@ function generateTankTextures(scene: Phaser.Scene): void {
       ctx.fillRect(11, 12, 2, 3);
 
       // Tank Body (x: 4..14, y: 4..11)
-      ctx.fillStyle = yellowMain;
+      ctx.fillStyle = p1Main;
       ctx.fillRect(4, 4, 11, 8);
-      ctx.fillStyle = yellowLight;
+      ctx.fillStyle = p1Light;
       ctx.fillRect(4, 4, 11, 1);
       ctx.fillRect(4, 4, 1, 8);
-      ctx.fillStyle = yellowDark;
+      ctx.fillStyle = p1Dark;
       ctx.fillRect(4, 11, 11, 1);
       ctx.fillRect(14, 4, 1, 8);
 
       // Central Turret
-      ctx.fillStyle = yellowDark;
+      ctx.fillStyle = p1Dark;
       ctx.fillRect(6, 5, 6, 6);
-      ctx.fillStyle = yellowLight;
+      ctx.fillStyle = p1Light;
       ctx.fillRect(7, 6, 4, 4);
 
       // Cannon Barrel (x: 0..6, y: 7..8)
-      ctx.fillStyle = yellowLight;
+      ctx.fillStyle = p1Light;
       ctx.fillRect(0, 7, 7, 2);
-      ctx.fillStyle = yellowDark;
+      ctx.fillStyle = p1Dark;
       ctx.fillRect(0, 8, 7, 1);
     } else if (dir === 'right') {
       // Top track
@@ -612,25 +630,25 @@ function generateTankTextures(scene: Phaser.Scene): void {
       ctx.fillRect(10, 12, 2, 3);
 
       // Tank Body
-      ctx.fillStyle = yellowMain;
+      ctx.fillStyle = p1Main;
       ctx.fillRect(1, 4, 11, 8);
-      ctx.fillStyle = yellowLight;
+      ctx.fillStyle = p1Light;
       ctx.fillRect(1, 4, 11, 1);
       ctx.fillRect(1, 4, 1, 8);
-      ctx.fillStyle = yellowDark;
+      ctx.fillStyle = p1Dark;
       ctx.fillRect(1, 11, 11, 1);
       ctx.fillRect(11, 4, 1, 8);
 
       // Central Turret
-      ctx.fillStyle = yellowDark;
+      ctx.fillStyle = p1Dark;
       ctx.fillRect(4, 5, 6, 6);
-      ctx.fillStyle = yellowLight;
+      ctx.fillStyle = p1Light;
       ctx.fillRect(5, 6, 4, 4);
 
       // Cannon Barrel
-      ctx.fillStyle = yellowLight;
+      ctx.fillStyle = p1Light;
       ctx.fillRect(9, 7, 7, 2);
-      ctx.fillStyle = yellowDark;
+      ctx.fillStyle = p1Dark;
       ctx.fillRect(9, 7, 7, 1);
     }
 
@@ -652,11 +670,12 @@ function generateP2TankTextures(scene: Phaser.Scene): void {
     // Transparent background
     ctx.clearRect(0, 0, 16, 16);
 
-    const greenMain = '#16a34a';
-    const greenLight = '#86efac';
-    const greenDark = '#14532d';
-    const trackColor = '#475569';
-    const trackLight = '#94a3b8';
+    // Tank P2: Màu vàng (Yellow)
+    const p2Main = PLAYER_TANK_PALETTES.P2.main;
+    const p2Light = PLAYER_TANK_PALETTES.P2.light;
+    const p2Dark = PLAYER_TANK_PALETTES.P2.dark;
+    const trackColor = PLAYER_TANK_PALETTES.P2.track;
+    const trackLight = PLAYER_TANK_PALETTES.P2.trackLight;
 
     if (dir === 'up') {
       // Left track (x: 1..3, y: 2..15)
@@ -676,25 +695,25 @@ function generateP2TankTextures(scene: Phaser.Scene): void {
       ctx.fillRect(12, 11, 3, 2);
 
       // Tank Body (x: 4..11, y: 4..14)
-      ctx.fillStyle = greenMain;
+      ctx.fillStyle = p2Main;
       ctx.fillRect(4, 4, 8, 11);
-      ctx.fillStyle = greenLight;
+      ctx.fillStyle = p2Light;
       ctx.fillRect(4, 4, 8, 1);
       ctx.fillRect(4, 4, 1, 11);
-      ctx.fillStyle = greenDark;
+      ctx.fillStyle = p2Dark;
       ctx.fillRect(4, 14, 8, 1);
       ctx.fillRect(11, 4, 1, 11);
 
       // Central Turret (x: 5..10, y: 6..11)
-      ctx.fillStyle = greenDark;
+      ctx.fillStyle = p2Dark;
       ctx.fillRect(5, 6, 6, 6);
-      ctx.fillStyle = greenLight;
+      ctx.fillStyle = p2Light;
       ctx.fillRect(6, 7, 4, 4);
 
       // Cannon Barrel (x: 7..8, y: 0..6)
-      ctx.fillStyle = greenLight;
+      ctx.fillStyle = p2Light;
       ctx.fillRect(7, 0, 2, 7);
-      ctx.fillStyle = greenDark;
+      ctx.fillStyle = p2Dark;
       ctx.fillRect(7, 0, 1, 7);
     } else if (dir === 'down') {
       // Left track
@@ -714,25 +733,25 @@ function generateP2TankTextures(scene: Phaser.Scene): void {
       ctx.fillRect(12, 10, 3, 2);
 
       // Tank Body
-      ctx.fillStyle = greenMain;
+      ctx.fillStyle = p2Main;
       ctx.fillRect(4, 1, 8, 11);
-      ctx.fillStyle = greenLight;
+      ctx.fillStyle = p2Light;
       ctx.fillRect(4, 1, 8, 1);
       ctx.fillRect(4, 1, 1, 11);
-      ctx.fillStyle = greenDark;
+      ctx.fillStyle = p2Dark;
       ctx.fillRect(4, 11, 8, 1);
       ctx.fillRect(11, 1, 1, 11);
 
       // Central Turret
-      ctx.fillStyle = greenDark;
+      ctx.fillStyle = p2Dark;
       ctx.fillRect(5, 4, 6, 6);
-      ctx.fillStyle = greenLight;
+      ctx.fillStyle = p2Light;
       ctx.fillRect(6, 5, 4, 4);
 
       // Cannon Barrel
-      ctx.fillStyle = greenLight;
+      ctx.fillStyle = p2Light;
       ctx.fillRect(7, 9, 2, 7);
-      ctx.fillStyle = greenDark;
+      ctx.fillStyle = p2Dark;
       ctx.fillRect(8, 9, 1, 7);
     } else if (dir === 'left') {
       // Top track (x: 2..15, y: 1..3)
@@ -752,25 +771,25 @@ function generateP2TankTextures(scene: Phaser.Scene): void {
       ctx.fillRect(11, 12, 2, 3);
 
       // Tank Body (x: 4..14, y: 4..11)
-      ctx.fillStyle = greenMain;
+      ctx.fillStyle = p2Main;
       ctx.fillRect(4, 4, 11, 8);
-      ctx.fillStyle = greenLight;
+      ctx.fillStyle = p2Light;
       ctx.fillRect(4, 4, 11, 1);
       ctx.fillRect(4, 4, 1, 8);
-      ctx.fillStyle = greenDark;
+      ctx.fillStyle = p2Dark;
       ctx.fillRect(4, 11, 11, 1);
       ctx.fillRect(14, 4, 1, 8);
 
       // Central Turret
-      ctx.fillStyle = greenDark;
+      ctx.fillStyle = p2Dark;
       ctx.fillRect(6, 5, 6, 6);
-      ctx.fillStyle = greenLight;
+      ctx.fillStyle = p2Light;
       ctx.fillRect(7, 6, 4, 4);
 
       // Cannon Barrel (x: 0..6, y: 7..8)
-      ctx.fillStyle = greenLight;
+      ctx.fillStyle = p2Light;
       ctx.fillRect(0, 7, 7, 2);
-      ctx.fillStyle = greenDark;
+      ctx.fillStyle = p2Dark;
       ctx.fillRect(0, 8, 7, 1);
     } else if (dir === 'right') {
       // Top track
@@ -790,25 +809,25 @@ function generateP2TankTextures(scene: Phaser.Scene): void {
       ctx.fillRect(10, 12, 2, 3);
 
       // Tank Body
-      ctx.fillStyle = greenMain;
+      ctx.fillStyle = p2Main;
       ctx.fillRect(1, 4, 11, 8);
-      ctx.fillStyle = greenLight;
+      ctx.fillStyle = p2Light;
       ctx.fillRect(1, 4, 11, 1);
       ctx.fillRect(1, 4, 1, 8);
-      ctx.fillStyle = greenDark;
+      ctx.fillStyle = p2Dark;
       ctx.fillRect(1, 11, 11, 1);
       ctx.fillRect(11, 4, 1, 8);
 
       // Central Turret
-      ctx.fillStyle = greenDark;
+      ctx.fillStyle = p2Dark;
       ctx.fillRect(4, 5, 6, 6);
-      ctx.fillStyle = greenLight;
+      ctx.fillStyle = p2Light;
       ctx.fillRect(5, 6, 4, 4);
 
       // Cannon Barrel
-      ctx.fillStyle = greenLight;
+      ctx.fillStyle = p2Light;
       ctx.fillRect(9, 7, 7, 2);
-      ctx.fillStyle = greenDark;
+      ctx.fillStyle = p2Dark;
       ctx.fillRect(9, 7, 7, 1);
     }
 
@@ -881,21 +900,24 @@ function drawSubTile(ctx: CanvasRenderingContext2D, srcX: number, srcY: number):
   }
 }
 
-const ENEMY_PALETTES = {
+export const ENEMY_PALETTES = {
+  // Tank Basic: màu trắng (1HP, chạy thường)
   BASIC: {
-    main: '#cbd5e1',
-    light: '#f8fafc',
-    dark: '#64748b',
-    track: '#334155',
-    trackLight: '#94a3b8',
+    main: '#ffffff',
+    light: '#ffffff',
+    dark: '#cbd5e1',
+    track: '#64748b',
+    trackLight: '#f8fafc',
   },
+  // Tank Fast: màu xanh biển (1HP, chạy nhanh nhất)
   FAST: {
-    main: '#06b6d4',
-    light: '#67e8f9',
-    dark: '#0e7490',
-    track: '#164e63',
-    trackLight: '#22d3ee',
+    main: '#2563eb',
+    light: '#60a5fa',
+    dark: '#1d4ed8',
+    track: '#1e3a8a',
+    trackLight: '#38bdf8',
   },
+  // Tank Power: màu xanh lá cây (2HP, chạy thường)
   POWER: {
     main: '#16a34a',
     light: '#86efac',
@@ -903,14 +925,15 @@ const ENEMY_PALETTES = {
     track: '#052e16',
     trackLight: '#4ade80',
   },
+  // Tank Armor: màu đen viền trắng (4HP, chạy chậm nhất)
   ARMOR: {
-    main: '#dc2626',
-    light: '#f87171',
-    dark: '#991b1b',
-    track: '#450a0a',
-    trackLight: '#ef4444',
+    main: '#09090b',
+    light: '#ffffff',
+    dark: '#ffffff',
+    track: '#09090b',
+    trackLight: '#ffffff',
   },
-};
+} as const;
 
 function generateEnemyTextures(scene: Phaser.Scene): void {
   const directions: Array<'up' | 'down' | 'left' | 'right'> = ['up', 'down', 'left', 'right'];
@@ -918,6 +941,7 @@ function generateEnemyTextures(scene: Phaser.Scene): void {
 
   for (const t of types) {
     const pal = ENEMY_PALETTES[t];
+    const isArmorBlackWhite = t === 'ARMOR';
 
     for (const dir of directions) {
       const key = `tank_${t.toLowerCase()}_${dir}`;
@@ -931,14 +955,29 @@ function generateEnemyTextures(scene: Phaser.Scene): void {
 
       if (dir === 'up') {
         // Tracks
-        ctx.fillStyle = pal.track;
-        ctx.fillRect(1, 2, 3, 13);
-        ctx.fillRect(12, 2, 3, 13);
-        ctx.fillStyle = pal.trackLight;
-        ctx.fillRect(1, 3, 3, 2);
-        ctx.fillRect(1, 8, 3, 2);
-        ctx.fillRect(12, 3, 3, 2);
-        ctx.fillRect(12, 8, 3, 2);
+        if (isArmorBlackWhite) {
+          // White border around tracks with black interior
+          ctx.fillStyle = pal.trackLight;
+          ctx.fillRect(1, 2, 3, 13);
+          ctx.fillRect(12, 2, 3, 13);
+          ctx.fillStyle = pal.track;
+          ctx.fillRect(2, 3, 1, 11);
+          ctx.fillRect(13, 3, 1, 11);
+          ctx.fillStyle = pal.trackLight;
+          ctx.fillRect(2, 6, 1, 1);
+          ctx.fillRect(2, 10, 1, 1);
+          ctx.fillRect(13, 6, 1, 1);
+          ctx.fillRect(13, 10, 1, 1);
+        } else {
+          ctx.fillStyle = pal.track;
+          ctx.fillRect(1, 2, 3, 13);
+          ctx.fillRect(12, 2, 3, 13);
+          ctx.fillStyle = pal.trackLight;
+          ctx.fillRect(1, 3, 3, 2);
+          ctx.fillRect(1, 8, 3, 2);
+          ctx.fillRect(12, 3, 3, 2);
+          ctx.fillRect(12, 8, 3, 2);
+        }
 
         // Body
         ctx.fillStyle = pal.main;
@@ -951,24 +990,47 @@ function generateEnemyTextures(scene: Phaser.Scene): void {
         ctx.fillRect(11, 4, 1, 11);
 
         // Turret
-        ctx.fillStyle = pal.dark;
-        ctx.fillRect(5, 6, 6, 6);
-        ctx.fillStyle = pal.light;
-        ctx.fillRect(6, 7, 4, 4);
+        if (isArmorBlackWhite) {
+          ctx.fillStyle = pal.main;
+          ctx.fillRect(5, 6, 6, 6);
+          ctx.fillStyle = pal.light;
+          ctx.fillRect(6, 7, 4, 4);
+          ctx.fillStyle = pal.main;
+          ctx.fillRect(7, 8, 2, 2);
+        } else {
+          ctx.fillStyle = pal.dark;
+          ctx.fillRect(5, 6, 6, 6);
+          ctx.fillStyle = pal.light;
+          ctx.fillRect(6, 7, 4, 4);
+        }
 
         // Cannon
         ctx.fillStyle = pal.light;
         ctx.fillRect(7, 0, 2, 7);
       } else if (dir === 'down') {
         // Tracks
-        ctx.fillStyle = pal.track;
-        ctx.fillRect(1, 1, 3, 13);
-        ctx.fillRect(12, 1, 3, 13);
-        ctx.fillStyle = pal.trackLight;
-        ctx.fillRect(1, 3, 3, 2);
-        ctx.fillRect(1, 8, 3, 2);
-        ctx.fillRect(12, 3, 3, 2);
-        ctx.fillRect(12, 8, 3, 2);
+        if (isArmorBlackWhite) {
+          ctx.fillStyle = pal.trackLight;
+          ctx.fillRect(1, 1, 3, 13);
+          ctx.fillRect(12, 1, 3, 13);
+          ctx.fillStyle = pal.track;
+          ctx.fillRect(2, 2, 1, 11);
+          ctx.fillRect(13, 2, 1, 11);
+          ctx.fillStyle = pal.trackLight;
+          ctx.fillRect(2, 5, 1, 1);
+          ctx.fillRect(2, 9, 1, 1);
+          ctx.fillRect(13, 5, 1, 1);
+          ctx.fillRect(13, 9, 1, 1);
+        } else {
+          ctx.fillStyle = pal.track;
+          ctx.fillRect(1, 1, 3, 13);
+          ctx.fillRect(12, 1, 3, 13);
+          ctx.fillStyle = pal.trackLight;
+          ctx.fillRect(1, 3, 3, 2);
+          ctx.fillRect(1, 8, 3, 2);
+          ctx.fillRect(12, 3, 3, 2);
+          ctx.fillRect(12, 8, 3, 2);
+        }
 
         // Body
         ctx.fillStyle = pal.main;
@@ -981,24 +1043,47 @@ function generateEnemyTextures(scene: Phaser.Scene): void {
         ctx.fillRect(11, 1, 1, 11);
 
         // Turret
-        ctx.fillStyle = pal.dark;
-        ctx.fillRect(5, 4, 6, 6);
-        ctx.fillStyle = pal.light;
-        ctx.fillRect(6, 5, 4, 4);
+        if (isArmorBlackWhite) {
+          ctx.fillStyle = pal.main;
+          ctx.fillRect(5, 4, 6, 6);
+          ctx.fillStyle = pal.light;
+          ctx.fillRect(6, 5, 4, 4);
+          ctx.fillStyle = pal.main;
+          ctx.fillRect(7, 6, 2, 2);
+        } else {
+          ctx.fillStyle = pal.dark;
+          ctx.fillRect(5, 4, 6, 6);
+          ctx.fillStyle = pal.light;
+          ctx.fillRect(6, 5, 4, 4);
+        }
 
         // Cannon
         ctx.fillStyle = pal.light;
         ctx.fillRect(7, 9, 2, 7);
       } else if (dir === 'left') {
         // Tracks
-        ctx.fillStyle = pal.track;
-        ctx.fillRect(2, 1, 13, 3);
-        ctx.fillRect(2, 12, 13, 3);
-        ctx.fillStyle = pal.trackLight;
-        ctx.fillRect(3, 1, 2, 3);
-        ctx.fillRect(8, 1, 2, 3);
-        ctx.fillRect(3, 12, 2, 3);
-        ctx.fillRect(8, 12, 2, 3);
+        if (isArmorBlackWhite) {
+          ctx.fillStyle = pal.trackLight;
+          ctx.fillRect(2, 1, 13, 3);
+          ctx.fillRect(2, 12, 13, 3);
+          ctx.fillStyle = pal.track;
+          ctx.fillRect(3, 2, 11, 1);
+          ctx.fillRect(3, 13, 11, 1);
+          ctx.fillStyle = pal.trackLight;
+          ctx.fillRect(6, 2, 1, 1);
+          ctx.fillRect(10, 2, 1, 1);
+          ctx.fillRect(6, 13, 1, 1);
+          ctx.fillRect(10, 13, 1, 1);
+        } else {
+          ctx.fillStyle = pal.track;
+          ctx.fillRect(2, 1, 13, 3);
+          ctx.fillRect(2, 12, 13, 3);
+          ctx.fillStyle = pal.trackLight;
+          ctx.fillRect(3, 1, 2, 3);
+          ctx.fillRect(8, 1, 2, 3);
+          ctx.fillRect(3, 12, 2, 3);
+          ctx.fillRect(8, 12, 2, 3);
+        }
 
         // Body
         ctx.fillStyle = pal.main;
@@ -1011,24 +1096,47 @@ function generateEnemyTextures(scene: Phaser.Scene): void {
         ctx.fillRect(14, 4, 1, 8);
 
         // Turret
-        ctx.fillStyle = pal.dark;
-        ctx.fillRect(6, 5, 6, 6);
-        ctx.fillStyle = pal.light;
-        ctx.fillRect(7, 6, 4, 4);
+        if (isArmorBlackWhite) {
+          ctx.fillStyle = pal.main;
+          ctx.fillRect(6, 5, 6, 6);
+          ctx.fillStyle = pal.light;
+          ctx.fillRect(7, 6, 4, 4);
+          ctx.fillStyle = pal.main;
+          ctx.fillRect(8, 7, 2, 2);
+        } else {
+          ctx.fillStyle = pal.dark;
+          ctx.fillRect(6, 5, 6, 6);
+          ctx.fillStyle = pal.light;
+          ctx.fillRect(7, 6, 4, 4);
+        }
 
         // Cannon
         ctx.fillStyle = pal.light;
         ctx.fillRect(0, 7, 7, 2);
       } else if (dir === 'right') {
         // Tracks
-        ctx.fillStyle = pal.track;
-        ctx.fillRect(1, 1, 13, 3);
-        ctx.fillRect(1, 12, 13, 3);
-        ctx.fillStyle = pal.trackLight;
-        ctx.fillRect(3, 1, 2, 3);
-        ctx.fillRect(8, 1, 2, 3);
-        ctx.fillRect(3, 12, 2, 3);
-        ctx.fillRect(8, 12, 2, 3);
+        if (isArmorBlackWhite) {
+          ctx.fillStyle = pal.trackLight;
+          ctx.fillRect(1, 1, 13, 3);
+          ctx.fillRect(1, 12, 13, 3);
+          ctx.fillStyle = pal.track;
+          ctx.fillRect(2, 2, 11, 1);
+          ctx.fillRect(2, 13, 11, 1);
+          ctx.fillStyle = pal.trackLight;
+          ctx.fillRect(5, 2, 1, 1);
+          ctx.fillRect(9, 2, 1, 1);
+          ctx.fillRect(5, 13, 1, 1);
+          ctx.fillRect(9, 13, 1, 1);
+        } else {
+          ctx.fillStyle = pal.track;
+          ctx.fillRect(1, 1, 13, 3);
+          ctx.fillRect(1, 12, 13, 3);
+          ctx.fillStyle = pal.trackLight;
+          ctx.fillRect(3, 1, 2, 3);
+          ctx.fillRect(8, 1, 2, 3);
+          ctx.fillRect(3, 12, 2, 3);
+          ctx.fillRect(8, 12, 2, 3);
+        }
 
         // Body
         ctx.fillStyle = pal.main;
@@ -1041,10 +1149,19 @@ function generateEnemyTextures(scene: Phaser.Scene): void {
         ctx.fillRect(11, 4, 1, 8);
 
         // Turret
-        ctx.fillStyle = pal.dark;
-        ctx.fillRect(4, 5, 6, 6);
-        ctx.fillStyle = pal.light;
-        ctx.fillRect(5, 6, 4, 4);
+        if (isArmorBlackWhite) {
+          ctx.fillStyle = pal.main;
+          ctx.fillRect(4, 5, 6, 6);
+          ctx.fillStyle = pal.light;
+          ctx.fillRect(5, 6, 4, 4);
+          ctx.fillStyle = pal.main;
+          ctx.fillRect(6, 7, 2, 2);
+        } else {
+          ctx.fillStyle = pal.dark;
+          ctx.fillRect(4, 5, 6, 6);
+          ctx.fillStyle = pal.light;
+          ctx.fillRect(5, 6, 4, 4);
+        }
 
         // Cannon
         ctx.fillStyle = pal.light;

@@ -975,10 +975,10 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                             <span
                               className={`pointer-events-none absolute inset-[1px] rounded-[2px] border flex items-center justify-center text-[8px] font-extrabold tracking-tighter ${
                                 spawnOverlay.role === 'P1'
-                                  ? 'border-amber-400 bg-amber-500/35 text-amber-200'
+                                  ? 'border-red-500 bg-red-500/35 text-red-200'
                                   : spawnOverlay.role === 'P2'
-                                    ? 'border-emerald-400 bg-emerald-500/35 text-emerald-200'
-                                    : 'border-rose-400 bg-rose-500/35 text-rose-100'
+                                    ? 'border-amber-400 bg-amber-500/35 text-amber-200'
+                                    : 'border-sky-400 bg-sky-500/35 text-sky-100'
                               }`}
                             >
                               {spawnOverlay.shortLabel}
@@ -994,15 +994,15 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                 <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px] text-zinc-400 px-1">
                   <div className="flex items-center gap-2">
                     <span className="inline-flex items-center gap-1">
-                      <span className="w-2.5 h-2.5 rounded-sm bg-amber-500/40 border border-amber-400 inline-block" />
+                      <span className="w-2.5 h-2.5 rounded-sm bg-red-500/40 border border-red-400 inline-block" />
                       P1 [12,3]
                     </span>
                     <span className="inline-flex items-center gap-1">
-                      <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500/40 border border-emerald-400 inline-block" />
+                      <span className="w-2.5 h-2.5 rounded-sm bg-amber-500/40 border border-amber-400 inline-block" />
                       P2 [12,9]
                     </span>
                     <span className="inline-flex items-center gap-1">
-                      <span className="w-2.5 h-2.5 rounded-sm bg-rose-500/40 border border-rose-400 inline-block" />
+                      <span className="w-2.5 h-2.5 rounded-sm bg-sky-500/40 border border-sky-400 inline-block" />
                       Enemy [0,0], [0,6], [0,12]
                     </span>
                   </div>
