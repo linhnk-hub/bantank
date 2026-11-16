@@ -242,7 +242,7 @@ export const SystemLogsAdminPanel: React.FC<SystemLogsAdminPanelProps> = ({ user
         <div>
           <div className="font-extrabold uppercase">TỪ CHỐI TRUY CẬP LOG HỆ THỐNG</div>
           <p className="text-rose-200/80 mt-0.5">
-            Chỉ tài khoản ADMIN duy nhất mới được phép xem, sao lưu hoặc quản lý nhật ký hệ thống.
+            Chỉ tài khoản Admin mới được phép xem, sao lưu hoặc quản lý nhật ký hệ thống.
           </p>
         </div>
       </div>

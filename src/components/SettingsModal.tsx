@@ -144,7 +144,7 @@ export function getAvailableSettingsTabsForRole(
   const tabs: Array<{ id: SettingsTabId; label: string; adminOnly: boolean }> = [
     {
       id: 'ACCOUNT',
-      label: 'Thông tin',
+      label: 'HỒ SƠ',
       adminOnly: false,
     },
   ];
@@ -152,21 +152,21 @@ export function getAvailableSettingsTabsForRole(
   if (hasRolePermission(effectiveRole, 'MANAGE_AVATAR_CATALOG')) {
     tabs.push({
       id: 'IMAGE_SETTINGS',
-      label: 'Hình ảnh',
+      label: 'AVATAR',
       adminOnly: true,
     });
   }
 
   tabs.push({
     id: 'AUDIO_SETTINGS',
-    label: 'Media',
+    label: 'ÂM THANH',
     adminOnly: false,
   });
 
   if (hasRolePermission(effectiveRole, 'MANAGE_STAGES')) {
     tabs.push({
       id: 'GAME_MODE_SETTINGS',
-      label: 'Chế độ chơi',
+      label: 'MÀN CHƠI',
       adminOnly: true,
     });
   }
@@ -174,7 +174,7 @@ export function getAvailableSettingsTabsForRole(
   if (hasRolePermission(effectiveRole, 'VIEW_AUDIT_AND_MONITORING')) {
     tabs.push({
       id: 'ADMIN_OTHER',
-      label: 'Cấp quyền',
+      label: 'PHÂN QUYỀN',
       adminOnly: true,
     });
   }
@@ -182,16 +182,16 @@ export function getAvailableSettingsTabsForRole(
   if (hasRolePermission(effectiveRole, 'VIEW_ACCOUNT_LIST')) {
     tabs.push({
       id: 'USER_ACCOUNTS',
-      label: 'Tài khoản',
+      label: 'DS TÀI KHOẢN',
       adminOnly: true,
     });
   }
 
-  // M7.5.1 PHẦN 4: Mục LOG HỆ THỐNG và BẢO TRÌ chỉ dành riêng cho duy nhất ADMIN (linhnk2013@gmail.com)
+  // M7.5.1 PHẦN 4: Mục LOG HỆ THỐNG và BẢO TRÌ chỉ dành riêng cho Admin
   if (effectiveRole === 'ADMIN') {
     tabs.push({
       id: 'SYSTEM_LOGS',
-      label: 'LOG HỆ THỐNG',
+      label: 'LOG',
       adminOnly: true,
     });
     tabs.push({
