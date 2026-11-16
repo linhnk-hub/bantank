@@ -263,7 +263,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               )}
               <span
                 data-testid="welcome-signin-gradient-text"
-                className="tracking-wide uppercase">
+                className="tracking-wide uppercase"
               >
                 {isProcessing ? 'ĐANG KẾT NỐI...' : 'ĐĂNG NHẬP'}
               </span>

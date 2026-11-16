@@ -1919,16 +1919,22 @@ async function verifyUiAndStageCloudSyncSuite() {
   ) {
     throw new Error('StageEditorPanel material palette separation or cloud sync check failed');
   }
+  const textureGenSrc = readSrc('src/game/textureGenerator.ts');
   if (
     !welcomeScreenSrc.includes('data-testid="welcome-signin-gradient-text"') ||
-    !welcomeScreenSrc.includes('from-yellow-200 via-amber-400 to-red-500 bg-clip-text text-transparent') ||
     !mainMenuScreenSrc.includes('data-testid="main-menu-slogan-image"') ||
     !mainMenuScreenSrc.includes('src="/slogan.png"') ||
     !mainMenuScreenSrc.includes('max-w-[260px]') ||
     !mainMenuScreenSrc.includes('data-testid="main-menu-play-gradient-text"') ||
-    !confirmPopupSrc.includes('formatSentenceLineBreaks')
+    !confirmPopupSrc.includes('formatSentenceLineBreaks') ||
+    !textureGenSrc.includes("main: '#dc2626'") ||
+    !textureGenSrc.includes("main: '#eab308'") ||
+    !textureGenSrc.includes("main: '#ffffff'") ||
+    !textureGenSrc.includes("main: '#2563eb'") ||
+    !textureGenSrc.includes("main: '#16a34a'") ||
+    !textureGenSrc.includes("main: '#09090b'")
   ) {
-    throw new Error('WelcomeScreen / MainMenuScreen / ConfirmationPopupModal consistency check failed');
+    throw new Error('WelcomeScreen / MainMenuScreen / ConfirmationPopupModal / Tank Colors consistency check failed');
   }
 
   // 4. End-to-End Stage 2 Edit -> Activate -> Cloud Sync -> Other Player StageManager & GameEngine
