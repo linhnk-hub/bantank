@@ -206,7 +206,7 @@
     },
     "SoundCatalogItem": {
       "title": "SoundCatalogItem",
-      "description": "Metadata danh mục âm thanh dùng chung lưu trên Firebase Storage (/sound_catalog/{soundId}), chỉ Admin duy nhất linhnk2013@gmail.com ghi.",
+      "description": "Metadata danh mục âm thanh dùng chung lưu trên Firebase Storage (/sound_catalog/{soundId}), chỉ Admin có quyền ghi.",
       "type": "object",
       "properties": {
         "soundId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },

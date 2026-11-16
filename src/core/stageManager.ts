@@ -175,7 +175,7 @@ export function validateStageDefinition(stage: StageDefinition): {
  */
 export const STAGE_1_DEFINITION: StageDefinition = {
   id: 1,
-  name: 'Stage 1 - Mặt Trận Khởi Đầu',
+  name: 'Stage 1 - KHỞI ĐẦU',
   map: STAGE_1_MAP,
   enemyQueue: [...ENEMY_CONFIG.QUEUE],
   spawnIntervalS: 1.0,
@@ -621,7 +621,7 @@ export class StageManager {
     if (!hasRolePermission(params.actorRole, 'ADD_STAGE')) {
       return {
         success: false,
-        errors: ['Tài khoản hiện tại không có quyền thêm màn chơi mới (Yêu cầu quyền Admin hoặc Super Admin).'],
+        errors: ['Tài khoản hiện tại không có quyền thêm màn chơi mới (Yêu cầu quyền Admin).'],
       };
     }
 
@@ -692,7 +692,7 @@ export class StageManager {
     if (!hasRolePermission(params.actorRole, 'SAVE_STAGE_DRAFT')) {
       return {
         success: false,
-        errors: ['Tài khoản hiện tại không có quyền lưu màn chơi (Yêu cầu quyền Admin hoặc Super Admin).'],
+        errors: ['Tài khoản hiện tại không có quyền lưu màn chơi (Yêu cầu quyền Admin).'],
       };
     }
 
@@ -806,7 +806,7 @@ export class StageManager {
     if (!hasRolePermission(params.actorRole, 'ACTIVATE_STAGE')) {
       return {
         success: false,
-        errors: ['Tài khoản hiện tại không có quyền kích hoạt màn chơi (Yêu cầu quyền Admin hoặc Super Admin).'],
+        errors: ['Tài khoản hiện tại không có quyền kích hoạt màn chơi (Yêu cầu quyền Admin).'],
       };
     }
 
@@ -907,7 +907,7 @@ export class StageManager {
     if (!hasRolePermission(params.actorRole, 'DEACTIVATE_STAGE')) {
       return {
         success: false,
-        errors: ['Tài khoản hiện tại không có quyền ngừng kích hoạt màn chơi (Yêu cầu quyền Admin hoặc Super Admin).'],
+        errors: ['Tài khoản hiện tại không có quyền ngừng kích hoạt màn chơi (Yêu cầu quyền Admin).'],
       };
     }
 
@@ -1337,7 +1337,7 @@ export class StageManager {
     ) {
       return {
         success: false,
-        error: 'Chỉ Admin duy nhất mới có quyền đồng bộ cấu hình màn chơi lên máy chủ.',
+        error: 'Chỉ Admin mới có quyền đồng bộ cấu hình màn chơi lên máy chủ.',
       };
     }
 

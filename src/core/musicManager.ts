@@ -15,7 +15,7 @@
  *    - Priority 2: Game Mode assignment (e.g., SOLO, TWO_PLAYER)
  *    - Priority 3: Global Default assignment (ALL_GAME)
  *    - Priority 4: Built-in Procedural 8-Bit Arcade Default BGM (SoundManager fallback)
- * 5. Super Admin role access control vs Standard Player permissions.
+ * 5. Admin role access control vs Standard Player permissions.
  * 6. Storage Adapter Pattern ready to switch seamlessly from Local Storage / IndexedDB to Firebase Storage & Firestore.
  */
 
@@ -430,7 +430,7 @@ export function validateSafeAudioOrStoragePath(
 }
 
 /**
- * Chuẩn hóa tên file nhạc do Super Admin chọn thành tên file an toàn cho `public/audio/` và GitHub Pages.
+ * Chuẩn hóa tên file nhạc do Admin chọn thành tên file an toàn cho `public/audio/` và GitHub Pages.
  */
 export function normalizeSafeAudioFileName(
   rawFileName: string,
@@ -1796,7 +1796,7 @@ export class MusicManager {
   }
 
   /**
-   * Trả về Blob và tên file chuẩn hóa để Super Admin tải xuống máy và đặt vào `public/audio/<normalizedFileName>`.
+   * Trả về Blob và tên file chuẩn hóa để Admin tải xuống máy và đặt vào `public/audio/<normalizedFileName>`.
    */
   public getStagedAudioDownloadBlob(): { blob: Blob; fileName: string } | null {
     if (!this.stagedAudioPackage || !this.stagedPackageBinary) return null;
@@ -2039,7 +2039,7 @@ export class MusicManager {
 
   /**
    * Xử lý dữ liệu `/system_config/audio` nhận được từ Firestore (khi mới mở trang, sau khi F5 reload,
-   * hoặc khi Super Admin kích hoạt phiên bản nhạc nền mới trên GitHub Pages).
+   * hoặc khi Admin kích hoạt phiên bản nhạc nền mới trên GitHub Pages).
    * - Kiểm tra an toàn đường dẫn `assetPath` (bắt buộc nằm trong thư mục `audio/`).
    * - Tải nhạc trực tiếp từ GitHub Pages kèm cache-busting `?v=<version>`.
    * - Nếu file lỗi hoặc không tồn tại, tự động chuyển về nhạc nền 8-bit mặc định.
@@ -2490,7 +2490,7 @@ export class MusicManager {
 
   /**
    * Bước 1 (Chuẩn bị gói nhạc cho GitHub Pages):
-   * Khi Super Admin chọn file nhạc trên giao diện:
+   * Khi Admin chọn file nhạc trên giao diện:
    * - Kiểm tra định dạng (MP3, OGG, WAV) và dung lượng (<= 25 MB, hỗ trợ file > 4 MB).
    * - Giải mã âm thanh cục bộ để kiểm tra tính toàn vẹn và cho phép nghe thử ngay lập tức.
    * - Tạo gói chuẩn bị (`StagedAudioPackage`) với tên file chuẩn hóa và đường dẫn `public/audio/<normalizedFileName>`.
@@ -2542,7 +2542,7 @@ export class MusicManager {
     if (!this.canManageMusic()) {
       return {
         success: false,
-        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền chuẩn bị gói nhạc nền.',
+        error: 'Chỉ Admin mới có quyền chuẩn bị gói nhạc nền.',
       };
     }
 
@@ -2635,7 +2635,7 @@ export class MusicManager {
 
   /**
    * Bước 2 (Xác minh file thực tế trên GitHub Pages & Kích hoạt `/system_config/audio` trên Firestore):
-   * - Chỉ sau khi Super Admin đã đặt file vào `public/audio/<normalizedFileName>`, push lên GitHub `main`
+   * - Chỉ sau khi Admin đã đặt file vào `public/audio/<normalizedFileName>`, push lên GitHub `main`
    *   và GitHub Pages đã phát hành file tại `./audio/<normalizedFileName>?v=<targetVersion>`,
    *   hệ thống mới tải thử và giải mã file từ GitHub Pages để xác nhận file thực sự tồn tại.
    * - Nếu file chưa có trên web server (HTTP 404 hoặc trả về trang HTML), hệ thống TỪ CHỐI kích hoạt
@@ -2650,7 +2650,7 @@ export class MusicManager {
     if (!this.canManageMusic()) {
       return {
         success: false,
-        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền kích hoạt nhạc nền chung.',
+        error: 'Chỉ Admin mới có quyền kích hoạt nhạc nền chung.',
       };
     }
 
@@ -2692,7 +2692,7 @@ export class MusicManager {
     if (!this.canManageMusic()) {
       return {
         success: false,
-        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền kích hoạt nhạc nền chung.',
+        error: 'Chỉ Admin mới có quyền kích hoạt nhạc nền chung.',
       };
     }
 
@@ -2906,7 +2906,7 @@ export class MusicManager {
    * Khi gọi `uploadTrack(file)` trên trình duyệt, hệ thống thực hiện Bước 1 (`stageAudioFileForGitHubPages`)
    * và nếu file đã có mặt sẵn trên `public/audio/` (hoặc đang dùng InMemorySharedMusicCloudAdapter trong kiểm thử)
    * thì xác minh và kích hoạt luôn. Nếu file chưa được push lên GitHub Pages, hệ thống dừng ở trạng thái
-   * đã chuẩn bị gói nhạc (`stagedPackage`) và thông báo rõ cho Super Admin đặt file vào `public/audio/`.
+   * đã chuẩn bị gói nhạc (`stagedPackage`) và thông báo rõ cho Admin đặt file vào `public/audio/`.
    */
   /**
    * M7.5.1 PHẦN 2: Chặn toàn bộ upload file âm thanh từ phía client lên Firebase Storage.
@@ -2997,7 +2997,7 @@ export class MusicManager {
     if (!this.canManageMusic()) {
       return {
         success: false,
-        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền kích hoạt âm thanh hệ thống.',
+        error: 'Chỉ Admin mới có quyền kích hoạt âm thanh hệ thống.',
       };
     }
 
@@ -3133,7 +3133,7 @@ export class MusicManager {
     if (!this.canManageMusic()) {
       return {
         success: false,
-        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền xóa âm thanh khỏi danh mục.',
+        error: 'Chỉ Admin mới có quyền xóa âm thanh khỏi danh mục.',
       };
     }
     const entry = this.soundCatalog.get(soundId);
@@ -3220,7 +3220,7 @@ export class MusicManager {
     if (!this.canManageMusic()) {
       return {
         success: false,
-        error: 'Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền cập nhật nhạc nền chung toàn hệ thống.',
+        error: 'Chỉ Admin mới có quyền cập nhật nhạc nền chung toàn hệ thống.',
       };
     }
 
@@ -3366,7 +3366,7 @@ export class MusicManager {
     nowMs?: number
   ): Promise<{ success: boolean; error?: string }> {
     if (!this.canManageMusic()) {
-      return { success: false, error: `Chỉ Admin duy nhất (${ADMIN_EMAIL}) mới có quyền bật/tắt nhạc nền chung.` };
+      return { success: false, error: `Chỉ Admin mới có quyền bật/tắt nhạc nền chung.` };
     }
     const current = this.sharedAudioConfig ?? (await this.cloudAdapter.getSystemAudioConfig().catch(() => null));
     if (!current) {
@@ -3431,7 +3431,7 @@ export class MusicManager {
     sourceInfo?: MusicTrackMetadata['sourceInfo'];
   }): { success: boolean; track?: MusicTrackMetadata; error?: string } {
     if (!this.canManageMusic()) {
-      return { success: false, error: `Chỉ Admin duy nhất (${ADMIN_EMAIL}) mới có quyền thêm nhạc nền.` };
+      return { success: false, error: `Chỉ Admin mới có quyền thêm nhạc nền.` };
     }
 
     const check = MusicManager.validateAudioFileBasic({

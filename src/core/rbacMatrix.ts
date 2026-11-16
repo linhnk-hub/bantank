@@ -106,7 +106,7 @@ export const RBAC_PERMISSION_MATRIX: readonly PermissionMatrixRow[] = Object.fre
     id: 'GRANT_REVOKE_MOD',
     category: 'Phân quyền Hệ thống',
     nameVi: 'Cấp/thu hồi quyền Mod',
-    descriptionVi: 'Cấp quyền Mod cho người chơi hoặc thu hồi quyền Mod về Người chơi (Chỉ Admin duy nhất linhnk2013@gmail.com).',
+    descriptionVi: 'Cấp quyền Mod cho người chơi hoặc thu hồi quyền Mod về Người chơi (Chỉ Admin).',
     status: 'DEPLOYED',
     statusLabelVi: 'Đã triển khai',
     ADMIN: true,
@@ -183,7 +183,7 @@ export const RBAC_PERMISSION_MATRIX: readonly PermissionMatrixRow[] = Object.fre
     id: 'MANAGE_AUDIO_SYSTEM',
     category: 'Tài nguyên & Hệ thống',
     nameVi: 'Quản lý âm thanh',
-    descriptionVi: 'Upload, thay thế, xóa nhạc nền hệ thống (BGM) và âm thanh hành động (Action SFX) (Chỉ Admin duy nhất).',
+    descriptionVi: 'Upload, thay thế, xóa nhạc nền hệ thống (BGM) và âm thanh hành động (Action SFX) (Chỉ Admin).',
     status: 'DEPLOYED',
     statusLabelVi: 'Đã triển khai',
     ADMIN: true,
@@ -194,7 +194,7 @@ export const RBAC_PERMISSION_MATRIX: readonly PermissionMatrixRow[] = Object.fre
     id: 'MANAGE_AVATAR_CATALOG',
     category: 'Tài nguyên & Hệ thống',
     nameVi: 'Quản lý avatar',
-    descriptionVi: 'Upload, thay thế phiên bản, ẩn/hiện và xóa Avatar trong Danh mục dùng chung (Chỉ Admin duy nhất).',
+    descriptionVi: 'Upload, thay thế phiên bản, ẩn/hiện và xóa Avatar trong Danh mục dùng chung (Chỉ Admin).',
     status: 'DEPLOYED',
     statusLabelVi: 'Đã triển khai',
     ADMIN: true,
@@ -205,7 +205,7 @@ export const RBAC_PERMISSION_MATRIX: readonly PermissionMatrixRow[] = Object.fre
     id: 'MANAGE_SYSTEM_SETTINGS',
     category: 'Tài nguyên & Hệ thống',
     nameVi: 'Quản lý cài đặt hệ thống',
-    descriptionVi: 'Cấu hình chế độ chơi ưu tiên và thiết lập vận hành chung (Chỉ Admin duy nhất).',
+    descriptionVi: 'Cấu hình chế độ chơi ưu tiên và thiết lập vận hành chung (Chỉ Admin).',
     status: 'DEPLOYED',
     statusLabelVi: 'Đã triển khai',
     ADMIN: true,
@@ -354,7 +354,7 @@ export function validateRoleAssignmentChange(params: {
     return {
       allowed: false,
       reasonVi:
-        'Từ chối truy cập: Chỉ Admin duy nhất (linhnk2013@gmail.com) mới có quyền cấp hoặc thu hồi quyền Mod.',
+        'Từ chối truy cập: Chỉ Admin mới có quyền cấp hoặc thu hồi quyền Mod.',
     };
   }
 

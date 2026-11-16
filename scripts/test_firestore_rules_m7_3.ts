@@ -737,7 +737,7 @@ async function main(): Promise<void> {
     );
 
     // =========================================================================
-    // Nhóm 17: Kiểm tra Session M7.1 (/user_sessions/{uid}) và Super Admin (/admins/{uid}) không bị ảnh hưởng
+    // Nhóm 17: Kiểm tra Session M7.1 (/user_sessions/{uid}) và Admin (/admins/{uid}) không bị ảnh hưởng
     // =========================================================================
     const sessionDocId = 'uid_host_1';
     const token1 = 'sess_token_1234567890abcdef';
@@ -1241,12 +1241,12 @@ async function main(): Promise<void> {
       const samplePayload = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
       const over5MbPayload = new Uint8Array(5 * 1024 * 1024 + 16);
 
-      // 1. Super Admin upload JPEG hợp lệ: PASS
+      // 1. Admin upload JPEG hợp lệ: PASS
       await checkRule(
         'R20_01_ALLOW_ADMIN_UPLOAD_JPEG',
         20,
         'ALLOW',
-        '1. Super Admin upload JPEG hợp lệ (allow create)',
+        '1. Admin upload JPEG hợp lệ (allow create)',
         'storage.rules: allow create -> isValidCatalogCreate (image/jpeg)',
         () =>
           uploadBytes(
@@ -1256,12 +1256,12 @@ async function main(): Promise<void> {
           )
       );
 
-      // 2. Super Admin upload PNG hợp lệ: PASS
+      // 2. Admin upload PNG hợp lệ: PASS
       await checkRule(
         'R20_02_ALLOW_ADMIN_UPLOAD_PNG',
         20,
         'ALLOW',
-        '2. Super Admin upload PNG hợp lệ (allow create)',
+        '2. Admin upload PNG hợp lệ (allow create)',
         'storage.rules: allow create -> isValidCatalogCreate (image/png)',
         () =>
           uploadBytes(
@@ -1271,12 +1271,12 @@ async function main(): Promise<void> {
           )
       );
 
-      // 3. Super Admin upload WebP hợp lệ: PASS
+      // 3. Admin upload WebP hợp lệ: PASS
       await checkRule(
         'R20_03_ALLOW_ADMIN_UPLOAD_WEBP',
         20,
         'ALLOW',
-        '3. Super Admin upload WebP hợp lệ (allow create)',
+        '3. Admin upload WebP hợp lệ (allow create)',
         'storage.rules: allow create -> isValidCatalogCreate (image/webp)',
         () =>
           uploadBytes(
@@ -1291,7 +1291,7 @@ async function main(): Promise<void> {
         'R20_04_ALLOW_ADMIN_GET_CATALOG_IMAGE',
         20,
         'ALLOW',
-        '4. Super Admin Gmail đã xác minh đọc ảnh trong avatar_catalog (allow get)',
+        '4. Admin Gmail đã xác minh đọc ảnh trong avatar_catalog (allow get)',
         'storage.rules: allow get: if isVerifiedPersonalGmail() && isValidCatalogPath(...)',
         () => getBytes(storageRef(superAdminStorage, 'avatar_catalog/tank_01/v1/gold.png'))
       );
@@ -1391,7 +1391,7 @@ async function main(): Promise<void> {
         'R20_12_ALLOW_ADMIN_CREATE_NEW_VERSION',
         20,
         'ALLOW',
-        '12. Super Admin tạo version mới (v2) thành công',
+        '12. Admin tạo version mới (v2) thành công',
         'storage.rules: allow create (resource == null trên v2)',
         () =>
           uploadBytes(
@@ -1406,7 +1406,7 @@ async function main(): Promise<void> {
         'R20_13_DENY_ADMIN_SECOND_UPLOAD_SAME_PATH',
         20,
         'DENY',
-        '13. Super Admin upload lần thứ hai vào chính đường dẫn đã tạo bị từ chối',
+        '13. Admin upload lần thứ hai vào chính đường dẫn đã tạo bị từ chối',
         'storage.rules: allow create requires resource == null & allow update: if false',
         () =>
           uploadBytes(
@@ -1421,7 +1421,7 @@ async function main(): Promise<void> {
         'R20_14_DENY_ADMIN_UPDATE_METADATA',
         20,
         'DENY',
-        '14. Super Admin cập nhật metadata object cũ bị từ chối (allow update: if false)',
+        '14. Admin cập nhật metadata object cũ bị từ chối (allow update: if false)',
         'storage.rules: allow update: if false',
         () =>
           updateMetadata(storageRef(superAdminStorage, 'avatar_catalog/tank_01/v1/gold.png'), {
@@ -1444,7 +1444,7 @@ async function main(): Promise<void> {
         'R20_16_ALLOW_ADMIN_DELETE_OBJECT',
         20,
         'ALLOW',
-        '16. Super Admin xóa object hợp lệ',
+        '16. Admin xóa object hợp lệ',
         'storage.rules: allow delete (resource != null && request.resource == null)',
         () => deleteObject(storageRef(superAdminStorage, 'avatar_catalog/tank_01/v1/gold.jpg'))
       );

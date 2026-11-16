@@ -6,19 +6,19 @@
  *
  * Kiến trúc bắt buộc:
  * - Loại bỏ hoàn toàn Cloudflare R2 / Cloudflare Worker và tính năng người chơi tự upload ảnh cá nhân.
- * - Chỉ Admin duy nhất (`linhnk2013@gmail.com`) được upload, thay thế (qua version mới `v{version + 1}`),
+ * - Chỉ Admin (`linhnk2013@gmail.com`) được upload, thay thế (qua version mới `v{version + 1}`),
  *   bật/tắt (`isActive`) và xóa avatar trong danh mục dùng chung trên Firebase Storage
  *   (`avatar_catalog/{avatarId}/v{version}/{fileName}`) kèm metadata trong Cloud Firestore (`/avatar_catalog/{avatarId}`).
  * - Firebase Storage Security Rules (`storage.rules`, `rules_version = '2'`) sử dụng phân quyền chi tiết:
  *   + `allow get`: chỉ Gmail cá nhân đã xác minh, đăng nhập qua Google (`google.com`), đúng đường dẫn hợp lệ.
  *   + `allow list: if false`: cấm liệt kê (`list`/`listAll`); client lấy danh mục từ Firestore (`/avatar_catalog`).
- *   + `allow create`: chỉ Super Admin, bắt buộc `resource == null && request.resource != null` (chặn tuyệt đối
+ *   + `allow create`: chỉ Admin, bắt buộc `resource == null && request.resource != null` (chặn tuyệt đối
  *     việc upload lần thứ 2 đè lên đường dẫn đã tồn tại), dung lượng `1..5242880` bytes, `image/jpeg|png|webp`.
  *   + `allow update: if false`: cấm cập nhật metadata hoặc ghi đè object cũ.
- *   + `allow delete`: chỉ Super Admin, bắt buộc `resource != null && request.resource == null`.
+ *   + `allow delete`: chỉ Admin, bắt buộc `resource != null && request.resource == null`.
  * - Lưu ý kỹ thuật về Magic Bytes & Cơ chế tải ảnh:
  *   + `validateCatalogAvatarBinary()` và `createImageBitmap()` kiểm tra magic bytes nhị phân và kích thước pixel
- *     ngay tại trình duyệt trước khi upload; Storage Rules chỉ kiểm tra `size`, `contentType` và quyền Super Admin.
+ *     ngay tại trình duyệt trước khi upload; Storage Rules chỉ kiểm tra `size`, `contentType` và quyền Admin.
  *   + Không lưu Base64, dữ liệu nhị phân hoặc `downloadURL` kèm token cố định vào Firestore;
  *     không coi URL token dài hạn là cơ chế xác thực người dùng.
  *   + Hỗ trợ tải ảnh kiểm soát bởi Rules qua `getBlob()` (kèm `BlobUrlCacheManager` quản lý cache và
@@ -1260,7 +1260,7 @@ function parseWebpDimensions(bytes: Uint8Array): { width: number; height: number
  * Lưu ý bảo mật (M7.3.5.1 Mục III):
  * - Đây là bước kiểm tra sớm ở phía trình duyệt (client-side validation) trước khi upload.
  * - Firebase Storage Security Rules KHÔNG có khả năng kiểm tra magic bytes nhị phân bên trong file,
- *   mà chỉ kiểm tra `request.resource.contentType`, `request.resource.size` và quyền Super Admin.
+ *   mà chỉ kiểm tra `request.resource.contentType`, `request.resource.size` và quyền Admin.
  */
 export function validateCatalogAvatarBinary(
   buffer: ArrayBuffer | Uint8Array
@@ -1551,14 +1551,14 @@ export type LegacyStorageActionAlias = StorageRuleGranularMethod;
  *      đúng đường dẫn `avatar_catalog/{avatarId}/v{version}/{fileName}`.
  *   2. `allow list: if false`: Cấm hoàn toàn thao tác liệt kê (`list` / `listAll`).
  *   3. `allow create`: Áp dụng cho ghi nội dung file (`uploadBytes` / `uploadBytesResumable`), chỉ cho phép
- *      Super Admin duy nhất (`linhnk.online@gmail.com`) khi kích thước `1 .. 5 MiB`, `contentType` thuộc
+ *      Admin khi kích thước `1 .. 5 MiB`, `contentType` thuộc
  *      `image/jpeg | image/png | image/webp` và `resource == null && request.resource != null`.
  *      Lưu ý M7.3.5.4: Không sử dụng mô phỏng In-memory để kết luận rằng `resource == null` chắc chắn chặn
  *      `uploadBytes` lần hai vào cùng một path trên Firebase Storage thực tế (trạng thái kiểm thử cho trường hợp
  *      upload lần hai cùng path khi chưa có Emulator/Production là `'NOT_PROVEN'`).
  *   4. `allow update: if false`: Áp dụng cho cập nhật metadata của file hiện có (`updateMetadata`) -> bị từ chối.
  *      Không mô tả `allow update: if false` là biện pháp ngăn `uploadBytes` ghi đè nội dung.
- *   5. `allow delete`: Chỉ cho phép Super Admin khi `resource != null` (`resourceExists === true`)
+ *   5. `allow delete`: Chỉ cho phép Admin khi `resource != null` (`resourceExists === true`)
  *      và `request.resource == null`.
  * - Mọi đường dẫn ngoài `avatar_catalog/{avatarId}/{versionSegment}/{fileName}` bị từ chối (`allow read, write: if false`).
  */
@@ -1602,7 +1602,7 @@ export function evaluateStorageCatalogRule(params: {
     return true;
   }
 
-  // Các thao tác ghi (`create`, `delete`, hoặc `write` tổng quát): chỉ Super Admin (`linhnk.online@gmail.com`)
+  // Các thao tác ghi (`create`, `delete`, hoặc `write` tổng quát): chỉ Admin
   const normalizedEmail = (params.authEmail || '').trim().toLowerCase();
   if (normalizedEmail !== SUPER_ADMIN_EMAIL.toLowerCase()) {
     return false;
@@ -1648,7 +1648,7 @@ export function evaluateStorageCatalogRule(params: {
 /**
  * Mô phỏng `firestore.rules` cho `/avatar_catalog/{avatarId}`:
  * - `allow get, list`: `isVerifiedPersonalGmail()`
- * - `allow create, update, delete`: chỉ Super Admin (`linhnk.online@gmail.com`) với schema hợp lệ,
+ * - `allow create, update, delete`: chỉ Admin với schema hợp lệ,
  *   không chứa `downloadURL`/`avatarUrl`/`base64`/`dataUrl`, và khi update `version >= existing.version`.
  */
 export function evaluateAvatarCatalogRule(params: {
@@ -1777,7 +1777,7 @@ export function evaluateAvatarCatalogRule(params: {
 /**
  * Mô phỏng `firestore.rules` cho `/users/{uid}` (M7.3.5.3 Mục V):
  * - `allow get`: mọi người chơi Gmail cá nhân đã xác minh.
- * - `allow list`: chỉ Super Admin (dùng với `limit(1)` để kiểm tra xem avatar danh mục có đang được người chơi sử dụng trước khi xóa hay không).
+ * - `allow list`: chỉ Admin (dùng với `limit(1)` để kiểm tra xem avatar danh mục có đang được người chơi sử dụng trước khi xóa hay không).
  * - Tách quyền chỉnh `displayName` khỏi quyền chọn avatar:
  *   + Khi khởi tạo (`create`):
  *     - Nhánh chọn avatar: chỉ chứa `['avatarType', 'avatarId', 'avatarUpdatedAt']` (và tùy chọn `'uid'` khớp `uid == authUid`).
@@ -2306,7 +2306,7 @@ export class InMemoryAvatarCatalogSystem {
    *          `highestVersionByAvatarId`, không xóa object, không tái sử dụng path và không tạo metadata catalog.
    *    - Nếu trạng thái là `'UPLOAD_CONFIRMED_METADATA_PENDING'`:
    *      + Kiểm tra lại object trên Storage vẫn tồn tại và khớp `uploadOperationId`, `fileSize`, `contentType`,
-   *        sau đó khôi phục vào `this.pendingSyncs` để Super Admin chỉ cần bấm retry ghi metadata Firestore.
+   *        sau đó khôi phục vào `this.pendingSyncs` để Admin chỉ cần bấm retry ghi metadata Firestore.
    */
   public async recoverPendingUploadsAfterF5(params: {
     currentUserUid: string | null;
@@ -2437,7 +2437,7 @@ export class InMemoryAvatarCatalogSystem {
   }
 
   /**
-   * Mô phỏng Super Admin upload mới hoặc thay thế ảnh trong danh mục (M7.3.5.3 & M7.3.5.5 Mục III):
+   * Mô phỏng Admin upload mới hoặc thay thế ảnh trong danh mục (M7.3.5.3 & M7.3.5.5 Mục III):
    * 1. Kiểm tra file (JPEG/PNG/WebP, <= 5 MiB, <= 2048x2048 px, magic bytes).
    * 2. Tổng hợp lịch sử `version` và `storagePath` từ cả 3 nguồn (Firestore catalog, pending records bền vững, used paths bền vững).
    * 3. Cấp phát `version`, `storagePath` mới và `uploadOperationId` (UUID duy nhất).
@@ -2961,7 +2961,7 @@ export class InMemoryAvatarCatalogSystem {
   }
 
   /**
-   * Super Admin bật / tắt (`isActive`) một avatar trong danh mục.
+   * Admin bật / tắt (`isActive`) một avatar trong danh mục.
    */
   public adminSetCatalogActive(params: {
     authEmail: string | null;
@@ -2999,7 +2999,7 @@ export class InMemoryAvatarCatalogSystem {
       return {
         success: false,
         errorCode: 'FIRESTORE_PERMISSION_DENIED',
-        message: 'Chỉ Super Admin được phép bật/tắt avatar trong danh mục.',
+        message: 'Chỉ Admin được phép bật/tắt avatar trong danh mục.',
       };
     }
 
@@ -3012,7 +3012,7 @@ export class InMemoryAvatarCatalogSystem {
   }
 
   /**
-   * Super Admin xóa hẳn một avatar khỏi danh mục (M7.3.5.1 Mục IV):
+   * Admin xóa hẳn một avatar khỏi danh mục (M7.3.5.1 Mục IV):
    * - Truy vấn có điều kiện theo `avatarId` kèm `limit(1)` thay vì tải toàn bộ `users`.
    * - Nếu đang có người chơi dùng -> chặn xóa và khuyến nghị ẩn (`isActive = false`).
    * - Nếu không còn ai dùng:
@@ -3046,7 +3046,7 @@ export class InMemoryAvatarCatalogSystem {
       return {
         success: false,
         errorCode: 'FIRESTORE_PERMISSION_DENIED',
-        message: 'Chỉ Super Admin mới có quyền xóa avatar khỏi danh mục.',
+        message: 'Chỉ Admin mới có quyền xóa avatar khỏi danh mục.',
       };
     }
 
@@ -3427,9 +3427,9 @@ export class InMemoryAvatarCatalogSystem {
   }
 
   /**
-   * M7.3.9 Mục 1: Mô phỏng đồng bộ luồng Super Admin chọn ảnh từ thiết bị -> kiểm tra hợp lệ ->
+   * M7.3.9 Mục 1: Mô phỏng đồng bộ luồng Admin chọn ảnh từ thiết bị -> kiểm tra hợp lệ ->
    * tải lên Storage -> lưu metadata vào `/avatar_catalog/{avatarId}` -> áp dụng ngay vào hồ sơ `/users/{uid}`
-   * của Super Admin -> trả về URL hiển thị ngay lập tức; nếu bất kỳ bước nào thất bại thì giữ nguyên ảnh cũ.
+   * của Admin -> trả về URL hiển thị ngay lập tức; nếu bất kỳ bước nào thất bại thì giữ nguyên ảnh cũ.
    */
   public uploadAndApplySuperAdminAvatarSync(params: {
     authUid: string;
@@ -3495,7 +3495,7 @@ export class InMemoryAvatarCatalogSystem {
       return {
         success: false,
         errorCode: 'STORAGE_PERMISSION_DENIED',
-        message: 'Chỉ Super Admin được phép tải ảnh đại diện lên Storage.',
+        message: 'Chỉ Admin được phép tải ảnh đại diện lên Storage.',
       };
     }
 
@@ -3558,7 +3558,7 @@ export class InMemoryAvatarCatalogSystem {
 
     this.catalogDocs.set(cleanId, incomingDoc);
 
-    // Áp dụng ngay vào hồ sơ /users/{uid} của Super Admin
+    // Áp dụng ngay vào hồ sơ /users/{uid} của Admin
     const selectRes = this.playerSelectAvatar({
       targetUid: params.authUid,
       authUid: params.authUid,
@@ -3695,7 +3695,7 @@ export class BlobObjectUrlCacheManager {
   }
 
   /**
-   * Thu hồi mọi URL thuộc các version cũ của cùng một `avatarId` khi Super Admin thay thế bằng version mới `v{version + 1}`.
+   * Thu hồi mọi URL thuộc các version cũ của cùng một `avatarId` khi Admin thay thế bằng version mới `v{version + 1}`.
    */
   public revokeObsoleteVersionsForAvatar(avatarId: string, keepStoragePath: string): number {
     const prefix = `avatar_catalog/${avatarId}/`;
@@ -4415,7 +4415,7 @@ export class AvatarManager {
 
   /**
    * Trả về danh sách toàn bộ avatar trong danh mục (sắp xếp theo `sortOrder` tăng dần).
-   * Người chơi chỉ hiển thị các mục có `isActive === true`; Super Admin thấy cả mục đang ẩn.
+   * Người chơi chỉ hiển thị các mục có `isActive === true`; Admin thấy cả mục đang ẩn.
    */
   public getCatalogItems(includeInactive: boolean = false): AvatarCatalogItem[] {
     const list = includeInactive
@@ -5314,7 +5314,7 @@ export class AvatarManager {
   }
 
   // ==========================================================================
-  // THAO TÁC QUẢN TRỊ CỦA SUPER ADMIN (`linhnk.online@gmail.com`)
+  // THAO TÁC QUẢN TRỊ CỦA ADMIN
   // ==========================================================================
 
   /**

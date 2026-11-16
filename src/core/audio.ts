@@ -1068,7 +1068,7 @@ export class SoundManager {
 
   /**
    * M7.3.9 Requirement 8: Built-in 8-bit procedural BGM fallback has been disabled.
-   * Only BGM uploaded and configured by Super Admin in MusicManager is played.
+   * Only BGM uploaded and configured by Admin in MusicManager is played.
    */
   public startBgm(): void {
     this.pauseBgm();

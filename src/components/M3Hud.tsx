@@ -271,7 +271,7 @@ export const M3Hud: React.FC<M3HudProps> = ({
         </div>
       )}
 
-      {/* Super Admin Internal Telemetry & Enemy Progress */}
+      {/* Admin Internal Telemetry & Enemy Progress */}
       {isSuperAdmin && (
         <>
           <div className="bg-neutral-950 p-2.5 rounded border border-neutral-800 space-y-2">

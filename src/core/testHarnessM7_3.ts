@@ -3575,7 +3575,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   }
 
   // =========================================================================
-  // M7_3_T31: M7.3.2 / M7.3.3 Test C – Nhạc nền Super Admin lưu bền vững qua /system_config/audio (assetPath trong audio/),
+  // M7_3_T31: M7.3.2 / M7.3.3 Test C – Nhạc nền Admin lưu bền vững qua /system_config/audio (assetPath trong audio/),
   //           đồng bộ sang người chơi khác, giữ nguyên sau reload, và fallback an toàn khi lỗi
   // =========================================================================
   {
@@ -3598,7 +3598,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     };
 
     // 1. Kiểm tra Security Rules cho /system_config/audio:
-    // - Super Admin được phép create/update/delete
+    // - Admin được phép create/update/delete
     const superAdminCreateAllow = evaluateSystemAudioConfigRule({
       action: 'create',
       docId: 'audio',
@@ -3699,7 +3699,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
 
     results.push({
       id: 'M7_3_T31',
-      name: 'T31: M7.3.2 / M7.3.3 Test C – Phân quyền /system_config/audio (chỉ Super Admin ghi, mọi người chơi đọc) & chống nhân đôi listener nhạc nền',
+      name: 'T31: M7.3.2 / M7.3.3 Test C – Phân quyền /system_config/audio (chỉ Admin ghi, mọi người chơi đọc) & chống nhân đôi listener nhạc nền',
       passed,
       details: `superAdminWriteOk=${superAdminCreateAllow}, playerReadOk=${playerReadAllow}, playerWriteBlocked=${!playerWriteDeny}, unverifiedBlocked=${!unverifiedReadDeny}, singleListenerOk=${singleListenerGuaranteed}, cleanupOk=${cleanupListenerOk}, nonAdminRejected=${nonAdminRejected || true}`,
     });
@@ -4225,8 +4225,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const storagePathWebpV1 = buildCatalogStoragePath('tank_01', 1, 'gold_tank.webp');
     const storagePathPngV2 = buildCatalogStoragePath('tank_01', 2, 'gold_tank_v2.png');
 
-    // (1) Super Admin upload JPEG hợp lệ: PASS
-    // (1) Super Admin upload JPEG hợp lệ (allow create, resource == null): PASS
+    // (1) Admin upload JPEG hợp lệ: PASS
+    // (1) Admin upload JPEG hợp lệ (allow create, resource == null): PASS
     const sr1AdminUploadJpegPass = evaluateStorageCatalogRule({
       method: 'create',
       storagePath: storagePathJpgV1,
@@ -4237,7 +4237,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       contentType: 'image/jpeg',
       sizeBytes: 4096,
     });
-    // (2) Super Admin upload PNG hợp lệ (allow create, resource == null): PASS
+    // (2) Admin upload PNG hợp lệ (allow create, resource == null): PASS
     const sr2AdminUploadPngPass = evaluateStorageCatalogRule({
       method: 'create',
       storagePath: storagePathPngV1,
@@ -4248,7 +4248,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       contentType: 'image/png',
       sizeBytes: 4096,
     });
-    // (3) Super Admin upload WebP hợp lệ (allow create, resource == null): PASS
+    // (3) Admin upload WebP hợp lệ (allow create, resource == null): PASS
     const sr3AdminUploadWebpPass = evaluateStorageCatalogRule({
       method: 'create',
       storagePath: storagePathWebpV1,
@@ -4334,7 +4334,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
         contentType: 'image/png',
         sizeBytes: 4096,
       }) === false;
-    // (9) Super Admin tạo version mới (v2, resourceExists == false): PASS
+    // (9) Admin tạo version mới (v2, resourceExists == false): PASS
     const sr9AdminCreateNewVersionPass = evaluateStorageCatalogRule({
       method: 'create',
       storagePath: storagePathPngV2,
@@ -4344,7 +4344,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       contentType: 'image/png',
       sizeBytes: 4096,
     });
-    // (10) Super Admin xóa object (allow delete, resourceExists == true, request.resource == null): PASS
+    // (10) Admin xóa object (allow delete, resourceExists == true, request.resource == null): PASS
     const sr10AdminDeletePass = evaluateStorageCatalogRule({
       method: 'delete',
       storagePath: storagePathPngV1,
@@ -4369,7 +4369,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const sr12SecondUploadSamePathNotProven =
       getSecondUploadSamePathStorageEnforcementVerdict(false) === 'NOT_PROVEN' &&
       SECOND_UPLOAD_SAME_PATH_STORAGE_RULE_STATUS === 'NOT_PROVEN';
-    // (13) Super Admin cập nhật metadata object cũ (allow update: if false): DENIED
+    // (13) Admin cập nhật metadata object cũ (allow update: if false): DENIED
     const sr13AdminUpdateMetadataDenied = evaluateStorageCatalogRule({
       method: 'update',
       storagePath: storagePathPngV1,
@@ -4569,7 +4569,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
         },
       }) === false;
 
-    // FR-6: Super Admin quản lý avatar_catalog (create/update/delete), người chơi thường bị chặn: PASS
+    // FR-6: Admin quản lý avatar_catalog (create/update/delete), người chơi thường bị chặn: PASS
     const fr6AdminManageCatalogPass =
       evaluateAvatarCatalogRule({
         action: 'create',
@@ -6623,7 +6623,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   }
 
   // =========================================================================
-  // T50: M7.3.9 (Mục 1) – Super Admin tải ảnh đại diện từ thiết bị, cập nhật ngay vào hồ sơ & giữ nguyên ảnh cũ nếu thất bại
+  // T50: M7.3.9 (Mục 1) – Admin tải ảnh đại diện từ thiết bị, cập nhật ngay vào hồ sơ & giữ nguyên ảnh cũ nếu thất bại
   // =========================================================================
   {
     const sys = new InMemoryAvatarCatalogSystem();
@@ -6666,7 +6666,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const clientValidationOk =
       validPng.valid === true && invalidSvg.valid === false && invalidOversize.valid === false;
 
-    // 2. Super Admin tải ảnh đại diện mới lên Storage -> lưu metadata vào /avatar_catalog -> áp dụng ngay cho hồ sơ Super Admin
+    // 2. Admin tải ảnh đại diện mới lên Storage -> lưu metadata vào /avatar_catalog -> áp dụng ngay cho hồ sơ Admin
     const uploadRes1 = sys.uploadAndApplySuperAdminAvatarSync({
       authUid: superAdminUid,
       authEmail: SUPER_ADMIN_EMAIL,
@@ -6717,7 +6717,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
 
     results.push({
       id: 'M7_3_T50',
-      name: 'T50: M7.3.9 (Mục 1) – Super Admin tải ảnh đại diện từ thiết bị, áp dụng ngay vào hồ sơ & bảo toàn ảnh cũ khi có lỗi',
+      name: 'T50: M7.3.9 (Mục 1) – Admin tải ảnh đại diện từ thiết bị, áp dụng ngay vào hồ sơ & bảo toàn ảnh cũ khi có lỗi',
       passed,
       details: `clientValidation=${clientValidationOk}, firstUploadApplied=${firstUploadAppliedOk}, preservedOnError=${previousAvatarPreservedOnError}`,
     });
@@ -7074,7 +7074,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       page3.accounts[0].uid === 'uid_user_21' &&
       noSensitiveFieldsLeaked;
 
-    // 3. Kiểm tra tắt hoàn toàn nhạc 8-bit mặc định tích hợp sẵn & chỉ phát nhạc Super Admin tải lên (Mục 8)
+    // 3. Kiểm tra tắt hoàn toàn nhạc 8-bit mặc định tích hợp sẵn & chỉ phát nhạc Admin tải lên (Mục 8)
     const sm = SoundManager.getInstance();
     sm.setCustomBgmActive(false);
     sm.startBgm();
@@ -7192,7 +7192,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   }
 
   // =========================================================================
-  // T56: M7.3.10 – Quy chuẩn Logo 200% (320x320), Nút Tắt/Mở nhanh âm thanh trên Top Menu & Quản lý/Upload Âm thanh Hành động (Action SFX) của Super Admin
+  // T56: M7.3.10 – Quy chuẩn Logo 200% (320x320), Nút Tắt/Mở nhanh âm thanh trên Top Menu & Quản lý/Upload Âm thanh Hành động (Action SFX) của Admin
   // =========================================================================
   {
     // 1. Kiểm tra quy chuẩn kích thước Logo 200% dùng chung (320px x 320px, giữ nguyên tỷ lệ object-contain)
@@ -7236,7 +7236,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       Math.abs(afterUnmuteSettings.bgmVolume - 0.42) < 0.001 &&
       Math.abs(afterUnmuteSettings.sfxVolume - 0.68) < 0.001;
 
-    // 3. Kiểm tra phân quyền & quản lý âm thanh hành động (Action SFX) của Super Admin (Mục 4)
+    // 3. Kiểm tra phân quyền & quản lý âm thanh hành động (Action SFX) của Admin (Mục 4)
     const all7ActionSlotsDefined = GAME_ACTION_SOUND_SLOTS.length === 7;
 
     // Người chơi thường (PLAYER) bị từ chối upload, xóa và bật/tắt Action SFX
@@ -7301,7 +7301,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
 
     results.push({
       id: 'M7_3_T56',
-      name: 'T56: M7.3.10 – Quy chuẩn Logo 200% (320x320), Nút Tắt/Mở nhanh âm thanh trên Top Menu & Quản lý/Upload Âm thanh Hành động (Action SFX) của Super Admin',
+      name: 'T56: M7.3.10 – Quy chuẩn Logo 200% (320x320), Nút Tắt/Mở nhanh âm thanh trên Top Menu & Quản lý/Upload Âm thanh Hành động (Action SFX) của Admin',
       passed,
       details: `logoSpec200Pct=${logoSpecOk}, quickMuteOff=${quickMuteOffOk}, quickMuteRestore=${quickMuteOnRestoreOk}, adminActionSfx=${adminActionSfxLifecycleOk}`,
     });
@@ -7441,7 +7441,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       auditLogs[0].newRole === 'PLAYER' &&
       auditLogs[1].newRole === 'MOD';
 
-    // Test A6: Chặn cấp quyền trái phép (Email cũ linhnk.online@gmail.com, Mod, Player bị từ chối; chặn tự hạ quyền Admin duy nhất; chặn cấp thêm Admin/Super Admin)
+    // Test A6: Chặn cấp quyền trái phép (Email cũ linhnk.online@gmail.com, Mod, Player bị từ chối; chặn tự hạ quyền Admin duy nhất; chặn cấp thêm Admin)
     setVerifiedServerRoleForUid('uid_mod_1', 'MOD');
     const oldAdminAttempt = authMgr.changeUserRoleSync({
       targetUid: 'uid_bulk_4',

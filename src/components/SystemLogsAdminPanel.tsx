@@ -411,7 +411,6 @@ export const SystemLogsAdminPanel: React.FC<SystemLogsAdminPanelProps> = ({ user
           <span>LOG HỆ THỐNG • KIỂM TOÁN, SAO LƯU &amp; LƯU TRỮ</span>
         </div>
         <div className="flex items-center gap-2 font-mono text-[10px] text-neutral-400">
-          <span>Chỉ ADMIN duy nhất</span>
           <button
             type="button"
             disabled={isSyncingCloudAudit}

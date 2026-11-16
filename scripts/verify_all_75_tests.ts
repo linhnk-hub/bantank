@@ -340,7 +340,7 @@ async function verifyM735SharedAvatarCatalogAsyncSuite() {
   const sys = new InMemoryAvatarCatalogSystem();
   const nowMs = 1_700_000_000_000;
 
-  // 1. Super Admin upload JPEG/PNG/WebP hợp lệ (<= 5 MB, <= 2048px): PASS
+  // 1. Admin upload JPEG/PNG/WebP hợp lệ (<= 5 MB, <= 2048px): PASS
   const upPng = await sys.adminUploadOrReplaceCatalogAvatar({
     authEmail: SUPER_ADMIN_EMAIL,
     isVerifiedPersonalGmail: true,
@@ -378,7 +378,7 @@ async function verifyM735SharedAvatarCatalogAsyncSuite() {
     nowMs,
   });
   if (!upPng.success || !upJpg.success || !upWebp.success) {
-    throw new Error('Case 1 failed: Super Admin valid JPEG/PNG/WebP upload must succeed');
+    throw new Error('Case 1 failed: Admin valid JPEG/PNG/WebP upload must succeed');
   }
 
   // 2. Người chơi thường upload bị chặn: PASS
@@ -573,7 +573,7 @@ async function verifyM735SharedAvatarCatalogAsyncSuite() {
     }
   }
 
-  // 12. Super Admin ẩn avatar (tank_gold -> isActive = false) -> người chơi đang dùng fallback về ảnh Google: PASS
+  // 12. Admin ẩn avatar (tank_gold -> isActive = false) -> người chơi đang dùng fallback về ảnh Google: PASS
   const hideRes = sys.adminSetCatalogActive({
     authEmail: SUPER_ADMIN_EMAIL,
     isVerifiedPersonalGmail: true,
@@ -597,7 +597,7 @@ async function verifyM735SharedAvatarCatalogAsyncSuite() {
     nowMs: nowMs + 6500,
   });
 
-  // 13. Super Admin thay ảnh bằng version mới (v2) -> hiển thị ảnh mới (avatar_catalog/tank_gold/v2/...): PASS
+  // 13. Admin thay ảnh bằng version mới (v2) -> hiển thị ảnh mới (avatar_catalog/tank_gold/v2/...): PASS
   const replaceV2 = await sys.adminUploadOrReplaceCatalogAvatar({
     authEmail: SUPER_ADMIN_EMAIL,
     isVerifiedPersonalGmail: true,
@@ -623,7 +623,7 @@ async function verifyM735SharedAvatarCatalogAsyncSuite() {
     throw new Error('Case 13 failed: Replacing catalog image with v2 must update version and URL');
   }
 
-  // 14. Super Admin xóa avatar không còn ai dùng (tank_crimson): PASS
+  // 14. Admin xóa avatar không còn ai dùng (tank_crimson): PASS
   const delUnused = sys.adminDeleteCatalogAvatar({
     authEmail: SUPER_ADMIN_EMAIL,
     isVerifiedPersonalGmail: true,
@@ -633,7 +633,7 @@ async function verifyM735SharedAvatarCatalogAsyncSuite() {
     throw new Error('Case 14 failed: Deleting unused catalog avatar must succeed');
   }
 
-  // 15. Super Admin xóa avatar đang có người dùng (tank_gold đang được uid_player_1 chọn) -> bị chặn & báo rõ lý do: PASS
+  // 15. Admin xóa avatar đang có người dùng (tank_gold đang được uid_player_1 chọn) -> bị chặn & báo rõ lý do: PASS
   const delInUse = sys.adminDeleteCatalogAvatar({
     authEmail: SUPER_ADMIN_EMAIL,
     isVerifiedPersonalGmail: true,

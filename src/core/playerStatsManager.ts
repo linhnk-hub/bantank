@@ -1427,7 +1427,7 @@ export class PlayerStatsManager {
       return {
         success: false,
         errorCode: 'PERMISSION_DENIED',
-        errorMessage: 'Chỉ ADMIN duy nhất mới có quyền kiểm tra đối chiếu dữ liệu Level người chơi.',
+        errorMessage: 'Chỉ Admin mới có quyền kiểm tra đối chiếu dữ liệu Level người chơi.',
         isProductionVerified: false,
         sourceMode: 'NONE',
         scannedCount: 0,

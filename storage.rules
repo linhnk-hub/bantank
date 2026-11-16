@@ -176,14 +176,14 @@ service firebase.storage {
       // 2. Liệt kê: cấm tuyệt đối (danh mục lấy từ Firestore /avatar_catalog)
       allow list: if false;
 
-      // 3. Upload nội dung file mới: chỉ Admin duy nhất (linhnk2013@gmail.com), yêu cầu resource == null
+      // 3. Upload nội dung file mới: chỉ Admin, yêu cầu resource == null
       allow create: if isAdmin()
                     && isValidCatalogCreate(avatarId, versionSegment, fileName);
 
       // 4. Cập nhật metadata của file hiện có: cấm tuyệt đối
       allow update: if false;
 
-      // 5. Xóa: chỉ Admin duy nhất (linhnk2013@gmail.com) khi resource != null && request.resource == null
+      // 5. Xóa: chỉ Admin khi resource != null && request.resource == null
       allow delete: if isAdmin()
                     && isValidCatalogDelete(avatarId, versionSegment, fileName);
     }
@@ -199,14 +199,14 @@ service firebase.storage {
       // 2. Liệt kê: cấm tuyệt đối (danh mục lấy từ Firestore /sound_catalog)
       allow list: if false;
 
-      // 3. Upload file âm thanh mới: chỉ Admin duy nhất (linhnk2013@gmail.com), yêu cầu resource == null
+      // 3. Upload file âm thanh mới: chỉ Admin, yêu cầu resource == null
       allow create: if isAdmin()
                     && isValidSoundCatalogCreate(soundId, versionSegment, fileName);
 
       // 4. Cập nhật tại chỗ: cấm tuyệt đối
       allow update: if false;
 
-      // 5. Xóa: chỉ Admin duy nhất (linhnk2013@gmail.com)
+      // 5. Xóa: chỉ Admin 
       allow delete: if isAdmin()
                     && isValidSoundCatalogDelete(soundId, versionSegment, fileName);
     }

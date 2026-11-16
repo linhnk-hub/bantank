@@ -389,7 +389,7 @@ service cloud.firestore {
     //    (M7.3.5: Danh mục Avatar dùng chung trên Firebase Storage + Firestore)
     //    - /avatar_catalog/{avatarId}:
     //      + Đọc (get, list): người chơi Gmail cá nhân đã xác minh (isVerifiedPersonalGmail()).
-    //      + Tạo, sửa, xóa: chỉ Admin duy nhất (linhnk2013@gmail.com).
+    //      + Tạo, sửa, xóa: chỉ Admin (linhnk2013@gmail.com).
     //      + Dùng Firestore Timestamp nhất quán (createdAt, updatedAt).
     //    - /users/{uid}:
     //      + Người chơi chỉ được cập nhật lựa chọn avatar của chính mình (isOwner(uid)).

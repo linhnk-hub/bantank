@@ -1134,7 +1134,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex items-center justify-between flex-wrap gap-2 border-b border-neutral-800 pb-2.5">
                   <div className="flex items-center gap-2 font-extrabold text-amber-300 text-xs sm:text-sm uppercase tracking-wider">
                     <Trophy className="w-4 h-4 text-amber-400" />
-                    <span>THỐNG KÊ NGƯỜI CHƠI &amp; PHIÊN TRUY CẬP</span>
+                    <span>THỐNG KÊ CHI TIẾT</span>
                   </div>
                   <span
                     className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
@@ -1361,24 +1361,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <span className="text-neutral-400">- SOLO:</span>
                         <span>
                           <strong className="text-white">{playerStats.matchesByMode.SOLO.played}</strong>{' '}
-                          (<span className="text-emerald-300">Thắng {playerStats.matchesByMode.SOLO.won}</span> •{' '}
-                          <span className="text-rose-300">Thua {playerStats.matchesByMode.SOLO.lost}</span>)
+                          (<span className="text-emerald-300">T {playerStats.matchesByMode.SOLO.won}</span> •{' '}
+                          <span className="text-rose-300">B {playerStats.matchesByMode.SOLO.lost}</span>)
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-neutral-400">- CO-OP AI:</span>
                         <span>
                           <strong className="text-white">{playerStats.matchesByMode.COOP_AI.played}</strong>{' '}
-                          (<span className="text-emerald-300">Thắng {playerStats.matchesByMode.COOP_AI.won}</span> •{' '}
-                          <span className="text-rose-300">Thua {playerStats.matchesByMode.COOP_AI.lost}</span>)
+                          (<span className="text-emerald-300">T {playerStats.matchesByMode.COOP_AI.won}</span> •{' '}
+                          <span className="text-rose-300">B {playerStats.matchesByMode.COOP_AI.lost}</span>)
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-neutral-400">- CO-OP Online:</span>
                         <span>
                           <strong className="text-white">{playerStats.matchesByMode.COOP_ONLINE.played}</strong>{' '}
-                          (<span className="text-emerald-300">Thắng {playerStats.matchesByMode.COOP_ONLINE.won}</span> •{' '}
-                          <span className="text-rose-300">Thua {playerStats.matchesByMode.COOP_ONLINE.lost}</span>)
+                          (<span className="text-emerald-300">T {playerStats.matchesByMode.COOP_ONLINE.won}</span> •{' '}
+                          <span className="text-rose-300">B {playerStats.matchesByMode.COOP_ONLINE.lost}</span>)
                         </span>
                       </div>
                     </div>

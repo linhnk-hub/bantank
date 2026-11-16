@@ -1090,7 +1090,7 @@ export class SystemAuditLogger {
       return {
         success: false,
         errorCode: 'PERMISSION_DENIED',
-        errorMessage: 'Chỉ ADMIN duy nhất mới có quyền thực thi dọn dẹp và lưu trữ log.',
+        errorMessage: 'Chỉ Admin mới có quyền thực thi dọn dẹp và lưu trữ log.',
         scopeKey,
         stepsCompleted: [],
       };
@@ -1526,7 +1526,7 @@ export class SystemAuditLogger {
       return {
         success: false,
         errorCode: 'PERMISSION_DENIED',
-        errorMessage: 'Chỉ ADMIN duy nhất mới có quyền đọc bản lưu trữ vĩnh viễn.',
+        errorMessage: 'Chỉ Admin mới có quyền đọc bản lưu trữ vĩnh viễn.',
       };
     }
     const [batch, manifest] = await Promise.all([
@@ -1675,7 +1675,7 @@ export class SystemAuditLogger {
       return {
         success: false,
         errorCode: 'PERMISSION_DENIED',
-        errorMessage: 'Từ chối truy cập: Chỉ ADMIN duy nhất được phép xem LOG HỆ THỐNG.',
+        errorMessage: 'Từ chối truy cập: Chỉ Admin được phép xem LOG HỆ THỐNG.',
         items: [],
         totalItems: 0,
         totalPages: 0,
@@ -1721,7 +1721,7 @@ export class SystemAuditLogger {
       return {
         success: false,
         errorCode: 'PERMISSION_DENIED',
-        errorMessage: 'Từ chối truy cập: Chỉ ADMIN duy nhất được phép xem Lịch sử người chơi.',
+        errorMessage: 'Từ chối truy cập: Chỉ Admin được phép xem Lịch sử người chơi.',
         items: [],
         totalItems: 0,
         totalPages: 0,
@@ -1771,7 +1771,7 @@ export class SystemAuditLogger {
       return {
         success: false,
         errorCode: 'PERMISSION_DENIED',
-        errorMessage: 'Từ chối truy cập: Chỉ ADMIN duy nhất được phép tra cứu Lịch sử Level.',
+        errorMessage: 'Từ chối truy cập: Chỉ Admin được phép tra cứu Lịch sử Level.',
         items: [],
         totalItems: 0,
         totalPages: 0,
@@ -1880,7 +1880,7 @@ export class SystemAuditLogger {
       return {
         success: false,
         errorCode: 'PERMISSION_DENIED',
-        errorMessage: 'Chỉ ADMIN duy nhất mới có quyền sao lưu dữ liệu log.',
+        errorMessage: 'Chỉ Admin mới có quyền sao lưu dữ liệu log.',
       };
     }
 

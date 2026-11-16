@@ -128,7 +128,7 @@ export function runAllM7_4Tests(): {
       const expectedName = EXPECTED_STAGE_NAMES[id];
       const managedNameOk =
         managed.name === expectedName ||
-        (id === 1 && managed.name === 'Stage 1 - Mặt Trận Khởi Đầu');
+        (id === 1 && managed.name === 'Stage 1 - KHỞI ĐẦU');
       if (spec.name !== expectedName || !managedNameOk) {
         all10MapsValid = false;
         mapChecks.push(`Stage ${id} name mismatch`);
