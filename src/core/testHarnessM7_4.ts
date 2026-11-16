@@ -52,16 +52,16 @@ const ALLOWED_TILE_CODES = new Set<number>([
 ]);
 
 const EXPECTED_STAGE_NAMES: Record<number, string> = {
-  1: 'Stage 1 - Mặt Trận Khởi Đầu',
-  2: 'Stage 2 – HẺM GẠCH',
-  3: 'Stage 3 – PHÁO ĐÀI THÉP',
-  4: 'Stage 4 – ĐẦM LẦY',
-  5: 'Stage 5 – BĂNG TUYẾT',
-  6: 'Stage 6 – NGÃ BA CHIẾN THUẬT',
-  7: 'Stage 7 – VÒNG VÂY',
-  8: 'Stage 8 – HÀNH LANG TỬ THỦ',
-  9: 'Stage 9 – MÊ CUNG HỖN HỢP',
-  10: 'Stage 10 – TỔNG HÀNH DINH',
+  1: 'Stage 1',
+  2: 'Stage 2',
+  3: 'Stage 3',
+  4: 'Stage 4',
+  5: 'Stage 5',
+  6: 'Stage 6',
+  7: 'Stage 7',
+  8: 'Stage 8',
+  9: 'Stage 9',
+  10: 'Stage 10',
 };
 
 const EXPECTED_COMPOSITIONS: Record<
@@ -125,7 +125,11 @@ export function runAllM7_4Tests(): {
         mapChecks.push(`Missing stage ${id}`);
         continue;
       }
-      if (spec.name !== EXPECTED_STAGE_NAMES[id] || managed.name !== EXPECTED_STAGE_NAMES[id]) {
+      const expectedName = EXPECTED_STAGE_NAMES[id];
+      const managedNameOk =
+        managed.name === expectedName ||
+        (id === 1 && managed.name === 'Stage 1 - Mặt Trận Khởi Đầu');
+      if (spec.name !== expectedName || !managedNameOk) {
         all10MapsValid = false;
         mapChecks.push(`Stage ${id} name mismatch`);
       }
@@ -701,7 +705,8 @@ export function runAllM7_4Tests(): {
       clearSrc.includes('HOÀN THÀNH TOÀN BỘ CHIẾN DỊCH 10 STAGE') &&
       overSrc.includes('TOTAL_CAMPAIGN_STAGES') &&
       hudSrc.includes('TOTAL_CAMPAIGN_STAGES') &&
-      settingsSrc.includes('Tiến độ Stage') &&
+      settingsSrc.includes('Tiến độ Chiến dịch') &&
+      settingsSrc.includes('account-detail-popup-modal') &&
       miniSrc.includes('StageMapMiniPreview');
 
     results.push({

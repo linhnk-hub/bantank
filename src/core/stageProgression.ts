@@ -9,6 +9,18 @@ import { SystemAuditLogger } from './systemAuditLogger.ts';
 
 export type ProgressionGameMode = 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE';
 
+export interface ModeStageProgressItem {
+  unlockedStage: number; // 1..10
+  completedStages: number[]; // sorted unique 1..10
+}
+
+export interface UserPerModeStageProgressRecord {
+  uid: string;
+  modes: Record<ProgressionGameMode, ModeStageProgressItem>;
+  updatedAtMs: number;
+  signature: string;
+}
+
 export interface UserStageProgressRecord {
   uid: string;
   unlockedStage: number; // 1..10
@@ -48,6 +60,7 @@ export interface StageAccessCheckResult {
 }
 
 const STORAGE_KEY_PREFIX = 'bantank_stage_progression_v1_';
+const BY_MODE_STORAGE_KEY_PREFIX = 'bantank_stage_prog_bymode_v1_';
 const SIGNING_DOMAIN = 'BANTANK_M7_4_1_STAGE_PROGRESSION_SALT_9F3A7C';
 
 function computeCanonicalDigest(payload: string): string {
@@ -104,6 +117,39 @@ function signClearProof(params: {
   );
 }
 
+function signPerModeProgressRecord(
+  uid: string,
+  modes: Record<ProgressionGameMode, ModeStageProgressItem>,
+  updatedAtMs: number
+): string {
+  const s = modes.SOLO;
+  const ai = modes.TWO_PLAYERS_AI;
+  const onl = modes.TWO_PLAYERS_ONLINE;
+  return computeCanonicalDigest(
+    `BYMODE|${uid}|S:${s.unlockedStage}:${s.completedStages.join(',')}|AI:${ai.unlockedStage}:${ai.completedStages.join(',')}|ONL:${onl.unlockedStage}:${onl.completedStages.join(',')}|${updatedAtMs}`
+  );
+}
+
+function createDefaultPerModeProgressRecord(
+  uid: string,
+  fallbackUnified?: UserStageProgressRecord
+): UserPerModeStageProgressRecord {
+  const updatedAtMs = Date.now();
+  const soloUnlocked = fallbackUnified ? fallbackUnified.unlockedStage : 1;
+  const soloCompleted = fallbackUnified ? [...fallbackUnified.completedStages] : [];
+  const modes: Record<ProgressionGameMode, ModeStageProgressItem> = {
+    SOLO: { unlockedStage: soloUnlocked, completedStages: soloCompleted },
+    TWO_PLAYERS_AI: { unlockedStage: 1, completedStages: [] },
+    TWO_PLAYERS_ONLINE: { unlockedStage: 1, completedStages: [] },
+  };
+  return {
+    uid,
+    modes,
+    updatedAtMs,
+    signature: signPerModeProgressRecord(uid, modes, updatedAtMs),
+  };
+}
+
 function createDefaultProgressRecord(uid: string): UserStageProgressRecord {
   const updatedAtMs = Date.now();
   const completedStages: number[] = [];
@@ -120,6 +166,7 @@ function createDefaultProgressRecord(uid: string): UserStageProgressRecord {
 export class StageProgressionManager {
   private static instance: StageProgressionManager | null = null;
   private cache: Map<string, UserStageProgressRecord> = new Map();
+  private byModeCache: Map<string, UserPerModeStageProgressRecord> = new Map();
   private fallbackStorage: Map<string, string> = new Map();
   private issuedTokenIds: Set<string> = new Set();
   private listeners: Set<() => void> = new Set();
@@ -150,6 +197,10 @@ export class StageProgressionManager {
 
   private getStorageKey(uid: string): string {
     return `${STORAGE_KEY_PREFIX}${uid}`;
+  }
+
+  private getByModeStorageKey(uid: string): string {
+    return `${BY_MODE_STORAGE_KEY_PREFIX}${uid}`;
   }
 
   private readRawStorage(key: string): string | null {
@@ -305,6 +356,129 @@ export class StageProgressionManager {
       ...rec,
       completedStages: [...rec.completedStages],
     };
+  }
+
+  public getUserPerModeStageProgressSnapshot(
+    uid: string | null | undefined
+  ): Record<ProgressionGameMode, ModeStageProgressItem> {
+    const cleanUid = (uid || '').trim();
+    if (!cleanUid) {
+      return {
+        SOLO: { unlockedStage: 1, completedStages: [] },
+        TWO_PLAYERS_AI: { unlockedStage: 1, completedStages: [] },
+        TWO_PLAYERS_ONLINE: { unlockedStage: 1, completedStages: [] },
+      };
+    }
+
+    const unifiedRec = this.getUserStageProgressSnapshot(cleanUid);
+    try {
+      const raw = this.readRawStorage(this.getByModeStorageKey(cleanUid));
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<UserPerModeStageProgressRecord>;
+        if (
+          parsed &&
+          parsed.uid === cleanUid &&
+          parsed.modes &&
+          typeof parsed.updatedAtMs === 'number' &&
+          typeof parsed.signature === 'string'
+        ) {
+          const sanitizeItem = (item: Partial<ModeStageProgressItem> | undefined): ModeStageProgressItem => {
+            const comp = normalizeCompletedStages(item?.completedStages);
+            const maxC = comp.length > 0 ? comp[comp.length - 1] : 0;
+            const maxAllowed = Math.min(TOTAL_CAMPAIGN_STAGES, maxC + 1);
+            const unl =
+              typeof item?.unlockedStage === 'number' &&
+              Number.isInteger(item.unlockedStage) &&
+              item.unlockedStage >= 1 &&
+              item.unlockedStage <= maxAllowed
+                ? item.unlockedStage
+                : maxAllowed;
+            return { unlockedStage: unl, completedStages: comp };
+          };
+          const modes: Record<ProgressionGameMode, ModeStageProgressItem> = {
+            SOLO: sanitizeItem(parsed.modes.SOLO),
+            TWO_PLAYERS_AI: sanitizeItem(parsed.modes.TWO_PLAYERS_AI),
+            TWO_PLAYERS_ONLINE: sanitizeItem(parsed.modes.TWO_PLAYERS_ONLINE),
+          };
+          const expectedSig = signPerModeProgressRecord(cleanUid, modes, parsed.updatedAtMs);
+          if (parsed.signature === expectedSig) {
+            this.byModeCache.set(cleanUid, {
+              uid: cleanUid,
+              modes,
+              updatedAtMs: parsed.updatedAtMs,
+              signature: expectedSig,
+            });
+            return {
+              SOLO: {
+                unlockedStage: modes.SOLO.unlockedStage,
+                completedStages: [...modes.SOLO.completedStages],
+              },
+              TWO_PLAYERS_AI: {
+                unlockedStage: modes.TWO_PLAYERS_AI.unlockedStage,
+                completedStages: [...modes.TWO_PLAYERS_AI.completedStages],
+              },
+              TWO_PLAYERS_ONLINE: {
+                unlockedStage: modes.TWO_PLAYERS_ONLINE.unlockedStage,
+                completedStages: [...modes.TWO_PLAYERS_ONLINE.completedStages],
+              },
+            };
+          }
+        }
+      }
+    } catch {
+      // Fallback below
+    }
+
+    const fallback = createDefaultPerModeProgressRecord(cleanUid, unifiedRec);
+    this.byModeCache.set(cleanUid, fallback);
+    return {
+      SOLO: {
+        unlockedStage: fallback.modes.SOLO.unlockedStage,
+        completedStages: [...fallback.modes.SOLO.completedStages],
+      },
+      TWO_PLAYERS_AI: {
+        unlockedStage: fallback.modes.TWO_PLAYERS_AI.unlockedStage,
+        completedStages: [...fallback.modes.TWO_PLAYERS_AI.completedStages],
+      },
+      TWO_PLAYERS_ONLINE: {
+        unlockedStage: fallback.modes.TWO_PLAYERS_ONLINE.unlockedStage,
+        completedStages: [...fallback.modes.TWO_PLAYERS_ONLINE.completedStages],
+      },
+    };
+  }
+
+  private recordModeStageClear(
+    uid: string,
+    gameMode: ProgressionGameMode,
+    stageId: number
+  ): void {
+    if (!uid) return;
+    const currentModes = this.getUserPerModeStageProgressSnapshot(uid);
+    const safeMode: ProgressionGameMode =
+      gameMode === 'TWO_PLAYERS_AI' || gameMode === 'TWO_PLAYERS_ONLINE' ? gameMode : 'SOLO';
+    const target = currentModes[safeMode];
+    const completedSet = new Set<number>(target.completedStages);
+    completedSet.add(stageId);
+    const nextCompleted = Array.from(completedSet).sort((a, b) => a - b);
+    const candidateUnlock = Math.min(TOTAL_CAMPAIGN_STAGES, stageId + 1);
+    const nextUnlocked = Math.max(target.unlockedStage, candidateUnlock);
+
+    const nextModes: Record<ProgressionGameMode, ModeStageProgressItem> = {
+      ...currentModes,
+      [safeMode]: {
+        unlockedStage: nextUnlocked,
+        completedStages: nextCompleted,
+      },
+    };
+    const updatedAtMs = Date.now();
+    const rec: UserPerModeStageProgressRecord = {
+      uid,
+      modes: nextModes,
+      updatedAtMs,
+      signature: signPerModeProgressRecord(uid, nextModes, updatedAtMs),
+    };
+    this.byModeCache.set(uid, rec);
+    this.writeRawStorage(this.getByModeStorageKey(uid), JSON.stringify(rec));
   }
 
   public getUnlockedStageForUser(uid: string | null | undefined, isTrialMode = false): number {
@@ -526,6 +700,7 @@ export class StageProgressionManager {
     };
 
     this.saveRecord(updatedRec);
+    this.recordModeStageClear(cleanUid, proof.gameMode, proof.stageId);
     if (newlyUnlockedStage !== null) {
       SystemAuditLogger.getInstance().recordEvent({
         severity: 'INFO',
@@ -572,6 +747,7 @@ export class StageProgressionManager {
   public clearInMemoryCacheForTesting(): void {
     // Useful for simulating fresh session / re-login from persistent storage
     this.cache.clear();
+    this.byModeCache.clear();
   }
 
   public writeRawSerializedRecordForTesting(uid: string, rawJson: string): void {
@@ -585,13 +761,20 @@ export class StageProgressionManager {
     if (uid) {
       const cleanUid = uid.trim();
       this.cache.delete(cleanUid);
+      this.byModeCache.delete(cleanUid);
       this.removeRawStorage(this.getStorageKey(cleanUid));
+      this.removeRawStorage(this.getByModeStorageKey(cleanUid));
     } else {
       this.cache.clear();
+      this.byModeCache.clear();
       this.fallbackStorage.clear();
       this.issuedTokenIds.clear();
       for (const k of this.listPrefixedStorageKeys()) {
         this.removeRawStorage(k);
+        const u = k.slice(STORAGE_KEY_PREFIX.length);
+        if (u) {
+          this.removeRawStorage(this.getByModeStorageKey(u));
+        }
       }
     }
     this.notifyListeners();

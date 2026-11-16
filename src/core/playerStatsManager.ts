@@ -55,9 +55,18 @@ export interface PlayerAuthHistoryRecord {
   note: string;
 }
 
+export type StatsModeCategory = 'SOLO' | 'COOP_AI' | 'COOP_ONLINE';
+
+export interface ModeMatchCounters {
+  played: number;
+  won: number;
+  lost: number;
+}
+
 export interface PersistedMatchEventSummary {
   outcome: 'WIN' | 'LOSS';
   earnedXp: number;
+  modeCategory?: StatsModeCategory;
   defeatedByType: {
     BASIC: number;
     FAST: number;
@@ -73,6 +82,7 @@ export interface PersistedPerUidStats {
   matchesPlayed: number;
   matchesWon: number;
   matchesLost: number;
+  matchesByMode: Record<StatsModeCategory, ModeMatchCounters>;
   totalEnemiesDefeated: number;
   defeatedByType: {
     BASIC: number;
@@ -124,10 +134,16 @@ export interface PlayerFullStatisticsSnapshot {
   xuBalance: number;
   unlockedStage: number;
   completedStages: number[];
+  campaignByMode: {
+    SOLO: { unlockedStage: number; completedStages: number[] };
+    COOP_AI: { unlockedStage: number; completedStages: number[] };
+    COOP_ONLINE: { unlockedStage: number; completedStages: number[] };
+  };
   // 4. Hoạt động chiến đấu & Co-op
   matchesPlayed: number;
   matchesWon: number;
   matchesLost: number;
+  matchesByMode: Record<StatsModeCategory, ModeMatchCounters>;
   totalEnemiesDefeated: number;
   defeatedByType: {
     BASIC: number;
@@ -220,6 +236,17 @@ function resolveXpGrantSourceFromGameMode(gameMode: string): XpGrantSource {
     return 'COOP_AI_BATTLE';
   }
   return 'SOLO_BATTLE';
+}
+
+function resolveStatsModeCategory(gameMode: string | undefined | null): StatsModeCategory {
+  const mode = String(gameMode || '').toUpperCase();
+  if (mode.includes('ONLINE')) {
+    return 'COOP_ONLINE';
+  }
+  if (mode.includes('TWO_PLAYERS') || mode.includes('COOP')) {
+    return 'COOP_AI';
+  }
+  return 'SOLO';
 }
 
 export class PlayerStatsManager {
@@ -355,6 +382,11 @@ export class PlayerStatsManager {
       matchesPlayed: 0,
       matchesWon: 0,
       matchesLost: 0,
+      matchesByMode: {
+        SOLO: { played: 0, won: 0, lost: 0 },
+        COOP_AI: { played: 0, won: 0, lost: 0 },
+        COOP_ONLINE: { played: 0, won: 0, lost: 0 },
+      },
       totalEnemiesDefeated: 0,
       defeatedByType: {
         BASIC: 0,
@@ -378,9 +410,19 @@ export class PlayerStatsManager {
     try {
       const parsed = JSON.parse(raw) as Partial<PersistedPerUidStats>;
       if (!parsed || parsed.uid !== uid) return null;
+      const sanitizeModeCounters = (rawCounter?: Partial<ModeMatchCounters>): ModeMatchCounters => ({
+        played: Math.max(0, Number(rawCounter?.played || 0)),
+        won: Math.max(0, Number(rawCounter?.won || 0)),
+        lost: Math.max(0, Number(rawCounter?.lost || 0)),
+      });
       return {
         ...this.createEmptyPerUidStats(uid),
         ...parsed,
+        matchesByMode: {
+          SOLO: sanitizeModeCounters(parsed.matchesByMode?.SOLO),
+          COOP_AI: sanitizeModeCounters(parsed.matchesByMode?.COOP_AI),
+          COOP_ONLINE: sanitizeModeCounters(parsed.matchesByMode?.COOP_ONLINE),
+        },
         defeatedByType: {
           BASIC: Number(parsed.defeatedByType?.BASIC || 0),
           FAST: Number(parsed.defeatedByType?.FAST || 0),
@@ -398,6 +440,10 @@ export class PlayerStatsManager {
                   {
                     outcome: s?.outcome === 'WIN' ? 'WIN' : 'LOSS',
                     earnedXp: Math.max(0, Number(s?.earnedXp || 0)),
+                    modeCategory:
+                      s?.modeCategory === 'COOP_AI' || s?.modeCategory === 'COOP_ONLINE'
+                        ? s.modeCategory
+                        : 'SOLO',
                     defeatedByType: {
                       BASIC: Math.max(0, Number(s?.defeatedByType?.BASIC || 0)),
                       FAST: Math.max(0, Number(s?.defeatedByType?.FAST || 0)),
@@ -449,6 +495,11 @@ export class PlayerStatsManager {
     let sumF = 0;
     let sumP = 0;
     let sumA = 0;
+    const summaryByMode: Record<StatsModeCategory, ModeMatchCounters> = {
+      SOLO: { played: 0, won: 0, lost: 0 },
+      COOP_AI: { played: 0, won: 0, lost: 0 },
+      COOP_ONLINE: { played: 0, won: 0, lost: 0 },
+    };
     for (const summary of Object.values(mergedSummaries)) {
       summaryPlayed += 1;
       if (summary.outcome === 'WIN') summaryWon += 1;
@@ -458,12 +509,37 @@ export class PlayerStatsManager {
       sumF += summary.defeatedByType.FAST;
       sumP += summary.defeatedByType.POWER;
       sumA += summary.defeatedByType.ARMOR;
+      const cat: StatsModeCategory =
+        summary.modeCategory === 'COOP_AI' || summary.modeCategory === 'COOP_ONLINE'
+          ? summary.modeCategory
+          : 'SOLO';
+      summaryByMode[cat].played += 1;
+      if (summary.outcome === 'WIN') summaryByMode[cat].won += 1;
+      else summaryByMode[cat].lost += 1;
     }
     const summaryEnemies = sumB + sumF + sumP + sumA;
 
     const takeDiskTotals =
       (disk.recordedXpEventIds?.length ?? 0) >= (mem.recordedXpEventIds?.length ?? 0);
     const baseMatchSource = takeDiskTotals ? disk : mem;
+
+    const mergeModeCat = (cat: StatsModeCategory): ModeMatchCounters => ({
+      played: Math.max(
+        disk.matchesByMode?.[cat]?.played ?? 0,
+        mem.matchesByMode?.[cat]?.played ?? 0,
+        summaryByMode[cat].played
+      ),
+      won: Math.max(
+        disk.matchesByMode?.[cat]?.won ?? 0,
+        mem.matchesByMode?.[cat]?.won ?? 0,
+        summaryByMode[cat].won
+      ),
+      lost: Math.max(
+        disk.matchesByMode?.[cat]?.lost ?? 0,
+        mem.matchesByMode?.[cat]?.lost ?? 0,
+        summaryByMode[cat].lost
+      ),
+    });
 
     return {
       uid: disk.uid,
@@ -472,6 +548,11 @@ export class PlayerStatsManager {
       matchesPlayed: Math.max(disk.matchesPlayed, mem.matchesPlayed, summaryPlayed),
       matchesWon: Math.max(disk.matchesWon, mem.matchesWon, summaryWon),
       matchesLost: Math.max(disk.matchesLost, mem.matchesLost, summaryLost),
+      matchesByMode: {
+        SOLO: mergeModeCat('SOLO'),
+        COOP_AI: mergeModeCat('COOP_AI'),
+        COOP_ONLINE: mergeModeCat('COOP_ONLINE'),
+      },
       totalEnemiesDefeated: Math.max(
         disk.totalEnemiesDefeated,
         mem.totalEnemiesDefeated,
@@ -1040,11 +1121,25 @@ export class PlayerStatsManager {
         ? params.runTotalScoreXp
         : safeEarned;
 
+    const modeCat = resolveStatsModeCategory(params.gameMode);
     record.matchesPlayed += 1;
     if (params.outcome === 'WIN') {
       record.matchesWon += 1;
     } else {
       record.matchesLost += 1;
+    }
+    if (!record.matchesByMode) {
+      record.matchesByMode = {
+        SOLO: { played: 0, won: 0, lost: 0 },
+        COOP_AI: { played: 0, won: 0, lost: 0 },
+        COOP_ONLINE: { played: 0, won: 0, lost: 0 },
+      };
+    }
+    record.matchesByMode[modeCat].played += 1;
+    if (params.outcome === 'WIN') {
+      record.matchesByMode[modeCat].won += 1;
+    } else {
+      record.matchesByMode[modeCat].lost += 1;
     }
     record.accumulatedBattleXp += safeEarned;
     record.highScoreXp = Math.max(record.highScoreXp, safeEarned, safeRunTotal);
@@ -1064,6 +1159,7 @@ export class PlayerStatsManager {
       [xpEventId]: {
         outcome: params.outcome,
         earnedXp: safeEarned,
+        modeCategory: modeCat,
         defeatedByType: { BASIC: b, FAST: f, POWER: p, ARMOR: a },
       },
     };
@@ -1141,9 +1237,19 @@ export class PlayerStatsManager {
         xuBalance: 0,
         unlockedStage: 1,
         completedStages: [],
+        campaignByMode: {
+          SOLO: { unlockedStage: 1, completedStages: [] },
+          COOP_AI: { unlockedStage: 1, completedStages: [] },
+          COOP_ONLINE: { unlockedStage: 1, completedStages: [] },
+        },
         matchesPlayed: 0,
         matchesWon: 0,
         matchesLost: 0,
+        matchesByMode: {
+          SOLO: { played: 0, won: 0, lost: 0 },
+          COOP_AI: { played: 0, won: 0, lost: 0 },
+          COOP_ONLINE: { played: 0, won: 0, lost: 0 },
+        },
         totalEnemiesDefeated: 0,
         defeatedByType: { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 },
         coopRoomsParticipated: 0,
@@ -1166,7 +1272,9 @@ export class PlayerStatsManager {
     this.ensureUserFirestoreSubscription(cleanUid);
     const localStats = this.getOrLoadPerUidStats(cleanUid);
     const cloudStats = this.cloudFieldsByUid.get(cleanUid) ?? null;
-    const stageProg = StageProgressionManager.getInstance().getUserStageProgressSnapshot(cleanUid);
+    const stageProgMgr = StageProgressionManager.getInstance();
+    const stageProg = stageProgMgr.getUserStageProgressSnapshot(cleanUid);
+    const perModeProg = stageProgMgr.getUserPerModeStageProgressSnapshot(cleanUid);
     const scoreMgr = new ScoreManager();
     const levelMgr = PlayerLevelManager.getInstance();
 
@@ -1249,9 +1357,28 @@ export class PlayerStatsManager {
       xuBalance,
       unlockedStage: stageProg.unlockedStage,
       completedStages: [...stageProg.completedStages],
+      campaignByMode: {
+        SOLO: {
+          unlockedStage: perModeProg.SOLO.unlockedStage,
+          completedStages: [...perModeProg.SOLO.completedStages],
+        },
+        COOP_AI: {
+          unlockedStage: perModeProg.TWO_PLAYERS_AI.unlockedStage,
+          completedStages: [...perModeProg.TWO_PLAYERS_AI.completedStages],
+        },
+        COOP_ONLINE: {
+          unlockedStage: perModeProg.TWO_PLAYERS_ONLINE.unlockedStage,
+          completedStages: [...perModeProg.TWO_PLAYERS_ONLINE.completedStages],
+        },
+      },
       matchesPlayed: localStats.matchesPlayed,
       matchesWon: localStats.matchesWon,
       matchesLost: localStats.matchesLost,
+      matchesByMode: {
+        SOLO: { ...(localStats.matchesByMode?.SOLO ?? { played: 0, won: 0, lost: 0 }) },
+        COOP_AI: { ...(localStats.matchesByMode?.COOP_AI ?? { played: 0, won: 0, lost: 0 }) },
+        COOP_ONLINE: { ...(localStats.matchesByMode?.COOP_ONLINE ?? { played: 0, won: 0, lost: 0 }) },
+      },
       totalEnemiesDefeated: localStats.totalEnemiesDefeated,
       defeatedByType: { ...localStats.defeatedByType },
       coopRoomsParticipated: localStats.coopRoomsParticipated,

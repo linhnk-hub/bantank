@@ -5390,11 +5390,11 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       getRoleNameFrameClasses('ADMIN').includes('border-neutral-700/80') &&
       getRoleNameFrameClasses('MOD').includes('border-neutral-700/80') &&
       getRoleNameFrameClasses('PLAYER').includes('border-neutral-700/80') &&
-      getRoleTrademarkBadge('ADMIN') === 'A' &&
-      getRoleTrademarkBadge('MOD') === 'M' &&
+      getRoleTrademarkBadge('ADMIN') === 'Ⓐ' &&
+      getRoleTrademarkBadge('MOD') === 'Ⓜ' &&
       getRoleTrademarkBadge('PLAYER') === null &&
       getRoleDisplayInfo('ADMIN').label === 'Admin' &&
-      getRoleDisplayInfo('ADMIN').trademarkBadge === 'A';
+      getRoleDisplayInfo('ADMIN').trademarkBadge === 'Ⓐ';
     clearVerifiedServerRoles();
 
     // 3. Hạng mục 3: Kiểm tra đồng bộ Single-BGM giữa MusicManager và SoundManager
@@ -7029,14 +7029,15 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       !regularTabIds.includes('ADMIN_OTHER') &&
       !regularTabIds.includes('USER_ACCOUNTS') &&
       !regularTabIds.includes('SYSTEM_LOGS') &&
-      superAdminTabLabels.length === 7 &&
+      superAdminTabLabels.length === 8 &&
       superAdminTabLabels[0] === 'Thông tin' &&
       superAdminTabLabels[1] === 'Hình ảnh' &&
       superAdminTabLabels[2] === 'Media' &&
       superAdminTabLabels[3] === 'Chế độ chơi' &&
       superAdminTabLabels[4] === 'Cấp quyền' &&
       superAdminTabLabels[5] === 'Tài khoản' &&
-      superAdminTabLabels[6] === 'LOG HỆ THỐNG';
+      superAdminTabLabels[6] === 'LOG HỆ THỐNG' &&
+      superAdminTabLabels[7] === 'BẢO TRÌ';
 
     // 2. Kiểm tra phân trang danh sách Tài khoản (tối đa 10 tài khoản/trang, Trước/Sau) & bảo mật quyền truy cập (Mục 3)
     const seedAccounts = Array.from({ length: 25 }, (_, idx) => {
@@ -8441,7 +8442,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const tc2Pass =
       mm.canManageMusic() === true &&
       sm.canManageActionSounds() === true &&
-      adminTabs.length === 7 &&
+      adminTabs.length === 8 &&
       hasRolePermission('ADMIN', 'MANAGE_STAGES') &&
       hasRolePermission('ADMIN', 'MANAGE_AUDIO_SYSTEM') &&
       hasRolePermission('ADMIN', 'MANAGE_AVATAR_CATALOG') &&
@@ -9170,11 +9171,12 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const playerTabs = getAvailableSettingsTabsForRole('PLAYER').map((t) => t.id);
     const section3UnifiedLayoutOk =
       UNIFIED_SETTINGS_MODAL_WIDTH_CLASS === 'w-full max-w-4xl' &&
-      adminTabs.length === 7 &&
+      adminTabs.length === 8 &&
       adminTabs.includes('USER_ACCOUNTS') &&
       adminTabs.includes('ADMIN_OTHER') &&
       adminTabs.includes('IMAGE_SETTINGS') &&
       adminTabs.includes('SYSTEM_LOGS') &&
+      adminTabs.includes('MAINTENANCE') &&
       modTabs.includes('USER_ACCOUNTS') &&
       !modTabs.includes('IMAGE_SETTINGS') &&
       !modTabs.includes('SYSTEM_LOGS') &&
@@ -10230,8 +10232,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
   {
     // 1. Role trademark badges
     const roleBadgeOk =
-      getRoleTrademarkBadge('ADMIN') === 'A' &&
-      getRoleTrademarkBadge('MOD') === 'M' &&
+      getRoleTrademarkBadge('ADMIN') === 'Ⓐ' &&
+      getRoleTrademarkBadge('MOD') === 'Ⓜ' &&
       getRoleTrademarkBadge('PLAYER') === null &&
       !getRoleNameFrameClasses('ADMIN').includes('emerald') &&
       !getRoleNameFrameClasses('MOD').includes('sky');

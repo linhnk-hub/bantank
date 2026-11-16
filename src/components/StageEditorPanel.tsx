@@ -33,6 +33,7 @@ import {
   type StageLifecycleStatus,
 } from '../core/stageManager.ts';
 import { hasRolePermission, type UserRole } from '../core/rbacMatrix.ts';
+import { ConfirmationPopupModal } from './ConfirmationPopupModal.tsx';
 
 interface StageEditorPanelProps {
   actorRole: UserRole;
@@ -445,16 +446,23 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
 
   return (
     <div className="space-y-4">
+      <ConfirmationPopupModal
+        isOpen={Boolean(feedbackBanner)}
+        type={feedbackBanner?.type ?? 'success'}
+        messages={feedbackBanner?.messages ?? []}
+        onClose={() => setFeedbackBanner(null)}
+      />
+
       {/* Header & Add Stage CTA */}
       <div className="p-3.5 rounded-lg bg-zinc-900 border border-zinc-800 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <div className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
               <Layers className="w-4 h-4" />
-              Quản lý danh sách màn chơi (Stage) & Thiết kế bản đồ 13×13
+              Quản lý màn chơi (Stage) &amp; Thiết kế bản đồ 13×13
             </div>
             <p className="text-[11px] text-zinc-400 mt-0.5">
-              Stage 1 chính thức luôn được bảo toàn nguyên trạng. Màn chơi mới tạo mặc định ở trạng thái Bản nháp cho đến khi nhấn Kích hoạt.
+              Stage 1 chính thức được bảo vệ nguyên trạng. Màn chơi mới tạo ở trạng thái Bản nháp cho đến khi bấm Kích hoạt.
             </p>
           </div>
           {canEditStages && (
@@ -462,7 +470,7 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
               type="button"
               onClick={handleAddStage}
               data-testid="btn-add-stage"
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-colors shadow"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-xs transition-colors shadow cursor-pointer"
             >
               <Plus className="w-3.5 h-3.5" />
               Thêm màn chơi
@@ -492,18 +500,15 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
           </div>
         )}
 
-        {/* Stage Table */}
+        {/* Stage Table (Đã bỏ cột Tên Stage, Phiên bản, Người chỉnh sửa theo đặc tả) */}
         <div className="overflow-x-auto rounded-lg border border-zinc-800 bg-zinc-950">
           <table className="w-full text-left border-collapse text-[11px]">
             <thead>
               <tr className="bg-zinc-900/90 text-zinc-400 border-b border-zinc-800">
-                <th className="py-2 px-2.5 font-semibold whitespace-nowrap">Thứ tự</th>
-                <th className="py-2 px-2.5 font-semibold">Tên Stage</th>
-                <th className="py-2 px-2.5 font-semibold whitespace-nowrap">Trạng thái</th>
-                <th className="py-2 px-2.5 font-semibold whitespace-nowrap">Phiên bản</th>
-                <th className="py-2 px-2.5 font-semibold whitespace-nowrap">Cập nhật gần nhất</th>
-                <th className="py-2 px-2.5 font-semibold whitespace-nowrap">Người chỉnh sửa</th>
-                <th className="py-2 px-2.5 font-semibold text-right whitespace-nowrap">Hành động</th>
+                <th className="py-2 px-3 font-semibold whitespace-nowrap">Thứ tự</th>
+                <th className="py-2 px-3 font-semibold whitespace-nowrap">Trạng thái</th>
+                <th className="py-2 px-3 font-semibold whitespace-nowrap">Cập nhật gần nhất</th>
+                <th className="py-2 px-3 font-semibold text-right whitespace-nowrap">Hành động</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-zinc-800/70">
@@ -525,17 +530,14 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                       isSelected ? 'bg-amber-500/10' : 'hover:bg-zinc-900/50'
                     }`}
                   >
-                    <td className="py-2 px-2.5 font-mono font-bold text-amber-400 whitespace-nowrap">
-                      #{stage.orderIndex}
-                      {stage.isOfficialStage1 && (
-                        <span className="ml-1 px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[9px]">
-                          CHÍNH THỨC
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2 px-2.5 font-semibold text-zinc-100">
+                    <td className="py-2 px-3 font-mono font-bold text-amber-400 whitespace-nowrap">
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        <span>{stage.name}</span>
+                        <span>Stage #{stage.orderIndex}</span>
+                        {stage.isOfficialStage1 && (
+                          <span className="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[9px]">
+                            CHÍNH THỨC
+                          </span>
+                        )}
                         {hasPendingDraftDiff && stage.status === 'ACTIVE' && (
                           <span className="px-1.5 py-0.5 rounded bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[9px] font-bold">
                             Chưa kích hoạt bản sửa
@@ -543,29 +545,18 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                         )}
                       </div>
                     </td>
-                    <td className="py-2 px-2.5 whitespace-nowrap">
+                    <td className="py-2 px-3 whitespace-nowrap">
                       {getStatusBadge(stage.status)}
                     </td>
-                    <td className="py-2 px-2.5 font-mono text-zinc-300 whitespace-nowrap">
-                      v{stage.version}
-                      {stage.activeVersion !== null && (
-                        <span className="text-[10px] text-emerald-400 ml-1">
-                          (Active: v{stage.activeVersion})
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-2 px-2.5 text-zinc-400 whitespace-nowrap">
+                    <td className="py-2 px-3 text-zinc-400 font-mono whitespace-nowrap">
                       {new Date(stage.updatedAtMs).toLocaleString('vi-VN')}
                     </td>
-                    <td className="py-2 px-2.5 text-zinc-300 truncate max-w-[140px]">
-                      {stage.updatedBy}
-                    </td>
-                    <td className="py-2 px-2.5 text-right whitespace-nowrap">
+                    <td className="py-2 px-3 text-right whitespace-nowrap">
                       <div className="inline-flex items-center gap-1">
                         <button
                           type="button"
                           onClick={() => handleSelectStageForEdit(stage)}
-                          className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors ${
+                          className={`px-2 py-1 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
                             isSelected
                               ? 'bg-amber-500 text-zinc-950 border-amber-400'
                               : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700'
@@ -581,7 +572,7 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                               onClick={() => {
                                 void handleSaveStage(stage);
                               }}
-                              className="px-2 py-1 rounded bg-sky-900/70 hover:bg-sky-800 disabled:opacity-50 border border-sky-700/70 text-sky-200 text-[10px] font-bold transition-colors"
+                              className="px-2 py-1 rounded bg-sky-900/70 hover:bg-sky-800 disabled:opacity-50 border border-sky-700/70 text-sky-200 text-[10px] font-bold transition-colors cursor-pointer"
                             >
                               Lưu
                             </button>
@@ -592,7 +583,7 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                                 onClick={() => {
                                   void handleActivateStage(stage);
                                 }}
-                                className="px-2 py-1 rounded bg-emerald-900/70 hover:bg-emerald-800 disabled:opacity-50 border border-emerald-700/70 text-emerald-200 text-[10px] font-bold transition-colors"
+                                className="px-2 py-1 rounded bg-emerald-900/70 hover:bg-emerald-800 disabled:opacity-50 border border-emerald-700/70 text-emerald-200 text-[10px] font-bold transition-colors cursor-pointer"
                               >
                                 Kích hoạt
                               </button>
@@ -604,9 +595,9 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                                 onClick={() => {
                                   void handleDeactivateStage(stage);
                                 }}
-                                className="px-2 py-1 rounded bg-rose-900/70 hover:bg-rose-800 disabled:opacity-50 border border-rose-700/70 text-rose-200 text-[10px] font-bold transition-colors"
+                                className="px-2 py-1 rounded bg-rose-900/70 hover:bg-rose-800 disabled:opacity-50 border border-rose-700/70 text-rose-200 text-[10px] font-bold transition-colors cursor-pointer"
                               >
-                                Ngừng kích hoạt
+                                Hủy kích hoạt
                               </button>
                             )}
                             {stage.previousActiveVersions.length > 0 && (
@@ -617,7 +608,7 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                                   void handleRestorePreviousVersion(stage);
                                 }}
                                 title="Khôi phục phiên bản hợp lệ trước đó"
-                                className="px-1.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 border border-zinc-700 text-amber-300 text-[10px] font-bold transition-colors"
+                                className="px-1.5 py-1 rounded bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 border border-zinc-700 text-amber-300 text-[10px] font-bold transition-colors cursor-pointer"
                               >
                                 <History className="w-3 h-3" />
                               </button>
@@ -706,9 +697,15 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                     if (res.success && res.stage) {
                       setManagedStages(stageManager.getManagedStages());
                       handleSelectStageForEdit(res.stage);
+                      setFeedbackBanner({
+                        type: 'success',
+                        messages: [
+                          `Đã tạo màn chơi mới (Stage #${res.stage.orderIndex}) từ bản sao Stage 1. Hãy chỉnh sửa bản đồ và nhấn Lưu / Kích hoạt.`,
+                        ],
+                      });
                     }
                   }}
-                  className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[10px] whitespace-nowrap"
+                  className="px-2.5 py-1 rounded bg-amber-500 hover:bg-amber-400 text-zinc-950 font-bold text-[10px] whitespace-nowrap cursor-pointer"
                 >
                   Sao chép sang Stage mới
                 </button>

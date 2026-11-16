@@ -32,6 +32,10 @@ import {
   Award,
   Clock,
   History,
+  Wrench,
+  Power,
+  Rocket,
+  Mail,
 } from 'lucide-react';
 import { SoundManager, type AudioSettings } from '../core/audio.ts';
 import { MusicManager } from '../core/musicManager.ts';
@@ -54,15 +58,28 @@ import {
   hasRolePermission,
   getRoleChangeAuditLogs,
   type UserAccountSummary,
+  type DetailedUserAccountProfile,
   type UserRole,
 } from '../core/authManager.ts';
 import {
   PlayerStatsManager,
+  formatPvpRankLabel,
   type PlayerFullStatisticsSnapshot,
 } from '../core/playerStatsManager.ts';
+import {
+  DifficultyConfigManager,
+  type DifficultyModeKey,
+  type DifficultyProfileParameters,
+} from '../core/difficultyManager.ts';
+import {
+  MaintenanceManager,
+  buildMaintenanceNoticeMessage,
+  type SystemMaintenanceConfigDocument,
+} from '../core/maintenanceManager.ts';
 import { MusicAdminPanel } from './MusicAdminPanel.tsx';
 import { StageEditorPanel } from './StageEditorPanel.tsx';
 import { SystemLogsAdminPanel } from './SystemLogsAdminPanel.tsx';
+import { ConfirmationPopupModal } from './ConfirmationPopupModal.tsx';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import {
   getShowOnlineNetStatsPreference,
@@ -76,7 +93,8 @@ export type SettingsTabId =
   | 'GAME_MODE_SETTINGS'
   | 'ADMIN_OTHER'
   | 'USER_ACCOUNTS'
-  | 'SYSTEM_LOGS';
+  | 'SYSTEM_LOGS'
+  | 'MAINTENANCE';
 
 /**
  * M7.3.11.6 Section 3: Kích thước khung chuẩn đồng nhất cho tất cả các mục con trong Cài đặt hệ thống
@@ -169,16 +187,32 @@ export function getAvailableSettingsTabsForRole(
     });
   }
 
-  // M7.5.1 PHẦN 4: Mục LOG HỆ THỐNG chỉ dành riêng cho duy nhất ADMIN (linhnk2013@gmail.com)
+  // M7.5.1 PHẦN 4: Mục LOG HỆ THỐNG và BẢO TRÌ chỉ dành riêng cho duy nhất ADMIN (linhnk2013@gmail.com)
   if (effectiveRole === 'ADMIN') {
     tabs.push({
       id: 'SYSTEM_LOGS',
       label: 'LOG HỆ THỐNG',
       adminOnly: true,
     });
+    tabs.push({
+      id: 'MAINTENANCE',
+      label: 'BẢO TRÌ',
+      adminOnly: true,
+    });
   }
 
   return tabs;
+}
+
+function toDatetimeLocalValue(timestampMs: number): string {
+  const safeMs = Number.isFinite(timestampMs) && timestampMs > 0 ? timestampMs : Date.now();
+  const d = new Date(safeMs);
+  const yyyy = d.getFullYear();
+  const mo = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mo}-${dd}T${hh}:${mm}`;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -258,6 +292,42 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   } | null>(null);
   const [isChangingRole, setIsChangingRole] = useState<boolean>(false);
 
+  // Account Detail Popup Modal state (when clicking on an account's name in USER_ACCOUNTS)
+  const [selectedAccountDetail, setSelectedAccountDetail] =
+    useState<DetailedUserAccountProfile | null>(null);
+  const [isLoadingAccountDetail, setIsLoadingAccountDetail] = useState<boolean>(false);
+
+  // Detailed Difficulty Editor state (GAME_MODE_SETTINGS)
+  const difficultyManager = DifficultyConfigManager.getInstance();
+  const [editingDifficultyMode, setEditingDifficultyMode] = useState<DifficultyModeKey>(difficulty);
+  const [defaultDiffDraft, setDefaultDiffDraft] = useState<DifficultyProfileParameters>(() =>
+    difficultyManager.getProfile('DEFAULT')
+  );
+  const [extremeDiffDraft, setExtremeDiffDraft] = useState<DifficultyProfileParameters>(() =>
+    difficultyManager.getProfile('EXTREME')
+  );
+  const [isActivatingDifficulty, setIsActivatingDifficulty] = useState<boolean>(false);
+
+  // System Maintenance state (MAINTENANCE tab)
+  const maintenanceManager = MaintenanceManager.getInstance();
+  const [maintenanceConfig, setMaintenanceConfig] = useState<SystemMaintenanceConfigDocument>(() =>
+    maintenanceManager.getConfig()
+  );
+  const [maintStartInput, setMaintStartInput] = useState<string>(() =>
+    toDatetimeLocalValue(maintenanceManager.getConfig().startAtMs)
+  );
+  const [maintEndInput, setMaintEndInput] = useState<string>(() =>
+    toDatetimeLocalValue(maintenanceManager.getConfig().endAtMs)
+  );
+  const [isUpdatingMaintenance, setIsUpdatingMaintenance] = useState<boolean>(false);
+
+  // Unified Confirmation Popup Modal state
+  const [popupNotice, setPopupNotice] = useState<{
+    type: 'success' | 'error' | 'info';
+    title?: string;
+    messages: string[];
+  } | null>(null);
+
   const canViewAccountsTab =
     isVerifiedSuperAdmin || hasRolePermission(userRole, 'VIEW_ACCOUNT_LIST');
   const canManageStagesTab =
@@ -301,11 +371,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         currentTargetRole: pendingRoleChangeConfirm.account.role,
         newRole: pendingRoleChangeConfirm.newRole,
       });
+      const msgText = res.success
+        ? `Đã cập nhật vai trò cho ${pendingRoleChangeConfirm.account.email || pendingRoleChangeConfirm.account.uid} thành ${pendingRoleChangeConfirm.label}.`
+        : res.errorMessage || 'Không thể cập nhật vai trò.';
       setAccountsRoleFeedback({
         type: res.success ? 'success' : 'error',
-        text: res.success
-          ? `Đã cập nhật vai trò cho ${pendingRoleChangeConfirm.account.email || pendingRoleChangeConfirm.account.uid} thành ${pendingRoleChangeConfirm.label}.`
-          : res.errorMessage || 'Không thể cập nhật vai trò.',
+        text: msgText,
+      });
+      setPopupNotice({
+        type: res.success ? 'success' : 'error',
+        messages: [msgText],
       });
       if (res.success) {
         setPendingRoleChangeConfirm(null);
@@ -316,6 +391,119 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       }
     } finally {
       setIsChangingRole(false);
+    }
+  };
+
+  const handleOpenAccountDetail = async (acc: UserAccountSummary) => {
+    setIsLoadingAccountDetail(true);
+    const localStats = playerStatsManager.getPlayerStatisticsSnapshot(acc.uid);
+    const localProg = StageProgressionManager.getInstance().getUserStageProgressSnapshot(acc.uid);
+    setSelectedAccountDetail({
+      ...acc,
+      photoURL: null,
+      level: localStats.level,
+      totalXp: localStats.totalXp,
+      xuBalance: localStats.xuBalance,
+      pvpRankCode: localStats.pvpRankCode,
+      unlockedStage: localProg.unlockedStage,
+      completedStages: [...localProg.completedStages],
+      sessionDeviceId: localStats.currentSession.deviceId,
+      sessionLastActiveMs: acc.lastLoginAtMs > 0 ? acc.lastLoginAtMs : null,
+    });
+    try {
+      const detailed = await authManager.fetchAccountDetailedProfile(acc);
+      setSelectedAccountDetail((prev) => {
+        if (!prev || prev.uid !== acc.uid) return prev;
+        return {
+          ...detailed,
+          level: detailed.level ?? localStats.level,
+          totalXp: Math.max(detailed.totalXp, localStats.totalXp),
+          xuBalance: Math.max(detailed.xuBalance, localStats.xuBalance),
+          pvpRankCode: detailed.pvpRankCode ?? localStats.pvpRankCode,
+          unlockedStage: Math.max(detailed.unlockedStage, localProg.unlockedStage),
+          completedStages:
+            detailed.completedStages.length >= localProg.completedStages.length
+              ? detailed.completedStages
+              : [...localProg.completedStages],
+        };
+      });
+    } finally {
+      setIsLoadingAccountDetail(false);
+    }
+  };
+
+  const handleActivateDifficultySettings = async (targetMode: DifficultyModeKey) => {
+    if (isActivatingDifficulty) return;
+    setIsActivatingDifficulty(true);
+    try {
+      const res = await difficultyManager.activateDifficultyConfig({
+        targetMode,
+        allProfilesPatch: {
+          DEFAULT: defaultDiffDraft,
+          EXTREME: extremeDiffDraft,
+        },
+        actorRole: isVerifiedSuperAdmin ? 'ADMIN' : userRole,
+        actorEmail: currentUser?.email || SUPER_ADMIN_EMAIL,
+      });
+      setDefaultDiffDraft(res.config.profiles.DEFAULT);
+      setExtremeDiffDraft(res.config.profiles.EXTREME);
+      if (res.success) {
+        setEditingDifficultyMode(targetMode);
+        onDifficultyChange?.(targetMode);
+      }
+      setPopupNotice({
+        type: res.success ? 'success' : 'error',
+        messages: [res.message],
+      });
+    } finally {
+      setIsActivatingDifficulty(false);
+    }
+  };
+
+  const handleActivateMaintenance = async () => {
+    if (isUpdatingMaintenance) return;
+    const startMs = new Date(maintStartInput).getTime();
+    const endMs = new Date(maintEndInput).getTime();
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) {
+      setPopupNotice({
+        type: 'error',
+        messages: ['Vui lòng chọn Ngày giờ kết thúc bảo trì lớn hơn Ngày giờ bắt đầu bảo trì.'],
+      });
+      return;
+    }
+    setIsUpdatingMaintenance(true);
+    try {
+      const res = await maintenanceManager.activateMaintenance({
+        startAtMs: startMs,
+        endAtMs: endMs,
+        actorRole: isVerifiedSuperAdmin ? 'ADMIN' : userRole,
+        actorEmail: currentUser?.email || SUPER_ADMIN_EMAIL,
+      });
+      setMaintenanceConfig(res.config);
+      setPopupNotice({
+        type: res.success ? 'success' : 'error',
+        messages: [res.message],
+      });
+    } finally {
+      setIsUpdatingMaintenance(false);
+    }
+  };
+
+  const handleEndMaintenance = async () => {
+    if (isUpdatingMaintenance) return;
+    setIsUpdatingMaintenance(true);
+    try {
+      const res = await maintenanceManager.endMaintenance({
+        actorRole: isVerifiedSuperAdmin ? 'ADMIN' : userRole,
+        actorEmail: currentUser?.email || SUPER_ADMIN_EMAIL,
+      });
+      setMaintenanceConfig(res.config);
+      setPopupNotice({
+        type: res.success ? 'success' : 'error',
+        messages: [res.message],
+      });
+    } finally {
+      setIsUpdatingMaintenance(false);
     }
   };
 
@@ -382,12 +570,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       const uid = authManager.getCurrentUser()?.uid || currentUid;
       setPlayerStats(playerStatsManager.getPlayerStatisticsSnapshot(uid));
     });
+    const unsubDiff = difficultyManager.subscribe(() => {
+      setDefaultDiffDraft(difficultyManager.getProfile('DEFAULT'));
+      setExtremeDiffDraft(difficultyManager.getProfile('EXTREME'));
+    });
+    const unsubMaint = maintenanceManager.subscribe(() => {
+      const cfg = maintenanceManager.getConfig();
+      setMaintenanceConfig(cfg);
+      setMaintStartInput(toDatetimeLocalValue(cfg.startAtMs));
+      setMaintEndInput(toDatetimeLocalValue(cfg.endAtMs));
+    });
     return () => {
       unsubAvatar();
       unsubSound();
       unsubStats();
+      unsubDiff();
+      unsubMaint();
     };
-  }, [avatarManager, authManager, currentUid, soundManager, playerStatsManager]);
+  }, [
+    avatarManager,
+    authManager,
+    currentUid,
+    soundManager,
+    playerStatsManager,
+    difficultyManager,
+    maintenanceManager,
+  ]);
 
   if (!isOpen) return null;
 
@@ -438,9 +646,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const restored = soundManager.resetSettingsToDefault();
     setAudioSettings(restored);
     musicManager.onVolumeOrToggleChanged();
+    const msg = 'Đã khôi phục cài đặt âm thanh mặc định (Nhạc nền 35%, Hiệu ứng 50%).';
     setFeedback({
       type: 'success',
-      text: 'Đã khôi phục cài đặt âm thanh mặc định (Nhạc nền 35%, Hiệu ứng 50%).',
+      text: msg,
+    });
+    setPopupNotice({
+      type: 'success',
+      messages: [msg],
     });
   };
 
@@ -452,10 +665,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (res.success) {
         setAvatarLoadError(false);
         onProfileUpdated?.();
+        setPopupNotice({
+          type: 'success',
+          messages: [res.message || 'Đã cập nhật ảnh đại diện mặc định thành công.'],
+        });
       } else {
+        const errText = res.message || 'Không thể chọn ảnh đại diện.';
         setFeedback({
           type: 'error',
-          text: res.message || 'Không thể chọn ảnh đại diện.',
+          text: errText,
+        });
+        setPopupNotice({
+          type: 'error',
+          messages: [errText],
         });
       }
     } finally {
@@ -471,10 +693,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (res.success) {
         setAvatarLoadError(false);
         onProfileUpdated?.();
+        setPopupNotice({
+          type: 'success',
+          messages: [res.message || `Đã chọn ảnh đại diện "${item.name}".`],
+        });
       } else {
+        const errText = res.message || 'Không thể chọn ảnh đại diện này.';
         setFeedback({
           type: 'error',
-          text: res.message || 'Không thể chọn ảnh đại diện này.',
+          text: errText,
+        });
+        setPopupNotice({
+          type: 'error',
+          messages: [errText],
         });
       }
     } finally {
@@ -491,6 +722,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       setFeedback({
         type: res.success ? 'success' : 'error',
         text: res.message,
+      });
+      setPopupNotice({
+        type: res.success ? 'success' : 'error',
+        messages: [res.message],
       });
       if (res.success) {
         onProfileUpdated?.();
@@ -540,6 +775,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         return <Users className="w-3.5 h-3.5" />;
       case 'SYSTEM_LOGS':
         return <Terminal className="w-3.5 h-3.5" />;
+      case 'MAINTENANCE':
+        return <Wrench className="w-3.5 h-3.5" />;
     }
   };
 
@@ -550,11 +787,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     icon: getTabIcon(tab.id),
   }));
 
+  const recentLoginHistory = playerStats.authHistory
+    .filter((evt) => evt.eventType === 'LOGIN')
+    .slice(0, 5);
+
   return (
     <div
       data-testid="settings-modal-backdrop"
       className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 bg-black/80 backdrop-blur-md animate-fade-in select-none"
     >
+      <ConfirmationPopupModal
+        isOpen={Boolean(popupNotice)}
+        type={popupNotice?.type ?? 'success'}
+        title={popupNotice?.title}
+        messages={popupNotice?.messages ?? []}
+        onClose={() => setPopupNotice(null)}
+      />
+
       <div
         data-testid="settings-modal-frame"
         className={`bg-neutral-900 border border-neutral-700 rounded-2xl ${UNIFIED_SETTINGS_MODAL_WIDTH_CLASS} max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-2xl overflow-hidden`}
@@ -1057,50 +1306,128 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   )}
                 </div>
 
-                {/* Thành tích Chiến dịch & Hoạt động chiến đấu */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
-                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
-                    <div className="text-[10px] text-neutral-400">Tiến độ Chiến dịch</div>
-                    <div className="text-xs font-extrabold font-mono text-white">
-                      Stage {playerStats.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
+                {/* Thành tích Chiến dịch & Hoạt động chiến đấu (Đầy đủ SOLO, CO-OP AI, CO-OP Online & 4 loại xe địch) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  <div
+                    data-testid="stat-card-campaign-progress"
+                    className="p-3 rounded-xl bg-neutral-950/90 border border-neutral-800 space-y-1.5"
+                  >
+                    <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
+                      Tiến độ Chiến dịch
                     </div>
-                    <div className="text-[10px] text-neutral-500">
-                      Đã qua {playerStats.completedStages.length}/{TOTAL_CAMPAIGN_STAGES} màn
+                    <div className="text-xs font-extrabold font-mono text-white">
+                      Mở khóa: Stage {playerStats.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
+                    </div>
+                    <div className="space-y-1 pt-0.5 border-t border-neutral-800/80 text-[10px] font-mono text-neutral-300">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-neutral-400">- SOLO:</span>
+                        <span className="font-bold text-amber-200">
+                          Stage {playerStats.campaignByMode.SOLO.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-neutral-400">- CO-OP AI:</span>
+                        <span className="font-bold text-sky-200">
+                          Stage {playerStats.campaignByMode.COOP_AI.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-neutral-400">- CO-OP Online:</span>
+                        <span className="font-bold text-emerald-200">
+                          Stage {playerStats.campaignByMode.COOP_ONLINE.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
-                    <div className="text-[10px] text-neutral-400">Trận đã hoàn thành</div>
-                    <div className="text-xs font-extrabold font-mono text-white">
-                      {playerStats.matchesPlayed} trận
+                  <div
+                    data-testid="stat-card-matches-completed"
+                    className="p-3 rounded-xl bg-neutral-950/90 border border-neutral-800 space-y-1.5"
+                  >
+                    <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
+                      Trận đã hoàn thành
                     </div>
-                    <div className="text-[10px] font-mono text-neutral-400">
-                      Thắng <span className="text-emerald-300">{playerStats.matchesWon}</span> • Thua{' '}
-                      <span className="text-rose-300">{playerStats.matchesLost}</span>
+                    <div className="flex items-baseline justify-between gap-1">
+                      <span className="text-xs font-extrabold font-mono text-white">
+                        Tổng: {playerStats.matchesPlayed} trận
+                      </span>
+                      <span className="text-[10px] font-mono text-neutral-400">
+                        <span className="text-emerald-300">{playerStats.matchesWon}T</span>/
+                        <span className="text-rose-300">{playerStats.matchesLost}B</span>
+                      </span>
+                    </div>
+                    <div className="space-y-1 pt-0.5 border-t border-neutral-800/80 text-[10px] font-mono text-neutral-300">
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-neutral-400">- SOLO:</span>
+                        <span>
+                          <strong className="text-white">{playerStats.matchesByMode.SOLO.played}</strong>{' '}
+                          (<span className="text-emerald-300">Thắng {playerStats.matchesByMode.SOLO.won}</span> •{' '}
+                          <span className="text-rose-300">Thua {playerStats.matchesByMode.SOLO.lost}</span>)
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-neutral-400">- CO-OP AI:</span>
+                        <span>
+                          <strong className="text-white">{playerStats.matchesByMode.COOP_AI.played}</strong>{' '}
+                          (<span className="text-emerald-300">Thắng {playerStats.matchesByMode.COOP_AI.won}</span> •{' '}
+                          <span className="text-rose-300">Thua {playerStats.matchesByMode.COOP_AI.lost}</span>)
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1">
+                        <span className="text-neutral-400">- CO-OP Online:</span>
+                        <span>
+                          <strong className="text-white">{playerStats.matchesByMode.COOP_ONLINE.played}</strong>{' '}
+                          (<span className="text-emerald-300">Thắng {playerStats.matchesByMode.COOP_ONLINE.won}</span> •{' '}
+                          <span className="text-rose-300">Thua {playerStats.matchesByMode.COOP_ONLINE.lost}</span>)
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
-                    <div className="text-[10px] text-neutral-400">Xe địch tiêu diệt</div>
-                    <div className="text-xs font-extrabold font-mono text-white">
-                      {playerStats.totalEnemiesDefeated} xe
+                  <div
+                    data-testid="stat-card-enemies-defeated"
+                    className="p-3 rounded-xl bg-neutral-950/90 border border-neutral-800 space-y-1.5"
+                  >
+                    <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
+                      Xe địch tiêu diệt
                     </div>
-                    <div className="text-[10px] font-mono text-neutral-500">
-                      B:{playerStats.defeatedByType.BASIC} F:{playerStats.defeatedByType.FAST} P:
-                      {playerStats.defeatedByType.POWER} A:{playerStats.defeatedByType.ARMOR}
+                    <div className="text-xs font-extrabold font-mono text-white">
+                      Tổng: {playerStats.totalEnemiesDefeated} xe
+                    </div>
+                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 pt-0.5 border-t border-neutral-800/80 text-[10px] font-mono text-neutral-300">
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-400">Basic:</span>
+                        <strong className="text-white">{playerStats.defeatedByType.BASIC}</strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-400">Fast:</span>
+                        <strong className="text-sky-300">{playerStats.defeatedByType.FAST}</strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-400">Power:</span>
+                        <strong className="text-amber-300">{playerStats.defeatedByType.POWER}</strong>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-neutral-400">Armor:</span>
+                        <strong className="text-rose-300">{playerStats.defeatedByType.ARMOR}</strong>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
-                    <div className="text-[10px] text-neutral-400">Phòng Co-op Online</div>
+                  <div className="p-3 rounded-xl bg-neutral-950/90 border border-neutral-800 space-y-1.5">
+                    <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
+                      Phòng Co-op Online
+                    </div>
                     <div className="text-xs font-extrabold font-mono text-white">
                       {playerStats.coopRoomsParticipated} phòng
                     </div>
-                    <div className="text-[10px] text-neutral-500">Đã tạo hoặc tham gia</div>
+                    <div className="text-[10px] text-neutral-500 pt-0.5 border-t border-neutral-800/80">
+                      Đã tạo hoặc tham gia
+                    </div>
                   </div>
                 </div>
 
-                {/* Lịch sử truy cập & Trạng thái phiên hiện tại */}
+                {/* Lịch sử truy cập & Trạng thái hiện tại */}
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                   <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
                     <div className="text-[10px] text-neutral-400 flex items-center gap-1">
@@ -1134,10 +1461,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* Chi tiết phiên hiện tại */}
+                {/* Chi tiết trạng thái hiện tại (Đã bỏ Timeout nhàn rỗi & Mã phiên, sửa thành Trạng thái) */}
                 <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 flex flex-wrap items-center justify-between gap-2 text-[11px]">
                   <div className="text-neutral-300">
-                    Trạng thái phiên:{' '}
+                    Trạng thái:{' '}
                     <strong
                       className={
                         playerStats.currentSession.isOnlineActive
@@ -1146,47 +1473,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }
                     >
                       {playerStats.currentSession.status}
-                    </strong>{' '}
-                    • Timeout nhàn rỗi: {playerStats.currentSession.idleTimeoutMinutes} phút
+                    </strong>
                   </div>
-                  {playerStats.currentSession.sessionId && (
-                    <span className="font-mono text-[10px] text-neutral-400">
-                      Mã phiên: {playerStats.currentSession.sessionId.slice(0, 16)}
-                    </span>
-                  )}
                 </div>
 
-                {/* Nhật ký Đăng nhập & Đăng xuất gần đây */}
+                {/* Lịch sử truy cập (Chỉ thống kê 5 lần truy cập thành công gần nhất của tài khoản) */}
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[11px] font-bold text-neutral-300">
                     <span className="flex items-center gap-1.5">
                       <History className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Lịch sử đăng nhập &amp; đăng xuất ({playerStats.authHistory.length})</span>
+                      <span>Lịch sử truy cập ({recentLoginHistory.length}/5 lần gần nhất)</span>
                     </span>
                   </div>
-                  {playerStats.authHistory.length === 0 ? (
+                  {recentLoginHistory.length === 0 ? (
                     <div className="p-2.5 rounded-lg bg-neutral-950 border border-neutral-800 text-[11px] text-neutral-500">
-                      Chưa có bản ghi lịch sử đăng nhập/đăng xuất cho tài khoản này.
+                      Chưa có bản ghi lịch sử truy cập cho tài khoản này.
                     </div>
                   ) : (
                     <div
                       data-testid="player-auth-history-list"
                       className="max-h-36 overflow-y-auto space-y-1 pr-1"
                     >
-                      {playerStats.authHistory.slice(0, 12).map((evt) => (
+                      {recentLoginHistory.map((evt) => (
                         <div
                           key={evt.id}
                           className="px-2.5 py-1.5 rounded-lg bg-neutral-950 border border-neutral-800 flex flex-wrap items-center justify-between gap-2 text-[11px]"
                         >
                           <div className="flex items-center gap-2">
-                            <span
-                              className={`px-1.5 py-0.5 rounded text-[9px] font-extrabold font-mono ${
-                                evt.eventType === 'LOGIN'
-                                  ? 'bg-emerald-950 text-emerald-300 border border-emerald-700/60'
-                                  : 'bg-amber-950 text-amber-300 border border-amber-700/60'
-                              }`}
-                            >
-                              {evt.eventType === 'LOGIN' ? 'ĐĂNG NHẬP' : 'ĐĂNG XUẤT'}
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold font-mono bg-emerald-950 text-emerald-300 border border-emerald-700/60">
+                              TRUY CẬP THÀNH CÔNG
                             </span>
                             <span className="text-neutral-200">{evt.note}</span>
                           </div>
@@ -1408,50 +1723,326 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
                   <Gamepad2 className="w-4 h-4 text-amber-400" />
-                  <span>CHẾ ĐỘ CHƠI &amp; QUẢN LÝ STAGE (13×13 MAP EDITOR)</span>
+                  <span>CHẾ ĐỘ CHƠI &amp; THIẾT LẬP ĐỘ KHÓ CHI TIẾT</span>
                 </div>
                 <span className="text-[10px] text-neutral-400 font-mono">
-                  Chơi đơn • Co-op 2 người • Co-op Online
+                  SOLO • CO-OP AI • CO-OP Online
                 </span>
               </div>
 
-              {onDifficultyChange && (
-                <div className="space-y-2">
-                  <div className="text-xs font-bold text-amber-300">
-                    Độ khó ưu tiên mặc định (Chơi đơn &amp; Co-op 2 người)
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => onDifficultyChange('DEFAULT')}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                        difficulty === 'DEFAULT'
-                          ? 'bg-emerald-950/50 border-emerald-500 text-emerald-200 ring-1 ring-emerald-500/40'
-                          : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700'
-                      }`}
-                    >
-                      <div className="font-extrabold text-xs">1. GIẢI TRÍ (MẶC ĐỊNH)</div>
-                      <div className="text-[11px] text-neutral-400 mt-1">
-                        3 mạng khởi đầu • Nhịp độ cân bằng.
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => onDifficultyChange('EXTREME')}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
-                        difficulty === 'EXTREME'
-                          ? 'bg-rose-950/50 border-rose-500 text-rose-200 ring-1 ring-rose-500/40'
-                          : 'bg-neutral-900 border-neutral-800 text-neutral-300 hover:border-neutral-700'
-                      }`}
-                    >
-                      <div className="font-extrabold text-xs">2. THỬ THÁCH (SIÊU KHÓ)</div>
-                      <div className="text-[11px] text-neutral-400 mt-1">
-                        Solo 2 mạng • Co-op 1 mạng • 60s • Áp lực cao.
-                      </div>
-                    </button>
+              {/* Thiết lập chi tiết thông số Độ khó & Nút Kích hoạt */}
+              <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-3.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div>
+                    <div className="text-xs font-extrabold text-amber-300 uppercase tracking-wider">
+                      Điều chỉnh chi tiết Độ khó &amp; Kích hoạt chế độ mặc định
+                    </div>
+                    <p className="text-[11px] text-neutral-400 mt-0.5">
+                      Tùy chỉnh thời gian trận, số mạng khởi đầu Solo/Co-op, số lượng xe địch tối đa trên sân và nhịp độ xuất hiện/bắn của xe địch.
+                    </p>
                   </div>
                 </div>
-              )}
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3.5">
+                  {/* Card 1: GIẢI TRÍ (DEFAULT) */}
+                  <div
+                    className={`p-3.5 rounded-xl border space-y-3 transition-all ${
+                      difficulty === 'DEFAULT' || editingDifficultyMode === 'DEFAULT'
+                        ? 'bg-emerald-950/25 border-emerald-500/70 ring-1 ring-emerald-500/30'
+                        : 'bg-neutral-950/80 border-neutral-800'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 border-b border-neutral-800 pb-2">
+                      <div>
+                        <div className="font-extrabold text-xs text-emerald-300">
+                          1. GIẢI TRÍ (MẶC ĐỊNH)
+                        </div>
+                        <div className="text-[10px] text-neutral-400 font-mono">
+                          Solo {defaultDiffDraft.soloLives} mạng • Co-op {defaultDiffDraft.coopLives} mạng • {defaultDiffDraft.durationSeconds}s
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid="activate-difficulty-default-btn"
+                        disabled={!isVerifiedSuperAdmin || isActivatingDifficulty}
+                        onClick={() => void handleActivateDifficultySettings('DEFAULT')}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs flex items-center gap-1 shadow cursor-pointer shrink-0"
+                      >
+                        <Rocket className="w-3.5 h-3.5" />
+                        <span>Kích hoạt</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5 text-[11px]">
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 mb-1">
+                          Thời gian trận (giây)
+                        </label>
+                        <input
+                          type="number"
+                          min={30}
+                          max={600}
+                          disabled={!isVerifiedSuperAdmin}
+                          value={defaultDiffDraft.durationSeconds}
+                          onChange={(e) =>
+                            setDefaultDiffDraft((prev) => ({
+                              ...prev,
+                              durationSeconds: Number(e.target.value) || 120,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 mb-1">
+                          Xe địch tối đa trên sân
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={12}
+                          disabled={!isVerifiedSuperAdmin}
+                          value={defaultDiffDraft.maxActiveEnemies}
+                          onChange={(e) =>
+                            setDefaultDiffDraft((prev) => ({
+                              ...prev,
+                              maxActiveEnemies: Number(e.target.value) || 5,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 mb-1">
+                          Mạng khởi đầu SOLO
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={9}
+                          disabled={!isVerifiedSuperAdmin}
+                          value={defaultDiffDraft.soloLives}
+                          onChange={(e) =>
+                            setDefaultDiffDraft((prev) => ({
+                              ...prev,
+                              soloLives: Number(e.target.value) || 3,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 mb-1">
+                          Mạng khởi đầu CO-OP
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={9}
+                          disabled={!isVerifiedSuperAdmin}
+                          value={defaultDiffDraft.coopLives}
+                          onChange={(e) =>
+                            setDefaultDiffDraft((prev) => ({
+                              ...prev,
+                              coopLives: Number(e.target.value) || 3,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 mb-1">
+                          Giãn cách ra địch (giây)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min={0.3}
+                          max={5.0}
+                          disabled={!isVerifiedSuperAdmin}
+                          value={defaultDiffDraft.spawnIntervalS}
+                          onChange={(e) =>
+                            setDefaultDiffDraft((prev) => ({
+                              ...prev,
+                              spawnIntervalS: Number(e.target.value) || 1.0,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 mb-1">
+                          Hệ số tốc độ xe địch
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min={0.5}
+                          max={2.0}
+                          disabled={!isVerifiedSuperAdmin}
+                          value={defaultDiffDraft.enemySpeedScale}
+                          onChange={(e) =>
+                            setDefaultDiffDraft((prev) => ({
+                              ...prev,
+                              enemySpeedScale: Number(e.target.value) || 1.0,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Card 2: THỬ THÁCH (EXTREME) */}
+                  <div
+                    className={`p-3.5 rounded-xl border space-y-3 transition-all ${
+                      difficulty === 'EXTREME' || editingDifficultyMode === 'EXTREME'
+                        ? 'bg-rose-950/25 border-rose-500/70 ring-1 ring-rose-500/30'
+                        : 'bg-neutral-950/80 border-neutral-800'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2 border-b border-neutral-800 pb-2">
+                      <div>
+                        <div className="font-extrabold text-xs text-rose-300">
+                          2. THỬ THÁCH (SIÊU KHÓ)
+                        </div>
+                        <div className="text-[10px] text-neutral-400 font-mono">
+                          Solo {extremeDiffDraft.soloLives} mạng • Co-op {extremeDiffDraft.coopLives} mạng • {extremeDiffDraft.durationSeconds}s
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid="activate-difficulty-extreme-btn"
+                        disabled={!isVerifiedSuperAdmin || isActivatingDifficulty}
+                        onClick={() => void handleActivateDifficultySettings('EXTREME')}
+                        className="px-3 py-1.5 rounded-lg bg-rose-500 hover:bg-rose-400 disabled:opacity-50 text-black font-extrabold text-xs flex items-center gap-1 shadow cursor-pointer shrink-0"
+                      >
+                        <Rocket className="w-3.5 h-3.5" />
+                        <span>Kích hoạt</span>
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2.5 text-[11px]">
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 mb-1">
+                          Thời gian trận (giây)
+                        </label>
+                        <input
+                          type="number"
+                          min={30}
+                          max={600}
+                          disabled={!isVerifiedSuperAdmin}
+                          value={extremeDiffDraft.durationSeconds}
+                          onChange={(e) =>
+                            setExtremeDiffDraft((prev) => ({
+                              ...prev,
+                              durationSeconds: Number(e.target.value) || 60,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 mb-1">
+                          Xe địch tối đa trên sân
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={12}
+                          disabled={!isVerifiedSuperAdmin}
+                          value={extremeDiffDraft.maxActiveEnemies}
+                          onChange={(e) =>
+                            setExtremeDiffDraft((prev) => ({
+                              ...prev,
+                              maxActiveEnemies: Number(e.target.value) || 5,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 mb-1">
+                          Mạng khởi đầu SOLO
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={9}
+                          disabled={!isVerifiedSuperAdmin}
+                          value={extremeDiffDraft.soloLives}
+                          onChange={(e) =>
+                            setExtremeDiffDraft((prev) => ({
+                              ...prev,
+                              soloLives: Number(e.target.value) || 2,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 mb-1">
+                          Mạng khởi đầu CO-OP
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          max={9}
+                          disabled={!isVerifiedSuperAdmin}
+                          value={extremeDiffDraft.coopLives}
+                          onChange={(e) =>
+                            setExtremeDiffDraft((prev) => ({
+                              ...prev,
+                              coopLives: Number(e.target.value) || 1,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 mb-1">
+                          Giãn cách ra địch (giây)
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min={0.3}
+                          max={5.0}
+                          disabled={!isVerifiedSuperAdmin}
+                          value={extremeDiffDraft.spawnIntervalS}
+                          onChange={(e) =>
+                            setExtremeDiffDraft((prev) => ({
+                              ...prev,
+                              spawnIntervalS: Number(e.target.value) || 1.0,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white font-mono text-xs"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] text-neutral-400 mb-1">
+                          Hệ số tốc độ xe địch
+                        </label>
+                        <input
+                          type="number"
+                          step="0.1"
+                          min={0.5}
+                          max={2.0}
+                          disabled={!isVerifiedSuperAdmin}
+                          value={extremeDiffDraft.enemySpeedScale}
+                          onChange={(e) =>
+                            setExtremeDiffDraft((prev) => ({
+                              ...prev,
+                              enemySpeedScale: Number(e.target.value) || 1.0,
+                            }))
+                          }
+                          className="w-full px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 text-white font-mono text-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
 
               {/* Interactive Stage Manager & 13x13 Drag-and-Drop Map Editor */}
               <StageEditorPanel
@@ -1571,25 +2162,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </table>
               </div>
 
-              {/* Role Trademark Badge Legend */}
+              {/* Role Trademark Badge Legend (Ký hiệu Ⓐ và Ⓜ) */}
               <div className="space-y-2 pt-1">
                 <div className="text-xs font-bold text-white">
-                  Quy ước ký hiệu vai trò viết thu nhỏ phía trên tên người chơi:
+                  Quy ước ký hiệu chức danh viết thu nhỏ phía trên tên người chơi:
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <div className="p-2 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
                     <span className="font-extrabold text-white text-[11px]">
                       Admin
-                      <sup className="ml-0.5 text-[9px] font-black text-amber-300">A</sup>
+                      <sup className="ml-0.5 text-[9px] font-black text-amber-300">Ⓐ</sup>
                     </span>
-                    <span className="text-[10px] font-mono text-amber-300 font-bold">Ký hiệu A</span>
+                    <span className="text-[10px] font-mono text-amber-300 font-bold">Ký hiệu Ⓐ</span>
                   </div>
                   <div className="p-2 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
                     <span className="font-extrabold text-white text-[11px]">
                       Mod
-                      <sup className="ml-0.5 text-[9px] font-black text-amber-300">M</sup>
+                      <sup className="ml-0.5 text-[9px] font-black text-amber-300">Ⓜ</sup>
                     </span>
-                    <span className="text-[10px] font-mono text-amber-300 font-bold">Ký hiệu M</span>
+                    <span className="text-[10px] font-mono text-amber-300 font-bold">Ký hiệu Ⓜ</span>
                   </div>
                   <div className="p-2 rounded-xl bg-neutral-900 border border-neutral-700/80 flex items-center justify-between">
                     <span className="font-extrabold text-white text-[11px]">User</span>
@@ -1642,7 +2233,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* =========================================================================
-              TAB 6: TÀI KHOẢN (M7.3.11 MỤC II: HIỂN THỊ ĐẦY ĐỦ 8 CỘT & CẤP QUYỀN ADMIN/MOD)
+              TAB 6: TÀI KHOẢN (ĐÃ BỎ CỘT TIẾN ĐỘ STAGE • BẤM VÀO TÊN HIỆN CHI TIẾT TÀI KHOẢN)
              ========================================================================= */}
           {activeTab === 'USER_ACCOUNTS' && canViewAccountsTab && (
             <section className="p-4 rounded-xl bg-neutral-950/90 border border-red-500/40 space-y-4">
@@ -1653,7 +2244,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[10px] font-mono text-neutral-400">
-                    {USER_ACCOUNTS_PAGE_SIZE} tài khoản / trang
+                    Bấm vào tên tài khoản để xem chi tiết • {USER_ACCOUNTS_PAGE_SIZE} tài khoản / trang
                   </span>
                   <button
                     type="button"
@@ -1744,10 +2335,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <thead>
                       <tr className="bg-neutral-950 text-neutral-400 border-b border-neutral-800">
                         <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">STT</th>
-                        <th className="py-2.5 px-2.5 font-bold">Tên</th>
+                        <th className="py-2.5 px-2.5 font-bold">Tên (Bấm để xem chi tiết)</th>
                         <th className="py-2.5 px-2.5 font-bold">Email</th>
                         <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">Quyền</th>
-                        <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">Tiến độ Stage</th>
                         <th className="py-2.5 px-2.5 font-bold whitespace-nowrap">
                           Đăng nhập gần nhất
                         </th>
@@ -1773,13 +2363,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               #{rowNumber}
                             </td>
 
-                            {/* 2. Nickname (Never blank; shows note if not configured) */}
+                            {/* 2. Nickname (Clickable to view full Account Detail Modal) */}
                             <td className="py-2.5 px-2.5">
                               <div className="flex flex-col gap-0.5">
-                                <span
-                                  className={`inline-flex items-baseline w-fit px-2 py-0.5 rounded bg-neutral-950 text-xs font-extrabold text-white ${accRoleInfo.frameClass}`}
+                                <button
+                                  type="button"
+                                  data-testid={`account-name-btn-${acc.uid}`}
+                                  onClick={() => void handleOpenAccountDetail(acc)}
+                                  title="Bấm để xem bảng thông tin chi tiết tài khoản này"
+                                  className={`inline-flex items-baseline w-fit px-2 py-0.5 rounded bg-neutral-950 hover:bg-neutral-800 hover:border-amber-400/70 text-xs font-extrabold text-white transition-all cursor-pointer ${accRoleInfo.frameClass}`}
                                 >
-                                  <span>{acc.displayName}</span>
+                                  <span className="underline decoration-amber-400/60 underline-offset-2">
+                                    {acc.displayName}
+                                  </span>
                                   {accRoleInfo.trademarkBadge && (
                                     <sup
                                       data-testid="role-trademark-badge"
@@ -1788,7 +2384,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                       {accRoleInfo.trademarkBadge}
                                     </sup>
                                   )}
-                                </span>
+                                </button>
                                 {acc.nicknameNote && (
                                   <span className="text-[10px] italic text-amber-300/90">
                                     {acc.nicknameNote}
@@ -1815,23 +2411,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               >
                                 {acc.role === 'PLAYER' ? 'User' : accRoleInfo.label}
                               </span>
-                            </td>
-
-                            {/* 4b. Tiến độ Stage (Stage X/10) */}
-                            <td className="py-2.5 px-2.5 font-mono text-[11px] whitespace-nowrap">
-                              {(() => {
-                                const prog = StageProgressionManager.getInstance().getUserStageProgressSnapshot(
-                                  acc.uid
-                                );
-                                return (
-                                  <span
-                                    data-testid={`user-stage-progress-${acc.uid}`}
-                                    className="px-2 py-0.5 rounded bg-amber-950/70 border border-amber-700/60 text-amber-300 font-bold"
-                                  >
-                                    Stage {prog.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
-                                  </span>
-                                );
-                              })()}
                             </td>
 
                             {/* 5. Ngày đăng nhập gần nhất */}
@@ -1906,6 +2485,176 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               )}
 
+              {/* Account Detail Popup Modal */}
+              {selectedAccountDetail && (
+                <div
+                  data-testid="account-detail-popup-modal"
+                  role="dialog"
+                  aria-modal="true"
+                  onClick={(e) => {
+                    if (e.target === e.currentTarget) {
+                      setSelectedAccountDetail(null);
+                    }
+                  }}
+                  className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+                >
+                  <div className="w-full max-w-lg rounded-2xl bg-neutral-900 border-2 border-amber-500/70 shadow-2xl overflow-hidden text-xs">
+                    <div className="px-4 py-3 bg-neutral-950 border-b border-neutral-800 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 font-extrabold text-amber-300 uppercase tracking-wider">
+                        <User className="w-4 h-4 text-amber-400" />
+                        <span>THÔNG TIN CHI TIẾT TÀI KHOẢN</span>
+                      </div>
+                      <button
+                        type="button"
+                        data-testid="account-detail-close-btn"
+                        onClick={() => setSelectedAccountDetail(null)}
+                        className="p-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white cursor-pointer"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    <div className="p-4 space-y-3.5 max-h-[75dvh] overflow-y-auto">
+                      {/* Header card with Avatar & Name */}
+                      <div className="p-3 rounded-xl bg-neutral-950 border border-neutral-800 flex items-center justify-between gap-3 flex-wrap">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-amber-400 bg-neutral-900 flex items-center justify-center shrink-0">
+                            {(() => {
+                              const resolvedAvatar =
+                                selectedAccountDetail.avatarType === 'catalog' &&
+                                selectedAccountDetail.avatarId
+                                  ? avatarManager.getCatalogItemUrl(
+                                      `avatar/${selectedAccountDetail.avatarId}.png`
+                                    )
+                                  : selectedAccountDetail.photoURL;
+                              return resolvedAvatar ? (
+                                <img
+                                  src={resolvedAvatar}
+                                  alt={selectedAccountDetail.displayName}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                <User className="w-6 h-6 text-amber-400" />
+                              );
+                            })()}
+                          </div>
+                          <div className="min-w-0 space-y-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-extrabold text-sm text-white">
+                                {selectedAccountDetail.displayName}
+                                {getRoleTrademarkBadge(selectedAccountDetail.role) && (
+                                  <sup className="ml-0.5 text-[10px] font-black text-amber-300">
+                                    {getRoleTrademarkBadge(selectedAccountDetail.role)}
+                                  </sup>
+                                )}
+                              </span>
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-extrabold ${
+                                  selectedAccountDetail.role === 'ADMIN'
+                                    ? 'bg-emerald-950 text-emerald-300 border border-emerald-600/70'
+                                    : selectedAccountDetail.role === 'MOD'
+                                      ? 'bg-sky-950 text-sky-300 border border-sky-600/70'
+                                      : 'bg-neutral-800 text-neutral-300 border border-neutral-700'
+                                }`}
+                              >
+                                {selectedAccountDetail.role === 'PLAYER'
+                                  ? 'User'
+                                  : getRoleDisplayInfo(selectedAccountDetail.role).label}
+                              </span>
+                            </div>
+                            <div className="text-[11px] font-mono text-neutral-300 flex items-center gap-1 truncate">
+                              <Mail className="w-3 h-3 text-neutral-400 shrink-0" />
+                              <span>{selectedAccountDetail.email || 'Chưa đồng bộ email'}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <span
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold border ${
+                            selectedAccountDetail.status === 'ACTIVE'
+                              ? 'bg-emerald-950/90 text-emerald-300 border-emerald-600/70'
+                              : 'bg-neutral-800 text-neutral-400 border-neutral-700'
+                          }`}
+                        >
+                          {selectedAccountDetail.status === 'ACTIVE' ? 'Đang Online' : 'Offline'}
+                        </span>
+                      </div>
+
+                      {isLoadingAccountDetail && (
+                        <div className="text-[11px] font-mono text-amber-300 flex items-center gap-1.5">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          <span>Đang đồng bộ chi tiết hồ sơ từ Firestore...</span>
+                        </div>
+                      )}
+
+                      {/* Grid Info */}
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <div className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-0.5">
+                          <div className="text-[10px] text-neutral-400">Mã định danh (UID)</div>
+                          <div className="font-mono text-[11px] text-white break-all">
+                            {selectedAccountDetail.uid}
+                          </div>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-0.5">
+                          <div className="text-[10px] text-neutral-400">Level &amp; Tổng XP</div>
+                          <div className="font-mono text-xs font-extrabold text-sky-300">
+                            {selectedAccountDetail.level !== null
+                              ? `Lv. ${selectedAccountDetail.level}`
+                              : 'Lv. 1'}{' '}
+                            •{' '}
+                            <span className="text-amber-300">
+                              {selectedAccountDetail.totalXp.toLocaleString('vi-VN')} XP
+                            </span>
+                          </div>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-0.5">
+                          <div className="text-[10px] text-neutral-400">Quân hàm PvP &amp; Số dư Xu</div>
+                          <div className="font-mono text-[11px] text-purple-300 font-bold">
+                            {formatPvpRankLabel(selectedAccountDetail.pvpRankCode)} •{' '}
+                            <span className="text-emerald-300">
+                              {selectedAccountDetail.xuBalance.toLocaleString('vi-VN')} Xu
+                            </span>
+                          </div>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-0.5">
+                          <div className="text-[10px] text-neutral-400">Tiến độ Chiến dịch</div>
+                          <div className="font-mono text-[11px] text-amber-300 font-bold">
+                            Stage {selectedAccountDetail.unlockedStage}/{TOTAL_CAMPAIGN_STAGES} (Đã qua{' '}
+                            {selectedAccountDetail.completedStages.length} màn)
+                          </div>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-0.5">
+                          <div className="text-[10px] text-neutral-400">Ngày tạo hồ sơ</div>
+                          <div className="font-mono text-[11px] text-neutral-200">
+                            {selectedAccountDetail.createdAtMs > 0
+                              ? new Date(selectedAccountDetail.createdAtMs).toLocaleString('vi-VN')
+                              : 'Mới tham gia'}
+                          </div>
+                        </div>
+                        <div className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-0.5">
+                          <div className="text-[10px] text-neutral-400">Truy cập gần nhất</div>
+                          <div className="font-mono text-[11px] text-neutral-200">
+                            {selectedAccountDetail.lastLoginAtMs > 0
+                              ? new Date(selectedAccountDetail.lastLoginAtMs).toLocaleString('vi-VN')
+                              : 'Chưa ghi nhận'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="px-4 py-3 bg-neutral-950 border-t border-neutral-800 flex items-center justify-end">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedAccountDetail(null)}
+                        className="px-4 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs cursor-pointer"
+                      >
+                        ĐÓNG CHI TIẾT
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Pagination Controls: Trang trước / Trang sau */}
               <div className="pt-2 border-t border-neutral-800 flex items-center justify-between gap-2 flex-wrap">
                 <span className="text-[11px] font-mono text-neutral-400">
@@ -1942,6 +2691,128 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
              ========================================================================= */}
           {activeTab === 'SYSTEM_LOGS' && isVerifiedSuperAdmin && (
             <SystemLogsAdminPanel user={currentUser} />
+          )}
+
+          {/* =========================================================================
+              TAB 8: BẢO TRÌ HỆ THỐNG (CHỈ DUY NHẤT ADMIN linhnk2013@gmail.com)
+             ========================================================================= */}
+          {activeTab === 'MAINTENANCE' && isVerifiedSuperAdmin && (
+            <section
+              data-testid="system-maintenance-admin-panel"
+              className="p-4 rounded-xl bg-neutral-950/90 border border-amber-500/50 space-y-4"
+            >
+              <div className="flex items-center justify-between border-b border-amber-500/20 pb-2.5 flex-wrap gap-2">
+                <div className="flex items-center gap-2 font-extrabold text-amber-300 uppercase tracking-wider">
+                  <Wrench className="w-4 h-4 text-amber-400" />
+                  <span>QUẢN LÝ BẢO TRÌ HỆ THỐNG</span>
+                </div>
+                <span
+                  data-testid="maintenance-status-badge"
+                  className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold font-mono border ${
+                    maintenanceConfig.isActive
+                      ? 'bg-rose-950 text-rose-300 border-rose-500 animate-pulse'
+                      : 'bg-emerald-950 text-emerald-300 border-emerald-600/70'
+                  }`}
+                >
+                  {maintenanceConfig.isActive
+                    ? 'ĐANG BẢO TRÌ HỆ THỐNG'
+                    : 'HỆ THỐNG HOẠT ĐỘNG BÌNH THƯỜNG'}
+                </span>
+              </div>
+
+              <div className="p-3 rounded-xl bg-neutral-900/90 border border-neutral-800 text-[11px] text-neutral-300 leading-relaxed space-y-1">
+                <p>
+                  Khi bấm <strong className="text-rose-300">Kích hoạt bảo trì</strong>:
+                </p>
+                <ul className="list-disc list-inside text-neutral-400 space-y-0.5">
+                  <li>
+                    Tự động thoát toàn bộ phiên đăng nhập của người chơi trên toàn hệ thống.
+                  </li>
+                  <li>
+                    Hiện thông báo trực tiếp trên màn hình người chơi đang chơi kèm nút{' '}
+                    <strong className="text-amber-300">Thoát về Menu</strong>.
+                  </li>
+                  <li>
+                    Tại màn hình Menu chào mừng, nút <strong>ĐĂNG NHẬP</strong> và{' '}
+                    <strong>CHƠI THỬ</strong> sẽ bị làm mờ và tạm khóa cho đến khi kết thúc bảo trì.
+                  </li>
+                </ul>
+              </div>
+
+              {/* Ngày giờ bắt đầu & Ngày giờ kết thúc bảo trì */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-neutral-900 border border-neutral-800 space-y-1.5">
+                  <label className="block text-xs font-bold text-amber-300">
+                    Ngày giờ bắt đầu bảo trì
+                  </label>
+                  <input
+                    type="datetime-local"
+                    data-testid="maintenance-start-input"
+                    value={maintStartInput}
+                    onChange={(e) => setMaintStartInput(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-neutral-950 border border-neutral-700 text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="p-3 rounded-xl bg-neutral-900 border border-neutral-800 space-y-1.5">
+                  <label className="block text-xs font-bold text-amber-300">
+                    Ngày giờ kết thúc bảo trì
+                  </label>
+                  <input
+                    type="datetime-local"
+                    data-testid="maintenance-end-input"
+                    value={maintEndInput}
+                    onChange={(e) => setMaintEndInput(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-neutral-950 border border-neutral-700 text-white font-mono text-xs focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              {/* Xem trước nội dung thông báo bảo trì */}
+              <div className="p-3.5 rounded-xl bg-amber-950/30 border border-amber-500/40 space-y-1">
+                <div className="text-[10px] font-bold text-amber-300 uppercase">
+                  Nội dung thông báo hiển thị tới người chơi:
+                </div>
+                <div
+                  data-testid="maintenance-preview-message"
+                  className="text-xs font-bold text-white leading-relaxed"
+                >
+                  &ldquo;
+                  {buildMaintenanceNoticeMessage(
+                    new Date(maintStartInput).getTime(),
+                    new Date(maintEndInput).getTime()
+                  )}
+                  &rdquo;
+                </div>
+              </div>
+
+              {/* Nút Kích hoạt bảo trì & Nút Kết thúc bảo trì */}
+              <div className="flex flex-wrap items-center gap-3 pt-1">
+                <button
+                  type="button"
+                  data-testid="btn-activate-maintenance"
+                  disabled={isUpdatingMaintenance}
+                  onClick={() => void handleActivateMaintenance()}
+                  className="flex-1 min-w-[180px] py-2.5 px-4 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer"
+                >
+                  <Power className="w-4 h-4" />
+                  <span>
+                    {isUpdatingMaintenance ? 'Đang xử lý...' : 'KÍCH HOẠT BẢO TRÌ'}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="btn-end-maintenance"
+                  disabled={isUpdatingMaintenance || !maintenanceConfig.isActive}
+                  onClick={() => void handleEndMaintenance()}
+                  className="flex-1 min-w-[180px] py-2.5 px-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-40 text-black font-extrabold text-xs flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95 cursor-pointer"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>KẾT THÚC BẢO TRÌ</span>
+                </button>
+              </div>
+            </section>
           )}
         </div>
 

@@ -334,6 +334,34 @@
         "version": { "type": "number" }
       },
       "required": ["stage1Map", "stages", "updatedAtMs", "updatedBy", "version"]
+    },
+    "SystemDifficultyConfig": {
+      "title": "SystemDifficultyConfig",
+      "description": "Cấu hình chi tiết độ khó Giải trí (DEFAULT) và Thử thách (EXTREME) tại /system_config/difficulty.",
+      "type": "object",
+      "properties": {
+        "activeDefaultDifficulty": { "type": "string", "enum": ["DEFAULT", "EXTREME"] },
+        "profiles": { "type": "object" },
+        "updatedAt": { "type": "number" },
+        "updatedBy": { "type": "string" },
+        "version": { "type": "number" }
+      },
+      "required": ["activeDefaultDifficulty", "profiles", "updatedAt", "updatedBy", "version"]
+    },
+    "SystemMaintenanceConfig": {
+      "title": "SystemMaintenanceConfig",
+      "description": "Cấu hình chế độ Bảo trì hệ thống tại /system_config/maintenance.",
+      "type": "object",
+      "properties": {
+        "isActive": { "type": "boolean" },
+        "startAtMs": { "type": "number" },
+        "endAtMs": { "type": "number" },
+        "message": { "type": "string", "maxLength": 500 },
+        "updatedAt": { "type": "number" },
+        "updatedBy": { "type": "string" },
+        "version": { "type": "number" }
+      },
+      "required": ["isActive", "startAtMs", "endAtMs", "message", "updatedAt", "updatedBy", "version"]
     }
   },
   "firestore": {
@@ -367,7 +395,7 @@
     },
     "/system_config/{docId}": {
       "schema": { "$ref": "#/entities/SystemAudioConfig" },
-      "description": "Cấu hình hệ thống (/system_config/audio, /system_config/media, /system_config/stages_catalog, /system_config/action_sfx)."
+      "description": "Cấu hình hệ thống (/system_config/audio, /system_config/media, /system_config/stages_catalog, /system_config/action_sfx, /system_config/difficulty, /system_config/maintenance)."
     }
   }
 }

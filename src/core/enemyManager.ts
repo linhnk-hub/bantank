@@ -4,6 +4,7 @@
  */
 
 import { ENEMY_CONFIG, TANK_CONFIG } from './constants.ts';
+import { DifficultyConfigManager } from './difficultyManager.ts';
 import {
   type EnemyTank,
   type EnemyType,
@@ -29,21 +30,28 @@ export function getEffectiveShootCooldown(
   enemyType: EnemyType,
   difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT'
 ): number {
+  const scale = DifficultyConfigManager.getInstance().getProfile(difficulty).enemyShootCooldownScale || 1.0;
+  let baseCooldown: number = ENEMY_CONFIG.SPECS[enemyType].shootCooldown;
   if (difficulty === 'EXTREME') {
     switch (enemyType) {
       case 'FAST':
-        return 1.0;
+        baseCooldown = 1.0;
+        break;
       case 'BASIC':
-        return 1.1;
+        baseCooldown = 1.1;
+        break;
       case 'POWER':
-        return 1.15;
+        baseCooldown = 1.15;
+        break;
       case 'ARMOR':
-        return 1.2;
+        baseCooldown = 1.2;
+        break;
       default:
-        return 1.1;
+        baseCooldown = 1.1;
+        break;
     }
   }
-  return ENEMY_CONFIG.SPECS[enemyType].shootCooldown;
+  return Math.round(baseCooldown * scale * 1000) / 1000;
 }
 
 export class EnemyManager {
@@ -108,7 +116,9 @@ export class EnemyManager {
     difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT'
   ): EnemyTank | null {
     if (this.queue.length === 0) return null;
-    if (this.activeEnemies.length >= ENEMY_CONFIG.MAX_ACTIVE) return null;
+    const diffProfile = DifficultyConfigManager.getInstance().getProfile(difficulty);
+    const maxActive = diffProfile.maxActiveEnemies || ENEMY_CONFIG.MAX_ACTIVE;
+    if (this.activeEnemies.length >= maxActive) return null;
 
     const spawnPoint = ENEMY_CONFIG.SPAWN_POINTS[this.spawnIndex];
     const spawnBox = getTankHitbox(spawnPoint.x, spawnPoint.y);
@@ -149,13 +159,14 @@ export class EnemyManager {
 
     const type = this.queue.shift()!;
     const specs = ENEMY_CONFIG.SPECS[type];
+    const speedScale = diffProfile.enemySpeedScale || 1.0;
 
     const newEnemy: EnemyTank = {
       id: `enemy_${this.nextEnemyId++}_${type}`,
       x: spawnPoint.x,
       y: spawnPoint.y,
       direction: 'DOWN',
-      speed: specs.speed,
+      speed: Math.round(specs.speed * speedScale),
       type: 'enemy',
       enemyType: type,
       tier: 1,
@@ -254,7 +265,9 @@ export class EnemyManager {
         const allTanks = activeP2 ? [p1, activeP2, ...this.activeEnemies] : [p1, ...this.activeEnemies];
         const spawned = this.trySpawnEnemy(terrain, allTanks, bullets, dt, difficulty);
         if (spawned) {
-          this.spawnCooldown = ENEMY_CONFIG.SPAWN_INTERVAL_S;
+          this.spawnCooldown =
+            DifficultyConfigManager.getInstance().getProfile(difficulty).spawnIntervalS ||
+            ENEMY_CONFIG.SPAWN_INTERVAL_S;
           this.spawnRetryTimer = 0;
         }
       }

@@ -4,6 +4,7 @@
  */
 
 import { TILE_TYPES, type StageMapMatrix } from './types.ts';
+import { DifficultyConfigManager } from './difficultyManager.ts';
 
 export const MAP_DIMENSIONS = {
   ROWS: 13,
@@ -141,6 +142,10 @@ export const MATCH_TIMER_CONFIG = {
 export function getMatchDurationSecondsForDifficulty(
   difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT'
 ): number {
+  const profile = DifficultyConfigManager.getInstance().getProfile(difficulty);
+  if (profile && Number.isFinite(profile.durationSeconds) && profile.durationSeconds > 0) {
+    return profile.durationSeconds;
+  }
   return difficulty === 'EXTREME'
     ? MATCH_TIMER_CONFIG.EXTREME_DURATION_S
     : MATCH_TIMER_CONFIG.DEFAULT_DURATION_S;
@@ -173,6 +178,10 @@ export function getStartingLivesForDifficultyAndMode(
   difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT',
   gameMode: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' = 'SOLO'
 ): number {
+  const profile = DifficultyConfigManager.getInstance().getProfile(difficulty);
+  if (profile) {
+    return gameMode === 'SOLO' ? profile.soloLives : profile.coopLives;
+  }
   if (difficulty === 'EXTREME') {
     return gameMode === 'SOLO' ? 2 : 1;
   }

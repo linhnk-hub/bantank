@@ -83,8 +83,6 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
           aria-hidden="true"
         />
       )}
-      {showLabelOnDesktop && (
-      )}
     </button>
   );
 };

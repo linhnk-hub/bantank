@@ -41,6 +41,7 @@ import {
   type CustomActionSoundTrack,
 } from '../core/audio.ts';
 import { StageManager, type ManagedStageRecord } from '../core/stageManager.ts';
+import { ConfirmationPopupModal } from './ConfirmationPopupModal.tsx';
 
 export const MusicAdminPanel: React.FC = () => {
   const musicManager = MusicManager.getInstance();
@@ -280,8 +281,28 @@ export const MusicAdminPanel: React.FC = () => {
     return selectableTracks.find((t) => t.id === id)?.displayName || 'Đã chọn';
   };
 
+  const activePopupMessage =
+    sharedSyncError || actionSfxError || homeVideoError || statusMsg?.text || null;
+  const activePopupType: 'success' | 'error' | 'info' =
+    sharedSyncError || actionSfxError || homeVideoError || statusMsg?.type === 'error'
+      ? 'error'
+      : statusMsg?.type === 'info'
+        ? 'info'
+        : 'success';
+
   return (
     <div className="space-y-4 text-xs select-none">
+      <ConfirmationPopupModal
+        isOpen={Boolean(activePopupMessage)}
+        type={activePopupType}
+        messages={activePopupMessage ? [activePopupMessage] : []}
+        onClose={() => {
+          setStatusMsg(null);
+          musicManager.clearSharedSyncError();
+          soundManager.clearCloudActionSfxError();
+        }}
+      />
+
       {/* Top Banner */}
       <div className="p-3.5 rounded-xl bg-neutral-950 border border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="space-y-1">

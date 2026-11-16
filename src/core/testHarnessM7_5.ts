@@ -342,7 +342,7 @@ export function runAllM7_5Tests(): { results: M75TestResult[] } {
       settingsSrc.includes('Tổng điểm XP') &&
       settingsSrc.includes('Số dư Xu') &&
       settingsSrc.includes('Tổng số lần đăng nhập') &&
-      settingsSrc.includes('Lịch sử đăng nhập &amp; đăng xuất') &&
+      settingsSrc.includes('Lịch sử truy cập') &&
       userProfileSrc.includes('data-testid="profile-player-level-card"') &&
       adminLogsSrc.includes('data-testid="subtab-level-audit"');
 

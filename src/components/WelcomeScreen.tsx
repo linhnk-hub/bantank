@@ -4,9 +4,14 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { AlertCircle, CheckCircle2, Gamepad2, Loader2 } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Gamepad2, Loader2, ShieldAlert, Wrench } from 'lucide-react';
 import { GameLogo } from './GameLogo.tsx';
 import { MusicManager, type HomeBackgroundVideoConfig } from '../core/musicManager.ts';
+import {
+  MaintenanceManager,
+  buildMaintenanceNoticeMessage,
+  type SystemMaintenanceConfigDocument,
+} from '../core/maintenanceManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 
 export interface WelcomeScreenProps {
@@ -27,7 +32,11 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   onClearFeedback,
 }) => {
   const musicManager = MusicManager.getInstance();
+  const maintenanceMgr = MaintenanceManager.getInstance();
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const [maintenanceConfig, setMaintenanceConfig] = useState<SystemMaintenanceConfigDocument>(() =>
+    maintenanceMgr.getConfig()
+  );
   const [homeVideoConfig, setHomeVideoConfig] = useState<HomeBackgroundVideoConfig | null>(() =>
     musicManager.getHomeVideoConfig()
   );
@@ -43,6 +52,13 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   const [isVideoBuffering, setIsVideoBuffering] = useState<boolean>(() =>
     Boolean(musicManager.getHomeVideoUrl())
   );
+
+  useEffect(() => {
+    const unsubMaint = maintenanceMgr.subscribe(() => {
+      setMaintenanceConfig(maintenanceMgr.getConfig());
+    });
+    return unsubMaint;
+  }, [maintenanceMgr]);
 
   useEffect(() => {
     const unsubMusic = musicManager.subscribe(() => {
@@ -81,6 +97,11 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       tryPlayIntroVideo();
     }
   }, [homeVideoConfig?.isEnabled, homeVideoUrl]);
+
+  const isMaintenanceActive = Boolean(maintenanceConfig.isActive);
+  const maintenanceNoticeText =
+    maintenanceConfig.message ||
+    buildMaintenanceNoticeMessage(maintenanceConfig.startAtMs, maintenanceConfig.endAtMs);
 
   return (
     <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]">
@@ -170,14 +191,47 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           </h1>
           <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mt-1.5 sm:mt-2.5 mb-4 sm:mb-6" />
 
+          {/* Active System Maintenance Notice */}
+          {isMaintenanceActive && (
+            <div
+              data-testid="welcome-maintenance-banner"
+              className="w-full max-w-md mb-4 p-3.5 rounded-2xl bg-amber-950/90 border-2 border-amber-500/80 text-amber-100 shadow-2xl space-y-2 animate-fade-in"
+            >
+              <div className="flex items-center justify-center gap-2 text-amber-300 font-black text-xs sm:text-sm font-mono uppercase">
+                <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>HỆ THỐNG ĐANG BẢO TRÌ</span>
+              </div>
+              <p className="text-xs sm:text-sm text-amber-100 font-medium leading-relaxed">
+                {maintenanceNoticeText}
+              </p>
+              <div className="pt-1 flex justify-center">
+                <button
+                  type="button"
+                  data-testid="welcome-admin-maintenance-signin-btn"
+                  onClick={onSignIn}
+                  disabled={isProcessing}
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-900/90 hover:bg-neutral-800 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                  title="Dành riêng cho Quản trị viên để kết thúc bảo trì"
+                >
+                  <Wrench className="w-3 h-3 text-amber-400" />
+                  <span>Đăng nhập Quản trị viên</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Google Sign-in Call To Action & Trial Mode Button (Compact width + animated gradient shift) */}
           <div className="w-full max-w-[260px] flex flex-col items-center gap-2.5 px-2 mb-4">
             <button
               type="button"
               data-testid="welcome-google-signin-btn"
-              onClick={onSignIn}
-              disabled={isProcessing}
-              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-orange-600 via-red-600 to-orange-500 bg-[length:200%_100%] bg-left hover:bg-right text-white font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-lg shadow-orange-600/30 hover:shadow-red-600/45 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 border border-orange-400/70 disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed"
+              onClick={isMaintenanceActive ? undefined : onSignIn}
+              disabled={isProcessing || isMaintenanceActive}
+              className={`w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-orange-600 via-red-600 to-orange-500 bg-[length:200%_100%] bg-left hover:bg-right text-white font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-lg shadow-orange-600/30 hover:shadow-red-600/45 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 border border-orange-400/70 ${
+                isMaintenanceActive
+                  ? 'opacity-35 grayscale pointer-events-none cursor-not-allowed'
+                  : 'disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed'
+              }`}
             >
               {isProcessing ? (
                 <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0" />
@@ -213,9 +267,13 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               <button
                 type="button"
                 data-testid="welcome-trial-play-btn"
-                onClick={onStartTrialMode}
-                disabled={isProcessing}
-                className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-neutral-900 via-zinc-700 to-neutral-950 bg-[length:200%_100%] bg-left hover:bg-right text-neutral-100 hover:text-amber-300 font-extrabold text-xs sm:text-sm whitespace-nowrap border border-zinc-600/80 hover:border-amber-400/60 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-black/40 cursor-pointer disabled:opacity-50"
+                onClick={isMaintenanceActive ? undefined : onStartTrialMode}
+                disabled={isProcessing || isMaintenanceActive}
+                className={`w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-neutral-900 via-zinc-700 to-neutral-950 bg-[length:200%_100%] bg-left hover:bg-right text-neutral-100 hover:text-amber-300 font-extrabold text-xs sm:text-sm whitespace-nowrap border border-zinc-600/80 hover:border-amber-400/60 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-black/40 ${
+                  isMaintenanceActive
+                    ? 'opacity-35 grayscale pointer-events-none cursor-not-allowed'
+                    : 'cursor-pointer disabled:opacity-50'
+                }`}
               >
                 <Gamepad2 className="w-4 h-4 text-amber-400 shrink-0" />
                 <span className="tracking-wide uppercase">CHƠI THỬ</span>

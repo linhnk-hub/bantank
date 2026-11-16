@@ -126,6 +126,18 @@ export interface UserAccountSummary {
   status: 'ACTIVE' | 'OFFLINE';
 }
 
+export interface DetailedUserAccountProfile extends UserAccountSummary {
+  photoURL: string | null;
+  level: number | null;
+  totalXp: number;
+  xuBalance: number;
+  pvpRankCode: string | null;
+  unlockedStage: number;
+  completedStages: number[];
+  sessionDeviceId: string | null;
+  sessionLastActiveMs: number | null;
+}
+
 export interface PaginatedUserAccountsResult {
   success: boolean;
   accounts: UserAccountSummary[];
@@ -560,16 +572,16 @@ export function getRoleNameFrameClasses(_role: UserRoleType | string): string {
 
 /**
  * Ký hiệu thu nhỏ kiểu Trademark viết lên trên tên theo vai trò:
- * - ADMIN: 'A'
- * - MOD: 'M'
+ * - ADMIN: 'Ⓐ'
+ * - MOD: 'Ⓜ'
  * - PLAYER: null
  */
-export function getRoleTrademarkBadge(role: UserRoleType | string): 'A' | 'M' | null {
+export function getRoleTrademarkBadge(role: UserRoleType | string): 'Ⓐ' | 'Ⓜ' | null {
   switch (role) {
     case 'ADMIN':
-      return 'A';
+      return 'Ⓐ';
     case 'MOD':
-      return 'M';
+      return 'Ⓜ';
     default:
       return null;
   }
@@ -580,7 +592,7 @@ export function getRoleDisplayInfo(role: UserRoleType | string): {
   label: string;
   frameClass: string;
   colorNameVi: string;
-  trademarkBadge: 'A' | 'M' | null;
+  trademarkBadge: 'Ⓐ' | 'Ⓜ' | null;
 } {
   switch (role) {
     case 'ADMIN':
@@ -589,7 +601,7 @@ export function getRoleDisplayInfo(role: UserRoleType | string): {
         label: 'Admin',
         frameClass: getRoleNameFrameClasses('ADMIN'),
         colorNameVi: 'Mặc định',
-        trademarkBadge: 'A',
+        trademarkBadge: 'Ⓐ',
       };
     case 'MOD':
       return {
@@ -597,7 +609,7 @@ export function getRoleDisplayInfo(role: UserRoleType | string): {
         label: 'Mod',
         frameClass: getRoleNameFrameClasses('MOD'),
         colorNameVi: 'Mặc định',
-        trademarkBadge: 'M',
+        trademarkBadge: 'Ⓜ',
       };
     case 'PLAYER':
     default:
@@ -2001,6 +2013,89 @@ export class AuthManager {
     return () => {
       AuthManager.signOutHooks.delete(cb);
     };
+  }
+
+  public async fetchAccountDetailedProfile(
+    summary: UserAccountSummary
+  ): Promise<DetailedUserAccountProfile> {
+    const base: DetailedUserAccountProfile = {
+      ...summary,
+      photoURL: null,
+      level: null,
+      totalXp: 0,
+      xuBalance: 0,
+      pvpRankCode: null,
+      unlockedStage: 1,
+      completedStages: [],
+      sessionDeviceId: null,
+      sessionLastActiveMs: summary.lastLoginAtMs > 0 ? summary.lastLoginAtMs : null,
+    };
+
+    if (!summary?.uid) return base;
+
+    try {
+      const db = getFirebaseDb();
+      if (!db) return base;
+
+      const userSnap = await getDoc(doc(db, 'users', summary.uid));
+      if (userSnap.exists()) {
+        const data = userSnap.data() as Record<string, unknown>;
+        if (typeof data.photoURL === 'string' && data.photoURL.trim()) {
+          base.photoURL = data.photoURL.trim();
+        }
+        const rawXp = typeof data.totalXp === 'number' ? data.totalXp : typeof data.xp === 'number' ? data.xp : null;
+        if (typeof rawXp === 'number' && Number.isFinite(rawXp) && rawXp >= 0) {
+          base.totalXp = Math.floor(rawXp);
+        }
+        if (typeof data.level === 'number' && Number.isInteger(data.level) && data.level >= 1 && data.level <= 50) {
+          base.level = data.level;
+        }
+        if (typeof data.xu === 'number' && Number.isFinite(data.xu) && data.xu >= 0) {
+          base.xuBalance = Math.floor(data.xu);
+        }
+        if (typeof data.rank === 'string' && data.rank.trim()) {
+          base.pvpRankCode = data.rank.trim();
+        }
+        if (typeof data.unlockedStage === 'number' && Number.isInteger(data.unlockedStage) && data.unlockedStage >= 1) {
+          base.unlockedStage = data.unlockedStage;
+        }
+        if (Array.isArray(data.completedStages)) {
+          base.completedStages = data.completedStages.filter(
+            (x): x is number => typeof x === 'number' && Number.isInteger(x) && x >= 1
+          );
+        }
+        const createdMs = parseFirestoreTimestampMs(data.createdAt);
+        if (createdMs > 0) base.createdAtMs = createdMs;
+        const loginMs = parseFirestoreTimestampMs(data.lastLoginAt);
+        if (loginMs > 0) base.lastLoginAtMs = Math.max(base.lastLoginAtMs, loginMs);
+      }
+
+      const caller = this.getCurrentUser();
+      const isSoleAdminCaller = isAdminUser(caller);
+      if (isSoleAdminCaller || (caller && caller.uid === summary.uid)) {
+        try {
+          const sessSnap = await getDoc(doc(db, 'user_sessions', summary.uid));
+          if (sessSnap.exists()) {
+            const sData = sessSnap.data() as Record<string, unknown>;
+            if (typeof sData.deviceId === 'string' && sData.deviceId.trim()) {
+              base.sessionDeviceId = sData.deviceId.trim();
+            }
+            const activeMs = parseFirestoreTimestampMs(
+              sData.lastActiveAt || sData.updatedAt || sData.loginAt || sData.createdAt
+            );
+            if (activeMs > 0) {
+              base.sessionLastActiveMs = activeMs;
+            }
+          }
+        } catch {
+          // Ignore session read error if not permitted
+        }
+      }
+    } catch {
+      // Fall back to summary fields if offline or restricted
+    }
+
+    return base;
   }
 
   public async signOut(): Promise<void> {

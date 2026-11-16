@@ -21,6 +21,7 @@ import { CoopOnlineManager, type CoopRoomDocument } from '../core/coopOnlineMana
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { StageProgressionManager } from '../core/stageProgression.ts';
 import { StageManager } from '../core/stageManager.ts';
+import { DifficultyConfigManager } from '../core/difficultyManager.ts';
 import { StageMapMiniPreview } from './StageMapMiniPreview.tsx';
 import {
   ArrowLeft,
@@ -197,7 +198,18 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   );
   const [stageSelectError, setStageSelectError] = useState<string | null>(null);
   const stageManager = StageManager.getInstance();
+  const difficultyMgr = DifficultyConfigManager.getInstance();
   const [, setStageCatalogRev] = useState(0);
+  const [difficultyConfigState, setDifficultyConfigState] = useState(() =>
+    difficultyMgr.getConfig()
+  );
+
+  useEffect(() => {
+    const unsubDiff = difficultyMgr.subscribe(() => {
+      setDifficultyConfigState(difficultyMgr.getConfig());
+    });
+    return unsubDiff;
+  }, [difficultyMgr]);
 
   useEffect(() => {
     const unsubStages = stageManager.subscribe(() => {
@@ -851,7 +863,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       className="text-xs text-neutral-300 leading-relaxed mt-3 whitespace-pre-line"
                     >
                       {formatSentenceLineBreaks(
-                        'Có 3 mạng chơi, thời gian trận đấu 120 giây. Nhịp độ cân bằng, phù hợp chơi thư giãn và rèn kỹ năng chiến đấu.'
+                        `Có ${difficultyConfigState.profiles.DEFAULT.soloLives} mạng chơi, thời gian trận đấu ${difficultyConfigState.profiles.DEFAULT.durationSeconds} giây. Nhịp độ cân bằng, phù hợp chơi thư giãn và rèn kỹ năng chiến đấu.`
                       )}
                     </p>
                   </div>
@@ -901,7 +913,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       className="text-xs text-neutral-300 leading-relaxed mt-3 whitespace-pre-line"
                     >
                       {formatSentenceLineBreaks(
-                        'Có 2 mạng chơi, thời gian trận đấu 60 giây. Xe địch phản ứng nhanh và dồn hỏa lực mạnh vào căn cứ, đòi hỏi phản xạ và chiến thuật cao.'
+                        `Có ${difficultyConfigState.profiles.EXTREME.soloLives} mạng chơi, thời gian trận đấu ${difficultyConfigState.profiles.EXTREME.durationSeconds} giây. Xe địch phản ứng nhanh và dồn hỏa lực mạnh vào căn cứ, đòi hỏi phản xạ và chiến thuật cao.`
                       )}
                     </p>
                   </div>

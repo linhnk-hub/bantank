@@ -1574,8 +1574,115 @@ service cloud.firestore {
         && data.version >= 1;
     }
 
+    function isValidDifficultyProfileItem(p) {
+      return p is map
+        && p.keys().hasAll([
+          'durationSeconds',
+          'soloLives',
+          'coopLives',
+          'maxActiveEnemies',
+          'spawnIntervalS',
+          'enemySpeedScale',
+          'enemyShootCooldownScale'
+        ])
+        && p.keys().hasOnly([
+          'durationSeconds',
+          'soloLives',
+          'coopLives',
+          'maxActiveEnemies',
+          'spawnIntervalS',
+          'enemySpeedScale',
+          'enemyShootCooldownScale'
+        ])
+        && p.durationSeconds is int
+        && p.durationSeconds >= 30
+        && p.durationSeconds <= 600
+        && p.soloLives is int
+        && p.soloLives >= 1
+        && p.soloLives <= 9
+        && p.coopLives is int
+        && p.coopLives >= 1
+        && p.coopLives <= 9
+        && p.maxActiveEnemies is int
+        && p.maxActiveEnemies >= 1
+        && p.maxActiveEnemies <= 12
+        && (p.spawnIntervalS is int || p.spawnIntervalS is float)
+        && p.spawnIntervalS >= 0.3
+        && p.spawnIntervalS <= 5.0
+        && (p.enemySpeedScale is int || p.enemySpeedScale is float)
+        && p.enemySpeedScale >= 0.5
+        && p.enemySpeedScale <= 2.0
+        && (p.enemyShootCooldownScale is int || p.enemyShootCooldownScale is float)
+        && p.enemyShootCooldownScale >= 0.4
+        && p.enemyShootCooldownScale <= 2.5;
+    }
+
+    function isValidSystemDifficultyConfig(data) {
+      return data.keys().hasAll([
+          'activeDefaultDifficulty',
+          'profiles',
+          'updatedAt',
+          'updatedBy',
+          'version'
+        ])
+        && data.keys().hasOnly([
+          'activeDefaultDifficulty',
+          'profiles',
+          'updatedAt',
+          'updatedBy',
+          'version'
+        ])
+        && (data.activeDefaultDifficulty == 'DEFAULT' || data.activeDefaultDifficulty == 'EXTREME')
+        && data.profiles is map
+        && data.profiles.keys().hasAll(['DEFAULT', 'EXTREME'])
+        && data.profiles.keys().hasOnly(['DEFAULT', 'EXTREME'])
+        && isValidDifficultyProfileItem(data.profiles.DEFAULT)
+        && isValidDifficultyProfileItem(data.profiles.EXTREME)
+        && data.updatedAt is int
+        && data.updatedAt > 0
+        && data.updatedBy == 'linhnk2013@gmail.com'
+        && data.version is int
+        && data.version >= 1;
+    }
+
+    function isValidSystemMaintenanceConfig(data) {
+      return data.keys().hasAll([
+          'isActive',
+          'startAtMs',
+          'endAtMs',
+          'message',
+          'updatedAt',
+          'updatedBy',
+          'version'
+        ])
+        && data.keys().hasOnly([
+          'isActive',
+          'startAtMs',
+          'endAtMs',
+          'message',
+          'updatedAt',
+          'updatedBy',
+          'version'
+        ])
+        && data.isActive is bool
+        && data.startAtMs is int
+        && data.startAtMs > 0
+        && data.endAtMs is int
+        && data.endAtMs >= data.startAtMs
+        && data.message is string
+        && data.message.size() >= 1
+        && data.message.size() <= 500
+        && data.updatedAt is int
+        && data.updatedAt > 0
+        && data.updatedBy == 'linhnk2013@gmail.com'
+        && data.version is int
+        && data.version >= 1;
+    }
+
     match /system_config/{docId} {
-      allow get: if isVerifiedPersonalGmail() && (docId == 'audio' || docId == 'stages_catalog' || docId == 'action_sfx' || docId == 'media');
+      allow get: if (
+        isVerifiedPersonalGmail() && (docId == 'audio' || docId == 'stages_catalog' || docId == 'action_sfx' || docId == 'media')
+      ) || docId == 'difficulty' || docId == 'maintenance';
       allow list: if false;
       allow create: if isAdmin()
         && (
@@ -1583,6 +1690,8 @@ service cloud.firestore {
           || (docId == 'stages_catalog' && isValidSystemStagesCatalogConfig(incoming()))
           || (docId == 'action_sfx' && isValidSystemActionSfxConfig(incoming()))
           || (docId == 'media' && isValidSystemMediaConfig(incoming()))
+          || (docId == 'difficulty' && isValidSystemDifficultyConfig(incoming()))
+          || (docId == 'maintenance' && isValidSystemMaintenanceConfig(incoming()))
         );
       allow update: if isAdmin()
         && incoming().version > existing().version
@@ -1591,8 +1700,10 @@ service cloud.firestore {
           || (docId == 'stages_catalog' && isValidSystemStagesCatalogConfig(incoming()))
           || (docId == 'action_sfx' && isValidSystemActionSfxConfig(incoming()))
           || (docId == 'media' && isValidSystemMediaConfig(incoming()))
+          || (docId == 'difficulty' && isValidSystemDifficultyConfig(incoming()))
+          || (docId == 'maintenance' && isValidSystemMaintenanceConfig(incoming()))
         );
-      allow delete: if isAdmin() && (docId == 'audio' || docId == 'action_sfx' || docId == 'media');
+      allow delete: if isAdmin() && (docId == 'audio' || docId == 'action_sfx' || docId == 'media' || docId == 'difficulty' || docId == 'maintenance');
     }
 
     // =========================================================================

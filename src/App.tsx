@@ -62,6 +62,11 @@ import {
 import { PlayerStatsManager } from './core/playerStatsManager.ts';
 import { buildBattleXpIdentifiers } from './core/playerLevelSystem.ts';
 import { SystemAuditLogger } from './core/systemAuditLogger.ts';
+import { DifficultyConfigManager } from './core/difficultyManager.ts';
+import {
+  MaintenanceManager,
+  buildMaintenanceNoticeMessage,
+} from './core/maintenanceManager.ts';
 import {
   RotateCcw,
   Pause,
@@ -121,6 +126,7 @@ export default function App() {
   const [postStageReady, setPostStageReady] = useState<CoopPostStageReadyState | null>(() =>
     coopManager.getPostStageReadyState()
   );
+  const [maintenanceInterruptAlert, setMaintenanceInterruptAlert] = useState<string | null>(null);
 
   // Sync live peer Ping, post-stage ready status & online network telemetry toggle preference
   useEffect(() => {
@@ -180,10 +186,12 @@ export default function App() {
     }
   }, [appScreen, currentUser]);
 
-  // Eager audio unlock + static SFX preload + global audit/stats initialization on mount
+  // Eager audio unlock + static SFX preload + global audit/stats/difficulty/maintenance initialization on mount
   useEffect(() => {
     SystemAuditLogger.getInstance().installGlobalBrowserCaptureListeners();
     PlayerStatsManager.getInstance();
+    DifficultyConfigManager.getInstance().startCloudSync();
+    MaintenanceManager.getInstance().startCloudSync();
     SoundManager.getInstance().unlock();
     void SoundManager.getInstance().preloadStaticActionSfxBinaries();
     const unlockAudio = () => {
@@ -320,6 +328,63 @@ export default function App() {
       unsubSession();
     };
   }, [authManager, sessionManager, handlePause]);
+
+  // Enforce System Maintenance Mode: automatically sign out all non-Admin players and show maintenance notice modal
+  useEffect(() => {
+    const maintMgr = MaintenanceManager.getInstance();
+    const enforceMaintenanceIfNeeded = () => {
+      const cfg = maintMgr.getConfig();
+      if (!cfg.isActive) {
+        setMaintenanceInterruptAlert(null);
+        return;
+      }
+      const activeUser = authManager.getCurrentUser();
+      if (isSuperAdminUser(activeUser)) {
+        return;
+      }
+      const inTrial = authManager.isTrialMode() || isTrialMode;
+      const inActiveScreen =
+        appScreen === 'BATTLE' ||
+        appScreen === 'MAIN_MENU' ||
+        appScreen === 'MODE_SELECTION';
+      if (activeUser || inTrial || inActiveScreen) {
+        clearVirtualTouchInputs();
+        gameEngine.pause();
+        setIsPaused(true);
+        MusicManager.getInstance().pause();
+        SoundManager.getInstance().stopAllActiveActionSources();
+        void coopManager.leaveRoom();
+        coopManager.clearPostStageReadyState();
+        if (inTrial) {
+          authManager.exitTrialMode();
+          setIsTrialMode(false);
+          setIsMatchAllowed(false);
+        }
+        if (activeUser) {
+          AvatarManager.getInstance().clearSessionStateOnSignOut();
+          StageManager.getInstance().stopCloudSync();
+          void sessionManager.releaseSessionAndSignOut();
+          setCurrentUser(null);
+        }
+        const noticeMsg =
+          cfg.message || buildMaintenanceNoticeMessage(cfg.startAtMs, cfg.endAtMs);
+        setMaintenanceInterruptAlert(noticeMsg);
+      }
+    };
+
+    enforceMaintenanceIfNeeded();
+    return maintMgr.subscribe(() => {
+      enforceMaintenanceIfNeeded();
+    });
+  }, [
+    authManager,
+    sessionManager,
+    coopManager,
+    gameEngine,
+    clearVirtualTouchInputs,
+    isTrialMode,
+    appScreen,
+  ]);
 
   // Monitor Co-op Online Room for peer disconnection / leave / FINISHED fail-safe during BATTLE
   useEffect(() => {
@@ -506,6 +571,13 @@ export default function App() {
   );
 
   const handleStartTrialMode = useCallback(() => {
+    if (MaintenanceManager.getInstance().isMaintenanceActive()) {
+      const cfg = MaintenanceManager.getInstance().getConfig();
+      setAuthErrorMsg(
+        cfg.message || buildMaintenanceNoticeMessage(cfg.startAtMs, cfg.endAtMs)
+      );
+      return;
+    }
     authManager.startTrialMode();
     setIsTrialMode(true);
     setIsMatchAllowed(true);
@@ -606,6 +678,20 @@ export default function App() {
       if (!res.isValid) {
         setAuthErrorMsg(res.errorMessage || 'Đăng nhập không thành công.');
       } else {
+        const signedInUser = authManager.getCurrentUser();
+        if (
+          MaintenanceManager.getInstance().isMaintenanceActive() &&
+          !isSuperAdminUser(signedInUser)
+        ) {
+          const cfg = MaintenanceManager.getInstance().getConfig();
+          await sessionManager.releaseSessionAndSignOut();
+          setCurrentUser(null);
+          setAppScreen('WELCOME');
+          setAuthErrorMsg(
+            cfg.message || buildMaintenanceNoticeMessage(cfg.startAtMs, cfg.endAtMs)
+          );
+          return;
+        }
         setAppScreen('MAIN_MENU');
       }
     } catch (err: any) {
@@ -613,7 +699,7 @@ export default function App() {
     } finally {
       setAuthProcessing(false);
     }
-  }, [authManager]);
+  }, [authManager, sessionManager]);
 
   const handleSignOut = useCallback(async () => {
     setAuthProcessing(true);
@@ -1026,8 +1112,55 @@ export default function App() {
     setProfileRevision((r) => r + 1);
   }, [authManager]);
 
+  const handleMaintenanceExitToMenu = useCallback(() => {
+    setMaintenanceInterruptAlert(null);
+    setOnlineDisconnectMsg(null);
+    setIsReturningToLobby(false);
+    setReturnToLobbyError(null);
+    gameEngine.quitToMenu();
+    setIsPaused(false);
+    SoundManager.getInstance().stopAllActiveActionSources();
+    MusicManager.getInstance().syncMenuPlayback();
+    setGameState({ ...gameEngine.getState() });
+    setAppScreen('WELCOME');
+  }, [gameEngine]);
+
+  const maintenanceModalOverlay = maintenanceInterruptAlert ? (
+    <div
+      data-testid="active-maintenance-interrupt-modal"
+      className="fixed inset-0 z-[130] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 select-none"
+    >
+      <div className="w-full max-w-md rounded-2xl border-2 border-amber-500/80 bg-neutral-900 shadow-2xl overflow-hidden animate-fade-in">
+        <div className="px-5 py-3.5 border-b border-neutral-800 bg-amber-950/50 flex items-center gap-2.5">
+          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+          <h3 className="text-sm font-black uppercase tracking-wider font-mono text-amber-300">
+            THÔNG BÁO BẢO TRÌ HỆ THỐNG
+          </h3>
+        </div>
+        <div className="p-5 space-y-3 text-center">
+          <p className="text-xs sm:text-sm text-neutral-100 font-semibold leading-relaxed whitespace-pre-line">
+            {maintenanceInterruptAlert}
+          </p>
+        </div>
+        <div className="px-5 py-3.5 border-t border-neutral-800 bg-neutral-950/90 flex items-center justify-center">
+          <button
+            type="button"
+            data-testid="maintenance-exit-to-menu-btn"
+            onClick={handleMaintenanceExitToMenu}
+            className="w-full py-2.5 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs sm:text-sm font-mono uppercase tracking-wider transition-all shadow-lg cursor-pointer"
+          >
+            Thoát về Menu
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
+
   // View 1: Welcome Screen (Unauthenticated user or initial landing - V.1: Clean screen without Top Menu)
-  if ((!currentUser && (!isTrialMode || appScreen !== 'BATTLE')) || appScreen === 'WELCOME') {
+  if (
+    !maintenanceInterruptAlert &&
+    ((!currentUser && (!isTrialMode || appScreen !== 'BATTLE')) || appScreen === 'WELCOME')
+  ) {
     return (
       <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
         {!isAuthReady && (
@@ -1046,6 +1179,7 @@ export default function App() {
             setLogoutSuccessNotice(null);
           }}
         />
+        {maintenanceModalOverlay}
       </div>
     );
   }
@@ -1107,6 +1241,7 @@ export default function App() {
           onSignIn={handleSignIn}
           onSignOut={handleSignOut}
         />
+        {maintenanceModalOverlay}
       </div>
     );
   }
@@ -1175,6 +1310,7 @@ export default function App() {
           onSignIn={handleSignIn}
           onSignOut={handleSignOut}
         />
+        {maintenanceModalOverlay}
       </div>
     );
   }
@@ -1959,6 +2095,8 @@ export default function App() {
         onTogglePostStageReady={isCoopOnlineMatch ? handleTogglePostStageReady : undefined}
         hasTeammateLeft={hasTeammateLeft}
       />
+
+      {maintenanceModalOverlay}
     </div>
   );
 }
