@@ -695,7 +695,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         onProfileUpdated?.();
         setPopupNotice({
           type: 'success',
-          messages: [res.message || `Đã chọn ảnh đại diện "${item.name}".`],
+          messages: [res.message || `Đã chọn ảnh đại diện.`],
         });
       } else {
         const errText = res.message || 'Không thể chọn ảnh đại diện này.';

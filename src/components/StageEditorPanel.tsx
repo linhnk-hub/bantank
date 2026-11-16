@@ -854,7 +854,7 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                       <XCircle className="w-4 h-4 text-rose-400" />
                     )}
                     {liveMapValidation.isValid
-                      ? 'Cấu trúc bản đồ 13×13 hợp lệ (Đạt chuẩn)'
+                      ? 'Cấu trúc bản đồ 13×13'
                       : `Phát hiện ${liveMapValidation.errors.length} lỗi cấu trúc bản đồ`}
                   </span>
                   <span className="font-mono text-[10px]">
@@ -883,7 +883,7 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                     className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs transition-colors shadow cursor-pointer"
                   >
                     <Save className="w-3.5 h-3.5" />
-                    {isCloudSyncing ? 'Đang lưu...' : 'Lưu màn chơi (Bản nháp)'}
+                    {isCloudSyncing ? 'Đang lưu...' : 'Lưu màn chơi'}
                   </button>
                   <button
                     type="button"
