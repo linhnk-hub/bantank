@@ -1316,7 +1316,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       Tiến độ Chiến dịch
                     </div>
                     <div className="text-xs font-extrabold font-mono text-white">
-                      Mở khóa: Stage {playerStats.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
+                      Đã hoàn thành:
                     </div>
                     <div className="space-y-1 pt-0.5 border-t border-neutral-800/80 text-[10px] font-mono text-neutral-300">
                       <div className="flex items-center justify-between gap-1">
@@ -1361,24 +1361,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <span className="text-neutral-400">- SOLO:</span>
                         <span>
                           <strong className="text-white">{playerStats.matchesByMode.SOLO.played}</strong>{' '}
-                          (<span className="text-emerald-300">T {playerStats.matchesByMode.SOLO.won}</span> •{' '}
-                          <span className="text-rose-300">B {playerStats.matchesByMode.SOLO.lost}</span>)
+                          (<span className="text-emerald-300">{playerStats.matchesByMode.SOLO.won} T</span> •{' '}
+                          <span className="text-rose-300">{playerStats.matchesByMode.SOLO.lost} B</span>)
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-neutral-400">- CO-OP AI:</span>
                         <span>
                           <strong className="text-white">{playerStats.matchesByMode.COOP_AI.played}</strong>{' '}
-                          (<span className="text-emerald-300">T {playerStats.matchesByMode.COOP_AI.won}</span> •{' '}
-                          <span className="text-rose-300">B {playerStats.matchesByMode.COOP_AI.lost}</span>)
+                          (<span className="text-emerald-300">{playerStats.matchesByMode.COOP_AI.won} T</span> •{' '}
+                          <span className="text-rose-300">{playerStats.matchesByMode.COOP_AI.lost} B</span>)
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-neutral-400">- CO-OP Online:</span>
                         <span>
                           <strong className="text-white">{playerStats.matchesByMode.COOP_ONLINE.played}</strong>{' '}
-                          (<span className="text-emerald-300">T {playerStats.matchesByMode.COOP_ONLINE.won}</span> •{' '}
-                          <span className="text-rose-300">B {playerStats.matchesByMode.COOP_ONLINE.lost}</span>)
+                          (<span className="text-emerald-300">{playerStats.matchesByMode.COOP_ONLINE.won} T</span> •{' '}
+                          <span className="text-rose-300">{playerStats.matchesByMode.COOP_ONLINE.lost} B</span>)
                         </span>
                       </div>
                     </div>
@@ -1389,7 +1389,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="p-3 rounded-xl bg-neutral-950/90 border border-neutral-800 space-y-1.5"
                   >
                     <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
-                      Xe địch tiêu diệt
+                      Tiêu diệt xe địch 
                     </div>
                     <div className="text-xs font-extrabold font-mono text-white">
                       Tổng: {playerStats.totalEnemiesDefeated} xe
@@ -1416,7 +1416,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   <div className="p-3 rounded-xl bg-neutral-950/90 border border-neutral-800 space-y-1.5">
                     <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
-                      Phòng Co-op Online
+                      Co-op Online
                     </div>
                     <div className="text-xs font-extrabold font-mono text-white">
                       {playerStats.coopRoomsParticipated} phòng
