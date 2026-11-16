@@ -180,16 +180,20 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-2 sm:px-4 pt-1 sm:pt-3 pb-4 max-w-4xl mx-auto w-full">
         <div className="flex flex-col items-center text-center max-w-2xl w-full">
           {/* Official Game Logo Hero — M7.3.10 Unified 200% Standard (320x320) */}
-          <div className="flex justify-center items-center p-0 m-0 mb-2">
+          <div className="flex justify-center items-center p-0 m-0">
             <GameLogo />
           </div>
 
-          {/* Title: Chiến trường huyền thoại with subtle yellow lines above and below */}
-          <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mb-1.5 sm:mb-2.5" />
-          <h1 className="text-[clamp(1.1rem,4.5vw,2.35rem)] whitespace-nowrap font-black uppercase text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow p-0 text-center">
-            Chiến trường huyền thoại
+          {/* Slogan Banner Image (/slogan.png) — zero outer margin/padding on all 4 sides */}
+          <h1 className="inline-flex items-center justify-center p-0 m-0 leading-none">
+            <img
+              src="/slogan.png"
+              alt="Chiến trường huyền thoại"
+              data-testid="welcome-slogan-image"
+              className="block w-auto max-w-[280px] sm:max-w-[380px] h-auto object-contain p-0 m-0 drop-shadow-lg select-none pointer-events-none"
+              draggable={false}
+            />
           </h1>
-          <div className="w-32 sm:w-60 h-[1.5px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent mx-auto mt-1.5 sm:mt-2.5 mb-4 sm:mb-6" />
 
           {/* Active System Maintenance Notice */}
           {isMaintenanceActive && (
@@ -211,10 +215,9 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                   onClick={onSignIn}
                   disabled={isProcessing}
                   className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-900/90 hover:bg-neutral-800 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold transition-colors cursor-pointer"
-                  title="Dành riêng cho Quản trị viên để kết thúc bảo trì"
                 >
                   <Wrench className="w-3 h-3 text-amber-400" />
-                  <span>Đăng nhập Quản trị viên</span>
+                  <span>Đăng nhập (Admin)</span>
                 </button>
               </div>
             </div>

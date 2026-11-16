@@ -572,16 +572,16 @@ export function getRoleNameFrameClasses(_role: UserRoleType | string): string {
 
 /**
  * Ký hiệu thu nhỏ kiểu Trademark viết lên trên tên theo vai trò:
- * - ADMIN: 'Ⓐ'
- * - MOD: 'Ⓜ'
+ * - ADMIN: 'AD'
+ * - MOD: 'MOD'
  * - PLAYER: null
  */
-export function getRoleTrademarkBadge(role: UserRoleType | string): 'Ⓐ' | 'Ⓜ' | null {
+export function getRoleTrademarkBadge(role: UserRoleType | string): 'AD' | 'MOD' | null {
   switch (role) {
     case 'ADMIN':
-      return 'Ⓐ';
+      return 'AD';
     case 'MOD':
-      return 'Ⓜ';
+      return 'MOD';
     default:
       return null;
   }
@@ -592,7 +592,7 @@ export function getRoleDisplayInfo(role: UserRoleType | string): {
   label: string;
   frameClass: string;
   colorNameVi: string;
-  trademarkBadge: 'Ⓐ' | 'Ⓜ' | null;
+  trademarkBadge: 'AD' | 'MOD' | null;
 } {
   switch (role) {
     case 'ADMIN':
@@ -601,7 +601,7 @@ export function getRoleDisplayInfo(role: UserRoleType | string): {
         label: 'Admin',
         frameClass: getRoleNameFrameClasses('ADMIN'),
         colorNameVi: 'Mặc định',
-        trademarkBadge: 'Ⓐ',
+        trademarkBadge: 'AD',
       };
     case 'MOD':
       return {
@@ -609,7 +609,7 @@ export function getRoleDisplayInfo(role: UserRoleType | string): {
         label: 'Mod',
         frameClass: getRoleNameFrameClasses('MOD'),
         colorNameVi: 'Mặc định',
-        trademarkBadge: 'Ⓜ',
+        trademarkBadge: 'MOD',
       };
     case 'PLAYER':
     default:

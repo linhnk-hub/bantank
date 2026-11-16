@@ -37,7 +37,7 @@ export function formatMaintenanceDateTimeVi(timestampMs: number): string {
 export function buildMaintenanceNoticeMessage(startAtMs: number, endAtMs: number): string {
   const startLabel = formatMaintenanceDateTimeVi(startAtMs);
   const endLabel = formatMaintenanceDateTimeVi(endAtMs);
-  return `Hệ thống bảo trì từ ${startLabel} đến ${endLabel}. Vui lòng quay lại game sau thời gian trên`;
+  return `Thời gian: từ ${startLabel} đến ${endLabel}. \nVui lòng quay lại game sau thời gian trên`;
 }
 
 export class MaintenanceManager {
