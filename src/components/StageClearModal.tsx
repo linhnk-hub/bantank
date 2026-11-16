@@ -154,7 +154,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
             </p>
             {isFinalCampaignStage && (
               <div className="inline-block px-2.5 py-0.5 rounded-full bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-[10px] font-extrabold font-mono">
-                HOÀN THÀNH TOÀN BỘ CHIẾN DỊCH 10 STAGE!
+                HOÀN THÀNH TOÀN BỘ 10 STAGE!
               </div>
             )}
           </div>
@@ -166,9 +166,6 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
             </div>
             <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400 tracking-tight">
               {localTotalScore.toLocaleString()} XP
-            </div>
-            <div className="text-[11px] font-mono text-emerald-300/90 font-semibold">
-              XP màn này: +{localStageScore.toLocaleString()} XP
             </div>
             <div className="flex items-center justify-center gap-1.5 pt-0.5 text-[11px] sm:text-xs">
               <Award className="w-3.5 h-3.5 text-amber-500" />

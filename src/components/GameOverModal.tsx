@@ -151,9 +151,6 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <div className="text-2xl sm:text-3xl font-black font-mono text-amber-400 tracking-tight">
               {localTotalScore.toLocaleString()} XP
             </div>
-            <div className="text-[11px] font-mono text-emerald-300/90 font-semibold">
-              XP màn này: +{localStageScore.toLocaleString()} XP
-            </div>
             <div className="flex items-center justify-center gap-1.5 pt-0.5 text-[11px] sm:text-xs">
               <Trophy className="w-3.5 h-3.5 text-amber-500" />
               <span className="text-neutral-400">Kỷ lục:</span>
