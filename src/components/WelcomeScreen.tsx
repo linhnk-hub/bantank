@@ -223,24 +223,24 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             </div>
           )}
 
-          {/* Google Sign-in Call To Action & Trial Mode Button (Compact width + animated gradient shift + yellow-to-red login text) */}
+          {/* Google Sign-in Call To Action & Trial Mode Button (Compact width + white-to-red background gradient) */}
           <div className="w-full max-w-[260px] flex flex-col items-center gap-2.5 px-2 mt-2.5 mb-4">
             <button
               type="button"
               data-testid="welcome-google-signin-btn"
               onClick={isMaintenanceActive ? undefined : onSignIn}
               disabled={isProcessing || isMaintenanceActive}
-              className={`w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-orange-600 via-red-600 to-orange-500 bg-[length:200%_100%] bg-left hover:bg-right text-white font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-lg shadow-orange-600/30 hover:shadow-red-600/45 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 border border-orange-400/70 ${
+              className={`w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-white via-red-600 to-white bg-[length:200%_100%] bg-left hover:bg-right text-white font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-lg shadow-red-600/30 hover:shadow-red-600/50 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 border border-red-400/80 ${
                 isMaintenanceActive
                   ? 'opacity-35 grayscale pointer-events-none cursor-not-allowed'
                   : 'disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed'
               }`}
             >
               {isProcessing ? (
-                <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0" />
+                <div className="w-4 h-4 border-2 border-red-600/40 border-t-red-600 rounded-full animate-spin shrink-0" />
               ) : (
                 /* Google Official "G" Multi-color SVG on crisp white badge */
-                <span className="w-5 h-5 rounded-full bg-white flex items-center justify-center shrink-0 shadow-sm">
+                <span className="w-5 h-5 rounded-full bg-white ring-1 ring-red-200/80 flex items-center justify-center shrink-0 shadow-sm">
                   <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
                     <path
                       fill="#4285F4"
@@ -263,7 +263,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               )}
               <span
                 data-testid="welcome-signin-gradient-text"
-                className="tracking-wide uppercase"
+                className="tracking-wide uppercase drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.85)]"
               >
                 {isProcessing ? 'ĐANG KẾT NỐI...' : 'ĐĂNG NHẬP'}
               </span>

@@ -364,23 +364,23 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             </div>
           )}
 
-          {/* Primary Action Button: "CHỌN CHẾ ĐỘ CHƠI" & Unified CÀI ĐẶT / HƯỚNG DẪN (Same compact width + gradient format as WelcomeScreen) */}
+          {/* Primary Action Button: "CHỌN CHẾ ĐỘ CHƠI" & Unified CÀI ĐẶT / HƯỚNG DẪN (Same compact width + white-to-red gradient format as WelcomeScreen) */}
           <div className="w-full max-w-[260px] flex flex-col items-center gap-2.5 px-2 mt-2.5 mb-4">
             <button
               type="button"
               data-testid="main-menu-play-btn"
               onClick={isSessionActive ? onPlay : onRetryAcquire}
               disabled={isProcessing}
-              className={`w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-orange-600 via-red-600 to-orange-500 bg-[length:200%_100%] bg-left hover:bg-right text-white font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-lg shadow-orange-600/30 hover:shadow-red-600/45 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 border border-orange-400/70 ${
+              className={`w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-white via-red-600 to-white bg-[length:200%_100%] bg-left hover:bg-right text-white font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-lg shadow-red-600/30 hover:shadow-red-600/50 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 border border-red-400/80 ${
                 isProcessing
                   ? 'opacity-60 cursor-not-allowed'
                   : 'cursor-pointer'
               }`}
             >
-              <Play className="w-4 h-4 fill-yellow-300 text-amber-400 drop-shadow shrink-0" />
+              <Play className="w-4 h-4 fill-red-600 text-red-700 drop-shadow-sm shrink-0" />
               <span
                 data-testid="main-menu-play-gradient-text"
-                className="tracking-wide uppercase font-black bg-gradient-to-b from-yellow-200 via-amber-400 to-red-500 bg-clip-text text-transparent [filter:drop-shadow(0_1.5px_1px_rgba(0,0,0,0.95))_drop-shadow(0_-0.5px_1px_rgba(0,0,0,0.9))_drop-shadow(1px_0_1px_rgba(0,0,0,0.9))_drop-shadow(-1px_0_1px_rgba(0,0,0,0.9))]"
+                className="tracking-wide uppercase drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.85)]"
               >
                 CHỌN CHẾ ĐỘ CHƠI
               </span>

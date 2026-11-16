@@ -1780,11 +1780,11 @@ async function verifyM7313FixesAsyncSuite() {
     throw new Error('public/intro-bantank.mp4 is missing');
   }
 
-  // 3. Google Sign-In & Chơi thử compact width + orange-red / dark-gray gradient shift styling
+  // 3. Google Sign-In & Chơi thử compact width + white-to-red / dark-gray gradient shift styling
   if (
     !welcomeSrc.includes('data-testid="welcome-google-signin-btn"') ||
     !welcomeSrc.includes('max-w-[260px]') ||
-    !welcomeSrc.includes('from-orange-600 via-red-600 to-orange-500') ||
+    !welcomeSrc.includes('from-white via-red-600 to-white') ||
     !welcomeSrc.includes('from-neutral-900 via-zinc-700 to-neutral-950') ||
     !welcomeSrc.includes('bg-[length:200%_100%] bg-left hover:bg-right')
   ) {
