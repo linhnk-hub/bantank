@@ -87,8 +87,12 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
     musicManager.getHomeVideoError()
   );
   const [isVideoBuffering, setIsVideoBuffering] = useState<boolean>(() =>
-    Boolean(musicManager.getHomeVideoUrl())
+    Boolean(musicManager.getHomeVideoUrl()) && !musicManager.isHomeVideoLoaded()
   );
+
+  useEffect(() => {
+    musicManager.preloadStaticHomeVideoOnce();
+  }, [musicManager]);
 
   const tryPlayIntroVideo = () => {
     const el = videoRef.current;
@@ -109,9 +113,9 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       const nextUrl = musicManager.getHomeVideoUrl();
       setHomeVideoConfig(nextConfig);
       setHomeVideoUrl((prevUrl) => {
-        if (nextUrl && nextUrl !== prevUrl) {
+        if (nextUrl && nextUrl !== prevUrl && !musicManager.isHomeVideoLoaded(nextUrl)) {
           setIsVideoBuffering(true);
-        } else if (!nextUrl) {
+        } else if (!nextUrl || musicManager.isHomeVideoLoaded(nextUrl)) {
           setIsVideoBuffering(false);
         }
         return nextUrl;
@@ -196,15 +200,17 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isSessionActive, isProcessing, onPlay]);
 
+  const effectiveVideoSrc = musicManager.getHomeVideoPlaybackSrc() || homeVideoUrl;
+
   return (
     <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
-      {/* Home Background Video (.mp4 with configurable opacity, blur & loop) */}
-      {homeVideoConfig?.isEnabled && homeVideoUrl && (
+      {/* Home Background Video (.mp4 with configurable opacity, blur & loop — reuses cached video from WelcomeScreen) */}
+      {homeVideoConfig?.isEnabled && effectiveVideoSrc && (
         <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
           <video
             ref={videoRef}
-            key={homeVideoUrl}
-            src={homeVideoUrl}
+            key={homeVideoConfig.videoId || 'intro-bantank'}
+            src={effectiveVideoSrc}
             autoPlay
             muted
             playsInline
@@ -212,16 +218,38 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             loop={homeVideoConfig.loop !== false}
             style={{ opacity: homeVideoConfig.opacity }}
             className="w-full h-full object-cover blur-[3px] scale-105"
-            onLoadStart={() => setIsVideoBuffering(true)}
+            onLoadStart={() => {
+              if (!musicManager.isHomeVideoLoaded(homeVideoUrl)) {
+                setIsVideoBuffering(true);
+              }
+            }}
+            onLoadedMetadata={(e) => {
+              const savedTime = musicManager.getHomeVideoPlaybackTime();
+              if (savedTime > 0 && Math.abs(e.currentTarget.currentTime - savedTime) > 0.5) {
+                try {
+                  e.currentTarget.currentTime = savedTime;
+                } catch {
+                  // ignore seek error
+                }
+              }
+            }}
             onLoadedData={() => {
+              musicManager.markHomeVideoLoaded(homeVideoUrl);
               setIsVideoBuffering(false);
               tryPlayIntroVideo();
             }}
             onCanPlay={() => {
+              musicManager.markHomeVideoLoaded(homeVideoUrl);
               setIsVideoBuffering(false);
               tryPlayIntroVideo();
             }}
-            onPlaying={() => setIsVideoBuffering(false)}
+            onPlaying={() => {
+              musicManager.markHomeVideoLoaded(homeVideoUrl);
+              setIsVideoBuffering(false);
+            }}
+            onTimeUpdate={(e) => {
+              musicManager.setHomeVideoPlaybackTime(e.currentTarget.currentTime);
+            }}
             onError={() => setIsVideoBuffering(false)}
           />
           <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/60 via-neutral-950/30 to-neutral-950/80" />
@@ -390,18 +418,18 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               <button
                 type="button"
                 onClick={onOpenSettings}
-                className="w-full py-3 px-3 rounded-2xl bg-gradient-to-r from-neutral-900 via-zinc-700 to-neutral-950 bg-[length:200%_100%] bg-left hover:bg-right text-neutral-100 hover:text-amber-300 font-extrabold text-xs sm:text-sm whitespace-nowrap border border-zinc-600/80 hover:border-amber-400/60 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-black/40 cursor-pointer"
+                className="w-full py-3 px-2.5 rounded-2xl bg-gradient-to-r from-neutral-900 via-zinc-700 to-neutral-950 bg-[length:200%_100%] bg-left hover:bg-right text-neutral-100 hover:text-amber-300 font-extrabold text-[11px] sm:text-xs whitespace-nowrap border border-zinc-600/80 hover:border-amber-400/60 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-black/40 cursor-pointer"
               >
-                <Settings className="w-4 h-4 text-amber-400 shrink-0" />
+                <Settings className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span className="tracking-wide uppercase">CÀI ĐẶT</span>
               </button>
 
               <button
                 type="button"
                 onClick={onOpenSupport}
-                className="w-full py-3 px-3 rounded-2xl bg-gradient-to-r from-neutral-900 via-zinc-700 to-neutral-950 bg-[length:200%_100%] bg-left hover:bg-right text-neutral-100 hover:text-amber-300 font-extrabold text-xs sm:text-sm whitespace-nowrap border border-zinc-600/80 hover:border-amber-400/60 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-black/40 cursor-pointer"
+                className="w-full py-3 px-2.5 rounded-2xl bg-gradient-to-r from-neutral-900 via-zinc-700 to-neutral-950 bg-[length:200%_100%] bg-left hover:bg-right text-neutral-100 hover:text-amber-300 font-extrabold text-[11px] sm:text-xs whitespace-nowrap border border-zinc-600/80 hover:border-amber-400/60 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-1.5 shadow-lg shadow-black/40 cursor-pointer"
               >
-                <HelpCircle className="w-4 h-4 text-amber-400 shrink-0" />
+                <HelpCircle className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span className="tracking-wide uppercase">HƯỚNG DẪN</span>
               </button>
             </div>
@@ -421,7 +449,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
           >
             <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
             <span>
-              Đang tải video intro{homeVideoConfig.fileName ? ` (${homeVideoConfig.fileName})` : ''}...
+              Đang tải Video intro...
             </span>
           </div>
         )}

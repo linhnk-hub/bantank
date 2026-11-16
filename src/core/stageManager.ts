@@ -175,7 +175,7 @@ export function validateStageDefinition(stage: StageDefinition): {
  */
 export const STAGE_1_DEFINITION: StageDefinition = {
   id: 1,
-  name: 'Stage 1 - KHỞI ĐẦU',
+  name: 'KHỞI ĐẦU',
   map: STAGE_1_MAP,
   enemyQueue: [...ENEMY_CONFIG.QUEUE],
   spawnIntervalS: 1.0,

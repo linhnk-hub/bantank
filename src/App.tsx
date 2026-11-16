@@ -1217,7 +1217,6 @@ export default function App() {
             displayName: currentUser.displayName,
             photoURL: currentUser.photoURL,
           }}
-          key={`main_menu_${profileRevision}`}
           session={sessionSnapshot}
           isProcessing={authProcessing}
           onPlay={() => setAppScreen('MODE_SELECTION')}
@@ -1488,7 +1487,6 @@ export default function App() {
                   title="Bảng Kiểm thử & QA (Admin)"
                 >
                   <Wrench className="w-3 h-3 text-amber-400" />
-                  <span className="hidden sm:inline">QA</span>
                 </button>
               )}
             </div>

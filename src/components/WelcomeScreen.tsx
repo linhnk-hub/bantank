@@ -50,8 +50,12 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     musicManager.getHomeVideoError()
   );
   const [isVideoBuffering, setIsVideoBuffering] = useState<boolean>(() =>
-    Boolean(musicManager.getHomeVideoUrl())
+    Boolean(musicManager.getHomeVideoUrl()) && !musicManager.isHomeVideoLoaded()
   );
+
+  useEffect(() => {
+    musicManager.preloadStaticHomeVideoOnce();
+  }, [musicManager]);
 
   useEffect(() => {
     const unsubMaint = maintenanceMgr.subscribe(() => {
@@ -66,9 +70,9 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       const nextUrl = musicManager.getHomeVideoUrl();
       setHomeVideoConfig(nextConfig);
       setHomeVideoUrl((prevUrl) => {
-        if (nextUrl && nextUrl !== prevUrl) {
+        if (nextUrl && nextUrl !== prevUrl && !musicManager.isHomeVideoLoaded(nextUrl)) {
           setIsVideoBuffering(true);
-        } else if (!nextUrl) {
+        } else if (!nextUrl || musicManager.isHomeVideoLoaded(nextUrl)) {
           setIsVideoBuffering(false);
         }
         return nextUrl;
@@ -102,16 +106,17 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   const maintenanceNoticeText =
     maintenanceConfig.message ||
     buildMaintenanceNoticeMessage(maintenanceConfig.startAtMs, maintenanceConfig.endAtMs);
+  const effectiveVideoSrc = musicManager.getHomeVideoPlaybackSrc() || homeVideoUrl;
 
   return (
     <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]">
       {/* Intro Background Video (preloaded immediately on page load, blurred & looped automatically) */}
-      {homeVideoConfig?.isEnabled && homeVideoUrl && (
+      {homeVideoConfig?.isEnabled && effectiveVideoSrc && (
         <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
           <video
             ref={videoRef}
-            key={homeVideoUrl}
-            src={homeVideoUrl}
+            key={homeVideoConfig.videoId || 'intro-bantank'}
+            src={effectiveVideoSrc}
             autoPlay
             muted
             playsInline
@@ -119,16 +124,38 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             loop={homeVideoConfig.loop !== false}
             style={{ opacity: homeVideoConfig.opacity }}
             className="w-full h-full object-cover blur-[3px] scale-105"
-            onLoadStart={() => setIsVideoBuffering(true)}
+            onLoadStart={() => {
+              if (!musicManager.isHomeVideoLoaded(homeVideoUrl)) {
+                setIsVideoBuffering(true);
+              }
+            }}
+            onLoadedMetadata={(e) => {
+              const savedTime = musicManager.getHomeVideoPlaybackTime();
+              if (savedTime > 0 && Math.abs(e.currentTarget.currentTime - savedTime) > 0.5) {
+                try {
+                  e.currentTarget.currentTime = savedTime;
+                } catch {
+                  // ignore seek error
+                }
+              }
+            }}
             onLoadedData={() => {
+              musicManager.markHomeVideoLoaded(homeVideoUrl);
               setIsVideoBuffering(false);
               tryPlayIntroVideo();
             }}
             onCanPlay={() => {
+              musicManager.markHomeVideoLoaded(homeVideoUrl);
               setIsVideoBuffering(false);
               tryPlayIntroVideo();
             }}
-            onPlaying={() => setIsVideoBuffering(false)}
+            onPlaying={() => {
+              musicManager.markHomeVideoLoaded(homeVideoUrl);
+              setIsVideoBuffering(false);
+            }}
+            onTimeUpdate={(e) => {
+              musicManager.setHomeVideoPlaybackTime(e.currentTarget.currentTime);
+            }}
             onError={() => setIsVideoBuffering(false)}
           />
           <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/60 via-neutral-950/30 to-neutral-950/80" />
@@ -301,7 +328,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           >
             <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
             <span>
-              Đang tải Video intro
+              Đang tải Video intro...
             </span>
           </div>
         )}

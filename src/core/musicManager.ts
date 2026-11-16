@@ -1674,6 +1674,10 @@ export class MusicManager {
   private loadingTrackPromises: Map<string, Promise<boolean>> = new Map();
   private homeVideoUrl: string | null = './intro-bantank.mp4';
   private homeVideoObjectUrl: string | null = null;
+  private homeVideoCachedBlobUrl: string | null = null;
+  private homeVideoBlobPreloadPromise: Promise<string | null> | null = null;
+  private homeVideoLoadedUrls: Set<string> = new Set();
+  private homeVideoPlaybackTime: number = 0;
   private homeVideoLoading: boolean = false;
   private homeVideoError: string | null = null;
   private homeVideoFetchToken: number = 0;
@@ -3820,8 +3824,9 @@ export class MusicManager {
   public async applySharedMediaConfigSnapshot(
     config: SystemMediaConfigDocument | null
   ): Promise<void> {
-    const previousVideoPath = this.sharedMediaConfig?.homeVideo?.storagePath ?? null;
-    const previousVideoEnabled = this.sharedMediaConfig?.homeVideo?.isEnabled ?? false;
+    const previousEffective = this.getHomeVideoConfig();
+    const previousVideoPath = previousEffective?.storagePath ?? null;
+    const previousVideoEnabled = previousEffective?.isEnabled ?? false;
     this.sharedMediaConfig = config ? JSON.parse(JSON.stringify(config)) : null;
 
     if (!config) {
@@ -4058,6 +4063,70 @@ export class MusicManager {
 
   public getHomeVideoUrl(): string | null {
     return this.homeVideoUrl;
+  }
+
+  public getHomeVideoPlaybackSrc(): string | null {
+    if (this.homeVideoUrl === './intro-bantank.mp4' && this.homeVideoCachedBlobUrl) {
+      return this.homeVideoCachedBlobUrl;
+    }
+    return this.homeVideoUrl;
+  }
+
+  public isHomeVideoLoaded(url?: string | null): boolean {
+    const target = url ?? this.homeVideoUrl;
+    if (!target) return false;
+    if (this.homeVideoLoadedUrls.has(target)) return true;
+    if (target === './intro-bantank.mp4' && this.homeVideoCachedBlobUrl) return true;
+    if (this.homeVideoCachedBlobUrl && target === this.homeVideoCachedBlobUrl) return true;
+    return false;
+  }
+
+  public markHomeVideoLoaded(url?: string | null): void {
+    const target = url ?? this.homeVideoUrl ?? './intro-bantank.mp4';
+    if (target) {
+      this.homeVideoLoadedUrls.add(target);
+    }
+    if (this.homeVideoUrl) {
+      this.homeVideoLoadedUrls.add(this.homeVideoUrl);
+    }
+    if (this.homeVideoCachedBlobUrl) {
+      this.homeVideoLoadedUrls.add(this.homeVideoCachedBlobUrl);
+    }
+  }
+
+  public getHomeVideoPlaybackTime(): number {
+    return this.homeVideoPlaybackTime;
+  }
+
+  public setHomeVideoPlaybackTime(seconds: number): void {
+    if (Number.isFinite(seconds) && seconds >= 0) {
+      this.homeVideoPlaybackTime = seconds;
+    }
+  }
+
+  public preloadStaticHomeVideoOnce(): void {
+    if (
+      this.homeVideoCachedBlobUrl ||
+      this.homeVideoBlobPreloadPromise ||
+      typeof window === 'undefined' ||
+      typeof fetch !== 'function' ||
+      typeof URL === 'undefined' ||
+      typeof URL.createObjectURL !== 'function'
+    ) {
+      return;
+    }
+    this.homeVideoBlobPreloadPromise = fetch('./intro-bantank.mp4', { cache: 'force-cache' })
+      .then(async (res) => {
+        if (!res.ok) return null;
+        const blob = await res.blob();
+        if (!blob || blob.size === 0) return null;
+        const objUrl = URL.createObjectURL(blob);
+        this.homeVideoCachedBlobUrl = objUrl;
+        this.homeVideoLoadedUrls.add('./intro-bantank.mp4');
+        this.homeVideoLoadedUrls.add(objUrl);
+        return objUrl;
+      })
+      .catch(() => null);
   }
 
   public isHomeVideoLoading(): boolean {

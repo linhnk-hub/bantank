@@ -151,7 +151,7 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
     stageManager.getManagedStages()
   );
   const [selectedStageId, setSelectedStageId] = useState<number>(1);
-  const [editingName, setEditingName] = useState<string>('Stage 1 - KHỞI ĐẦU');
+  const [editingName, setEditingName] = useState<string>('KHỞI ĐẦU');
   const [editingOrderIndex, setEditingOrderIndex] = useState<number>(1);
   const [editingMap, setEditingMap] = useState<number[][]>(() => cloneStageMap(STAGE_1_MAP));
   const [undoStack, setUndoStack] = useState<number[][][]>([]);
