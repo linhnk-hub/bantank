@@ -27,6 +27,7 @@ import {
 import { CoopOnlineManager, type CoopPlayerRole } from '../core/coopOnlineManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { TOTAL_CAMPAIGN_STAGES, getCampaignStageSpec } from '../core/campaignStages.ts';
+import { useLanguage } from '../core/i18n.ts';
 
 interface M3HudProps {
   state: GameCoreState | null;
@@ -51,6 +52,8 @@ export const M3Hud: React.FC<M3HudProps> = ({
   peerPingMs = null,
   showOnlineNetStats = true,
 }) => {
+  const { t } = useLanguage();
+
   if (!state) {
     return null;
   }
@@ -96,17 +99,17 @@ export const M3Hud: React.FC<M3HudProps> = ({
   const isWarningTime =
     !isCriticalTime && remainingSeconds <= MATCH_TIMER_CONFIG.WARNING_THRESHOLD_S;
   const timerBadgeClass = isCriticalTime
-    ? 'bg-red-950/90 border-red-500 text-red-300 animate-pulse shadow-sm shadow-red-500/30'
+    ? 'bg-red-950/90 border-[#FF0055] text-red-300 animate-pulse shadow-sm shadow-[#FF0055]/30'
     : isWarningTime
-    ? 'bg-amber-950/80 border-amber-500/80 text-amber-300'
-    : 'bg-neutral-950 border-neutral-800 text-emerald-300';
+    ? 'bg-amber-950/80 border-[#FFB800]/80 text-[#FFB800]'
+    : 'bg-[#050510] border-[#00F0FF]/40 text-[#00F0FF]';
 
   return (
-    <div className="bg-neutral-900 border border-neutral-800 rounded-lg p-4 text-xs flex flex-col gap-3 shadow-xl">
+    <div className="bg-[#0b0d1e]/95 border border-[#00F0FF]/30 rounded-lg p-4 text-xs flex flex-col gap-3 shadow-xl">
       {/* Top Header: Stage, Countdown Timer, Score, High Score & Lives */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 pb-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold">
+          <div className="font-btn flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#FFB800]/15 border border-[#FFB800]/40 text-[#FFB800] font-bold">
             <span>
               STAGE {state.currentStageId ?? 1}/{TOTAL_CAMPAIGN_STAGES} •{' '}
               {state.currentStageName || getCampaignStageSpec(state.currentStageId ?? 1).shortTitle}
@@ -115,32 +118,32 @@ export const M3Hud: React.FC<M3HudProps> = ({
 
           <div
             data-testid="hud-countdown-timer"
-            className={`flex items-center gap-1.5 px-3 py-1 rounded border font-mono transition-colors ${timerBadgeClass}`}
+            className={`font-hud flex items-center gap-1.5 px-3 py-1 rounded border transition-colors ${timerBadgeClass}`}
             title={
               state.difficulty === 'EXTREME'
-                ? 'Đồng hồ đếm ngược chế độ Thử thách (60s)'
-                : 'Đồng hồ đếm ngược chế độ Giải trí (120s)'
+                ? t('Đồng hồ đếm ngược chế độ Thử thách (60s)', 'Challenge Mode Countdown Timer (60s)')
+                : t('Đồng hồ đếm ngược chế độ Giải trí (120s)', 'Casual Mode Countdown Timer (120s)')
             }
           >
             <Clock
               className={`w-4 h-4 ${
                 isCriticalTime
-                  ? 'text-red-400'
+                  ? 'text-[#FF0055]'
                   : isWarningTime
-                  ? 'text-amber-400'
-                  : 'text-emerald-400'
+                  ? 'text-[#FFB800]'
+                  : 'text-[#00F0FF]'
               }`}
             />
-            <span className="text-[11px] opacity-80">THỜI GIAN:</span>
-            <span className="font-black text-sm tracking-wider">
+            <span className="text-xs opacity-85">{t('THỜI GIAN:', 'TIME:')}</span>
+            <span className="font-black text-base tracking-wider">
               {formatCountdownMMSS(remainingSeconds)}
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-neutral-950 border border-neutral-800">
-            <Trophy className="w-4 h-4 text-amber-400" />
-            <span className="text-neutral-400 font-mono">XP:</span>
-            <span className="text-amber-400 font-black font-mono text-sm">
+          <div className="font-hud flex items-center gap-1.5 px-3 py-1 rounded bg-[#050510] border border-[#FFB800]/30">
+            <Trophy className="w-4 h-4 text-[#FFB800]" />
+            <span className="text-neutral-400">XP:</span>
+            <span className="text-[#FFB800] font-black text-base">
               {(state.gameMode === 'TWO_PLAYERS_ONLINE' && effectiveOnlineRole === 'GUEST'
                 ? state.p2Stats?.score ?? 0
                 : state.p1Stats?.score ?? state.score)}{' '}
@@ -148,38 +151,40 @@ export const M3Hud: React.FC<M3HudProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded bg-neutral-950 border border-neutral-800 text-[11px]">
-            <span className="text-neutral-500 font-mono">HIGH XP:</span>
-            <span className="text-neutral-300 font-bold font-mono">{state.highScore} XP</span>
+          <div className="font-hud flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050510] border border-neutral-800 text-sm">
+            <span className="text-neutral-500">HIGH XP:</span>
+            <span className="text-neutral-200 font-bold">{state.highScore} XP</span>
           </div>
 
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-neutral-950 border border-neutral-800">
-            <Heart className="w-4 h-4 text-red-500 fill-red-500" />
-            <span className="text-neutral-400 font-mono">MẠNG P1:</span>
-            <span className="text-red-400 font-black font-mono text-sm">{p1State.lives}</span>
+          <div className="font-hud flex items-center gap-1.5 px-3 py-1 rounded bg-[#050510] border border-[#FF0055]/40">
+            <Heart className="w-4 h-4 text-[#FF0055] fill-[#FF0055]" />
+            <span className="text-neutral-400">{t('MẠNG P1:', 'P1 LIVES:')}</span>
+            <span className="text-[#FF0055] font-black text-base">{p1State.lives}</span>
           </div>
 
           {p1State.shieldTimer > 0 && (
-            <div className="flex items-center gap-1 px-2.5 py-1 rounded bg-sky-950/80 border border-sky-700 text-sky-300 font-mono text-[11px] animate-pulse">
-              <Shield className="w-3.5 h-3.5 text-sky-400" />
-              <span>KHIÊN P1: {p1State.shieldTimer.toFixed(1)}s</span>
+            <div className="font-hud flex items-center gap-1 px-2.5 py-1 rounded bg-sky-950/80 border border-[#00F0FF] text-[#00F0FF] text-sm animate-pulse">
+              <Shield className="w-3.5 h-3.5 text-[#00F0FF]" />
+              <span>{t('KHIÊN P1:', 'P1 SHIELD:')} {p1State.shieldTimer.toFixed(1)}s</span>
             </div>
           )}
 
           {isCoop && state.p2State && (
             <>
-              <div className="flex items-center gap-1.5 px-3 py-1 rounded bg-amber-950/60 border border-amber-700/80">
-                <Heart className="w-4 h-4 text-amber-400 fill-amber-400" />
-                <span className="text-amber-200 font-mono">
-                  {state.gameMode === 'TWO_PLAYERS_ONLINE' ? 'MẠNG P2 (ONLINE):' : 'MẠNG P2 (AI):'}
+              <div className="font-hud flex items-center gap-1.5 px-3 py-1 rounded bg-amber-950/60 border border-[#FFB800]/70">
+                <Heart className="w-4 h-4 text-[#FFB800] fill-[#FFB800]" />
+                <span className="text-amber-200">
+                  {state.gameMode === 'TWO_PLAYERS_ONLINE'
+                    ? t('MẠNG P2 (ONLINE):', 'P2 LIVES (ONLINE):')
+                    : t('MẠNG P2 (AI):', 'P2 LIVES (AI):')}
                 </span>
-                <span className="text-amber-400 font-black font-mono text-sm">{state.p2State.lives}</span>
+                <span className="text-[#FFB800] font-black text-base">{state.p2State.lives}</span>
               </div>
 
               {state.p2State.shieldTimer > 0 && (
-                <div className="flex items-center gap-1 px-2.5 py-1 rounded bg-amber-950/80 border border-amber-600 text-amber-300 font-mono text-[11px] animate-pulse">
-                  <Shield className="w-3.5 h-3.5 text-amber-400" />
-                  <span>KHIÊN P2: {state.p2State.shieldTimer.toFixed(1)}s</span>
+                <div className="font-hud flex items-center gap-1 px-2.5 py-1 rounded bg-amber-950/80 border border-[#FFB800] text-[#FFB800] text-sm animate-pulse">
+                  <Shield className="w-3.5 h-3.5 text-[#FFB800]" />
+                  <span>{t('KHIÊN P2:', 'P2 SHIELD:')} {state.p2State.shieldTimer.toFixed(1)}s</span>
                 </div>
               )}
             </>
@@ -190,29 +195,29 @@ export const M3Hud: React.FC<M3HudProps> = ({
           {onPause && (
             <button
               onClick={onPause}
-              className="flex items-center gap-1 px-3 py-1 rounded bg-amber-500 hover:bg-amber-400 text-black font-bold text-[11px] transition-colors shadow"
+              className="font-btn flex items-center gap-1 px-3 py-1.5 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-bold text-[11px] transition-colors shadow cursor-pointer"
             >
-              <span>Tạm Dừng (P)</span>
+              <span>{t('Tạm Dừng (P)', 'Pause (P)')}</span>
             </button>
           )}
 
           {isSuperAdmin && (
             <button
               onClick={onSpawnEnemy}
-              className="flex items-center gap-1 px-2.5 py-1 rounded bg-red-950/70 hover:bg-red-900 border border-red-800 text-red-300 text-[11px] font-semibold transition-colors"
+              className="font-btn flex items-center gap-1 px-2.5 py-1.5 rounded bg-red-950/70 hover:bg-red-900 border border-[#FF0055]/60 text-red-300 text-[11px] font-semibold transition-colors cursor-pointer"
             >
               <Cpu className="w-3 h-3" />
-              <span>Thả Địch</span>
+              <span>{t('Thả Địch', 'Spawn Enemy')}</span>
             </button>
           )}
 
           {onReset && (
             <button
               onClick={onReset}
-              className="flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] font-medium transition-colors"
+              className="font-btn flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#050510] hover:bg-neutral-800 border border-neutral-700 text-neutral-200 text-[11px] font-medium transition-colors cursor-pointer"
             >
               <RotateCcw className="w-3 h-3" />
-              <span>Đặt lại</span>
+              <span>{t('Đặt lại', 'Reset')}</span>
             </button>
           )}
         </div>
@@ -222,15 +227,15 @@ export const M3Hud: React.FC<M3HudProps> = ({
       {isLocalSpectator && (
         <div
           data-testid="hud-spectator-banner"
-          className="p-2.5 rounded-lg bg-sky-950/90 border border-sky-500/50 flex items-center justify-between text-sky-200 font-semibold shadow-md"
+          className="p-2.5 rounded bg-sky-950/90 border border-[#00F0FF]/50 flex items-center justify-between text-sky-200 font-semibold shadow-md"
         >
           <div className="flex items-center gap-2">
-            <Eye className="w-4 h-4 text-sky-400 shrink-0" />
+            <Eye className="w-4 h-4 text-[#00F0FF] shrink-0" />
             <span className="text-xs font-bold">
-              Bạn đã hết mạng, đang ở chế độ khán giả
+              {t('Bạn đã hết mạng, đang ở chế độ khán giả', 'Out of lives — Spectator Mode active')}
             </span>
           </div>
-          <span className="text-[10px] px-2 py-0.5 rounded bg-sky-900/80 border border-sky-700 text-sky-200 font-mono">
+          <span className="font-hud text-xs px-2 py-0.5 rounded bg-sky-900/80 border border-sky-700 text-sky-200">
             SPECTATOR
           </span>
         </div>
@@ -240,32 +245,34 @@ export const M3Hud: React.FC<M3HudProps> = ({
       {peerLeaveNotice && !state.isGameOver && (
         <div
           data-testid="hud-peer-leave-banner"
-          className="p-2.5 rounded-lg bg-amber-950/85 border border-amber-500/50 flex items-center gap-2 text-amber-200 font-semibold shadow-md"
+          className="p-2.5 rounded bg-amber-950/85 border border-[#FFB800]/50 flex items-center gap-2 text-amber-200 font-semibold shadow-md"
         >
-          <UserMinus className="w-4 h-4 text-amber-400 shrink-0" />
+          <UserMinus className="w-4 h-4 text-[#FFB800] shrink-0" />
           <span className="text-xs font-bold">{peerLeaveNotice}</span>
         </div>
       )}
 
       {/* Stage Clear Banner */}
       {state.isStageClear && (
-        <div className="p-3 rounded-lg bg-emerald-950/90 border border-emerald-600 flex items-center justify-between text-emerald-200 font-bold shadow-lg">
+        <div className="p-3 rounded bg-emerald-950/90 border border-emerald-600 flex items-center justify-between text-emerald-200 font-bold shadow-lg">
           <div className="flex items-center gap-2">
             <Trophy className="w-5 h-5 text-emerald-400" />
-            <span className="text-sm">CHIẾN THẮNG! Sân đấu đã được bảo vệ thành công!</span>
+            <span className="text-sm">
+              {t('CHIẾN THẮNG! Sân đấu đã được bảo vệ thành công!', 'VICTORY! The battlefield has been successfully defended!')}
+            </span>
           </div>
-          <span className="text-xs px-2 py-0.5 rounded bg-emerald-800 text-white font-mono">STAGE CLEAR</span>
+          <span className="font-hud text-sm px-2 py-0.5 rounded bg-emerald-800 text-white">STAGE CLEAR</span>
         </div>
       )}
 
       {/* Game Over Banner */}
       {state.isGameOver && (
-        <div className="p-3 rounded-lg bg-red-950/90 border border-red-700 flex items-center gap-2 text-red-200 font-bold shadow-lg animate-pulse">
-          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+        <div className="p-3 rounded bg-red-950/90 border border-[#FF0055] flex items-center gap-2 text-red-200 font-bold shadow-lg animate-pulse">
+          <AlertTriangle className="w-5 h-5 text-[#FF0055] shrink-0" />
           <div className="flex flex-col">
-            <span className="text-sm">GAME OVER</span>
+            <span className="font-btn text-sm">GAME OVER</span>
             <span className="text-xs text-red-300 font-normal whitespace-pre-line">
-              {formatSentenceLineBreaks(state.gameOverReason ?? 'Thất bại!')}
+              {formatSentenceLineBreaks(state.gameOverReason ?? t('Thất bại!', 'Defeat!'))}
             </span>
           </div>
         </div>
@@ -274,20 +281,20 @@ export const M3Hud: React.FC<M3HudProps> = ({
       {/* Admin Internal Telemetry & Enemy Progress */}
       {isSuperAdmin && (
         <>
-          <div className="bg-neutral-950 p-2.5 rounded border border-neutral-800 space-y-2">
+          <div className="bg-[#050510] p-2.5 rounded border border-neutral-800 space-y-2">
             <div className="flex items-center justify-between text-[11px]">
               <span className="font-semibold text-neutral-300 flex items-center gap-1.5">
                 <Skull className="w-3.5 h-3.5 text-neutral-400" />
-                <span>Tiến độ tiêu diệt địch (Admin)</span>
+                <span>{t('Tiến độ tiêu diệt địch (Admin)', 'Enemy Defeat Progress (Admin)')}</span>
               </span>
-              <span className="font-mono text-neutral-400">
-                <strong className="text-amber-400">{state.totalDefeatedEnemies}</strong> / 30 xe đã hạ
+              <span className="font-hud text-sm text-neutral-400">
+                <strong className="text-[#FFB800]">{state.totalDefeatedEnemies}</strong> / 30 {t('xe đã hạ', 'defeated')}
               </span>
             </div>
 
             <div className="w-full h-2 bg-neutral-800 rounded-full overflow-hidden">
               <div
-                className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-300"
+                className="h-full bg-gradient-to-r from-[#FFB800] to-emerald-500 transition-all duration-300"
                 style={{ width: `${(state.totalDefeatedEnemies / 30) * 100}%` }}
               />
             </div>
@@ -304,8 +311,8 @@ export const M3Hud: React.FC<M3HudProps> = ({
                       isDefeated
                         ? 'bg-neutral-800 opacity-30'
                         : isActive
-                        ? 'bg-red-500 animate-pulse'
-                        : 'bg-amber-500'
+                        ? 'bg-[#FF0055] animate-pulse'
+                        : 'bg-[#FFB800]'
                     }`}
                   />
                 );
@@ -316,16 +323,16 @@ export const M3Hud: React.FC<M3HudProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {/* P1 State Card */}
             <div
-              className={`bg-neutral-950 p-3 rounded space-y-1.5 font-mono text-[11px] ${
+              className={`bg-[#050510] p-3 rounded space-y-1.5 font-mono text-[11px] ${
                 isSuperAdmin
-                  ? 'border-2 border-red-500 ring-1 ring-red-500/40 shadow-sm shadow-red-500/20'
+                  ? 'border-2 border-[#FF0055] ring-1 ring-[#FF0055]/40 shadow-sm shadow-[#FF0055]/20'
                   : 'border border-neutral-800'
               }`}
             >
               <div className="flex items-center justify-between border-b border-neutral-800/80 pb-1.5">
-                <span className="font-bold text-amber-400 flex items-center gap-1.5">
+                <span className="font-bold text-[#FFB800] flex items-center gap-1.5">
                   <User className="w-3.5 h-3.5" />
-                  <span>NGƯỜI CHƠI P1</span>
+                  <span>{t('NGƯỜI CHƠI P1', 'PLAYER P1')}</span>
                 </span>
                 <span
                   className={`px-1.5 py-0.5 rounded text-[10px] ${
@@ -345,40 +352,42 @@ export const M3Hud: React.FC<M3HudProps> = ({
               </div>
 
               <div className="flex justify-between">
-                <span className="text-neutral-500">Tọa độ:</span>
+                <span className="text-neutral-500">{t('Tọa độ:', 'Coords:')}</span>
                 <span className="text-neutral-200">x={p1.x}, y={p1.y}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-neutral-500">Hướng nòng:</span>
-                <span className="text-sky-400 font-semibold">{p1.direction}</span>
+                <span className="text-neutral-500">{t('Hướng nòng:', 'Facing:')}</span>
+                <span className="text-[#00F0FF] font-semibold">{p1.direction}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-neutral-500">Đạn P1:</span>
-                <span className={state.bullet ? 'text-amber-400' : 'text-neutral-500'}>
-                  {state.bullet ? `Bay tại (${state.bullet.x.toFixed(0)}, ${state.bullet.y.toFixed(0)})` : 'Sẵn sàng'}
+                <span className="text-neutral-500">{t('Đạn P1:', 'P1 Bullet:')}</span>
+                <span className={state.bullet ? 'text-[#FFB800]' : 'text-neutral-500'}>
+                  {state.bullet
+                    ? `Bay tại (${state.bullet.x.toFixed(0)}, ${state.bullet.y.toFixed(0)})`
+                    : t('Sẵn sàng', 'Ready')}
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-neutral-500">Căn cứ:</span>
-                <span className={isBaseDestroyed ? 'text-red-400 font-bold' : 'text-emerald-400'}>
-                  {isBaseDestroyed ? 'BỊ PHÁ HỦY' : 'AN TOÀN'}
+                <span className="text-neutral-500">{t('Căn cứ:', 'Base:')}</span>
+                <span className={isBaseDestroyed ? 'text-[#FF0055] font-bold' : 'text-emerald-400'}>
+                  {isBaseDestroyed ? t('BỊ PHÁ HỦY', 'DESTROYED') : t('AN TOÀN', 'SAFE')}
                 </span>
               </div>
             </div>
 
             {/* Active Enemies List */}
-            <div className="bg-neutral-950 p-3 rounded border border-neutral-800 space-y-1.5 font-mono text-[11px]">
+            <div className="bg-[#050510] p-3 rounded border border-neutral-800 space-y-1.5 font-mono text-[11px]">
               <div className="flex items-center justify-between border-b border-neutral-800/80 pb-1.5">
-                <span className="font-bold text-red-400 flex items-center gap-1.5">
+                <span className="font-bold text-[#FF0055] flex items-center gap-1.5">
                   <Crosshair className="w-3.5 h-3.5" />
-                  <span>ĐỊCH TRÊN SÂN ({enemies.length}/5)</span>
+                  <span>{t('ĐỊCH TRÊN SÂN', 'ACTIVE ENEMIES')} ({enemies.length}/5)</span>
                 </span>
-                <span className="text-neutral-500 text-[10px]">Tối đa 5</span>
+                <span className="text-neutral-500 text-[10px]">{t('Tối đa 5', 'Max 5')}</span>
               </div>
 
               {enemies.length === 0 ? (
                 <div className="text-neutral-600 italic py-2 text-center text-[10px]">
-                  Chưa có xe địch nào trên sân đấu...
+                  {t('Chưa có xe địch nào trên sân đấu...', 'No active enemy tanks on the battlefield...')}
                 </div>
               ) : (
                 <div className="space-y-1">
@@ -411,7 +420,7 @@ export const M3Hud: React.FC<M3HudProps> = ({
                       </div>
 
                       <div className="flex items-center gap-2">
-                        <span className="text-amber-500 font-semibold">{e.aiState}</span>
+                        <span className="text-[#FFB800] font-semibold">{e.aiState}</span>
                         <span className="text-neutral-400">({Math.round(e.x)},{Math.round(e.y)})</span>
                       </div>
                     </div>
@@ -425,12 +434,17 @@ export const M3Hud: React.FC<M3HudProps> = ({
 
       {/* Hotkeys reminder & Network / FPS telemetry */}
       <div className="text-[10px] text-neutral-500 border-t border-neutral-800 pt-2 flex flex-wrap justify-between items-center gap-1.5">
-        <span>Điều khiển: W/A/S/D hoặc Mũi tên để di chuyển | Space / J để bắn đạn</span>
-        <div className="flex items-center gap-2 font-mono text-neutral-400">
+        <span>
+          {t(
+            'Điều khiển: W/A/S/D hoặc Mũi tên để di chuyển | Space / J để bắn đạn',
+            'Controls: W/A/S/D or Arrow keys to move | Space / J to fire'
+          )}
+        </span>
+        <div className="font-hud flex items-center gap-2 text-sm text-neutral-400">
           {state.gameMode === 'TWO_PLAYERS_ONLINE' && showOnlineNetStats && (
             <span
               data-testid="hud-online-net-stats"
-              className="px-1.5 py-0.5 rounded bg-sky-950/70 border border-sky-700/50 text-sky-300 font-bold"
+              className="px-1.5 py-0.5 rounded bg-sky-950/70 border border-[#00F0FF]/50 text-[#00F0FF] font-bold"
             >
               Ping: {peerPingMs != null ? `${Math.round(peerPingMs)} ms` : '-- ms'} • {Math.round(fps)} FPS
             </span>

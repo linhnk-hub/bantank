@@ -68,6 +68,8 @@ import {
   MaintenanceManager,
   buildMaintenanceNoticeMessage,
 } from './core/maintenanceManager.ts';
+import { useLanguage } from './core/i18n.ts';
+import { LanguageSelector } from './components/LanguageSelector.tsx';
 import {
   RotateCcw,
   Pause,
@@ -86,6 +88,7 @@ import {
 } from 'lucide-react';
 
 export default function App() {
+  const { t } = useLanguage();
   const authManager = useMemo(() => AuthManager.getInstance(), []);
   const sessionManager = useMemo(() => SessionManager.getInstance(), []);
   const coopManager = useMemo(() => CoopOnlineManager.getInstance(), []);
@@ -1129,13 +1132,13 @@ export default function App() {
   const maintenanceModalOverlay = maintenanceInterruptAlert ? (
     <div
       data-testid="active-maintenance-interrupt-modal"
-      className="fixed inset-0 z-[130] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 select-none"
+      className="fixed inset-0 z-[130] flex items-center justify-center bg-[#050510]/88 backdrop-blur-md p-4 select-none"
     >
-      <div className="w-full max-w-md rounded-2xl border-2 border-amber-500/80 bg-neutral-900 shadow-2xl overflow-hidden animate-fade-in">
+      <div className="w-full max-w-md rounded-lg border-2 border-[#FFB800] bg-[#0b0d1e] shadow-2xl overflow-hidden animate-fade-in">
         <div className="px-5 py-3.5 border-b border-neutral-800 bg-amber-950/50 flex items-center gap-2.5">
-          <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
-          <h3 className="text-sm font-black uppercase tracking-wider font-mono text-amber-300">
-            THÔNG BÁO BẢO TRÌ HỆ THỐNG
+          <AlertTriangle className="w-5 h-5 text-[#FFB800] shrink-0" />
+          <h3 className="font-btn text-sm font-black uppercase tracking-wider text-[#FFB800]">
+            {t('THÔNG BÁO BẢO TRÌ HỆ THỐNG', 'SYSTEM MAINTENANCE NOTICE')}
           </h3>
         </div>
         <div className="p-5 space-y-3 text-center">
@@ -1143,14 +1146,14 @@ export default function App() {
             {formatSentenceLineBreaks(maintenanceInterruptAlert)}
           </p>
         </div>
-        <div className="px-5 py-3.5 border-t border-neutral-800 bg-neutral-950/90 flex items-center justify-center">
+        <div className="px-5 py-3.5 border-t border-neutral-800 bg-[#050510]/90 flex items-center justify-center">
           <button
             type="button"
             data-testid="maintenance-exit-to-menu-btn"
             onClick={handleMaintenanceExitToMenu}
-            className="w-full py-2.5 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-black text-xs sm:text-sm font-mono uppercase tracking-wider transition-all shadow-lg cursor-pointer"
+            className="font-btn w-full min-h-[48px] py-2.5 px-5 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-xs sm:text-sm uppercase tracking-wider transition-all shadow-lg cursor-pointer"
           >
-            Thoát về Menu
+            {t('Thoát về Menu', 'Exit to Menu')}
           </button>
         </div>
       </div>
@@ -1163,10 +1166,10 @@ export default function App() {
     ((!currentUser && (!isTrialMode || appScreen !== 'BATTLE')) || appScreen === 'WELCOME')
   ) {
     return (
-      <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+      <div className="min-h-[100dvh] bg-[#050510] text-[#EAF4FF] flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-[#FFB800] selection:text-black">
         {!isAuthReady && (
-          <div className="w-full bg-neutral-900/90 border-b border-neutral-800 px-3 py-1 text-center text-[11px] font-mono text-amber-300/90">
-            Đang kiểm tra trạng thái kết nối...
+          <div className="w-full bg-[#0b0d1e]/90 border-b border-[#00F0FF]/30 px-3 py-1 text-center text-[11px] font-mono text-[#FFB800]/90">
+            {t('Đang kiểm tra trạng thái kết nối...', 'Checking connection status...')}
           </div>
         )}
         <WelcomeScreen
@@ -1188,7 +1191,7 @@ export default function App() {
   // View 2: Main Menu Screen (Authenticated user before entering battle)
   if (appScreen === 'MAIN_MENU' && currentUser) {
     return (
-      <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+      <div className="min-h-[100dvh] bg-[#050510] text-[#EAF4FF] flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-[#FFB800] selection:text-black">
         {isSuperAdmin && (
           <DevToolsDrawer
             isOpen={isDevDrawerOpen}
@@ -1249,7 +1252,7 @@ export default function App() {
   // View 2.5: Mode Selection Screen (Select SOLO vs CO-OP AI vs CO-OP ONLINE)
   if (appScreen === 'MODE_SELECTION' && currentUser) {
     return (
-      <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+      <div className="min-h-[100dvh] bg-[#050510] text-[#EAF4FF] flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-[#FFB800] selection:text-black">
         {isSuperAdmin && (
           <DevToolsDrawer
             isOpen={isDevDrawerOpen}
@@ -1317,7 +1320,7 @@ export default function App() {
 
   // View 3: Battle Arena with Canvas (Only mounted when player clicked "Chơi ngay")
   return (
-    <div className="min-h-[100dvh] bg-neutral-950 text-neutral-100 flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-amber-500 selection:text-black">
+    <div className="min-h-[100dvh] bg-[#050510] text-[#EAF4FF] flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-[#FFB800] selection:text-black">
       {/* Developer & QA Test Suite Drawer (Admin Only) */}
       {isSuperAdmin && (
         <DevToolsDrawer
@@ -1347,9 +1350,9 @@ export default function App() {
 
       {/* Co-op Online Peer Disconnection Banner */}
       {onlineDisconnectMsg && (
-        <div className="bg-red-950/95 border-b border-red-700 px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-red-200 z-40">
+        <div className="bg-red-950/95 border-b border-[#FF0055] px-4 py-2.5 flex flex-wrap items-center justify-between gap-2 text-xs text-red-200 z-40">
           <div className="flex items-center gap-2 font-bold">
-            <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+            <AlertTriangle className="w-4 h-4 text-[#FF0055] shrink-0" />
             <span className="whitespace-pre-line">{formatSentenceLineBreaks(onlineDisconnectMsg)}</span>
           </div>
           <div className="flex items-center gap-2">
@@ -1359,16 +1362,16 @@ export default function App() {
                 setOnlineDisconnectMsg(null);
                 void coopManager.retryWebRTCConnection();
               }}
-              className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-bold text-xs cursor-pointer"
+              className="font-btn px-3 py-1 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-bold text-xs cursor-pointer"
             >
-              Thử Kết Nối Lại P2P
+              {t('Thử Kết Nối Lại P2P', 'Retry P2P Connection')}
             </button>
             <button
               type="button"
               onClick={handleQuitToMenu}
-              className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-xs cursor-pointer"
+              className="font-btn px-3 py-1 rounded bg-[#FF0055] hover:bg-rose-500 text-white font-bold text-xs cursor-pointer"
             >
-              Về Menu Chính
+              {t('Về Menu Chính', 'Main Menu')}
             </button>
           </div>
         </div>
@@ -1380,17 +1383,17 @@ export default function App() {
       {(!isDesktop && layout.isLandscape) ? (
         <div className="flex-1 flex flex-col justify-start h-[100dvh] max-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
           {/* Slim Landscape Top HUD (32px) — Sticky Top Menu */}
-          <header className="sticky top-0 z-40 h-8 bg-neutral-950/95 backdrop-blur-md border-b border-neutral-800 px-2 sm:px-3 flex items-center justify-between text-xs shrink-0 shadow">
+          <header className="sticky top-0 z-40 h-8 bg-[#050510]/95 backdrop-blur-md border-b border-[#00F0FF]/30 px-2 sm:px-3 flex items-center justify-between text-xs shrink-0 shadow">
             {/* Left: Stage Status */}
             <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
+              <span className="font-btn font-extrabold text-[#FFB800] tracking-wider text-xs">
                 STAGE {gameState?.currentStageId ?? 1}
               </span>
-              <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
+              <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
             </div>
 
             {/* Center: Live Match Metrics (No remaining enemy count per M7.3 IV) */}
-            <div className="flex items-center gap-2 sm:gap-3 text-xs font-mono">
+            <div className="font-hud flex items-center gap-2 sm:gap-3 text-sm">
               {(() => {
                 const remSec =
                   typeof gameState?.remainingSeconds === 'number'
@@ -1402,19 +1405,19 @@ export default function App() {
                   <div
                     className={`flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold ${
                       isCrit
-                        ? 'bg-red-950/90 border-red-500 text-red-300 animate-pulse'
+                        ? 'bg-red-950/90 border-[#FF0055] text-red-300 animate-pulse'
                         : isWarn
-                        ? 'bg-amber-950/80 border-amber-500/80 text-amber-300'
-                        : 'bg-neutral-900 border-neutral-700 text-emerald-300'
+                        ? 'bg-amber-950/80 border-[#FFB800]/80 text-[#FFB800]'
+                        : 'bg-[#0b0d1e] border-[#00F0FF]/40 text-[#00F0FF]'
                     }`}
-                    title="Thời gian còn lại của trận đấu"
+                    title={t('Thời gian còn lại của trận đấu', 'Remaining match time')}
                   >
                     <Clock className="w-3 h-3" />
                     <span>{formatCountdownMMSS(remSec)}</span>
                   </div>
                 );
               })()}
-              <div className="flex items-center gap-1 text-amber-400">
+              <div className="flex items-center gap-1 text-[#FFB800]">
                 <Trophy className="w-3.5 h-3.5" />
                 <span className="font-bold">
                   {(isCoopOnlineMatch && localOnlineRole === 'GUEST'
@@ -1423,8 +1426,8 @@ export default function App() {
                   XP
                 </span>
               </div>
-              <div className="flex items-center gap-1 text-rose-400 font-bold" title="Mạng P1">
-                <Heart className="w-3.5 h-3.5 fill-rose-500" />
+              <div className="flex items-center gap-1 text-[#FF0055] font-bold" title="Mạng P1">
+                <Heart className="w-3.5 h-3.5 fill-[#FF0055]" />
                 <span>
                   P1×
                   {gameState?.p1State.lives ??
@@ -1443,7 +1446,7 @@ export default function App() {
               {isCoopOnlineMatch && showOnlineNetStats && (
                 <span
                   data-testid="landscape-online-net-stats"
-                  className="px-1.5 py-0.5 rounded bg-sky-950/75 border border-sky-700/50 text-sky-300 text-[10px] font-bold"
+                  className="px-1.5 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-xs font-bold"
                 >
                   {peerPingMs != null ? `${Math.round(peerPingMs)}ms` : '--ms'} • {Math.round(fps)}fps
                 </span>
@@ -1452,6 +1455,7 @@ export default function App() {
 
             {/* Right: Quick Action Buttons */}
             <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              <LanguageSelector compact />
               {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
               <QuickAudioToggleButton compact />
 
@@ -1459,10 +1463,10 @@ export default function App() {
                 <button
                   type="button"
                   onClick={isPaused ? handleResume : handlePause}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-xs font-semibold shadow cursor-pointer"
+                  className="font-btn flex items-center gap-1 px-2 py-0.5 rounded bg-[#0b0d1e] hover:bg-neutral-800 border border-[#FFB800]/40 text-[#EAF4FF] text-xs font-semibold shadow cursor-pointer"
                 >
                   {isPaused ? <Play className="w-3 h-3 fill-white" /> : <Pause className="w-3 h-3 fill-white" />}
-                  <span className="hidden xs:inline">{isPaused ? 'Tiếp tục' : 'Tạm dừng'}</span>
+                  <span className="hidden xs:inline">{isPaused ? t('Tiếp tục', 'Resume') : t('Tạm dừng', 'Pause')}</span>
                 </button>
               )}
 
@@ -1472,21 +1476,21 @@ export default function App() {
                   setSettingsInitialTab('ACCOUNT');
                   setIsSettingsOpen(true);
                 }}
-                aria-label="Cài đặt"
-                className="flex items-center justify-center p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold cursor-pointer"
-                title="Cài đặt"
+                aria-label={t('Cài đặt', 'Settings')}
+                className="flex items-center justify-center p-1 rounded bg-[#0b0d1e] border border-[#FFB800]/40 hover:border-[#FFB800] text-neutral-300 text-xs font-semibold cursor-pointer"
+                title={t('Cài đặt', 'Settings')}
               >
-                <Settings className="w-3.5 h-3.5 text-amber-400" />
+                <Settings className="w-3.5 h-3.5 text-[#FFB800]" />
               </button>
 
               {isSuperAdmin && (
                 <button
                   type="button"
                   onClick={() => setIsDevDrawerOpen(true)}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-xs font-semibold cursor-pointer"
-                  title="Bảng Kiểm thử & QA (Admin)"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#0b0d1e] border border-[#FFB800]/40 hover:border-[#FFB800] text-neutral-300 text-xs font-semibold cursor-pointer"
+                  title={t('Bảng Kiểm thử & QA (Admin)', 'QA Suite (Admin)')}
                 >
-                  <Wrench className="w-3 h-3 text-amber-400" />
+                  <Wrench className="w-3 h-3 text-[#FFB800]" />
                 </button>
               )}
             </div>
@@ -1534,32 +1538,36 @@ export default function App() {
               {isLocalSpectator && (
                 <div
                   data-testid="mobile-spectator-banner"
-                  className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1 rounded-lg bg-sky-950/90 border border-sky-500/60 text-sky-200 text-[11px] font-bold shadow-lg whitespace-nowrap"
+                  className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1 rounded bg-sky-950/90 border border-[#00F0FF]/60 text-sky-200 text-[11px] font-bold shadow-lg whitespace-nowrap"
                 >
-                  <Eye className="w-3.5 h-3.5 text-sky-400 shrink-0" />
-                  <span>Đã hết mạng — Đang xem đồng đội thi đấu</span>
+                  <Eye className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
+                  <span>{t('Đã hết mạng — Đang xem đồng đội thi đấu', 'Out of lives — Spectating teammate')}</span>
                 </div>
               )}
 
               {/* In MENU state: Overlay allowing immediate match start */}
               {gameState?.matchState === 'MENU' && (
-                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-sm overflow-y-auto">
+                <div className="absolute inset-0 bg-[#050510]/88 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-sm overflow-y-auto">
                   <GameLogo className="mb-1.5" />
-                  <p className="text-xs text-amber-300 font-mono font-bold mb-2">
+                  <p className="font-btn text-xs text-[#FFB800] font-bold mb-2">
                     STAGE {gameState?.currentStageId ?? 1}
                   </p>
                   <button
                     type="button"
                     onClick={isMatchAllowed ? handleRestart : undefined}
                     disabled={!isMatchAllowed}
-                    className={`py-2 px-5 rounded-xl font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                    className={`font-btn py-2 px-5 rounded font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 shrink-0 ${
                       isMatchAllowed
-                        ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/30 cursor-pointer'
+                        ? 'bg-[#FFB800] hover:bg-amber-400 text-[#050510] shadow-[#FFB800]/30 cursor-pointer'
                         : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
                     }`}
                   >
                     <Play className={`w-3.5 h-3.5 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
-                    <span>{isMatchAllowed ? 'BẮT ĐẦU TRẬN ĐẤU' : 'ĐĂNG NHẬP GMAIL ĐỂ BẮT ĐẦU'}</span>
+                    <span>
+                      {isMatchAllowed
+                        ? t('BẮT ĐẦU TRẬN ĐẤU', 'START BATTLE')
+                        : t('ĐĂNG NHẬP GMAIL ĐỂ BẮT ĐẦU', 'SIGN IN WITH GMAIL TO START')}
+                    </span>
                   </button>
                 </div>
               )}
@@ -1587,19 +1595,19 @@ export default function App() {
         /* =========================================================================
             MOBILE / TABLET PORTRAIT MODE (Dedicated 100dvh Top-to-Bottom Stack)
            ========================================================================= */
-        <div className="flex-1 flex flex-col justify-start h-[100dvh] max-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] bg-neutral-950">
+        <div className="flex-1 flex flex-col justify-start h-[100dvh] max-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] bg-[#050510]">
           {/* Slim Portrait Top HUD — Sticky Top Menu */}
-          <header className="sticky top-0 z-40 h-9 bg-neutral-950/95 backdrop-blur-md border-b border-neutral-800 px-2.5 sm:px-3 flex items-center justify-between text-xs shrink-0 shadow">
+          <header className="sticky top-0 z-40 h-9 bg-[#050510]/95 backdrop-blur-md border-b border-[#00F0FF]/30 px-2.5 sm:px-3 flex items-center justify-between text-xs shrink-0 shadow">
             {/* Left: Stage Status */}
             <div className="flex items-center gap-2">
-              <span className="font-extrabold text-amber-400 tracking-wider text-xs font-mono">
+              <span className="font-btn font-extrabold text-[#FFB800] tracking-wider text-xs">
                 STAGE {gameState?.currentStageId ?? 1}
               </span>
-              <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
+              <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
             </div>
 
             {/* Center: Live Match Metrics (No remaining enemy count per M7.3 IV) */}
-            <div className="flex items-center gap-2 text-xs font-mono">
+            <div className="font-hud flex items-center gap-2 text-sm">
               {(() => {
                 const remSec =
                   typeof gameState?.remainingSeconds === 'number'
@@ -1611,19 +1619,19 @@ export default function App() {
                   <div
                     className={`flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold ${
                       isCrit
-                        ? 'bg-red-950/90 border-red-500 text-red-300 animate-pulse'
+                        ? 'bg-red-950/90 border-[#FF0055] text-red-300 animate-pulse'
                         : isWarn
-                        ? 'bg-amber-950/80 border-amber-500/80 text-amber-300'
-                        : 'bg-neutral-900 border-neutral-700 text-emerald-300'
+                        ? 'bg-amber-950/80 border-[#FFB800]/80 text-[#FFB800]'
+                        : 'bg-[#0b0d1e] border-[#00F0FF]/40 text-[#00F0FF]'
                     }`}
-                    title="Thời gian còn lại của trận đấu"
+                    title={t('Thời gian còn lại của trận đấu', 'Remaining match time')}
                   >
                     <Clock className="w-3 h-3" />
                     <span>{formatCountdownMMSS(remSec)}</span>
                   </div>
                 );
               })()}
-              <div className="flex items-center gap-1 text-amber-400">
+              <div className="flex items-center gap-1 text-[#FFB800]">
                 <Trophy className="w-3.5 h-3.5" />
                 <span className="font-bold">
                   {(isCoopOnlineMatch && localOnlineRole === 'GUEST'
@@ -1632,8 +1640,8 @@ export default function App() {
                   XP
                 </span>
               </div>
-              <div className="flex items-center gap-1 text-rose-400 font-bold" title="Mạng P1">
-                <Heart className="w-3.5 h-3.5 fill-rose-500" />
+              <div className="flex items-center gap-1 text-[#FF0055] font-bold" title="Mạng P1">
+                <Heart className="w-3.5 h-3.5 fill-[#FF0055]" />
                 <span>
                   P1×
                   {gameState?.p1State.lives ??
@@ -1652,7 +1660,7 @@ export default function App() {
               {isCoopOnlineMatch && showOnlineNetStats && (
                 <span
                   data-testid="portrait-online-net-stats"
-                  className="px-1.5 py-0.5 rounded bg-sky-950/75 border border-sky-700/50 text-sky-300 text-[10px] font-bold"
+                  className="px-1.5 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-xs font-bold"
                 >
                   {peerPingMs != null ? `${Math.round(peerPingMs)}ms` : '--ms'} • {Math.round(fps)}fps
                 </span>
@@ -1661,6 +1669,7 @@ export default function App() {
 
             {/* Right: Quick Action Buttons */}
             <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+              <LanguageSelector compact />
               {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
               <QuickAudioToggleButton compact />
 
@@ -1670,30 +1679,30 @@ export default function App() {
                   setSettingsInitialTab('ACCOUNT');
                   setIsSettingsOpen(true);
                 }}
-                aria-label="Cài đặt"
-                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 cursor-pointer"
-                title="Cài đặt"
+                aria-label={t('Cài đặt', 'Settings')}
+                className="p-1 rounded bg-[#0b0d1e] border border-[#FFB800]/40 hover:border-[#FFB800] text-neutral-300 cursor-pointer"
+                title={t('Cài đặt', 'Settings')}
               >
-                <Settings className="w-3.5 h-3.5 text-amber-400" />
+                <Settings className="w-3.5 h-3.5 text-[#FFB800]" />
               </button>
 
               <button
                 type="button"
                 onClick={() => setIsSupportOpen(true)}
-                className="p-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-sky-500 text-neutral-300 cursor-pointer"
-                title="Hướng dẫn điều khiển"
+                className="p-1 rounded bg-[#0b0d1e] border border-[#00F0FF]/40 hover:border-[#00F0FF] text-neutral-300 cursor-pointer"
+                title={t('Hướng dẫn điều khiển', 'Controls Guide')}
               >
-                <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+                <HelpCircle className="w-3.5 h-3.5 text-[#00F0FF]" />
               </button>
 
               {isSuperAdmin && (
                 <button
                   type="button"
                   onClick={() => setIsDevDrawerOpen(true)}
-                  className="flex items-center gap-1 px-1.5 py-1 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-300 text-[10px] font-semibold cursor-pointer"
-                  title="Bảng Kiểm thử & QA (Admin)"
+                  className="font-btn flex items-center gap-1 px-1.5 py-1 rounded bg-[#0b0d1e] border border-[#FFB800]/40 hover:border-[#FFB800] text-neutral-300 text-[10px] font-semibold cursor-pointer"
+                  title={t('Bảng Kiểm thử & QA (Admin)', 'QA Suite (Admin)')}
                 >
-                  <Wrench className="w-3 h-3 text-amber-400" />
+                  <Wrench className="w-3 h-3 text-[#FFB800]" />
                   <span>QA</span>
                 </button>
               )}
@@ -1709,7 +1718,7 @@ export default function App() {
                 maxWidth: `${layout.canvasSizePx}px`,
                 maxHeight: `${layout.canvasSizePx}px`,
               }}
-              className="shrink-0 flex items-start justify-center overflow-hidden relative mx-auto rounded-xl border border-neutral-800 bg-black shadow-2xl mt-0.5 sm:mt-1"
+              className="shrink-0 flex items-start justify-center overflow-hidden relative mx-auto rounded-lg border-2 border-[#00F0FF]/35 bg-black shadow-2xl mt-0.5 sm:mt-1"
             >
               <PhaserGame
                 mode="battle"
@@ -1722,23 +1731,27 @@ export default function App() {
 
               {/* In MENU state: Overlay allowing immediate match start */}
               {gameState?.matchState === 'MENU' && (
-                <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-xl overflow-y-auto">
+                <div className="absolute inset-0 bg-[#050510]/88 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-lg overflow-y-auto">
                   <GameLogo className="mb-1.5" />
-                  <p className="text-xs text-amber-300 font-mono font-bold mb-2">
+                  <p className="font-btn text-xs text-[#FFB800] font-bold mb-2">
                     STAGE {gameState?.currentStageId ?? 1}
                   </p>
                   <button
                     type="button"
                     onClick={isMatchAllowed ? handleRestart : undefined}
                     disabled={!isMatchAllowed}
-                    className={`py-2 px-5 rounded-xl font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                    className={`font-btn py-2 px-5 rounded font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 shrink-0 ${
                       isMatchAllowed
-                        ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/30 cursor-pointer'
+                        ? 'bg-[#FFB800] hover:bg-amber-400 text-[#050510] shadow-[#FFB800]/30 cursor-pointer'
                         : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
                     }`}
                   >
                     <Play className={`w-3.5 h-3.5 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
-                    <span>{isMatchAllowed ? 'BẮT ĐẦU TRẬN ĐẤU' : 'ĐĂNG NHẬP ĐỂ BẮT ĐẦU'}</span>
+                    <span>
+                      {isMatchAllowed
+                        ? t('BẮT ĐẦU TRẬN ĐẤU', 'START BATTLE')
+                        : t('ĐĂNG NHẬP ĐỂ BẮT ĐẦU', 'SIGN IN TO START')}
+                    </span>
                   </button>
                 </div>
               )}
@@ -1747,10 +1760,10 @@ export default function App() {
             {isLocalSpectator && (
               <div
                 data-testid="mobile-spectator-banner"
-                className="mt-2 px-3 py-1.5 rounded-lg bg-sky-950/90 border border-sky-500/60 text-sky-200 text-xs font-bold flex items-center gap-2 shadow"
+                className="mt-2 px-3 py-1.5 rounded bg-sky-950/90 border border-[#00F0FF]/60 text-sky-200 text-xs font-bold flex items-center gap-2 shadow"
               >
-                <Eye className="w-4 h-4 text-sky-400 shrink-0" />
-                <span>Bạn đã hết mạng — Đang ở chế độ Xem đồng đội</span>
+                <Eye className="w-4 h-4 text-[#00F0FF] shrink-0" />
+                <span>{t('Bạn đã hết mạng — Đang ở chế độ Xem đồng đội', 'Out of lives — Spectating teammate')}</span>
               </div>
             )}
 
@@ -1788,17 +1801,19 @@ export default function App() {
            ========================================================================= */
         <div className="flex-1 flex flex-col justify-start w-full">
           {/* Header (M7.3.10: Sticky Top Menu with Safe Area & Quick Audio Mute/Unmute) */}
-          <header className="border-b border-neutral-800 bg-neutral-900/95 backdrop-blur-md px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 sticky top-0 z-40 shadow-md">
+          <header className="border-b border-[#00F0FF]/25 bg-[#050510]/95 backdrop-blur-md px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 sticky top-0 z-40 shadow-md">
             <div className="max-w-[1560px] mx-auto flex items-center justify-between gap-2">
               {/* Stage Indicator */}
               <div className="flex items-center gap-2">
-                <span className="text-[10px] sm:text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 font-mono font-bold">
+                <span className="font-btn text-[10px] sm:text-xs px-2.5 py-0.5 rounded bg-[#FFB800]/15 text-[#FFB800] border border-[#FFB800]/40 font-bold">
                   STAGE {gameState?.currentStageId ?? 1}
                 </span>
               </div>
 
               {/* Header Right Actions */}
               <div className="flex items-center gap-1.5 text-xs">
+                <LanguageSelector compact />
+
                 {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
                 <QuickAudioToggleButton showLabelOnDesktop />
 
@@ -1809,30 +1824,30 @@ export default function App() {
                       setSettingsInitialTab('ACCOUNT');
                       setIsSettingsOpen(true);
                     }}
-                    aria-label="Cài đặt"
-                    className="flex items-center justify-center p-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
-                    title="Cài đặt Tài khoản & Media"
+                    aria-label={t('Cài đặt', 'Settings')}
+                    className="flex items-center justify-center p-1.5 rounded bg-[#0b0d1e] border border-[#FFB800]/40 hover:border-[#FFB800] text-neutral-200 font-semibold transition-all shadow cursor-pointer"
+                    title={t('Cài đặt Tài khoản & Media', 'Account & Media Settings')}
                   >
-                    <Settings className="w-3.5 h-3.5 text-amber-400" />
+                    <Settings className="w-3.5 h-3.5 text-[#FFB800]" />
                   </button>
                 )}
 
                 <button
                   type="button"
                   onClick={() => setIsSupportOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-sky-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
-                  title="Hướng dẫn điều khiển"
+                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-[#0b0d1e] border border-[#00F0FF]/40 hover:border-[#00F0FF] text-neutral-200 font-semibold transition-all shadow cursor-pointer"
+                  title={t('Hướng dẫn điều khiển', 'Controls Guide')}
                 >
-                  <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+                  <HelpCircle className="w-3.5 h-3.5 text-[#00F0FF]" />
                 </button>
 
                 {isSuperAdmin && (
                   <button
                     type="button"
                     onClick={() => setIsDevDrawerOpen(true)}
-                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-neutral-900 border border-neutral-700 hover:border-amber-500 text-neutral-200 font-semibold transition-all shadow cursor-pointer"
+                    className="font-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-[#0b0d1e] border border-[#FFB800]/40 hover:border-[#FFB800] text-neutral-200 font-semibold transition-all shadow cursor-pointer"
                   >
-                    <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                    <Wrench className="w-3.5 h-3.5 text-[#FFB800]" />
                     <span className="hidden sm:inline">QA Suite</span>
                   </button>
                 )}
@@ -1840,7 +1855,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setIsMenuExpanded((v) => !v)}
-                  className="p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-all sm:hidden"
+                  className="p-1.5 rounded bg-[#0b0d1e] hover:bg-neutral-800 text-neutral-300 transition-all sm:hidden"
                   aria-label="Thu gọn/Mở rộng Menu"
                 >
                   {isMenuExpanded ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
@@ -1857,17 +1872,17 @@ export default function App() {
                       setIsDevDrawerOpen(true);
                       setIsMenuExpanded(false);
                     }}
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-200 font-semibold"
+                    className="font-btn flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded bg-[#0b0d1e] text-neutral-200 font-semibold"
                   >
-                    <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                    <Wrench className="w-3.5 h-3.5 text-[#FFB800]" />
                     <span>QA Suite</span>
                   </button>
                 )}
                 <button
                   onClick={() => setShowTouchControls((v) => !v)}
-                  className="flex items-center gap-1 py-2 px-3 rounded-lg bg-neutral-800 text-neutral-300 text-xs"
+                  className="font-btn flex items-center gap-1 py-2 px-3 rounded bg-[#0b0d1e] text-neutral-300 text-xs"
                 >
-                  <span>Cảm ứng: {showTouchControls ? 'Bật' : 'Tắt'}</span>
+                  <span>{t('Cảm ứng:', 'Touch:')} {showTouchControls ? t('Bật', 'On') : t('Tắt', 'Off')}</span>
                 </button>
               </div>
             )}
@@ -1877,12 +1892,12 @@ export default function App() {
           <main className="max-w-[1560px] mx-auto w-full px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 pb-6 grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-start">
             {/* Left Column: Enlarged Phaser Game Canvas */}
             <section className="lg:col-span-8 flex flex-col justify-start gap-3">
-              <div className="bg-neutral-900 border border-neutral-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col justify-start">
+              <div className="bg-[#0b0d1e] border border-[#00F0FF]/30 rounded-lg overflow-hidden shadow-2xl flex flex-col justify-start">
                 {/* Viewport Header */}
-                <div className="bg-neutral-950 px-4 py-2.5 border-b border-neutral-800 flex items-center justify-between text-xs">
+                <div className="bg-[#050510] px-4 py-2.5 border-b border-neutral-800 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2.5">
-                    <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse'}`} />
-                    <span className="font-semibold text-amber-400 font-mono">
+                    <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
+                    <span className="font-btn font-semibold text-[#FFB800]">
                       STAGE {gameState?.currentStageId ?? 1} {isPaused ? '(PAUSED)' : ''}
                     </span>
                   </div>
@@ -1890,32 +1905,32 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => setShowTouchControls((v) => !v)}
-                      className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-medium border transition-colors ${
+                      className={`font-btn flex items-center gap-1 px-2.5 py-1 rounded text-[11px] font-medium border transition-colors cursor-pointer ${
                         showTouchControls
-                          ? 'bg-neutral-800 text-amber-400 border-amber-500/40'
+                          ? 'bg-[#0b0d1e] text-[#FFB800] border-[#FFB800]/50'
                           : 'text-neutral-400 border-neutral-800 hover:text-neutral-200'
                       }`}
                     >
                       <Smartphone className="w-3 h-3" />
-                      <span>Joystick: {showTouchControls ? 'Bật' : 'Tắt'}</span>
+                      <span>Joystick: {showTouchControls ? t('Bật', 'On') : t('Tắt', 'Off')}</span>
                     </button>
 
                     {!isCoopOnlineMatch && (
                       <>
                         <button
                           onClick={isPaused ? handleResume : handlePause}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 text-[11px] font-semibold"
+                          className="font-btn flex items-center gap-1 px-2.5 py-1 rounded bg-[#0b0d1e] hover:bg-neutral-800 border border-[#FFB800]/40 text-neutral-200 text-[11px] font-semibold cursor-pointer"
                         >
                           <Pause className="w-3 h-3" />
-                          <span>{isPaused ? 'Tiếp tục' : 'Tạm dừng (P)'}</span>
+                          <span>{isPaused ? t('Tiếp tục', 'Resume') : t('Tạm dừng (P)', 'Pause (P)')}</span>
                         </button>
 
                         <button
                           onClick={handleResetGame}
-                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-300 text-[11px]"
+                          className="font-btn flex items-center gap-1 px-2.5 py-1 rounded bg-[#0b0d1e] hover:bg-neutral-800 border border-neutral-700 text-neutral-300 text-[11px] cursor-pointer"
                         >
                           <RotateCcw className="w-3 h-3" />
-                          <span>Đặt lại</span>
+                          <span>{t('Đặt lại', 'Reset')}</span>
                         </button>
                       </>
                     )}
@@ -1923,7 +1938,7 @@ export default function App() {
                 </div>
 
                 {/* Canvas Container - Top Aligned */}
-                <div className="p-3 sm:p-4 lg:p-5 bg-neutral-950/80 flex items-start justify-center relative">
+                <div className="p-3 sm:p-4 lg:p-5 bg-[#050510]/90 flex items-start justify-center relative">
                   <div className="w-full max-w-[min(calc(100dvh-140px),832px)] aspect-square flex items-start justify-center">
                     <PhaserGame
                       mode="battle"
@@ -1937,43 +1952,47 @@ export default function App() {
 
                   {/* In MENU state: Overlay allowing immediate match start */}
                   {gameState?.matchState === 'MENU' && (
-                    <div className="absolute inset-0 bg-black/85 backdrop-blur-sm flex flex-col items-center justify-start pt-4 px-6 pb-4 text-center z-20 rounded-xl overflow-y-auto">
+                    <div className="absolute inset-0 bg-[#050510]/88 backdrop-blur-sm flex flex-col items-center justify-start pt-4 px-6 pb-4 text-center z-20 rounded-lg overflow-y-auto">
                       <GameLogo className="mb-2" />
-                      <p className="text-sm sm:text-base text-amber-400 font-mono font-bold mb-3">
+                      <p className="font-btn text-sm sm:text-base text-[#FFB800] font-bold mb-3">
                         STAGE {gameState?.currentStageId ?? 1}
                       </p>
                       <button
                         type="button"
                         onClick={isMatchAllowed ? handleRestart : undefined}
                         disabled={!isMatchAllowed}
-                        className={`py-3 px-8 rounded-xl font-extrabold text-sm shadow-xl transition-transform active:scale-95 flex items-center gap-2.5 shrink-0 ${
+                        className={`font-btn py-3 px-8 rounded font-extrabold text-sm shadow-xl transition-transform active:scale-95 flex items-center gap-2.5 shrink-0 ${
                           isMatchAllowed
-                            ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/30 cursor-pointer'
+                            ? 'bg-[#FFB800] hover:bg-amber-400 text-[#050510] shadow-[#FFB800]/30 cursor-pointer'
                             : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
                         }`}
                       >
                         <Play className={`w-4 h-4 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
-                        <span>{isMatchAllowed ? 'BẮT ĐẦU TRẬN ĐẤU (SPACE / ENTER)' : 'ĐĂNG NHẬP GMAIL ĐỂ BẮT ĐẦU'}</span>
+                        <span>
+                          {isMatchAllowed
+                            ? t('BẮT ĐẦU TRẬN ĐẤU (SPACE / ENTER)', 'START BATTLE (SPACE / ENTER)')
+                            : t('ĐĂNG NHẬP GMAIL ĐỂ BẮT ĐẦU', 'SIGN IN WITH GMAIL TO START')}
+                        </span>
                       </button>
                     </div>
                   )}
                 </div>
 
                 {/* Viewport Footer */}
-                <div className="bg-neutral-950 px-4 py-2 border-t border-neutral-800 flex flex-wrap items-center justify-between text-xs gap-2">
+                <div className="bg-[#050510] px-4 py-2 border-t border-neutral-800 flex flex-wrap items-center justify-between text-xs gap-2">
                   <button
                     type="button"
                     onClick={() => setIsSupportOpen(true)}
-                    className="flex items-center gap-1.5 text-neutral-400 hover:text-sky-400 text-[11px] transition-colors cursor-pointer"
+                    className="flex items-center gap-1.5 text-neutral-400 hover:text-[#00F0FF] text-[11px] transition-colors cursor-pointer"
                   >
-                    <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
-                    <span>Xem hướng dẫn điều khiển trong mục Hướng dẫn</span>
+                    <HelpCircle className="w-3.5 h-3.5 text-[#00F0FF]" />
+                    <span>{t('Xem hướng dẫn điều khiển trong mục Hướng dẫn', 'View controls guide in How to Play')}</span>
                   </button>
-                  <div className="flex items-center gap-2 text-[11px] font-mono">
+                  <div className="font-hud flex items-center gap-2 text-sm">
                     {isCoopOnlineMatch && showOnlineNetStats ? (
                       <span
                         data-testid="desktop-online-net-stats"
-                        className="px-2 py-0.5 rounded bg-sky-950/75 border border-sky-700/50 text-sky-300 font-bold"
+                        className="px-2 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] font-bold"
                       >
                         Ping: {peerPingMs != null ? `${Math.round(peerPingMs)} ms` : '-- ms'} • {Math.round(fps)} FPS
                       </span>
@@ -2016,23 +2035,25 @@ export default function App() {
                 <>
                   <TerrainLegend tileCounts={validation.tileCounts} />
 
-                  <div className="bg-neutral-900 border border-neutral-800 rounded-xl p-4 text-xs flex flex-col gap-2.5 shadow">
+                  <div className="bg-[#0b0d1e] border border-[#FFB800]/30 rounded-lg p-4 text-xs flex flex-col gap-2.5 shadow">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        <Wrench className="w-4 h-4 text-amber-400" />
-                        <span className="font-bold text-white">Bảng Kiểm Thử & QA (Admin)</span>
+                        <Wrench className="w-4 h-4 text-[#FFB800]" />
+                        <span className="font-btn font-bold text-white">
+                          {t('Bảng Kiểm Thử & QA (Admin)', 'QA & Test Suite (Admin)')}
+                        </span>
                       </div>
-                      <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
+                      <span className="font-btn px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold">
                         ADMIN
                       </span>
                     </div>
                     <button
                       type="button"
                       onClick={() => setIsDevDrawerOpen(true)}
-                      className="w-full py-2 px-3 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow cursor-pointer"
+                      className="font-btn w-full py-2 px-3 rounded bg-[#050510] hover:bg-neutral-800 border border-[#FFB800]/40 text-neutral-200 font-semibold text-xs flex items-center justify-center gap-2 transition-all shadow cursor-pointer"
                     >
-                      <Wrench className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Mở Bảng Điều Khiển Kiểm Thử & QA</span>
+                      <Wrench className="w-3.5 h-3.5 text-[#FFB800]" />
+                      <span>{t('Mở Bảng Điều Khiển Kiểm Thử & QA', 'Open QA & Test Suite Console')}</span>
                     </button>
                   </div>
                 </>
@@ -2041,19 +2062,19 @@ export default function App() {
           </main>
 
           {/* Footer */}
-      <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">
-        <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
-          <span>© 2026 Bắn Tank Online</span>
-          <span>•</span>
-          <a href="/landing.html" className="hover:text-amber-400 transition-colors">
-            Giới thiệu
-          </a>
-          <span>•</span>
-          <a href="/privacy.html" className="hover:text-amber-400 transition-colors">
-            Chính sách quyền riêng tư
-          </a>
-        </div>
-      </footer>
+          <footer className="relative z-10 w-full border-t border-neutral-800 bg-[#050510]/90 px-4 py-3 text-center text-xs text-[#687386]">
+            <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
+              <span>© 2026 Bắn Tank Online</span>
+              <span>•</span>
+              <a href="/landing.html" className="hover:text-[#FFB800] transition-colors">
+                {t('Giới thiệu', 'About')}
+              </a>
+              <span>•</span>
+              <a href="/privacy.html" className="hover:text-[#FFB800] transition-colors">
+                {t('Chính sách quyền riêng tư', 'Privacy Policy')}
+              </a>
+            </div>
+          </footer>
         </div>
       )}
 

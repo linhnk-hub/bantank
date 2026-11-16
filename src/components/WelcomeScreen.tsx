@@ -6,6 +6,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AlertCircle, CheckCircle2, Gamepad2, Loader2, ShieldAlert, Wrench } from 'lucide-react';
 import { GameLogo } from './GameLogo.tsx';
+import { LanguageSelector } from './LanguageSelector.tsx';
 import { MusicManager, type HomeBackgroundVideoConfig } from '../core/musicManager.ts';
 import {
   MaintenanceManager,
@@ -13,6 +14,7 @@ import {
   type SystemMaintenanceConfigDocument,
 } from '../core/maintenanceManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
+import { useLanguage } from '../core/i18n.ts';
 
 export interface WelcomeScreenProps {
   onSignIn: () => Promise<void>;
@@ -31,6 +33,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   successMessage,
   onClearFeedback,
 }) => {
+  const { t } = useLanguage();
   const musicManager = MusicManager.getInstance();
   const maintenanceMgr = MaintenanceManager.getInstance();
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -109,7 +112,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
   const effectiveVideoSrc = musicManager.getHomeVideoPlaybackSrc() || homeVideoUrl;
 
   return (
-    <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]">
+    <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-[#050510] text-[#EAF4FF] font-body select-none overflow-x-hidden overflow-y-auto pt-[max(0.5rem,env(safe-area-inset-top))] pb-[max(0.25rem,env(safe-area-inset-bottom))]">
       {/* Intro Background Video (preloaded immediately on page load, blurred & looped automatically) */}
       {homeVideoConfig?.isEnabled && effectiveVideoSrc && (
         <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
@@ -158,27 +161,32 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             }}
             onError={() => setIsVideoBuffering(false)}
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-neutral-950/60 via-neutral-950/30 to-neutral-950/80" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#050510]/65 via-[#050510]/35 to-[#050510]/85" />
         </div>
       )}
 
-      {/* Background Ambience: Subtle retro scanlines and radial glow */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.15),rgba(255,255,255,0))] pointer-events-none" />
-      <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
+      {/* Background Ambience: Neo-Retro tactical grid and radial glow */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(255,184,0,0.16),rgba(5,5,16,0))] pointer-events-none" />
+      <div className="absolute inset-0 bg-grid-pattern opacity-20 pointer-events-none" />
+
+      {/* Top Language Bar (VI | EN) */}
+      <div className="relative z-20 max-w-4xl mx-auto w-full px-3 sm:px-4 pt-1 flex items-center justify-end">
+        <LanguageSelector compact />
+      </div>
 
       {/* Notifications: Logout notice / Error alert */}
-      <div className="relative z-20 max-w-xl mx-auto w-full px-3 sm:px-4 pt-1 sm:pt-3">
+      <div className="relative z-20 max-w-xl mx-auto w-full px-3 sm:px-4 pt-1 sm:pt-2">
         {successMessage && (
-          <div className="mb-2 p-3.5 rounded-xl bg-emerald-950/90 border border-emerald-800 text-emerald-200 text-xs sm:text-sm flex items-center justify-between shadow-xl animate-fade-in">
+          <div className="mb-2 p-3.5 neo-bevel-card border border-[#00F0FF]/60 text-[#EAF4FF] text-xs sm:text-sm flex items-center justify-between shadow-xl animate-fade-in">
             <div className="flex items-center gap-2.5">
-              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+              <CheckCircle2 className="w-5 h-5 text-[#00F0FF] shrink-0" />
               <span className="font-medium whitespace-pre-line">
                 {formatSentenceLineBreaks(successMessage)}
               </span>
             </div>
             <button
               onClick={onClearFeedback}
-              className="text-emerald-400 hover:text-white text-xs px-2 py-1 rounded"
+              className="text-[#00F0FF] hover:text-white text-xs min-w-[36px] min-h-[36px] px-2 py-1"
             >
               ✕
             </button>
@@ -186,16 +194,16 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         )}
 
         {errorMessage && (
-          <div className="mb-2 p-3.5 rounded-xl bg-rose-950/90 border border-rose-800 text-rose-200 text-xs sm:text-sm flex items-center justify-between shadow-xl animate-fade-in">
+          <div className="mb-2 p-3.5 neo-bevel-card neo-bevel-red text-[#EAF4FF] text-xs sm:text-sm flex items-center justify-between shadow-xl animate-fade-in">
             <div className="flex items-center gap-2.5">
-              <AlertCircle className="w-5 h-5 text-rose-400 shrink-0" />
+              <AlertCircle className="w-5 h-5 text-[#FF0055] shrink-0" />
               <span className="font-medium whitespace-pre-line">
                 {formatSentenceLineBreaks(errorMessage)}
               </span>
             </div>
             <button
               onClick={onClearFeedback}
-              className="text-rose-400 hover:text-white text-xs px-2 py-1 rounded"
+              className="text-[#FF0055] hover:text-white text-xs min-w-[36px] min-h-[36px] px-2 py-1"
             >
               ✕
             </button>
@@ -203,10 +211,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         )}
       </div>
 
-      {/* Main Welcome Content (M7.3.4 V.1: Clean welcome screen without Top Menu, Top Aligned) */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-2 sm:px-4 pt-1 sm:pt-3 pb-4 max-w-4xl mx-auto w-full">
+      {/* Main Welcome Content */}
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-2 sm:px-4 pt-1 sm:pt-2 pb-4 max-w-4xl mx-auto w-full">
         <div className="flex flex-col items-center text-center max-w-2xl w-full">
-          {/* Official Game Logo Hero — M7.3.10 Unified 200% Standard (320x320) */}
+          {/* Official Game Logo Hero — Unified 200% Standard (320x320) */}
           <div className="flex justify-center items-center p-0 m-0">
             <GameLogo />
           </div>
@@ -215,7 +223,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <h1 className="inline-flex items-center justify-center p-0 m-0 leading-none">
             <img
               src="/slogan.png"
-              alt="Chiến trường huyền thoại"
+              alt={t('Chiến trường huyền thoại', 'Legendary Tank Battlefield')}
               data-testid="welcome-slogan-image"
               className="block w-auto max-w-[280px] sm:max-w-[380px] h-auto object-contain p-0 m-0 drop-shadow-lg select-none pointer-events-none"
               draggable={false}
@@ -226,25 +234,31 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           {isMaintenanceActive && (
             <div
               data-testid="welcome-maintenance-banner"
-              className="w-full max-w-md mb-4 p-3.5 rounded-2xl bg-amber-950/90 border-2 border-amber-500/80 text-amber-100 shadow-2xl space-y-2 animate-fade-in"
+              className="w-full max-w-md mt-2.5 mb-2 p-3.5 neo-bevel-card neo-bevel-amber text-[#EAF4FF] text-xs sm:text-sm flex flex-col items-center gap-2 shadow-xl"
             >
-              <div className="flex items-center justify-center gap-2 text-amber-300 font-black text-xs sm:text-sm font-mono uppercase">
-                <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>HỆ THỐNG ĐANG BẢO TRÌ</span>
+              <div className="flex items-center gap-2 font-extrabold text-[#FFB800] uppercase tracking-wider font-btn">
+                <Wrench className="w-4 h-4 text-[#FFB800] animate-spin shrink-0" />
+                <span>{t('HỆ THỐNG ĐANG BẢO TRÌ', 'SYSTEM UNDER MAINTENANCE')}</span>
               </div>
-              <p className="text-xs sm:text-sm text-amber-100 font-medium leading-relaxed whitespace-pre-line">
+              <p className="text-center text-[#EAF4FF] leading-relaxed font-medium whitespace-pre-line">
                 {formatSentenceLineBreaks(maintenanceNoticeText)}
               </p>
-              <div className="pt-1 flex justify-center">
+              <div className="pt-1 border-t border-[#FFB800]/30 w-full flex flex-col items-center gap-1.5">
+                <span className="text-[10px] text-[#FFB800]/80">
+                  {t(
+                    'Quản trị viên (Admin) vẫn có thể đăng nhập để kết thúc bảo trì:',
+                    'Administrators can still sign in to end maintenance:'
+                  )}
+                </span>
                 <button
                   type="button"
                   data-testid="welcome-admin-maintenance-signin-btn"
                   onClick={onSignIn}
                   disabled={isProcessing}
-                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-900/90 hover:bg-neutral-800 text-amber-300 border border-amber-500/40 text-[10px] font-mono font-bold transition-colors cursor-pointer"
+                  className="px-3 py-1.5 min-h-[40px] bg-[#FFB800]/20 hover:bg-[#FFB800]/30 border border-[#FFB800]/60 text-[#FFB800] text-[11px] font-bold flex items-center gap-1.5 transition-all cursor-pointer font-btn"
                 >
-                  <Wrench className="w-3 h-3 text-amber-400" />
-                  <span>Đăng nhập (Admin)</span>
+                  <ShieldAlert className="w-3.5 h-3.5 text-[#FFB800]" />
+                  <span>{t('Đăng nhập (Admin)', 'Admin Sign In')}</span>
                 </button>
               </div>
             </div>
@@ -257,7 +271,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               data-testid="welcome-google-signin-btn"
               onClick={isMaintenanceActive ? undefined : onSignIn}
               disabled={isProcessing || isMaintenanceActive}
-              className={`w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-white via-red-600 to-white bg-[length:200%_100%] bg-left hover:bg-right text-white font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-lg shadow-red-600/30 hover:shadow-red-600/50 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 border border-red-400/80 ${
+              className={`w-full min-h-[48px] py-3 px-4 rounded-xl bg-gradient-to-r from-white via-red-600 to-white bg-[length:200%_100%] bg-left hover:bg-right text-white font-btn font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-lg shadow-red-600/30 hover:shadow-red-600/50 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 border border-red-400/80 ${
                 isMaintenanceActive
                   ? 'opacity-35 grayscale pointer-events-none cursor-not-allowed'
                   : 'disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed'
@@ -292,7 +306,9 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 data-testid="welcome-signin-gradient-text"
                 className="tracking-wide uppercase drop-shadow-[0_1.5px_2px_rgba(0,0,0,0.85)]"
               >
-                {isProcessing ? 'ĐANG KẾT NỐI...' : 'ĐĂNG NHẬP'}
+                {isProcessing
+                  ? t('ĐANG KẾT NỐI...', 'CONNECTING...')
+                  : t('ĐĂNG NHẬP', 'SIGN IN')}
               </span>
             </button>
 
@@ -302,14 +318,16 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 data-testid="welcome-trial-play-btn"
                 onClick={isMaintenanceActive ? undefined : onStartTrialMode}
                 disabled={isProcessing || isMaintenanceActive}
-                className={`w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-neutral-900 via-zinc-700 to-neutral-950 bg-[length:200%_100%] bg-left hover:bg-right text-neutral-100 hover:text-amber-300 font-extrabold text-xs sm:text-sm whitespace-nowrap border border-zinc-600/80 hover:border-amber-400/60 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-black/40 ${
+                className={`w-full min-h-[48px] py-3 px-4 rounded-xl bg-gradient-to-r from-neutral-900 via-zinc-700 to-neutral-950 bg-[length:200%_100%] bg-left hover:bg-right text-[#EAF4FF] hover:text-[#FFB800] font-btn font-extrabold text-xs sm:text-sm whitespace-nowrap border border-[#687386]/80 hover:border-[#FFB800]/70 transition-all duration-500 transform active:scale-95 flex items-center justify-center gap-2 shadow-lg shadow-black/40 ${
                   isMaintenanceActive
                     ? 'opacity-35 grayscale pointer-events-none cursor-not-allowed'
                     : 'cursor-pointer disabled:opacity-50'
                 }`}
               >
-                <Gamepad2 className="w-4 h-4 text-amber-400 shrink-0" />
-                <span className="tracking-wide uppercase">CHƠI THỬ</span>
+                <Gamepad2 className="w-4 h-4 text-[#FFB800] shrink-0" />
+                <span className="tracking-wide uppercase">
+                  {t('CHƠI THỬ', 'TRIAL PLAY')}
+                </span>
               </button>
             )}
           </div>
@@ -324,31 +342,27 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             data-testid="home-video-loading-banner"
             role="status"
             aria-live="polite"
-            className="relative z-10 w-full border-t border-amber-500/25 bg-neutral-900/90 backdrop-blur-sm px-4 py-2 text-xs text-amber-200 flex items-center justify-center gap-2 shrink-0"
+            className="relative z-10 w-full border-t border-[#FFB800]/30 bg-[#050510]/90 backdrop-blur-sm px-4 py-2 text-xs text-[#FFB800] flex items-center justify-center gap-2 shrink-0"
           >
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-400 shrink-0" />
-            <span>
-              Đang tải Video intro...
-            </span>
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-[#FFB800] shrink-0" />
+            <span>{t('Đang tải Video intro...', 'Loading intro video...')}</span>
           </div>
         )}
 
-      {/* Footer Strip */}
-      <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">
-        <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
-          <span>© 2026 Bắn Tank Online</span>
+      {/* Footer */}
+      <footer className="relative z-10 w-full border-t border-[#687386]/30 bg-[#050510]/85 px-4 py-3 text-center text-xs text-[#687386]">
+        <div className="max-w-4xl mx-auto flex items-center justify-center gap-3 flex-wrap">
+          <span className="text-[#EAF4FF]/80">© 2026 Bắn Tank Online</span>
           <span>•</span>
-          <a href="/landing.html" className="hover:text-amber-400 transition-colors">
-            Giới thiệu
+          <a href="/landing.html" className="hover:text-[#FFB800] transition-colors">
+            {t('Giới thiệu', 'About')}
           </a>
           <span>•</span>
-          <a href="/privacy.html" className="hover:text-amber-400 transition-colors">
-            Chính sách
+          <a href="/privacy.html" className="hover:text-[#00F0FF] transition-colors">
+            {t('Chính sách quyền riêng tư', 'Privacy Policy')}
           </a>
         </div>
       </footer>
     </div>
   );
 };
-
-

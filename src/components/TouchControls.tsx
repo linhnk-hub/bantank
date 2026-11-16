@@ -8,6 +8,7 @@ import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Crosshair, Pause } from 'luc
 import { VirtualJoystick } from './VirtualJoystick.tsx';
 import type { InputState } from '../core/types.ts';
 import { SessionManager } from '../core/sessionManager.ts';
+import { useLanguage } from '../core/i18n.ts';
 
 export type ActiveDirection = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | null;
 
@@ -28,12 +29,12 @@ export const VirtualDPad: React.FC<VirtualDPadProps> = ({
   return (
     <div className="relative w-36 h-36 flex items-center justify-center select-none touch-none shrink-0">
       {/* D-Pad Cross Background */}
-      <div className="absolute w-12 h-36 bg-neutral-900 rounded-xl border border-neutral-800 pointer-events-none" />
-      <div className="absolute w-36 h-12 bg-neutral-900 rounded-xl border border-neutral-800 pointer-events-none" />
+      <div className="absolute w-12 h-36 bg-[#0b0d1e] rounded-lg border border-[#00F0FF]/30 pointer-events-none" />
+      <div className="absolute w-36 h-12 bg-[#0b0d1e] rounded-lg border border-[#00F0FF]/30 pointer-events-none" />
 
       {/* Center Pivot Indicator */}
-      <div className="absolute w-9 h-9 rounded-full bg-neutral-800 border border-neutral-700 pointer-events-none z-10 flex items-center justify-center shadow-inner">
-        <div className="w-3 h-3 rounded-full bg-amber-500/90 shadow-sm" />
+      <div className="absolute w-9 h-9 rounded-full bg-[#050510] border border-[#FFB800]/50 pointer-events-none z-10 flex items-center justify-center shadow-inner">
+        <div className="w-3 h-3 rounded-full bg-[#FFB800] shadow-sm" />
       </div>
 
       {/* UP Button (48px standard touch target) */}
@@ -54,10 +55,10 @@ export const VirtualDPad: React.FC<VirtualDPadProps> = ({
           try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
           if (activeDirRef.current === 'UP') onDirectionChange(null);
         }}
-        className={`absolute top-0 w-12 h-12 rounded-t-xl flex items-center justify-center z-20 transition-all ${
+        className={`absolute top-0 w-12 h-12 rounded-t-lg flex items-center justify-center z-20 transition-all ${
           activeDirection === 'UP'
-            ? 'bg-amber-500 text-black shadow-lg scale-95'
-            : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700 active:bg-amber-500 active:text-black'
+            ? 'bg-[#FFB800] text-[#050510] shadow-lg scale-95'
+            : 'bg-[#0b0d1e] text-[#EAF4FF] hover:bg-neutral-800 active:bg-[#FFB800] active:text-[#050510]'
         }`}
         aria-label="Di chuyển Lên"
       >
@@ -82,10 +83,10 @@ export const VirtualDPad: React.FC<VirtualDPadProps> = ({
           try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
           if (activeDirRef.current === 'DOWN') onDirectionChange(null);
         }}
-        className={`absolute bottom-0 w-12 h-12 rounded-b-xl flex items-center justify-center z-20 transition-all ${
+        className={`absolute bottom-0 w-12 h-12 rounded-b-lg flex items-center justify-center z-20 transition-all ${
           activeDirection === 'DOWN'
-            ? 'bg-amber-500 text-black shadow-lg scale-95'
-            : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700 active:bg-amber-500 active:text-black'
+            ? 'bg-[#FFB800] text-[#050510] shadow-lg scale-95'
+            : 'bg-[#0b0d1e] text-[#EAF4FF] hover:bg-neutral-800 active:bg-[#FFB800] active:text-[#050510]'
         }`}
         aria-label="Di chuyển Xuống"
       >
@@ -110,10 +111,10 @@ export const VirtualDPad: React.FC<VirtualDPadProps> = ({
           try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
           if (activeDirRef.current === 'LEFT') onDirectionChange(null);
         }}
-        className={`absolute left-0 w-12 h-12 rounded-l-xl flex items-center justify-center z-20 transition-all ${
+        className={`absolute left-0 w-12 h-12 rounded-l-lg flex items-center justify-center z-20 transition-all ${
           activeDirection === 'LEFT'
-            ? 'bg-amber-500 text-black shadow-lg scale-95'
-            : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700 active:bg-amber-500 active:text-black'
+            ? 'bg-[#FFB800] text-[#050510] shadow-lg scale-95'
+            : 'bg-[#0b0d1e] text-[#EAF4FF] hover:bg-neutral-800 active:bg-[#FFB800] active:text-[#050510]'
         }`}
         aria-label="Di chuyển Trái"
       >
@@ -138,10 +139,10 @@ export const VirtualDPad: React.FC<VirtualDPadProps> = ({
           try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
           if (activeDirRef.current === 'RIGHT') onDirectionChange(null);
         }}
-        className={`absolute right-0 w-12 h-12 rounded-r-xl flex items-center justify-center z-20 transition-all ${
+        className={`absolute right-0 w-12 h-12 rounded-r-lg flex items-center justify-center z-20 transition-all ${
           activeDirection === 'RIGHT'
-            ? 'bg-amber-500 text-black shadow-lg scale-95'
-            : 'bg-neutral-800 text-neutral-300 hover:bg-neutral-700 active:bg-amber-500 active:text-black'
+            ? 'bg-[#FFB800] text-[#050510] shadow-lg scale-95'
+            : 'bg-[#0b0d1e] text-[#EAF4FF] hover:bg-neutral-800 active:bg-[#FFB800] active:text-[#050510]'
         }`}
         aria-label="Di chuyển Phải"
       >
@@ -162,6 +163,7 @@ export const VirtualShootButton: React.FC<VirtualShootButtonProps> = ({
   onShootChange,
   size = 76,
 }) => {
+  const { t } = useLanguage();
   const isCompact = size < 70;
   const iconSize = isCompact ? 20 : 26;
 
@@ -214,19 +216,19 @@ export const VirtualShootButton: React.FC<VirtualShootButtonProps> = ({
           try { e.currentTarget.releasePointerCapture(e.pointerId); } catch (_) {}
           onShootChange(false);
         }}
-        className={`rounded-full flex flex-col items-center justify-center gap-0.5 transition-all shadow-xl active:scale-95 ${
+        className={`font-btn rounded-full flex flex-col items-center justify-center gap-0.5 transition-all shadow-xl active:scale-95 ${
           isShooting
-            ? 'bg-red-500 text-white shadow-red-500/40 scale-95 border-2 border-red-300'
-            : 'bg-red-600 hover:bg-red-500 text-white shadow-red-600/30 border-2 border-red-400'
+            ? 'bg-[#FF0055] text-white shadow-[#FF0055]/50 scale-95 border-2 border-amber-300'
+            : 'bg-[#FF0055]/90 hover:bg-[#FF0055] text-white shadow-[#FF0055]/35 border-2 border-rose-300'
         }`}
-        aria-label="Bắn đạn"
+        aria-label={t('Bắn đạn', 'Fire')}
       >
         <Crosshair style={{ width: `${iconSize}px`, height: `${iconSize}px` }} />
         <span className={`${isCompact ? 'text-[9px]' : 'text-[10px]'} font-black tracking-widest uppercase`}>
-          BẮN
+          {t('BẮN', 'FIRE')}
         </span>
       </button>
-      {!isCompact && <span className="text-[10px] text-neutral-500 font-mono">SPACE / J</span>}
+      {!isCompact && <span className="font-hud text-xs text-neutral-500">SPACE / J</span>}
     </div>
   );
 };
@@ -246,6 +248,7 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
   controlType = 'joystick',
   disablePause = false,
 }) => {
+  const { t } = useLanguage();
   const [activeDirection, setActiveDirection] = useState<ActiveDirection>(null);
   const [isShooting, setIsShooting] = useState<boolean>(false);
 
@@ -304,7 +307,7 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
   );
 
   return (
-    <div className="w-full flex items-center justify-between select-none touch-none py-2 px-4 sm:px-8 md:px-10 bg-neutral-950/80 rounded-2xl border border-neutral-800 shadow-xl">
+    <div className="w-full flex items-center justify-between select-none touch-none py-2 px-4 sm:px-8 md:px-10 bg-[#050510]/90 rounded-lg border border-[#00F0FF]/30 shadow-xl">
       {/* Left Column: Virtual Joystick aligned to left hand zone */}
       <div className="flex items-center justify-start shrink-0">
         {controlType === 'joystick' ? (
@@ -330,12 +333,12 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
           <button
             type="button"
             onClick={onPauseClick}
-            className="w-11 h-11 rounded-full bg-neutral-900 border border-neutral-700 hover:bg-neutral-800 text-neutral-300 flex items-center justify-center transition-transform active:scale-90 shadow"
-            aria-label="Tạm dừng"
+            className="w-12 h-12 rounded-full bg-[#0b0d1e] border border-[#FFB800]/45 hover:bg-neutral-800 text-[#FFB800] flex items-center justify-center transition-transform active:scale-90 shadow"
+            aria-label={t('Tạm dừng', 'Pause')}
           >
-            <Pause className="w-4 h-4 fill-neutral-300" />
+            <Pause className="w-4 h-4 fill-[#FFB800]" />
           </button>
-          <span className="text-[9px] text-neutral-400 font-bold uppercase tracking-wider">
+          <span className="font-btn text-[9px] text-neutral-400 font-bold uppercase tracking-wider">
             PAUSE (P)
           </span>
         </div>

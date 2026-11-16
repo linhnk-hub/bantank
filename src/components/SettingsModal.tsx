@@ -85,6 +85,7 @@ import {
   getShowOnlineNetStatsPreference,
   setShowOnlineNetStatsPreference,
 } from '../core/networkStatsPref.ts';
+import { useLanguage, tx } from '../core/i18n.ts';
 
 export type SettingsTabId =
   | 'ACCOUNT'
@@ -144,29 +145,29 @@ export function getAvailableSettingsTabsForRole(
   const tabs: Array<{ id: SettingsTabId; label: string; adminOnly: boolean }> = [
     {
       id: 'ACCOUNT',
-      label: 'HỒ SƠ',
+      label: 'Thông tin',
       adminOnly: false,
     },
   ];
 
-  tabs.push({
-    id: 'AUDIO_SETTINGS',
-    label: 'ÂM THANH',
-    adminOnly: false,
-  });
-
   if (hasRolePermission(effectiveRole, 'MANAGE_AVATAR_CATALOG')) {
     tabs.push({
       id: 'IMAGE_SETTINGS',
-      label: 'AVATAR',
+      label: 'Hình ảnh',
       adminOnly: true,
     });
   }
 
+  tabs.push({
+    id: 'AUDIO_SETTINGS',
+    label: 'Media',
+    adminOnly: false,
+  });
+
   if (hasRolePermission(effectiveRole, 'MANAGE_STAGES')) {
     tabs.push({
       id: 'GAME_MODE_SETTINGS',
-      label: 'MÀN CHƠI',
+      label: 'Chế độ chơi',
       adminOnly: true,
     });
   }
@@ -174,7 +175,7 @@ export function getAvailableSettingsTabsForRole(
   if (hasRolePermission(effectiveRole, 'VIEW_AUDIT_AND_MONITORING')) {
     tabs.push({
       id: 'ADMIN_OTHER',
-      label: 'PHÂN QUYỀN',
+      label: 'Cấp quyền',
       adminOnly: true,
     });
   }
@@ -182,7 +183,7 @@ export function getAvailableSettingsTabsForRole(
   if (hasRolePermission(effectiveRole, 'VIEW_ACCOUNT_LIST')) {
     tabs.push({
       id: 'USER_ACCOUNTS',
-      label: 'TÀI KHOẢN',
+      label: 'Tài khoản',
       adminOnly: true,
     });
   }
@@ -191,7 +192,7 @@ export function getAvailableSettingsTabsForRole(
   if (effectiveRole === 'ADMIN') {
     tabs.push({
       id: 'SYSTEM_LOGS',
-      label: 'LOG',
+      label: 'LOG HỆ THỐNG',
       adminOnly: true,
     });
     tabs.push({
@@ -225,6 +226,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   user: propUser,
   onProfileUpdated,
 }) => {
+  const { t } = useLanguage();
   const soundManager = SoundManager.getInstance();
   const musicManager = MusicManager.getInstance();
   const avatarManager = AvatarManager.getInstance();
@@ -2827,13 +2829,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="bg-neutral-950 px-4 py-3 border-t border-neutral-800 flex items-center justify-end shrink-0">
+        <div className="bg-[#050510] px-4 py-3 border-t border-neutral-800 flex items-center justify-end shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="py-2 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs transition-transform active:scale-95 shadow cursor-pointer"
+            className="font-btn min-h-[44px] py-2 px-5 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-extrabold text-xs transition-transform active:scale-95 shadow cursor-pointer"
           >
-            ĐÓNG CÀI ĐẶT
+            {t('ĐÓNG CÀI ĐẶT', 'CLOSE SETTINGS')}
           </button>
         </div>
       </div>

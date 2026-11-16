@@ -17,6 +17,8 @@ import { PlayerStatsManager } from '../core/playerStatsManager.ts';
 import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
 import { CoopOnlineLobbyPanel, type CoopLobbySubView } from './CoopOnlineLobbyModal.tsx';
 import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
+import { LanguageSelector } from './LanguageSelector.tsx';
+import { useLanguage } from '../core/i18n.ts';
 import { CoopOnlineManager, type CoopRoomDocument } from '../core/coopOnlineManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { StageProgressionManager } from '../core/stageProgression.ts';
@@ -147,6 +149,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   onTwoPlayerOptionChange,
   isSuperAdmin = false,
 }) => {
+  const { t } = useLanguage();
+
   const deriveInitialCardMode = (): SelectionCardMode => {
     const activeRoom = CoopOnlineManager.getInstance().getCurrentRoom();
     if (
@@ -336,7 +340,11 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     );
     if (!access.allowed) {
       setStageSelectError(
-        access.errorMessage || `Stage ${selectedStageId} đang bị khóa.`
+        access.errorMessage ||
+          t(
+            `Stage ${selectedStageId} đang bị khóa.`,
+            `Stage ${selectedStageId} is locked.`
+          )
       );
       return;
     }
@@ -385,13 +393,13 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   };
 
   return (
-    <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-neutral-950 text-neutral-100 select-none overflow-x-hidden overflow-y-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <div className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-start bg-[#050510] text-[#EAF4FF] select-none overflow-x-hidden overflow-y-auto pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {/* Background Ambience */}
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(245,158,11,0.18),rgba(255,255,255,0))] pointer-events-none" />
-      <div className="absolute inset-0 bg-grid-pattern opacity-10 pointer-events-none" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(255,184,0,0.16),rgba(0,240,255,0.05),rgba(5,5,16,0))] pointer-events-none" />
+      <div className="absolute inset-0 bg-grid-pattern opacity-35 pointer-events-none" />
 
-      {/* Top Header Bar — M7.3.10: Sticky Top Menu with Safe Area, Quick Audio Mute/Unmute, and mobile overflow protection */}
-      <header className="sticky top-0 z-40 w-full border-b border-neutral-800 bg-neutral-900/95 backdrop-blur-md px-2.5 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 shrink-0 shadow-md">
+      {/* Top Header Bar — Sticky Top Menu with Safe Area, Quick Audio Mute/Unmute, VI | EN Language Selector */}
+      <header className="sticky top-0 z-40 w-full border-b border-[#00F0FF]/25 bg-[#050510]/95 backdrop-blur-md px-2.5 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 shrink-0 shadow-[0_4px_20px_rgba(0,0,0,0.75)]">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-1.5 sm:gap-2 min-w-0">
           {/* Left: Back Button (Hidden when inside Co-op Online waiting room) */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -400,38 +408,38 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 type="button"
                 data-testid="mode-selection-back-btn"
                 onClick={handleTopBack}
-                className="px-2.5 py-1.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 transition-all active:scale-95 shadow flex items-center gap-1.5 cursor-pointer text-xs font-bold"
-                title="Quay lại"
+                className="font-btn px-2.5 py-1.5 rounded bg-[#0c0e24] hover:bg-[#131738] text-[#EAF4FF] border border-[#FFB800]/40 transition-all active:scale-95 shadow flex items-center gap-1.5 cursor-pointer text-xs font-bold"
+                title={t('Quay lại', 'Back')}
               >
-                <ArrowLeft className="w-4 h-4 text-amber-400 shrink-0" />
-                <span className="hidden sm:inline">Quay lại</span>
+                <ArrowLeft className="w-4 h-4 text-[#FFB800] shrink-0" />
+                <span className="hidden sm:inline">{t('Quay lại', 'Back')}</span>
               </button>
             )}
           </div>
 
-          {/* Right: User Profile (Avatar + Display Name with Role Border Color), Quick Audio Toggle & Unified Cài đặt */}
+          {/* Right: User Profile (Avatar + Display Name with Role Border Color), VI | EN Language, Quick Audio Toggle & Cài đặt */}
           <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
             <div
-              className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1 rounded-lg bg-neutral-800/80 text-xs min-w-0 ${roleFrameClasses}`}
+              className={`flex items-center gap-1.5 sm:gap-2 px-2 sm:px-2.5 py-1 rounded bg-[#0c0e24]/90 text-xs min-w-0 ${roleFrameClasses}`}
             >
               {resolvedAvatarUrl && !avatarError ? (
                 <img
                   src={resolvedAvatarUrl}
                   alt={displayLabel}
-                  className="w-5 h-5 rounded-full object-cover border border-amber-400/60 shrink-0"
+                  className="w-5 h-5 rounded-full object-cover border border-[#FFB800]/60 shrink-0"
                   onError={() => setAvatarError(true)}
                 />
               ) : (
-                <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                <UserCheck className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
               )}
-              <span className="inline-flex items-baseline font-bold text-amber-300 min-w-0">
+              <span className="inline-flex items-baseline font-bold text-[#FFB800] min-w-0">
                 <span className="truncate max-w-[82px] xs:max-w-[115px] sm:max-w-[175px]">
                   {displayLabel}
                 </span>
                 {roleTrademarkBadge && (
                   <sup
                     data-testid="role-trademark-badge"
-                    className="ml-0.5 text-[9px] font-black leading-none text-amber-300 select-none shrink-0"
+                    className="ml-0.5 text-[9px] font-black leading-none text-[#FFB800] select-none shrink-0"
                   >
                     {roleTrademarkBadge}
                   </sup>
@@ -439,12 +447,15 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               </span>
               <span
                 data-testid="top-menu-player-level"
-                title={`Level người chơi: ${playerStats.levelSystemLabel}`}
-                className={`text-[10px] font-mono font-extrabold tabular-nums px-1.5 py-0.5 rounded border shrink-0 whitespace-nowrap ${
+                title={t(
+                  `Level người chơi: ${playerStats.levelSystemLabel}`,
+                  `Player Level: ${playerStats.levelSystemLabel}`
+                )}
+                className={`font-hud text-sm font-extrabold tabular-nums px-1.5 py-0.5 rounded border shrink-0 whitespace-nowrap leading-none ${
                   playerStats.isMaxLevel
-                    ? 'bg-amber-500 text-black border-amber-300'
+                    ? 'bg-[#FFB800] text-[#050510] border-amber-300'
                     : playerStats.xpVerificationStatus === 'VERIFIED'
-                      ? 'bg-amber-950/90 border-amber-500/40 text-amber-200'
+                      ? 'bg-[#050510] border-[#FFB800]/60 text-[#FFB800]'
                       : 'bg-neutral-900 border-neutral-700 text-neutral-400'
                 }`}
               >
@@ -457,27 +468,29 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               )}
             </div>
 
+            <LanguageSelector compact />
+
             {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
             <QuickAudioToggleButton />
 
             <button
               type="button"
               onClick={onOpenSettings}
-              aria-label="Cài đặt"
-              className="flex items-center justify-center p-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold transition-all shadow cursor-pointer shrink-0"
-              title="Cài đặt Tài khoản & Media"
+              aria-label={t('Cài đặt', 'Settings')}
+              className="flex items-center justify-center p-1.5 rounded bg-[#0c0e24] hover:bg-[#131738] text-[#EAF4FF] border border-[#FFB800]/40 text-xs font-semibold transition-all shadow cursor-pointer shrink-0"
+              title={t('Cài đặt Tài khoản & Media', 'Account & Media Settings')}
             >
-              <Settings className="w-3.5 h-3.5 text-amber-400" />
+              <Settings className="w-3.5 h-3.5 text-[#FFB800]" />
             </button>
 
             {isSuperAdmin && (
               <button
                 type="button"
                 onClick={onOpenDevTools}
-                className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 border border-neutral-700 text-xs font-semibold shadow cursor-pointer shrink-0"
-                title="Bảng Kiểm thử & QA (Admin)"
+                className="font-btn flex items-center gap-1 px-2 py-1.5 rounded bg-[#0c0e24] hover:bg-[#131738] text-[#EAF4FF] border border-[#FFB800]/40 text-xs font-semibold shadow cursor-pointer shrink-0"
+                title={t('Bảng Kiểm thử & QA (Admin)', 'QA & Test Suite (Admin)')}
               >
-                <Wrench className="w-3.5 h-3.5 text-amber-400" />
+                <Wrench className="w-3.5 h-3.5 text-[#FFB800]" />
                 <span className="hidden md:inline">QA</span>
               </button>
             )}
@@ -494,8 +507,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
           {flowStep === 'SELECT_MODE' && (
             <>
               <div className="mb-6 flex flex-col items-center">
-                <h1 className="text-[clamp(1.35rem,5.5vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow-lg uppercase">
-                  CHỌN CHẾ ĐỘ CHƠI
+                <h1 className="font-btn text-[clamp(1.35rem,5.5vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-[#FFB800] to-amber-600 tracking-wide sm:tracking-wider drop-shadow-lg uppercase">
+                  {t('CHỌN CHẾ ĐỘ CHƠI', 'SELECT GAME MODE')}
                 </h1>
               </div>
 
@@ -504,23 +517,23 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 {/* 1. SOLO */}
                 <div
                   onClick={() => handleSelectCardMode('SOLO')}
-                  className={`relative p-5 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
+                  className={`relative p-5 rounded-lg border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
                     cardMode === 'SOLO'
-                      ? 'bg-amber-950/40 border-amber-500 ring-2 ring-amber-500/30 shadow-2xl shadow-amber-500/20'
-                      : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700 opacity-90'
+                      ? 'bg-[#120e05]/90 border-[#FFB800] ring-2 ring-[#FFB800]/30 shadow-[0_0_24px_rgba(255,184,0,0.2)]'
+                      : 'bg-[#0b0d1e]/90 border-[#687386]/40 hover:border-[#FFB800]/60 opacity-95'
                   }`}
                 >
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
-                        <User className="w-3 h-3 text-amber-400" />
+                      <span className="font-btn inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-bold bg-[#FFB800]/20 text-[#FFB800] border border-[#FFB800]/40">
+                        <User className="w-3 h-3 text-[#FFB800]" />
                         <span>P1</span>
                       </span>
                       <div
                         className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                           cardMode === 'SOLO'
-                            ? 'border-amber-400 bg-amber-500'
-                            : 'border-neutral-600 bg-neutral-800'
+                            ? 'border-[#FFB800] bg-[#FFB800]'
+                            : 'border-[#687386] bg-[#050510]'
                         }`}
                       >
                         {cardMode === 'SOLO' && <div className="w-2 h-2 rounded-full bg-black" />}
@@ -528,22 +541,25 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 shrink-0">
+                      <div className="p-2 rounded bg-[#FFB800]/10 border border-[#FFB800]/30 shrink-0">
                         <RetroTankIconP1 className="w-10 h-10" />
                       </div>
                       <div>
-                        <h2 className="text-lg font-black text-white font-mono tracking-wide">
+                        <h2 className="font-btn text-lg font-black text-[#EAF4FF] tracking-wide">
                           SOLO
                         </h2>
-                        <p className="text-[11px] text-amber-300 font-medium">
-                          Chiến dịch 1 người chơi
+                        <p className="text-[11px] text-[#FFB800] font-medium">
+                          {t('Chiến dịch 1 người chơi', '1-Player Campaign')}
                         </p>
                       </div>
                     </div>
 
                     <p className="text-xs text-neutral-300 leading-relaxed whitespace-pre-line">
                       {formatSentenceLineBreaks(
-                        'Người chơi P1 độc lập tác chiến, tiêu diệt toàn bộ quân địch và bảo vệ căn cứ Đại bàng.'
+                        t(
+                          'Người chơi P1 độc lập tác chiến, tiêu diệt toàn bộ quân địch và bảo vệ căn cứ Đại bàng.',
+                          'Player P1 fights independently, destroys all enemy tanks, and protects the Eagle headquarters.'
+                        )
                       )}
                     </p>
                   </div>
@@ -552,13 +568,13 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     <button
                       type="button"
                       onClick={(e) => handleConfirmCardMode('SOLO', e)}
-                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow ${
+                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow ${
                         cardMode === 'SOLO'
-                          ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/25'
-                          : 'bg-neutral-800 hover:bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                          ? 'bg-[#FFB800] hover:bg-amber-400 text-[#050510] shadow-[#FFB800]/25'
+                          : 'bg-[#050510] hover:bg-[#FFB800]/20 text-[#FFB800] border border-[#FFB800]/40'
                       }`}
                     >
-                      <span>Xác nhận</span>
+                      <span>{t('Xác nhận', 'Confirm')}</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -567,23 +583,23 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 {/* 2. CO-OP AI */}
                 <div
                   onClick={() => handleSelectCardMode('COOP_AI')}
-                  className={`relative p-5 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
+                  className={`relative p-5 rounded-lg border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
                     cardMode === 'COOP_AI'
                       ? 'bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/30 shadow-2xl shadow-emerald-500/20'
-                      : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700 opacity-90'
+                      : 'bg-[#0b0d1e]/90 border-[#687386]/40 hover:border-emerald-500/60 opacity-95'
                   }`}
                 >
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                      <span className="font-btn inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                         <Bot className="w-3 h-3 text-emerald-400" />
-                        <span>P1 + ĐỒNG ĐỘI AI</span>
+                        <span>{t('P1 + ĐỒNG ĐỘI AI', 'P1 + AI ALLY')}</span>
                       </span>
                       <div
                         className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                           cardMode === 'COOP_AI'
                             ? 'border-emerald-400 bg-emerald-500'
-                            : 'border-neutral-600 bg-neutral-800'
+                            : 'border-[#687386] bg-[#050510]'
                         }`}
                       >
                         {cardMode === 'COOP_AI' && <div className="w-2 h-2 rounded-full bg-black" />}
@@ -591,23 +607,26 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 shrink-0 flex items-center gap-1">
+                      <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20 shrink-0 flex items-center gap-1">
                         <RetroTankIconP1 className="w-7 h-7" />
                         <RetroTankIconP2 className="w-7 h-7" />
                       </div>
                       <div>
-                        <h2 className="text-lg font-black text-white font-mono tracking-wide">
+                        <h2 className="font-btn text-lg font-black text-[#EAF4FF] tracking-wide">
                           CO-OP AI
                         </h2>
                         <p className="text-[11px] text-emerald-300 font-medium">
-                          Phối hợp cùng đồng đội AI
+                          {t('Phối hợp cùng đồng đội AI', 'Team up with AI partner')}
                         </p>
                       </div>
                     </div>
 
                     <p className="text-xs text-neutral-300 leading-relaxed whitespace-pre-line">
                       {formatSentenceLineBreaks(
-                        'Người chơi P1 và đồng đội P2 (do AI điều khiển) cùng nhau tiêu diệt toàn bộ quân địch và bảo vệ căn cứ Đại bàng.'
+                        t(
+                          'Người chơi P1 và đồng đội P2 (do AI điều khiển) cùng nhau tiêu diệt toàn bộ quân địch và bảo vệ căn cứ Đại bàng.',
+                          'Player P1 and AI-controlled partner P2 coordinate together to destroy all enemy tanks and defend the Eagle base.'
+                        )
                       )}
                     </p>
                   </div>
@@ -616,13 +635,13 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     <button
                       type="button"
                       onClick={(e) => handleConfirmCardMode('COOP_AI', e)}
-                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow ${
+                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow ${
                         cardMode === 'COOP_AI'
                           ? 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/25'
-                          : 'bg-neutral-800 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+                          : 'bg-[#050510] hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
                       }`}
                     >
-                      <span>Xác nhận</span>
+                      <span>{t('Xác nhận', 'Confirm')}</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -631,23 +650,23 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 {/* 3. CO-OP ONLINE */}
                 <div
                   onClick={() => handleSelectCardMode('COOP_ONLINE')}
-                  className={`relative p-5 rounded-2xl border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
+                  className={`relative p-5 rounded-lg border-2 transition-all cursor-pointer text-left flex flex-col justify-between ${
                     cardMode === 'COOP_ONLINE'
-                      ? 'bg-sky-950/40 border-sky-500 ring-2 ring-sky-500/30 shadow-2xl shadow-sky-500/20'
-                      : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700 opacity-90'
+                      ? 'bg-[#051624]/90 border-[#00F0FF] ring-2 ring-[#00F0FF]/30 shadow-[0_0_24px_rgba(0,240,255,0.2)]'
+                      : 'bg-[#0b0d1e]/90 border-[#687386]/40 hover:border-[#00F0FF]/60 opacity-95'
                   }`}
                 >
                   <div>
                     <div className="flex items-center justify-between mb-3">
-                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono font-bold bg-sky-500/20 text-sky-300 border border-sky-500/40">
-                        <Globe className="w-3 h-3 text-sky-400" />
-                        <span>2 NGƯỜI CHƠI</span>
+                      <span className="font-btn inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-[10px] font-bold bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/40">
+                        <Globe className="w-3 h-3 text-[#00F0FF]" />
+                        <span>{t('2 NGƯỜI CHƠI', '2 PLAYERS')}</span>
                       </span>
                       <div
                         className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
                           cardMode === 'COOP_ONLINE'
-                            ? 'border-sky-400 bg-sky-500'
-                            : 'border-neutral-600 bg-neutral-800'
+                            ? 'border-[#00F0FF] bg-[#00F0FF]'
+                            : 'border-[#687386] bg-[#050510]'
                         }`}
                       >
                         {cardMode === 'COOP_ONLINE' && <div className="w-2 h-2 rounded-full bg-black" />}
@@ -655,23 +674,26 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     <div className="flex items-center gap-3 mb-3">
-                      <div className="p-2 rounded-xl bg-sky-500/10 border border-sky-500/20 shrink-0 flex items-center gap-1">
+                      <div className="p-2 rounded bg-[#00F0FF]/10 border border-[#00F0FF]/30 shrink-0 flex items-center gap-1">
                         <RetroTankIconP1 className="w-7 h-7" />
                         <RetroTankIconP2 className="w-7 h-7" />
                       </div>
                       <div>
-                        <h2 className="text-lg font-black text-white font-mono tracking-wide">
+                        <h2 className="font-btn text-lg font-black text-[#EAF4FF] tracking-wide">
                           CO-OP ONLINE
                         </h2>
-                        <p className="text-[11px] text-sky-300 font-medium">
-                          2 Người chơi qua Internet
+                        <p className="text-[11px] text-[#00F0FF] font-medium">
+                          {t('2 Người chơi qua Internet', '2 Players via Internet')}
                         </p>
                       </div>
                     </div>
 
                     <p className="text-xs text-neutral-300 leading-relaxed whitespace-pre-line">
                       {formatSentenceLineBreaks(
-                        'Tạo phòng (có mật khẩu hoặc công khai) hoặc Tham gia phòng bằng mã phòng định dạng BTxxxx để phối hợp trực tuyến giữa 2 người chơi.'
+                        t(
+                          'Tạo phòng (có mật khẩu hoặc công khai) hoặc Tham gia phòng bằng mã phòng định dạng BTxxxx để phối hợp trực tuyến giữa 2 người chơi.',
+                          'Create a room (password-protected or public) or Join a room by BTxxxx room code for real-time 2-player online co-op.'
+                        )
                       )}
                     </p>
                   </div>
@@ -680,13 +702,13 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     <button
                       type="button"
                       onClick={(e) => handleConfirmCardMode('COOP_ONLINE', e)}
-                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow ${
+                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer shadow ${
                         cardMode === 'COOP_ONLINE'
-                          ? 'bg-sky-500 hover:bg-sky-400 text-black shadow-sky-500/25'
-                          : 'bg-neutral-800 hover:bg-sky-500/20 text-sky-300 border border-sky-500/40'
+                          ? 'bg-[#00F0FF] hover:bg-cyan-300 text-[#050510] shadow-[#00F0FF]/25'
+                          : 'bg-[#050510] hover:bg-[#00F0FF]/20 text-[#00F0FF] border border-[#00F0FF]/40'
                       }`}
                     >
-                      <span>Xác nhận</span>
+                      <span>{t('Xác nhận', 'Confirm')}</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -701,21 +723,21 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
           {flowStep === 'SELECT_DIFFICULTY' && (
             <>
               <div className="mb-6 flex flex-col items-center">
-                <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-neutral-900 border border-neutral-700 text-xs font-mono text-amber-300 mb-2">
+                <div className="font-btn inline-flex items-center gap-2 px-3 py-1 rounded bg-[#0c0e24] border border-[#FFB800]/40 text-xs text-[#FFB800] mb-2">
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                   <span>
                     {' '}
                     <strong>
                       {cardMode === 'SOLO'
-                        ? 'SOLO (1 Người chơi)'
+                        ? t('SOLO (1 Người chơi)', 'SOLO (1 Player)')
                         : cardMode === 'COOP_AI'
-                        ? 'CO-OP AI (P1 + Đồng đội AI)'
-                        : 'CO-OP ONLINE (2 Người chơi qua Internet)'}
+                        ? t('CO-OP AI (P1 + Đồng đội AI)', 'CO-OP AI (P1 + AI Partner)')
+                        : t('CO-OP ONLINE (2 Người chơi qua Internet)', 'CO-OP ONLINE (2 Players Online)')}
                     </strong>
                   </span>
                 </div>
-                <h1 className="text-[clamp(1.35rem,5.5vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-amber-400 to-amber-600 tracking-wide sm:tracking-wider font-mono drop-shadow-lg uppercase">
-                  CHỌN MÀN CHƠI &amp; ĐỘ KHÓ
+                <h1 className="font-btn text-[clamp(1.35rem,5.5vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-[#FFB800] to-amber-600 tracking-wide sm:tracking-wider drop-shadow-lg uppercase">
+                  {t('CHỌN MÀN CHƠI & ĐỘ KHÓ', 'SELECT STAGE & DIFFICULTY')}
                 </h1>
               </div>
 
@@ -728,15 +750,18 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 return (
                   <section
                     data-testid="campaign-stage-selector"
-                    className="w-full mb-5 p-4 rounded-2xl border border-neutral-800 bg-neutral-900/85 text-left space-y-3 shadow-lg"
+                    className="w-full mb-5 p-4 rounded-lg border border-[#00F0FF]/35 bg-[#0b0d1e]/90 text-left space-y-3 shadow-lg"
                   >
                     <div className="flex items-center justify-between flex-wrap gap-2 border-b border-neutral-800 pb-2.5">
-                      <div className="flex items-center gap-2 font-black text-xs sm:text-sm text-amber-300 font-mono uppercase">
-                        <MapIcon className="w-4 h-4 text-amber-400" />
-                        <span>CHIẾN DỊCH STAGE 1–10</span>
+                      <div className="font-btn flex items-center gap-2 font-black text-xs sm:text-sm text-[#FFB800] uppercase">
+                        <MapIcon className="w-4 h-4 text-[#FFB800]" />
+                        <span>{t('CHIẾN DỊCH STAGE 1–10', 'CAMPAIGN STAGES 1–10')}</span>
                       </div>
-                      <span className="text-[11px] font-mono text-emerald-300 font-bold">
-                        Đã mở khóa: Stage {stageProgress.unlockedStage}/10
+                      <span className="font-hud text-base text-[#00F0FF] font-bold">
+                        {t(
+                          `Đã mở khóa: Stage ${stageProgress.unlockedStage}/10`,
+                          `Unlocked: Stage ${stageProgress.unlockedStage}/10`
+                        )}
                       </span>
                     </div>
 
@@ -753,29 +778,35 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                             onClick={() => {
                               if (!isUnlocked) {
                                 setStageSelectError(
-                                  `Stage ${stage.id} đang bị khóa. Cần hoàn thành Stage ${stage.id - 1} để mở khóa.`
+                                  t(
+                                    `Stage ${stage.id} đang bị khóa. Cần hoàn thành Stage ${stage.id - 1} để mở khóa.`,
+                                    `Stage ${stage.id} is locked. Clear Stage ${stage.id - 1} first to unlock.`
+                                  )
                                 );
                                 return;
                               }
                               setStageSelectError(null);
                               setSelectedStageId(stage.id);
                             }}
-                            className={`relative py-2 px-1 rounded-xl border text-center transition-all flex flex-col items-center justify-center gap-0.5 ${
+                            className={`relative min-h-[48px] py-2 px-1 rounded border text-center transition-all flex flex-col items-center justify-center gap-0.5 ${
                               !isUnlocked
-                                ? 'bg-neutral-950/70 border-neutral-800 text-neutral-600 cursor-not-allowed opacity-70'
+                                ? 'bg-[#050510]/70 border-neutral-800 text-neutral-600 cursor-not-allowed opacity-70'
                                 : isSelected
-                                  ? 'bg-amber-500 border-amber-300 text-black font-black ring-2 ring-amber-400/50 cursor-pointer shadow'
+                                  ? 'bg-[#FFB800] border-amber-300 text-[#050510] font-black ring-2 ring-[#FFB800]/50 cursor-pointer shadow'
                                   : isCompleted
                                     ? 'bg-emerald-950/50 border-emerald-600/60 text-emerald-200 hover:border-emerald-400 cursor-pointer'
-                                    : 'bg-neutral-950 border-neutral-700 text-neutral-200 hover:border-amber-500/60 cursor-pointer'
+                                    : 'bg-[#050510] border-[#687386]/60 text-[#EAF4FF] hover:border-[#FFB800]/60 cursor-pointer'
                             }`}
                             title={
                               isUnlocked
                                 ? stage.name
-                                : `Khóa: Hoàn thành Stage ${stage.id - 1} để mở`
+                                : t(
+                                    `Khóa: Hoàn thành Stage ${stage.id - 1} để mở`,
+                                    `Locked: Clear Stage ${stage.id - 1} to unlock`
+                                  )
                             }
                           >
-                            <span className="text-[11px] font-mono font-extrabold">S{stage.id}</span>
+                            <span className="font-hud text-sm font-extrabold">S{stage.id}</span>
                             {!isUnlocked ? (
                               <Lock className="w-3 h-3 text-neutral-600" />
                             ) : isCompleted ? (
@@ -784,7 +815,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                               />
                             ) : (
                               <Unlock
-                                className={`w-3 h-3 ${isSelected ? 'text-black' : 'text-amber-400'}`}
+                                className={`w-3 h-3 ${isSelected ? 'text-black' : 'text-[#FFB800]'}`}
                               />
                             )}
                           </button>
@@ -793,7 +824,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     {/* Selected Stage Detail + 13x13 Preview */}
-                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3.5 p-3 rounded-xl bg-neutral-950/80 border border-neutral-800">
+                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3.5 p-3 rounded bg-[#050510]/90 border border-neutral-800">
                       <StageMapMiniPreview
                         map={selectedSpec.map}
                         sizePx={96}
@@ -802,28 +833,30 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       />
                       <div className="flex-1 min-w-0 space-y-1.5 text-center sm:text-left">
                         <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-                          <span className="font-mono font-black text-sm text-white">
+                          <span className="font-btn font-black text-sm text-[#EAF4FF]">
                             {selectedSpec.name}
                           </span>
                           {selectedCompleted ? (
-                            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 text-[10px] font-bold">
-                              HOÀN THÀNH
+                            <span className="font-btn px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 text-[10px] font-bold">
+                              {t('HOÀN THÀNH', 'COMPLETED')}
                             </span>
                           ) : selectedUnlocked ? (
-                            <span className="px-2 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-700/60 text-[10px] font-bold">
-                              ĐÃ MỞ KHÓA
+                            <span className="font-btn px-2 py-0.5 rounded bg-amber-950/80 text-[#FFB800] border border-[#FFB800]/60 text-[10px] font-bold">
+                              {t('ĐÃ MỞ KHÓA', 'UNLOCKED')}
                             </span>
                           ) : (
-                            <span className="px-2 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[10px] font-bold">
-                              ĐÃ KHÓA
+                            <span className="font-btn px-2 py-0.5 rounded bg-neutral-800 text-neutral-400 border border-neutral-700 text-[10px] font-bold">
+                              {t('ĐÃ KHÓA', 'LOCKED')}
                             </span>
                           )}
                         </div>
                         <p className="text-[11px] text-neutral-300 leading-relaxed whitespace-pre-line">
                           {formatSentenceLineBreaks(selectedSpec.terrainFocus)}
                         </p>
-                        <div className="text-[11px] font-mono text-neutral-400 flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                          <span className="text-amber-300 font-bold">30 Xe địch:</span>
+                        <div className="font-hud text-sm text-neutral-300 flex flex-wrap items-center justify-center sm:justify-start gap-2">
+                          <span className="text-[#FFB800] font-bold">
+                            {t('30 Xe địch:', '30 Enemies:')}
+                          </span>
                           <span>Basic {selectedSpec.enemyComposition.BASIC}</span>
                           <span>•</span>
                           <span>Fast {selectedSpec.enemyComposition.FAST}</span>
@@ -836,7 +869,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     {stageSelectError && (
-                      <div className="p-2.5 rounded-lg bg-rose-950/80 border border-rose-700/70 text-rose-200 text-[11px] font-medium whitespace-pre-line">
+                      <div className="p-2.5 rounded bg-rose-950/80 border border-[#FF0055]/70 text-rose-200 text-[11px] font-medium whitespace-pre-line">
                         {formatSentenceLineBreaks(stageSelectError)}
                       </div>
                     )}
@@ -848,21 +881,21 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 {/* NORMAL / DEFAULT -> Giải trí */}
                 <div
                   onClick={() => onDifficultyChange('DEFAULT')}
-                  className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                  className={`p-5 rounded-lg border-2 transition-all cursor-pointer flex flex-col justify-between ${
                     difficulty === 'DEFAULT'
-                      ? 'bg-amber-950/35 border-amber-500 shadow-2xl ring-2 ring-amber-500/25'
-                      : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700'
+                      ? 'bg-[#120e05]/85 border-[#FFB800] shadow-2xl ring-2 ring-[#FFB800]/25'
+                      : 'bg-[#0b0d1e]/90 border-[#687386]/40 hover:border-[#FFB800]/60'
                   }`}
                 >
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="font-black text-amber-300 text-lg sm:text-xl font-mono flex items-center gap-2.5">
-                        <Shield className="w-5 h-5 text-amber-400" />
-                        <span>Giải trí</span>
+                      <span className="font-btn font-black text-[#FFB800] text-lg sm:text-xl flex items-center gap-2.5">
+                        <Shield className="w-5 h-5 text-[#FFB800]" />
+                        <span>{t('Giải trí', 'Casual')}</span>
                       </span>
                       {difficulty === 'DEFAULT' && (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500 text-black font-black font-mono">
-                          ĐANG CHỌN
+                        <span className="font-btn text-[10px] px-2 py-0.5 rounded bg-[#FFB800] text-[#050510] font-black">
+                          {t('ĐANG CHỌN', 'SELECTED')}
                         </span>
                       )}
                     </div>
@@ -871,7 +904,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       className="text-xs text-neutral-300 leading-relaxed mt-3 whitespace-pre-line"
                     >
                       {formatSentenceLineBreaks(
-                        `Có ${difficultyConfigState.profiles.DEFAULT.soloLives} mạng chơi, thời gian trận đấu ${difficultyConfigState.profiles.DEFAULT.durationSeconds} giây. Nhịp độ cân bằng, phù hợp chơi thư giãn và rèn kỹ năng chiến đấu.`
+                        t(
+                          `Có ${difficultyConfigState.profiles.DEFAULT.soloLives} mạng chơi, thời gian trận đấu ${difficultyConfigState.profiles.DEFAULT.durationSeconds} giây. Nhịp độ cân bằng, phù hợp chơi thư giãn và rèn kỹ năng chiến đấu.`,
+                          `${difficultyConfigState.profiles.DEFAULT.soloLives} player lives, ${difficultyConfigState.profiles.DEFAULT.durationSeconds}s match timer. Balanced tactical pacing ideal for casual play and honing combat skills.`
+                        )
                       )}
                     </p>
                   </div>
@@ -881,15 +917,15 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       type="button"
                       disabled={!isSessionActive || isProcessing}
                       onClick={(e) => handleConfirmDifficulty('DEFAULT', e)}
-                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 shadow ${
+                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 shadow ${
                         !isSessionActive || isProcessing
                           ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
                           : difficulty === 'DEFAULT'
-                          ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-amber-500/25 cursor-pointer'
-                          : 'bg-neutral-800 hover:bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-pointer'
+                          ? 'bg-[#FFB800] hover:bg-amber-400 text-[#050510] shadow-[#FFB800]/25 cursor-pointer'
+                          : 'bg-[#050510] hover:bg-[#FFB800]/20 text-[#FFB800] border border-[#FFB800]/40 cursor-pointer'
                       }`}
                     >
-                      <span>Vào Stage {selectedStageId}</span>
+                      <span>{t(`Vào Stage ${selectedStageId}`, `Enter Stage ${selectedStageId}`)}</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -898,21 +934,21 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 {/* HARD / EXTREME -> Thử thách */}
                 <div
                   onClick={() => onDifficultyChange('EXTREME')}
-                  className={`p-5 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                  className={`p-5 rounded-lg border-2 transition-all cursor-pointer flex flex-col justify-between ${
                     difficulty === 'EXTREME'
-                      ? 'bg-rose-950/35 border-rose-500 shadow-2xl ring-2 ring-rose-500/25'
-                      : 'bg-neutral-900/80 border-neutral-800 hover:border-neutral-700'
+                      ? 'bg-[#200510]/85 border-[#FF0055] shadow-2xl ring-2 ring-[#FF0055]/25'
+                      : 'bg-[#0b0d1e]/90 border-[#687386]/40 hover:border-[#FF0055]/60'
                   }`}
                 >
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="font-black text-rose-300 text-lg sm:text-xl font-mono flex items-center gap-2.5">
-                        <Flame className="w-5 h-5 text-rose-400" />
-                        <span>Thử thách</span>
+                      <span className="font-btn font-black text-[#FF0055] text-lg sm:text-xl flex items-center gap-2.5">
+                        <Flame className="w-5 h-5 text-[#FF0055]" />
+                        <span>{t('Thử thách', 'Challenge')}</span>
                       </span>
                       {difficulty === 'EXTREME' && (
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-rose-600 text-white font-black font-mono">
-                          ĐANG CHỌN
+                        <span className="font-btn text-[10px] px-2 py-0.5 rounded bg-[#FF0055] text-white font-black">
+                          {t('ĐANG CHỌN', 'SELECTED')}
                         </span>
                       )}
                     </div>
@@ -921,7 +957,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       className="text-xs text-neutral-300 leading-relaxed mt-3 whitespace-pre-line"
                     >
                       {formatSentenceLineBreaks(
-                        `Có ${difficultyConfigState.profiles.EXTREME.soloLives} mạng chơi, thời gian trận đấu ${difficultyConfigState.profiles.EXTREME.durationSeconds} giây. Xe địch phản ứng nhanh và dồn hỏa lực mạnh vào căn cứ, đòi hỏi phản xạ và chiến thuật cao.`
+                        t(
+                          `Có ${difficultyConfigState.profiles.EXTREME.soloLives} mạng chơi, thời gian trận đấu ${difficultyConfigState.profiles.EXTREME.durationSeconds} giây. Xe địch phản ứng nhanh và dồn hỏa lực mạnh vào căn cứ, đòi hỏi phản xạ và chiến thuật cao.`,
+                          `${difficultyConfigState.profiles.EXTREME.soloLives} player life, ${difficultyConfigState.profiles.EXTREME.durationSeconds}s match timer. Enemy tanks react aggressively and focus heavy fire on the base, demanding sharp reflexes and tactics.`
+                        )
                       )}
                     </p>
                   </div>
@@ -931,15 +970,15 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       type="button"
                       disabled={!isSessionActive || isProcessing}
                       onClick={(e) => handleConfirmDifficulty('EXTREME', e)}
-                      className={`w-full min-h-[44px] py-2.5 px-4 rounded-xl font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 shadow ${
+                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 shadow ${
                         !isSessionActive || isProcessing
                           ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
                           : difficulty === 'EXTREME'
-                          ? 'bg-rose-600 hover:bg-rose-500 text-white shadow-rose-500/25 cursor-pointer'
-                          : 'bg-neutral-800 hover:bg-rose-500/20 text-rose-300 border border-rose-500/40 cursor-pointer'
+                          ? 'bg-[#FF0055] hover:bg-rose-500 text-white shadow-[#FF0055]/25 cursor-pointer'
+                          : 'bg-[#050510] hover:bg-[#FF0055]/20 text-rose-300 border border-[#FF0055]/40 cursor-pointer'
                       }`}
                     >
-                      <span>Vào Stage {selectedStageId}</span>
+                      <span>{t(`Vào Stage ${selectedStageId}`, `Enter Stage ${selectedStageId}`)}</span>
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
@@ -954,8 +993,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
           {flowStep === 'COOP_ONLINE_LOBBY' && (
             <div className="w-full text-left">
               <div className="mb-5 text-center">
-                <h1 className="text-[clamp(1.25rem,5vw,2.2rem)] font-black text-transparent bg-clip-text bg-gradient-to-b from-sky-200 via-sky-400 to-sky-600 font-mono uppercase">
-                  KẾT NỐI PHÒNG CO-OP ONLINE
+                <h1 className="font-btn text-[clamp(1.25rem,5vw,2.2rem)] font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-200 via-[#00F0FF] to-sky-500 uppercase">
+                  {t('KẾT NỐI PHÒNG CO-OP ONLINE', 'CO-OP ONLINE ROOM CONNECTION')}
                 </h1>
               </div>
 
@@ -974,16 +1013,16 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       </main>
 
       {/* Footer */}
-      <footer className="relative z-10 w-full border-t border-neutral-800 bg-neutral-900/60 px-4 py-3 text-center text-xs text-neutral-500">
+      <footer className="relative z-10 w-full border-t border-neutral-800 bg-[#050510]/90 px-4 py-3 text-center text-xs text-[#687386]">
         <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
           <span>© 2026 Bắn Tank Online</span>
           <span>•</span>
-          <a href="/landing.html" className="hover:text-amber-400 transition-colors">
-            Giới thiệu
+          <a href="/landing.html" className="hover:text-[#FFB800] transition-colors">
+            {t('Giới thiệu', 'About')}
           </a>
           <span>•</span>
-          <a href="/privacy.html" className="hover:text-amber-400 transition-colors">
-            Chính sách quyền riêng tư
+          <a href="/privacy.html" className="hover:text-[#FFB800] transition-colors">
+            {t('Chính sách quyền riêng tư', 'Privacy Policy')}
           </a>
         </div>
       </footer>

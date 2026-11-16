@@ -46,26 +46,77 @@
         "description": "Bắn Tank Online là trò chơi bắn xe tăng chiến thuật 2D trực tuyến trên trình duyệt. Điều khiển chiến xa, bảo vệ căn cứ Đại bàng, chơi đơn Solo, phối hợp Đồng đội AI, chơi 2 người Co-op Online hoặc Chơi thử ngay không cần đăng nhập."
       }
     </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@400;500;600;700&family=Tektur:wght@500;600;700;800;900&family=VT323&display=swap"
+      rel="stylesheet"
+    />
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
       :root {
         color-scheme: dark;
+        --crt-dark: #050510;
+        --neon-amber: #FFB800;
+        --laser-cyan: #00F0FF;
+        --alert-red: #FF0055;
+        --steel-gray: #687386;
+        --crt-white: #EAF4FF;
       }
       body {
         margin: 0;
-        background-color: #0a0a0a;
-        color: #f5f5f5;
-        font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        background-color: #050510;
+        color: #EAF4FF;
+        font-family: "Space Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      }
+      .font-pixel {
+        font-family: "Press Start 2P", "Tektur", monospace;
+      }
+      .font-hud {
+        font-family: "VT323", monospace;
+      }
+      .font-btn {
+        font-family: "Tektur", "Space Grotesk", sans-serif;
       }
       .tactical-grid-bg {
         background-image:
-          linear-gradient(to right, rgba(64, 64, 64, 0.25) 1px, transparent 1px),
-          linear-gradient(to bottom, rgba(64, 64, 64, 0.25) 1px, transparent 1px);
+          linear-gradient(to right, rgba(0, 240, 255, 0.08) 1px, transparent 1px),
+          linear-gradient(to bottom, rgba(0, 240, 255, 0.08) 1px, transparent 1px);
         background-size: 24px 24px;
+      }
+      .neo-retro-crt::after {
+        content: "";
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        z-index: 9999;
+        background: repeating-linear-gradient(
+          to bottom,
+          rgba(255, 255, 255, 0) 0px,
+          rgba(255, 255, 255, 0) 2px,
+          rgba(0, 240, 255, 0.025) 3px,
+          rgba(0, 0, 0, 0.14) 4px
+        );
+        opacity: 0.45;
+      }
+      .neo-glitch-text {
+        text-shadow:
+          -1.5px 0 rgba(255, 0, 85, 0.7),
+          1.5px 0 rgba(0, 240, 255, 0.7);
+      }
+      @keyframes arcadePulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.78; transform: scale(0.99); }
+      }
+      .arcade-pulse {
+        animation: arcadePulse 1.8s ease-in-out infinite;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .arcade-pulse { animation: none !important; }
       }
     </style>
   </head>
-  <body class="min-h-[100dvh] w-full bg-neutral-950 text-neutral-100 font-sans selection:bg-amber-500 selection:text-black overflow-x-hidden flex flex-col justify-start">
+  <body class="neo-retro-crt min-h-[100dvh] w-full bg-[#050510] text-[#EAF4FF] selection:bg-[#FFB800] selection:text-[#050510] overflow-x-hidden flex flex-col justify-start">
     <!-- =====================================================================
          A. THANH ĐIỀU HƯỚNG ĐẦU TRANG (TOP NAVIGATION BAR)
     ====================================================================== -->
@@ -137,15 +188,37 @@
 
         <!-- Cụm nút hành động bên phải -->
         <div class="hidden sm:flex items-center gap-2.5">
+          <!-- Bộ chuyển ngôn ngữ VI | EN -->
+          <div
+            class="inline-flex items-center rounded border border-[#687386]/60 bg-[#0b0d1e] p-0.5 font-btn text-xs font-bold tracking-wider"
+            role="group"
+            aria-label="Language selector"
+          >
+            <button
+              type="button"
+              data-lang-switch="vi"
+              class="lang-btn px-2 py-1 rounded-sm transition-colors bg-[#FFB800] text-[#050510] font-black"
+            >
+              VI
+            </button>
+            <span class="px-0.5 text-[#687386] select-none">|</span>
+            <button
+              type="button"
+              data-lang-switch="en"
+              class="lang-btn px-2 py-1 rounded-sm transition-colors text-[#EAF4FF]/75 hover:text-[#00F0FF]"
+            >
+              EN
+            </button>
+          </div>
           <a
             href="/?mode=trial"
-            class="px-3.5 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 hover:border-amber-500/50 text-amber-300 font-bold text-xs uppercase tracking-wider transition-all active:scale-[0.98]"
+            class="font-btn px-3.5 py-2 rounded bg-[#0b0d1e] hover:bg-[#131836] border border-[#00F0FF]/50 hover:border-[#00F0FF] text-[#00F0FF] font-bold text-xs uppercase tracking-wider transition-all active:scale-[0.98]"
           >
             Chơi thử
           </a>
           <a
             href="/?mode=play"
-            class="px-4 sm:px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs sm:text-sm uppercase tracking-wider transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2 active:scale-[0.98]"
+            class="font-btn px-4 sm:px-5 py-2.5 rounded bg-[#FFB800] hover:bg-[#ffc933] text-[#050510] font-black text-xs sm:text-sm uppercase tracking-wider transition-all shadow-[0_0_16px_rgba(255,184,0,0.35)] flex items-center gap-2 active:scale-[0.98]"
           >
             <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -155,10 +228,31 @@
         </div>
 
         <!-- Nút mở menu trên Mobile -->
-        <div class="flex items-center gap-2 sm:hidden">
+        <div class="flex items-center gap-1.5 sm:hidden">
+          <div
+            class="inline-flex items-center rounded border border-[#687386]/60 bg-[#0b0d1e] p-0.5 font-btn text-[11px] font-bold"
+            role="group"
+            aria-label="Language selector mobile"
+          >
+            <button
+              type="button"
+              data-lang-switch="vi"
+              class="lang-btn px-1.5 py-1 rounded-sm transition-colors bg-[#FFB800] text-[#050510] font-black"
+            >
+              VI
+            </button>
+            <span class="text-[#687386] select-none">|</span>
+            <button
+              type="button"
+              data-lang-switch="en"
+              class="lang-btn px-1.5 py-1 rounded-sm transition-colors text-[#EAF4FF]/75 hover:text-[#00F0FF]"
+            >
+              EN
+            </button>
+          </div>
           <a
             href="/?mode=play"
-            class="px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow"
+            class="font-btn px-3 py-2 rounded bg-[#FFB800] hover:bg-[#ffc933] text-[#050510] font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow"
           >
             <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
               <polygon points="5 3 19 12 5 21 5 3"></polygon>
@@ -168,7 +262,7 @@
           <button
             id="mobile-menu-toggle"
             type="button"
-            class="p-2 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-white"
+            class="p-2 rounded bg-[#0b0d1e] border border-[#687386]/50 text-[#EAF4FF] hover:text-[#FFB800]"
             aria-label="Mở menu điều hướng"
             aria-expanded="false"
           >
@@ -263,37 +357,40 @@
           <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
             <!-- Cột trái: Thông điệp thương hiệu & Nút hành động -->
             <div class="lg:col-span-7 space-y-6 text-left">
-              <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold uppercase tracking-wider">
+              <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded bg-[#FFB800]/10 border border-[#FFB800]/40 text-[#FFB800] font-btn text-xs font-bold uppercase tracking-wider">
                 <span>Chiến trường huyền thoại • Trực tuyến trên trình duyệt</span>
               </div>
 
               <div class="space-y-3">
                 <h1
                   id="hero-heading"
-                  class="text-3xl sm:text-5xl lg:text-6xl font-black uppercase tracking-tight text-white leading-[1.08]"
+                  class="font-pixel neo-glitch-text text-2xl sm:text-4xl lg:text-5xl font-black uppercase tracking-tight text-[#EAF4FF] leading-[1.25]"
                 >
-                  Bắn Tank <span class="text-amber-400">Online</span>
+                  Bắn Tank <span class="text-[#FFB800]">Online</span>
                 </h1>
-                <p class="text-base sm:text-lg lg:text-xl text-neutral-300 font-medium leading-relaxed max-w-2xl">
+                <p class="text-base sm:text-lg lg:text-xl text-[#EAF4FF]/90 font-medium leading-relaxed max-w-2xl">
                   Trò chơi bắn xe tăng chiến thuật 2D thời gian thực. Điều khiển chiến xa tiêu diệt toàn bộ 30 xe tăng địch trong mỗi màn chơi, tận dụng địa hình gạch – thép – rừng cây và bảo vệ Căn cứ Đại Bàng trước khi đồng hồ đếm ngược kết thúc.
                 </p>
               </div>
 
-              <!-- Cụm nút CTA chính -->
+              <!-- Cụm nút CTA chính (NEO-RETRO ARCADE TAP TO START) -->
               <div class="pt-2 flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5">
                 <a
                   href="/?mode=play"
-                  class="px-6 py-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-sm sm:text-base uppercase tracking-wider transition-all shadow-xl shadow-amber-500/20 flex items-center justify-center gap-2.5 active:scale-[0.99]"
+                  class="font-btn min-h-[52px] px-6 py-4 rounded bg-[#FFB800] hover:bg-[#ffc933] border-2 border-[#EAF4FF]/40 text-[#050510] font-black text-sm sm:text-base uppercase tracking-wider transition-all shadow-[0_0_24px_rgba(255,184,0,0.35)] flex items-center justify-center gap-2.5 active:scale-[0.99]"
                 >
                   <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24" aria-hidden="true">
                     <polygon points="5 3 19 12 5 21 5 3"></polygon>
                   </svg>
                   <span>Chơi ngay</span>
+                  <span class="arcade-pulse ml-1 px-2 py-0.5 rounded-sm bg-[#050510] text-[#FFB800] font-pixel text-[9px] tracking-widest border border-[#FFB800]/50">
+                    TAP TO START
+                  </span>
                 </a>
 
                 <a
                   href="/?mode=trial"
-                  class="px-6 py-4 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-amber-300 border border-amber-500/40 hover:border-amber-400 font-bold text-sm sm:text-base uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 active:scale-[0.99]"
+                  class="font-btn min-h-[52px] px-6 py-4 rounded bg-[#0b0d1e] hover:bg-[#131836] text-[#00F0FF] border-2 border-[#00F0FF]/50 hover:border-[#00F0FF] font-bold text-sm sm:text-base uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 active:scale-[0.99]"
                 >
                   <span>Chơi thử</span>
                 </a>
@@ -1150,6 +1247,100 @@
           },
           { passive: true }
         );
+
+        // =====================================================================
+        // HỆ THỐNG ĐA NGÔN NGỮ (VI | EN) KHÔNG TẢI LẠI TRANG
+        // =====================================================================
+        var LANG_STORAGE_KEY = 'bantank_lang_pref_v1';
+        var EN_DICTIONARY = {
+          'CHIẾN TRƯỜNG HUYỀN THOẠI': 'LEGENDARY BATTLEFIELD',
+          'Giới thiệu': 'Overview',
+          'Tính năng': 'Features',
+          'Chế độ chơi': 'Game Modes',
+          'Hướng dẫn': 'How to Play',
+          'Quyền riêng tư': 'Privacy Policy',
+          'Chơi thử': 'Trial Mode',
+          'Chơi ngay': 'Play Now',
+          'Chơi thử ngay': 'Try Now',
+          'Chiến trường huyền thoại • Trực tuyến trên trình duyệt': 'Legendary Battlefield • Play Instantly in Browser',
+          'Trò chơi bắn xe tăng chiến thuật 2D thời gian thực. Điều khiển chiến xa tiêu diệt toàn bộ 30 xe tăng địch trong mỗi màn chơi, tận dụng địa hình gạch – thép – rừng cây và bảo vệ Căn cứ Đại Bàng trước khi đồng hồ đếm ngược kết thúc.': 'Real-time 2D tactical tank arcade battle. Command your armored tank to eliminate all 30 enemy tanks per stage, leverage brick, steel, and forest terrain, and defend the Eagle Base before the countdown expires.',
+          'Solo, Co-op AI & Co-op online': 'Solo, Co-op AI & Co-op Online',
+          'Tương thích PC, Điện thoại & Tablet': 'Supports PC, Smartphone & Tablet',
+          'Miễn phí trên trình duyệt web': 'Free to play in web browser',
+          'Màn 01 • Bản đồ': 'Stage 01 • Tactical Map',
+          '⊕ Đội hình địch: 30 Xe Tăng': '⊕ Enemy Force: 30 Tanks',
+          'Mục tiêu chiến thuật: Bảo vệ Đại Bàng • Diệt 30 xe địch': 'Tactical Objective: Defend Eagle Base • Destroy 30 Enemy Tanks',
+          'Giới thiệu tổng quan': 'Game Overview',
+          'Tái hiện chiến trường xe tăng cổ điển trên nền tảng Web hiện đại': 'Reimagining the classic tank battlefield on a modern Web platform',
+          'Về trò chơi': 'About the Game',
+          'Mục tiêu trong mỗi màn chơi': 'Objective in Every Stage',
+          'Hệ thống phân loại xe tăng': 'Tank Classification System',
+          'Tính năng nổi bật': 'Key Features',
+          'Hệ thống chiến đấu & vật phẩm trợ chiến': 'Combat System & Tactical Power-ups',
+          'Các chế độ chơi trong Bắn Tank Online': 'Game Modes in Bắn Tank Online',
+          '4 Chế độ chơi linh hoạt': '4 Flexible Game Modes',
+          'Hướng dẫn điều khiển & Mẹo chiến thuật': 'Controls Guide & Tactical Tips',
+          'Làm chủ chiến xa trên cả Máy tính và Điện thoại': 'Master your tank on both Desktop and Mobile',
+          'Sẵn sàng tham gia chiến trường Bắn Tank Online?': 'Ready to enter the Bắn Tank Online battlefield?',
+          'Chính sách quyền riêng tư': 'Privacy Policy',
+          'Vào cổng trò chơi': 'Enter Game Portal'
+        };
+
+        var trackedTextNodes = [];
+        function collectTextNodes(root) {
+          var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+          var node;
+          while ((node = walker.nextNode())) {
+            var trimmed = (node.nodeValue || '').trim();
+            if (trimmed && EN_DICTIONARY[trimmed]) {
+              trackedTextNodes.push({
+                node: node,
+                vi: node.nodeValue,
+                en: node.nodeValue.replace(trimmed, EN_DICTIONARY[trimmed])
+              });
+            }
+          }
+        }
+        collectTextNodes(document.body);
+
+        function applyLanguage(lang) {
+          var normalized = lang === 'en' ? 'en' : 'vi';
+          document.documentElement.setAttribute('lang', normalized);
+          try {
+            window.localStorage.setItem(LANG_STORAGE_KEY, normalized);
+          } catch (e) {}
+
+          for (var i = 0; i < trackedTextNodes.length; i++) {
+            var item = trackedTextNodes[i];
+            item.node.nodeValue = normalized === 'en' ? item.en : item.vi;
+          }
+
+          var langBtns = document.querySelectorAll('[data-lang-switch]');
+          for (var j = 0; j < langBtns.length; j++) {
+            var btn = langBtns[j];
+            var btnLang = btn.getAttribute('data-lang-switch');
+            if (btnLang === normalized) {
+              btn.className = 'lang-btn px-2 py-1 rounded-sm transition-colors bg-[#FFB800] text-[#050510] font-black';
+            } else {
+              btn.className = 'lang-btn px-2 py-1 rounded-sm transition-colors text-[#EAF4FF]/75 hover:text-[#00F0FF]';
+            }
+          }
+        }
+
+        var langSwitchButtons = document.querySelectorAll('[data-lang-switch]');
+        for (var k = 0; k < langSwitchButtons.length; k++) {
+          langSwitchButtons[k].addEventListener('click', function (ev) {
+            var targetLang = ev.currentTarget.getAttribute('data-lang-switch') || 'vi';
+            applyLanguage(targetLang);
+          });
+        }
+
+        try {
+          var savedLang = window.localStorage.getItem(LANG_STORAGE_KEY);
+          if (savedLang === 'en') {
+            applyLanguage('en');
+          }
+        } catch (e) {}
       })();
     </script>
   </body>
