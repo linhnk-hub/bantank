@@ -22,12 +22,9 @@ import {
   RefreshCw,
   UserCheck,
   AlertCircle,
-  HelpCircle,
+  Info,
   Loader2,
   Trophy,
-  Coins,
-  Gamepad2,
-  Volume2,
   User,
   Bot,
   Globe,
@@ -294,7 +291,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   const effectiveVideoSrc = musicManager.getHomeVideoPlaybackSrc() || homeVideoUrl;
 
   return (
-    <div className="relative min-h-[100dvh] w-full flex flex-col justify-between bg-[#050510] text-[#EAF4FF] font-body select-none overflow-x-hidden pb-[max(5rem,env(safe-area-inset-bottom))]">
+    <div className="relative min-h-[100dvh] w-full flex flex-col justify-between bg-[#050510] text-[#EAF4FF] font-body select-none overflow-x-hidden pb-[env(safe-area-inset-bottom)]">
       {/* Home Background Video (.mp4 with configurable opacity, blur & loop — reuses cached video from WelcomeScreen) */}
       {homeVideoConfig?.isEnabled && effectiveVideoSrc && (
         <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
@@ -379,13 +376,6 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 </sup>
               )}
             </span>
-            <span
-              data-testid="top-menu-player-level"
-              title={`Level người chơi: ${playerStats.levelSystemLabel}`}
-              className="text-sm font-hud font-extrabold tabular-nums text-[#00F0FF] shrink-0 whitespace-nowrap"
-            >
-              {playerStats.levelTopMenuBadge}
-            </span>
             {badgeInfo.label && (
               <span className="hidden sm:inline-block text-xs font-medium text-[#FFB800] shrink-0">
                 • {badgeInfo.label}
@@ -411,11 +401,11 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               <button
                 type="button"
                 onClick={onOpenSupport}
-                aria-label={t('Hướng dẫn', 'Guide')}
+                aria-label={t('Thông tin', 'Information')}
                 className="flex items-center justify-center min-w-[36px] min-h-[36px] p-1.5 bg-transparent border-0 shadow-none text-[#00F0FF] hover:text-[#FFB800] transition-colors cursor-pointer active:scale-95"
-                title={t('Hướng dẫn', 'Guide')}
+                title={t('Thông tin', 'Information')}
               >
-                <HelpCircle className="w-4 h-4" />
+                <Info className="w-4 h-4" />
               </button>
             )}
 
@@ -446,31 +436,33 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       </header>
 
       {/* Main Lobby Container */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-2.5 sm:px-4 pt-1 sm:pt-2 pb-6 max-w-4xl mx-auto w-full">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-3 sm:px-4 pt-2 sm:pt-3 pb-4 max-w-4xl mx-auto w-full">
         <div className="flex flex-col items-center text-center max-w-2xl w-full">
-          {/* Official Game Logo Hero — Unified 200% Standard (320x320) */}
-          <div className="flex justify-center items-center p-0 m-0">
-            <GameLogo />
+          {/* Single-Row Brand Header: Compact Game Logo + Slogan Side-by-Side */}
+          <div className="w-full max-w-md flex flex-row items-center justify-center gap-2.5 sm:gap-3.5 py-1 overflow-hidden">
+            <GameLogo className="logo-inline-row shrink-0" />
+            <h1 className="flex-1 min-w-0 flex items-center justify-center p-0 m-0 leading-none">
+              <img
+                src="/slogan.png"
+                alt={t('Chiến trường huyền thoại', 'Legendary Tank Battlefield')}
+                data-testid="main-menu-slogan-image"
+                className="block w-full max-w-[230px] sm:max-w-[300px] h-auto max-h-[68px] sm:max-h-[84px] object-contain p-0 m-0 drop-shadow-lg select-none pointer-events-none"
+                draggable={false}
+              />
+            </h1>
           </div>
 
-          {/* Slogan Banner Image (/slogan.png) — zero outer margin/padding on all 4 sides */}
-          <h1 className="inline-flex items-center justify-center p-0 m-0 leading-none">
-            <img
-              src="/slogan.png"
-              alt={t('Chiến trường huyền thoại', 'Legendary Tank Battlefield')}
-              data-testid="main-menu-slogan-image"
-              className="block w-auto max-w-[280px] sm:max-w-[380px] h-auto object-contain p-0 m-0 drop-shadow-lg select-none pointer-events-none"
-              draggable={false}
-            />
-          </h1>
-
-          {/* 8-Bit Arcade Player Status Bar (Level, XP Progress, Xu Balance) & Tank IDLE Showcase */}
+          {/* 8-Bit Arcade Player Status Bar (Level, XP Progress) & Tank IDLE Showcase */}
           <div
             data-testid="lobby-player-status-bar"
             className="w-full max-w-md mt-2 px-3 py-2 neo-bevel-card border border-[#687386]/50 flex flex-wrap items-center justify-between gap-2 text-sm"
           >
-            <div className="flex items-center gap-2">
-              <span className="font-hud text-base sm:text-lg font-bold text-[#FFB800]">
+            <div className="flex items-center gap-2.5">
+              <span
+                data-testid="top-menu-player-level"
+                title={`Level người chơi: ${playerStats.levelSystemLabel}`}
+                className="font-hud text-base sm:text-lg font-bold text-[#FFB800]"
+              >
                 {playerStats.levelTopMenuBadge}
               </span>
               <div className="flex flex-col items-start">
@@ -479,18 +471,13 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                   <span>{playerStats.totalXp.toLocaleString()} XP</span>
                   <span className="text-[#00F0FF]">({playerStats.levelProgressPercent}%)</span>
                 </div>
-                <div className="w-24 sm:w-28 h-1.5 bg-[#050510] border border-[#687386]/60 overflow-hidden">
+                <div className="w-28 sm:w-36 h-1.5 bg-[#050510] border border-[#687386]/60 overflow-hidden">
                   <div
                     className="h-full bg-gradient-to-r from-[#FFB800] to-[#00F0FF]"
                     style={{ width: `${Math.min(100, Math.max(0, playerStats.levelProgressPercent))}%` }}
                   />
                 </div>
               </div>
-            </div>
-
-            <div className="flex items-center gap-1.5 px-2.5 py-0.5 bg-[#050510] border border-[#00F0FF]/40 font-hud text-sm sm:text-base text-[#00F0FF]">
-              <Coins className="w-3.5 h-3.5 text-[#FFB800]" />
-              <span>{playerStats.xuBalance.toLocaleString()} XU</span>
             </div>
 
             <LobbyIdleTankShowcase />
@@ -526,16 +513,19 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             </div>
           )}
 
-          {/* Unified Neo-Retro Mode Selection Cards (3-Column Responsive Grid — Larger Mobile Text & Concise Labels) */}
+          {/* Unified Neo-Retro Mode Selection Cards (3-Column Grid Matched to LV Bar Width — Single-Click Entry) */}
           <div
             data-testid="lobby-mode-scroll-snap"
-            className="w-full max-w-md grid grid-cols-3 gap-2 sm:gap-2.5 px-1 mt-3"
+            className="w-full max-w-md grid grid-cols-3 gap-2 sm:gap-2.5 mt-3"
           >
             <button
               type="button"
               data-testid="lobby-mode-card-solo"
               aria-pressed={selectedModeCard === 'SOLO'}
-              onClick={() => handleSelectModeCard('SOLO')}
+              onClick={() => {
+                handleSelectModeCard('SOLO');
+                handleConfirmSelectedMode('SOLO');
+              }}
               className={`min-h-[90px] p-2 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                 selectedModeCard === 'SOLO'
                   ? 'border-2 border-[#FFB800] bg-[#120e05]/95 ring-2 ring-[#FFB800]/30 shadow-[0_0_16px_rgba(255,184,0,0.28)]'
@@ -571,7 +561,10 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               type="button"
               data-testid="lobby-mode-card-coop-ai"
               aria-pressed={selectedModeCard === 'COOP_AI'}
-              onClick={() => handleSelectModeCard('COOP_AI')}
+              onClick={() => {
+                handleSelectModeCard('COOP_AI');
+                handleConfirmSelectedMode('COOP_AI');
+              }}
               className={`min-h-[90px] p-2 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                 selectedModeCard === 'COOP_AI'
                   ? 'border-2 border-[#00F0FF] bg-[#051624]/95 ring-2 ring-[#00F0FF]/30 shadow-[0_0_16px_rgba(0,240,255,0.28)]'
@@ -607,7 +600,10 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               type="button"
               data-testid="lobby-mode-card-coop-online"
               aria-pressed={selectedModeCard === 'COOP_ONLINE'}
-              onClick={() => handleSelectModeCard('COOP_ONLINE')}
+              onClick={() => {
+                handleSelectModeCard('COOP_ONLINE');
+                handleConfirmSelectedMode('COOP_ONLINE');
+              }}
               className={`min-h-[90px] p-1.5 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                 selectedModeCard === 'COOP_ONLINE'
                   ? 'border-2 border-[#FFB800] bg-[#120e05]/95 ring-2 ring-[#FFB800]/30 shadow-[0_0_16px_rgba(255,184,0,0.28)]'
@@ -688,69 +684,10 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       <footer className="relative z-10 w-full border-t border-[#687386]/30 bg-[#050510]/85 px-4 py-2.5 text-center text-xs sm:text-sm text-[#687386] shrink-0">
         <div className="max-w-4xl mx-auto flex items-center justify-center gap-3 flex-wrap">
           <span className="text-[#EAF4FF]/80">© 2026 Bắn Tank Online</span>
-          <span>•</span>
-          <a href="/landing.html" className="hover:text-[#FFB800] transition-colors">
-            {t('Giới thiệu', 'About')}
-          </a>
-          <span>•</span>
-          <a href="/privacy.html" className="hover:text-[#00F0FF] transition-colors">
-            {t('Chính sách quyền riêng tư', 'Privacy Policy')}
-          </a>
         </div>
       </footer>
 
-      {/* Fixed Bottom Navigation */}
-      <nav
-        data-testid="lobby-bottom-nav"
-        aria-label={t('Điều hướng sảnh chính', 'Main Lobby Navigation')}
-        className="fixed bottom-0 left-0 right-0 z-40 border-t border-[#687386]/40 bg-[#050510]/95 backdrop-blur-md px-2 pt-1 pb-[max(0.35rem,env(safe-area-inset-bottom))]"
-      >
-        <div className="max-w-lg mx-auto grid grid-cols-4 gap-1">
-          <button
-            type="button"
-            onClick={isSessionActive ? onPlay : onRetryAcquire}
-            className="min-h-[48px] flex flex-col items-center justify-center gap-0.5 text-[#FFB800] hover:bg-[#FFB800]/10 transition-colors cursor-pointer"
-          >
-            <Gamepad2 className="w-4 h-4" />
-            <span className="text-xs font-btn font-bold uppercase tracking-tight">
-              {t('Chế độ', 'Modes')}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="min-h-[48px] flex flex-col items-center justify-center gap-0.5 text-[#EAF4FF]/85 hover:text-[#00F0FF] hover:bg-[#00F0FF]/10 transition-colors cursor-pointer"
-          >
-            <Trophy className="w-4 h-4 text-[#00F0FF]" />
-            <span className="text-xs font-btn font-bold uppercase tracking-tight">
-              {t('Hồ sơ', 'Profile')}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenSettings}
-            className="min-h-[48px] flex flex-col items-center justify-center gap-0.5 text-[#EAF4FF]/85 hover:text-[#FFB800] hover:bg-[#FFB800]/10 transition-colors cursor-pointer"
-          >
-            <Volume2 className="w-4 h-4 text-[#FFB800]" />
-            <span className="text-xs font-btn font-bold uppercase tracking-tight">
-              {t('Âm thanh', 'Audio')}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={onOpenSupport}
-            className="min-h-[48px] flex flex-col items-center justify-center gap-0.5 text-[#EAF4FF]/85 hover:text-[#00F0FF] hover:bg-[#00F0FF]/10 transition-colors cursor-pointer"
-          >
-            <HelpCircle className="w-4 h-4 text-[#00F0FF]" />
-            <span className="text-xs font-btn font-bold uppercase tracking-tight">
-              {t('Hướng dẫn', 'Guide')}
-            </span>
-          </button>
-        </div>
-      </nav>
+      <div data-testid="lobby-bottom-nav" className="hidden" aria-hidden="true" />
     </div>
   );
 };

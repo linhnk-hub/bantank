@@ -141,11 +141,6 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
           aria-hidden="true"
         />
       )}
-      {compact && !frameless && (
-        <span className="text-[11px] font-extrabold tracking-wider uppercase leading-none">
-          {isBgmMuted ? 'OFF' : 'BGM'}
-        </span>
-      )}
     </button>
   );
 };

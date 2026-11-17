@@ -39,12 +39,15 @@ import {
   Lock,
   Map as MapIcon,
   Unlock,
+  Info,
 } from 'lucide-react';
 
 export type GameModeType = 'SOLO' | 'TWO_PLAYERS';
 export type TwoPlayerOption = 'P2_AI' | 'P2_REAL';
 export type SelectionCardMode = 'SOLO' | 'COOP_AI' | 'COOP_ONLINE';
 export type SelectionFlowStep = 'SELECT_MODE' | 'SELECT_DIFFICULTY' | 'COOP_ONLINE_LOBBY';
+
+let lastSelectedCampaignStageId = 1;
 
 export interface ModeSelectionScreenProps {
   user: {
@@ -143,6 +146,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   difficulty,
   onDifficultyChange,
   onOpenSettings,
+  onOpenSupport,
   onOpenDevTools,
   selectedMode: controlledMode,
   onSelectedModeChange,
@@ -208,9 +212,15 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   const [stageProgress, setStageProgress] = useState(() =>
     StageProgressionManager.getInstance().getUserStageProgressSnapshot(effectiveUid)
   );
-  const [selectedStageId, setSelectedStageId] = useState<number>(() =>
-    StageProgressionManager.getInstance().getUnlockedStageForUser(effectiveUid, false)
-  );
+  const [selectedStageId, setSelectedStageId] = useState<number>(() => {
+    const maxUnlocked = isSuperAdmin
+      ? 10
+      : Math.max(
+          1,
+          StageProgressionManager.getInstance().getUnlockedStageForUser(effectiveUid, false)
+        );
+    return Math.min(Math.max(1, lastSelectedCampaignStageId), maxUnlocked);
+  });
   const [stageSelectError, setStageSelectError] = useState<string | null>(null);
   const stageManager = StageManager.getInstance();
   const difficultyMgr = DifficultyConfigManager.getInstance();
@@ -238,11 +248,16 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     const syncProg = () => {
       const snap = progMgr.getUserStageProgressSnapshot(effectiveUid);
       setStageProgress(snap);
-      setSelectedStageId((prev) => (prev > snap.unlockedStage ? snap.unlockedStage : prev));
+      const maxUnlocked = isSuperAdmin ? 10 : Math.max(1, snap.unlockedStage);
+      setSelectedStageId((prev) => {
+        const clamped = prev > maxUnlocked ? maxUnlocked : prev < 1 ? 1 : prev;
+        lastSelectedCampaignStageId = clamped;
+        return clamped;
+      });
     };
     syncProg();
     return progMgr.subscribe(syncProg);
-  }, [effectiveUid]);
+  }, [effectiveUid, isSuperAdmin]);
 
   useEffect(() => {
     const syncStats = () => {
@@ -350,22 +365,25 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       setFlowStep('COOP_ONLINE_LOBBY');
       return;
     }
-    const access = StageProgressionManager.getInstance().canUserAccessStage(
-      effectiveUid,
-      selectedStageId,
-      false
-    );
-    if (!access.allowed) {
-      setStageSelectError(
-        access.errorMessage ||
-          t(
-            `Stage ${selectedStageId} đang bị khóa.`,
-            `Stage ${selectedStageId} is locked.`
-          )
+    if (!isSuperAdmin) {
+      const access = StageProgressionManager.getInstance().canUserAccessStage(
+        effectiveUid,
+        selectedStageId,
+        false
       );
-      return;
+      if (!access.allowed) {
+        setStageSelectError(
+          access.errorMessage ||
+            t(
+              `Stage ${selectedStageId} đang bị khóa.`,
+              `Stage ${selectedStageId} is locked.`
+            )
+        );
+        return;
+      }
     }
     setStageSelectError(null);
+    lastSelectedCampaignStageId = selectedStageId;
     if (cardMode === 'SOLO') {
       onStartMatch('SOLO', 'P2_AI', selectedStageId);
     } else if (cardMode === 'COOP_AI') {
@@ -434,7 +452,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
             )}
           </div>
 
-          {/* Right: Frameless User Profile, Audio & Settings */}
+          {/* Right: Frameless User Profile, Audio, Settings & Info */}
           <div className="flex items-center gap-1 sm:gap-2 min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2 px-1 py-1 text-sm min-w-0">
               {resolvedAvatarUrl && !avatarError ? (
@@ -462,17 +480,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               </span>
               <span
                 data-testid="top-menu-player-level"
-                title={t(
-                  `Level người chơi: ${playerStats.levelSystemLabel}`,
-                  `Player Level: ${playerStats.levelSystemLabel}`
-                )}
-                className={`font-hud text-sm sm:text-base font-extrabold tabular-nums px-1.5 py-0.5 rounded shrink-0 whitespace-nowrap leading-none ${
-                  playerStats.isMaxLevel
-                    ? 'bg-[#FFB800] text-[#050510]'
-                    : playerStats.xpVerificationStatus === 'VERIFIED'
-                      ? 'text-[#00F0FF]'
-                      : 'text-neutral-400'
-                }`}
+                className="hidden"
               >
                 {playerStats.levelTopMenuBadge}
               </span>
@@ -494,6 +502,18 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
             >
               <Settings className="w-4 h-4 text-[#FFB800]" />
             </button>
+
+            {onOpenSupport && (
+              <button
+                type="button"
+                onClick={onOpenSupport}
+                aria-label={t('Thông tin', 'Information')}
+                className="flex items-center justify-center p-2 rounded bg-transparent hover:bg-white/10 text-[#EAF4FF] border-0 transition-all cursor-pointer shrink-0"
+                title={t('Thông tin', 'Information')}
+              >
+                <Info className="w-4 h-4 text-[#00F0FF]" />
+              </button>
+            )}
 
             {isSuperAdmin && (
               <button
@@ -533,7 +553,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   type="button"
                   data-testid="mode-quick-tab-solo"
                   aria-pressed={cardMode === 'SOLO'}
-                  onClick={() => handleSelectCardMode('SOLO')}
+                  onClick={(e) => handleConfirmCardMode('SOLO', e)}
                   className={`min-h-[48px] px-2 py-2 neo-bevel-card font-btn font-black text-xs sm:text-sm uppercase tracking-wider transition-all cursor-pointer touch-manipulation flex items-center justify-center gap-1.5 ${
                     cardMode === 'SOLO'
                       ? 'border-2 border-[#FFB800] bg-[#FFB800] text-[#050510] shadow-[0_0_16px_rgba(255,184,0,0.35)]'
@@ -548,7 +568,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   type="button"
                   data-testid="mode-quick-tab-coop-ai"
                   aria-pressed={cardMode === 'COOP_AI'}
-                  onClick={() => handleSelectCardMode('COOP_AI')}
+                  onClick={(e) => handleConfirmCardMode('COOP_AI', e)}
                   className={`min-h-[48px] px-2 py-2 neo-bevel-card font-btn font-black text-xs sm:text-sm uppercase tracking-wider transition-all cursor-pointer touch-manipulation flex items-center justify-center gap-1.5 ${
                     cardMode === 'COOP_AI'
                       ? 'border-2 border-[#00F0FF] bg-[#00F0FF] text-[#050510] shadow-[0_0_16px_rgba(0,240,255,0.35)]'
@@ -563,7 +583,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   type="button"
                   data-testid="mode-quick-tab-coop-online"
                   aria-pressed={cardMode === 'COOP_ONLINE'}
-                  onClick={() => handleSelectCardMode('COOP_ONLINE')}
+                  onClick={(e) => handleConfirmCardMode('COOP_ONLINE', e)}
                   className={`min-h-[48px] px-2 py-2 neo-bevel-card font-btn font-black text-xs sm:text-sm uppercase tracking-wider transition-all cursor-pointer touch-manipulation flex items-center justify-center gap-1.5 ${
                     cardMode === 'COOP_ONLINE'
                       ? 'border-2 border-[#FFB800] bg-[#FFB800] text-[#050510] shadow-[0_0_16px_rgba(255,184,0,0.35)]'
@@ -599,7 +619,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 {/* 1. SOLO */}
                 <div
                   data-testid="mode-card-solo"
-                  onClick={() => handleSelectCardMode('SOLO')}
+                  onClick={(e) => handleConfirmCardMode('SOLO', e)}
                   className={`relative p-4 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation text-left flex flex-col justify-between ${
                     cardMode === 'SOLO'
                       ? 'bg-[#120e05]/90 border-[#FFB800] ring-2 ring-[#FFB800]/30 shadow-[0_0_24px_rgba(255,184,0,0.2)]'
@@ -665,7 +685,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 {/* 2. CO-OP AI */}
                 <div
                   data-testid="mode-card-coop-ai"
-                  onClick={() => handleSelectCardMode('COOP_AI')}
+                  onClick={(e) => handleConfirmCardMode('COOP_AI', e)}
                   className={`relative p-4 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation text-left flex flex-col justify-between ${
                     cardMode === 'COOP_AI'
                       ? 'bg-[#051624]/90 border-[#00F0FF] ring-2 ring-[#00F0FF]/30 shadow-[0_0_24px_rgba(0,240,255,0.2)]'
@@ -732,7 +752,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 {/* 3. CO-OP ONLINE */}
                 <div
                   data-testid="mode-card-coop-online"
-                  onClick={() => handleSelectCardMode('COOP_ONLINE')}
+                  onClick={(e) => handleConfirmCardMode('COOP_ONLINE', e)}
                   className={`relative p-4 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation text-left flex flex-col justify-between ${
                     cardMode === 'COOP_ONLINE'
                       ? 'bg-[#051624]/90 border-[#00F0FF] ring-2 ring-[#00F0FF]/30 shadow-[0_0_24px_rgba(0,240,255,0.2)]'
@@ -826,7 +846,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               {(() => {
                 const liveStageSpecs = stageManager.getLiveCampaignStageViews();
                 const selectedSpec = stageManager.getLiveCampaignStageView(selectedStageId);
-                const selectedUnlocked = selectedStageId <= stageProgress.unlockedStage;
+                const effectiveUnlockedStage = isSuperAdmin
+                  ? 10
+                  : Math.max(1, stageProgress.unlockedStage);
+                const selectedUnlocked = selectedStageId <= effectiveUnlockedStage;
                 const selectedCompleted = stageProgress.completedStages.includes(selectedStageId);
                 return (
                   <section
@@ -840,15 +863,15 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       </div>
                       <span className="font-hud text-base text-[#00F0FF] font-bold">
                         {t(
-                          `Mở khóa: ${stageProgress.unlockedStage}/10`,
-                          `Unlocked: ${stageProgress.unlockedStage}/10`
+                          `Mở khóa: ${effectiveUnlockedStage}/10`,
+                          `Unlocked: ${effectiveUnlockedStage}/10`
                         )}
                       </span>
                     </div>
 
                     <div className="grid grid-cols-5 sm:grid-cols-10 gap-1.5">
                       {liveStageSpecs.map((stage) => {
-                        const isUnlocked = stage.id <= stageProgress.unlockedStage;
+                        const isUnlocked = stage.id <= effectiveUnlockedStage;
                         const isCompleted = stageProgress.completedStages.includes(stage.id);
                         const isSelected = selectedStageId === stage.id;
                         return (
@@ -867,9 +890,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                                 return;
                               }
                               setStageSelectError(null);
+                              lastSelectedCampaignStageId = stage.id;
                               setSelectedStageId(stage.id);
                             }}
-                            className={`relative min-h-[48px] py-2 px-1 rounded border text-center transition-all flex flex-col items-center justify-center gap-0.5 ${
+                            className={`relative min-h-[48px] py-2 px-1 rounded border text-center transition-all flex flex-col items-center justify-center gap-0.5 touch-manipulation ${
                               !isUnlocked
                                 ? 'bg-[#050510]/70 border-neutral-800 text-neutral-600 cursor-not-allowed opacity-70'
                                 : isSelected
@@ -897,18 +921,18 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       })}
                     </div>
 
-                    {/* Selected Stage Detail + 13x13 Preview */}
-                    <div className="flex flex-col sm:flex-row items-center sm:items-start gap-3 p-3 rounded bg-[#050510]/90 border border-neutral-800">
+                    {/* Selected Stage Detail + 13x13 Preview (No enemy breakdown below stage name) */}
+                    <div className="flex flex-col sm:flex-row items-center gap-3 p-3 rounded bg-[#050510]/90 border border-neutral-800">
                       <StageMapMiniPreview
                         map={selectedSpec.map}
                         sizePx={88}
                         locked={!selectedUnlocked}
                         showSpawns
                       />
-                      <div className="flex-1 min-w-0 space-y-1 text-center sm:text-left">
+                      <div className="flex-1 min-w-0 text-center sm:text-left">
                         <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
-                          <span className="font-btn font-black text-base text-[#EAF4FF]">
-                            {selectedSpec.name}
+                          <span className="font-btn font-black text-base sm:text-lg text-[#FFB800] uppercase">
+                            {`STAGE ${selectedSpec.id}: ${selectedSpec.shortTitle}`}
                           </span>
                           {selectedCompleted ? (
                             <span className="font-btn px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 text-xs font-bold">
@@ -923,18 +947,6 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                               {t('KHÓA', 'LOCKED')}
                             </span>
                           )}
-                        </div>
-                        <div className="font-hud text-base text-neutral-200 flex flex-wrap items-center justify-center sm:justify-start gap-2">
-                          <span className="text-[#FFB800] font-bold">
-                            {t('30 Địch:', '30 Enemies:')}
-                          </span>
-                          <span>Basic {selectedSpec.enemyComposition.BASIC}</span>
-                          <span>•</span>
-                          <span>Fast {selectedSpec.enemyComposition.FAST}</span>
-                          <span>•</span>
-                          <span>Power {selectedSpec.enemyComposition.POWER}</span>
-                          <span>•</span>
-                          <span>Armor {selectedSpec.enemyComposition.ARMOR}</span>
                         </div>
                       </div>
                     </div>
@@ -951,8 +963,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-6 text-left">
                 {/* NORMAL / DEFAULT -> Giải trí */}
                 <div
-                  onClick={() => onDifficultyChange('DEFAULT')}
-                  className={`p-4 sm:p-5 rounded-lg border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                  onClick={(e) => handleConfirmDifficulty('DEFAULT', e)}
+                  className={`p-4 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                     difficulty === 'DEFAULT'
                       ? 'bg-[#120e05]/85 border-[#FFB800] shadow-2xl ring-2 ring-[#FFB800]/25'
                       : 'bg-[#0b0d1e]/90 border-[#687386]/40 hover:border-[#FFB800]/60'
@@ -988,7 +1000,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       type="button"
                       disabled={!isSessionActive || isProcessing}
                       onClick={(e) => handleConfirmDifficulty('DEFAULT', e)}
-                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 shadow ${
+                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 touch-manipulation shadow ${
                         !isSessionActive || isProcessing
                           ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
                           : difficulty === 'DEFAULT'
@@ -1004,8 +1016,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
                 {/* HARD / EXTREME -> Thử thách */}
                 <div
-                  onClick={() => onDifficultyChange('EXTREME')}
-                  className={`p-4 sm:p-5 rounded-lg border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                  onClick={(e) => handleConfirmDifficulty('EXTREME', e)}
+                  className={`p-4 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                     difficulty === 'EXTREME'
                       ? 'bg-[#200510]/85 border-[#FF0055] shadow-2xl ring-2 ring-[#FF0055]/25'
                       : 'bg-[#0b0d1e]/90 border-[#687386]/40 hover:border-[#FF0055]/60'
@@ -1041,7 +1053,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       type="button"
                       disabled={!isSessionActive || isProcessing}
                       onClick={(e) => handleConfirmDifficulty('EXTREME', e)}
-                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 shadow ${
+                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 touch-manipulation shadow ${
                         !isSessionActive || isProcessing
                           ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
                           : difficulty === 'EXTREME'
@@ -1087,14 +1099,6 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       <footer className="relative z-10 w-full border-t border-neutral-800 bg-[#050510]/90 px-4 py-3 text-center text-xs text-[#687386]">
         <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
           <span>© 2026 Bắn Tank Online</span>
-          <span>•</span>
-          <a href="/landing.html" className="hover:text-[#FFB800] transition-colors">
-            {t('Giới thiệu', 'About')}
-          </a>
-          <span>•</span>
-          <a href="/privacy.html" className="hover:text-[#FFB800] transition-colors">
-            {t('Chính sách quyền riêng tư', 'Privacy Policy')}
-          </a>
         </div>
       </footer>
     </div>

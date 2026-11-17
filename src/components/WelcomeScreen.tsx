@@ -358,14 +358,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       <footer className="relative z-10 w-full border-t border-[#687386]/30 bg-[#050510]/85 px-4 py-3 text-center text-xs text-[#687386] shrink-0">
         <div className="max-w-4xl mx-auto flex items-center justify-center gap-3 flex-wrap">
           <span className="text-[#EAF4FF]/80">© 2026 Bắn Tank Online</span>
-          <span>•</span>
-          <a href="/landing.html" className="hover:text-[#FFB800] transition-colors">
-            {t('Giới thiệu', 'About')}
-          </a>
-          <span>•</span>
-          <a href="/privacy.html" className="hover:text-[#00F0FF] transition-colors">
-            {t('Chính sách quyền riêng tư', 'Privacy Policy')}
-          </a>
         </div>
       </footer>
     </div>

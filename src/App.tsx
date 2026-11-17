@@ -1355,7 +1355,7 @@ export default function App() {
             photoURL: currentUser.photoURL,
           }}
           firebaseUser={currentUser}
-          key={`mode_select_${profileRevision}_${modeSelectionInitialCard}_${modeSelectionInitialStep}`}
+          key={`mode_select_${modeSelectionInitialCard}_${modeSelectionInitialStep}`}
           session={sessionSnapshot}
           isProcessing={authProcessing}
           onBack={() => setAppScreen('MAIN_MENU')}
@@ -1393,9 +1393,14 @@ export default function App() {
     );
   }
 
+  const currentBattleStageSpec = StageManager.getInstance().getLiveCampaignStageView(
+    gameState?.currentStageId ?? 1
+  );
+  const centeredStageTitle = `STAGE ${currentBattleStageSpec.id}: ${currentBattleStageSpec.shortTitle.toUpperCase()}`;
+
   // View 3: Battle Arena with Canvas (Only mounted when player clicked "Chơi ngay")
   return (
-    <div className="min-h-[100dvh] bg-[#050510] text-[#EAF4FF] flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-[#FFB800] selection:text-black">
+    <div className="min-h-[100dvh] bg-[#050510] text-[#EAF4FF] flex flex-col justify-between font-sans select-none overflow-x-hidden selection:bg-[#FFB800] selection:text-black">
       {/* Developer & QA Test Suite Drawer (Admin Only) */}
       {isSuperAdmin && (
         <DevToolsDrawer
@@ -1417,11 +1422,21 @@ export default function App() {
         onProfileUpdated={handleProfileUpdated}
       />
 
-      {/* Support Modal */}
+      {/* Support / Info Modal */}
       <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
 
-      {/* M7.1: Firebase Authentication & Single-Device Session Header Banner */}
-      <AuthSessionBanner onStartMatchAllowedChange={setIsMatchAllowed} />
+      {/* Top Battle Header: Player Name + Audio + Settings + Info (No Exit button in battle) */}
+      <AuthSessionBanner
+        onStartMatchAllowedChange={setIsMatchAllowed}
+        isBattleScreen={true}
+        isSuperAdmin={isSuperAdmin}
+        onOpenSettings={() => {
+          setSettingsInitialTab('ACCOUNT');
+          setIsSettingsOpen(true);
+        }}
+        onOpenSupport={() => setIsSupportOpen(true)}
+        onOpenDevTools={() => setIsDevDrawerOpen(true)}
+      />
 
       {/* Co-op Online Peer Disconnection Banner */}
       {onlineDisconnectMsg && (
@@ -1452,69 +1467,35 @@ export default function App() {
         </div>
       )}
 
+      {/* Centered Stage Headline Across All Battle Views */}
+      <div
+        data-testid="battle-stage-center-banner"
+        className="w-full py-1.5 px-3 bg-[#050510]/90 border-b border-[#00F0FF]/15 flex items-center justify-center gap-2 shrink-0 z-30"
+      >
+        <span className={`w-2 h-2 rounded-full shrink-0 ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
+        <h2
+          data-testid="battle-stage-center-title"
+          className="font-btn font-black text-[#FFB800] tracking-wider text-xs sm:text-sm md:text-base uppercase text-center"
+        >
+          {centeredStageTitle}
+        </h2>
+        {isCoopOnlineMatch && showOnlineNetStats && (
+          <span
+            data-testid={layout.isLandscape ? 'landscape-online-net-stats' : 'portrait-online-net-stats'}
+            className="px-1.5 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-xs font-bold shrink-0"
+          >
+            {peerPingMs != null ? `${Math.round(peerPingMs)}ms` : '--ms'} • {Math.round(fps)}fps
+          </span>
+        )}
+      </div>
+
       {/* =========================================================================
           LANDSCAPE MODE (Mobile / Tablet 3-Column Ergonomic Layout - Top Aligned)
          ========================================================================= */}
       {(!isDesktop && layout.isLandscape) ? (
-        <div className="flex-1 flex flex-col justify-start h-[100dvh] max-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-          {/* Clean Frameless Landscape Top Bar */}
-          <header className="sticky top-0 z-40 h-9 bg-[#050510]/95 backdrop-blur-md border-b border-[#00F0FF]/25 px-3 flex items-center justify-between text-xs sm:text-sm shrink-0">
-            <div className="flex items-center gap-2">
-              <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
-              <span className="font-btn font-extrabold text-[#FFB800] tracking-wider text-xs sm:text-sm">
-                {gameState?.currentStageName || `STAGE ${gameState?.currentStageId ?? 1}`}
-              </span>
-              {isCoopOnlineMatch && showOnlineNetStats && (
-                <span
-                  data-testid="landscape-online-net-stats"
-                  className="px-1.5 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-xs font-bold"
-                >
-                  {peerPingMs != null ? `${Math.round(peerPingMs)}ms` : '--ms'} • {Math.round(fps)}fps
-                </span>
-              )}
-            </div>
-
-            {/* Right: Frameless Quick Action Buttons (No LanguageSelector in Battle) */}
-            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-              <QuickAudioToggleButton frameless />
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSettingsInitialTab('ACCOUNT');
-                  setIsSettingsOpen(true);
-                }}
-                aria-label={t('Cài đặt', 'Settings')}
-                className="flex items-center justify-center p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 cursor-pointer"
-                title={t('Cài đặt', 'Settings')}
-              >
-                <Settings className="w-4 h-4 text-[#FFB800]" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsSupportOpen(true)}
-                className="flex items-center justify-center p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 cursor-pointer"
-                title={t('Hướng dẫn điều khiển', 'Controls Guide')}
-              >
-                <HelpCircle className="w-4 h-4 text-[#00F0FF]" />
-              </button>
-
-              {isSuperAdmin && (
-                <button
-                  type="button"
-                  onClick={() => setIsDevDrawerOpen(true)}
-                  className="flex items-center gap-1 px-2 py-1 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 text-xs font-semibold cursor-pointer"
-                  title={t('Bảng Kiểm thử & QA (Admin)', 'QA Suite (Admin)')}
-                >
-                  <Wrench className="w-4 h-4 text-[#FFB800]" />
-                </button>
-              )}
-            </div>
-          </header>
-
+        <div className="flex-1 flex flex-col justify-start w-full overflow-x-hidden overflow-y-auto">
           {/* Landscape Main 3-Column Combat View */}
-          <main className="flex-1 flex flex-row items-center justify-center w-full min-h-[calc(100dvh-36px)] px-1 sm:px-2 pt-1 pb-1 overflow-x-hidden overflow-y-auto gap-1.5">
+          <main className="flex-1 flex flex-row items-center justify-center w-full px-1 sm:px-2 pt-1 pb-1 overflow-x-hidden overflow-y-auto gap-1.5">
             {/* Left Column: Virtual Joystick */}
             <div
               style={{
@@ -1533,7 +1514,7 @@ export default function App() {
               />
             </div>
 
-            {/* Center Column: Game Canvas + Battle Center HUD Stats & Pause */}
+            {/* Center Column: Game Canvas */}
             <div className="flex-none flex flex-col items-center justify-center gap-1.5 mx-auto">
               <div
                 style={{
@@ -1567,7 +1548,7 @@ export default function App() {
                   <div className="absolute inset-0 bg-[#050510]/88 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-sm overflow-y-auto">
                     <GameLogo className="mb-1.5" />
                     <p className="font-btn text-xs text-[#FFB800] font-bold mb-2">
-                      STAGE {gameState?.currentStageId ?? 1}
+                      {centeredStageTitle}
                     </p>
                     <button
                       type="button"
@@ -1626,67 +1607,9 @@ export default function App() {
         </div>
       ) : !isDesktop ? (
         /* =========================================================================
-            MOBILE / TABLET PORTRAIT MODE (Dedicated 100dvh Top-to-Bottom Stack)
+            MOBILE / TABLET PORTRAIT MODE (Top-to-Bottom Stack)
            ========================================================================= */
-        <div className="flex-1 flex flex-col justify-start h-[100dvh] max-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] bg-[#050510]">
-          {/* Clean Frameless Portrait Top Bar */}
-          <header className="sticky top-0 z-40 h-10 bg-[#050510]/95 backdrop-blur-md border-b border-[#00F0FF]/25 px-3 flex items-center justify-between text-xs sm:text-sm shrink-0">
-            {/* Left: Stage Status */}
-            <div className="flex items-center gap-2 min-w-0">
-              <span className={`w-2 h-2 rounded-full shrink-0 ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
-              <span className="font-btn font-extrabold text-[#FFB800] tracking-wider text-xs sm:text-sm truncate">
-                {gameState?.currentStageName || `STAGE ${gameState?.currentStageId ?? 1}`}
-              </span>
-              {isCoopOnlineMatch && showOnlineNetStats && (
-                <span
-                  data-testid="portrait-online-net-stats"
-                  className="px-1.5 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-xs font-bold shrink-0"
-                >
-                  {peerPingMs != null ? `${Math.round(peerPingMs)}ms` : '--ms'} • {Math.round(fps)}fps
-                </span>
-              )}
-            </div>
-
-            {/* Right: Frameless Quick Action Buttons (No LanguageSelector in Battle) */}
-            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-              <QuickAudioToggleButton frameless />
-
-              <button
-                type="button"
-                onClick={() => {
-                  setSettingsInitialTab('ACCOUNT');
-                  setIsSettingsOpen(true);
-                }}
-                aria-label={t('Cài đặt', 'Settings')}
-                className="p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 cursor-pointer"
-                title={t('Cài đặt', 'Settings')}
-              >
-                <Settings className="w-4 h-4 text-[#FFB800]" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsSupportOpen(true)}
-                className="p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 cursor-pointer"
-                title={t('Hướng dẫn điều khiển', 'Controls Guide')}
-              >
-                <HelpCircle className="w-4 h-4 text-[#00F0FF]" />
-              </button>
-
-              {isSuperAdmin && (
-                <button
-                  type="button"
-                  onClick={() => setIsDevDrawerOpen(true)}
-                  className="font-btn flex items-center gap-1 px-2 py-1 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 text-xs font-semibold cursor-pointer"
-                  title={t('Bảng Kiểm thử & QA (Admin)', 'QA Suite (Admin)')}
-                >
-                  <Wrench className="w-4 h-4 text-[#FFB800]" />
-                  <span>QA</span>
-                </button>
-              )}
-            </div>
-          </header>
-
+        <div className="flex-1 flex flex-col justify-start w-full overflow-x-hidden overflow-y-auto bg-[#050510]">
           {/* Main Content Stack: Canvas -> Controls (with Center HUD Stats above Pause) */}
           <div className="flex-1 flex flex-col items-center justify-start w-full overflow-x-hidden overflow-y-auto px-2 pt-1 pb-2">
             <main
@@ -1712,7 +1635,7 @@ export default function App() {
                 <div className="absolute inset-0 bg-[#050510]/88 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-lg overflow-y-auto">
                   <GameLogo className="mb-1.5" />
                   <p className="font-btn text-xs sm:text-sm text-[#FFB800] font-bold mb-2">
-                    STAGE {gameState?.currentStageId ?? 1}
+                    {centeredStageTitle}
                   </p>
                   <button
                     type="button"
@@ -1767,13 +1690,6 @@ export default function App() {
                 localOnlineRole={localOnlineRole}
               />
             </div>
-
-            <div
-              style={{
-                minHeight: 'max(28px, env(safe-area-inset-bottom, 28px))',
-              }}
-              className="flex-1 w-full"
-            />
           </div>
         </div>
       ) : (
@@ -1781,91 +1697,6 @@ export default function App() {
             ENLARGED DESKTOP PC MODE (8/4 Grid Layout with Top Alignment)
            ========================================================================= */
         <div className="flex-1 flex flex-col justify-start w-full">
-          {/* Header — Frameless Top Menu Action Buttons & No LanguageSelector in Battle */}
-          <header className="border-b border-[#00F0FF]/25 bg-[#050510]/95 backdrop-blur-md px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2 sticky top-0 z-40 shadow-md">
-            <div className="max-w-[1560px] mx-auto flex items-center justify-between gap-2">
-              {/* Stage Indicator */}
-              <div className="flex items-center gap-2">
-                <span className="font-btn text-xs sm:text-sm text-[#FFB800] font-bold">
-                  {gameState?.currentStageName || `STAGE ${gameState?.currentStageId ?? 1}`}
-                </span>
-              </div>
-
-              {/* Header Right Actions (Frameless) */}
-              <div className="flex items-center gap-2 text-xs sm:text-sm">
-                <QuickAudioToggleButton frameless showLabelOnDesktop />
-
-                {!isTrialMode && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSettingsInitialTab('ACCOUNT');
-                      setIsSettingsOpen(true);
-                    }}
-                    aria-label={t('Cài đặt', 'Settings')}
-                    className="flex items-center justify-center p-2 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 font-semibold transition-all cursor-pointer"
-                    title={t('Cài đặt Tài khoản & Media', 'Account & Media Settings')}
-                  >
-                    <Settings className="w-4 h-4 text-[#FFB800]" />
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setIsSupportOpen(true)}
-                  className="flex items-center justify-center p-2 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 font-semibold transition-all cursor-pointer"
-                  title={t('Hướng dẫn điều khiển', 'Controls Guide')}
-                >
-                  <HelpCircle className="w-4 h-4 text-[#00F0FF]" />
-                </button>
-
-                {isSuperAdmin && (
-                  <button
-                    type="button"
-                    onClick={() => setIsDevDrawerOpen(true)}
-                    className="font-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 font-semibold transition-all cursor-pointer"
-                  >
-                    <Wrench className="w-4 h-4 text-[#FFB800]" />
-                    <span className="hidden sm:inline">QA Suite</span>
-                  </button>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setIsMenuExpanded((v) => !v)}
-                  className="p-1.5 rounded bg-transparent hover:bg-white/10 text-neutral-300 transition-all sm:hidden"
-                  aria-label="Thu gọn/Mở rộng Menu"
-                >
-                  {isMenuExpanded ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            {/* Mobile Expanded Menu Strip */}
-            {isMenuExpanded && (
-              <div className="mt-2.5 pt-2 border-t border-neutral-800 flex flex-wrap items-center justify-between gap-2 sm:hidden text-xs animate-fade-in">
-                {isSuperAdmin && (
-                  <button
-                    onClick={() => {
-                      setIsDevDrawerOpen(true);
-                      setIsMenuExpanded(false);
-                    }}
-                    className="font-btn flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded bg-[#0b0d1e] text-neutral-200 font-semibold"
-                  >
-                    <Wrench className="w-3.5 h-3.5 text-[#FFB800]" />
-                    <span>QA Suite</span>
-                  </button>
-                )}
-                <button
-                  onClick={() => setShowTouchControls((v) => !v)}
-                  className="font-btn flex items-center gap-1 py-2 px-3 rounded bg-[#0b0d1e] text-neutral-300 text-xs"
-                >
-                  <span>{t('Cảm ứng:', 'Touch:')} {showTouchControls ? t('Bật', 'On') : t('Tắt', 'Off')}</span>
-                </button>
-              </div>
-            )}
-          </header>
-
           {/* Main Content Area - Top Aligned */}
           <main className="max-w-[1560px] mx-auto w-full px-3 sm:px-4 lg:px-6 pt-3 sm:pt-4 pb-6 grid grid-cols-1 lg:grid-cols-12 gap-5 lg:gap-8 items-start">
             {/* Left Column: Enlarged Phaser Game Canvas */}
@@ -1876,7 +1707,7 @@ export default function App() {
                   <div className="flex items-center gap-2.5">
                     <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
                     <span className="font-btn font-semibold text-[#FFB800]">
-                      STAGE {gameState?.currentStageId ?? 1} {isPaused ? '(PAUSED)' : ''}
+                      {centeredStageTitle} {isPaused ? '(PAUSED)' : ''}
                     </span>
                   </div>
 
@@ -1933,7 +1764,7 @@ export default function App() {
                     <div className="absolute inset-0 bg-[#050510]/88 backdrop-blur-sm flex flex-col items-center justify-start pt-4 px-6 pb-4 text-center z-20 rounded-lg overflow-y-auto">
                       <GameLogo className="mb-2" />
                       <p className="font-btn text-sm sm:text-base text-[#FFB800] font-bold mb-3">
-                        STAGE {gameState?.currentStageId ?? 1}
+                        {centeredStageTitle}
                       </p>
                       <button
                         type="button"
@@ -1963,8 +1794,7 @@ export default function App() {
                     onClick={() => setIsSupportOpen(true)}
                     className="flex items-center gap-1.5 text-neutral-400 hover:text-[#00F0FF] text-[11px] transition-colors cursor-pointer"
                   >
-                    <HelpCircle className="w-3.5 h-3.5 text-[#00F0FF]" />
-                    <span>{t('Xem hướng dẫn điều khiển trong mục Hướng dẫn', 'View controls guide in How to Play')}</span>
+                    <span>{t('Xem hướng dẫn điều khiển trong mục Thông tin', 'View controls guide in Information')}</span>
                   </button>
                   <div className="font-hud flex items-center gap-2 text-sm">
                     {isCoopOnlineMatch && showOnlineNetStats ? (
@@ -2041,23 +1871,15 @@ export default function App() {
               )}
             </section>
           </main>
-
-          {/* Footer */}
-          <footer className="relative z-10 w-full border-t border-neutral-800 bg-[#050510]/90 px-4 py-3 text-center text-xs text-[#687386]">
-            <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
-              <span>© 2026 Bắn Tank Online</span>
-              <span>•</span>
-              <a href="/landing.html" className="hover:text-[#FFB800] transition-colors">
-                {t('Giới thiệu', 'About')}
-              </a>
-              <span>•</span>
-              <a href="/privacy.html" className="hover:text-[#FFB800] transition-colors">
-                {t('Chính sách quyền riêng tư', 'Privacy Policy')}
-              </a>
-            </div>
-          </footer>
         </div>
       )}
+
+      {/* Universal Battle Footer across all screens (Landscape, Portrait, Desktop) */}
+      <footer className="relative z-10 w-full border-t border-neutral-800 bg-[#050510]/90 px-4 py-2.5 text-center text-xs text-[#687386] shrink-0">
+        <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
+          <span>© 2026 Bắn Tank Online</span>
+        </div>
+      </footer>
 
       {/* =========================================================================
           MATCH MODALS (Pause, GameOver, StageClear)

@@ -21,8 +21,12 @@ import {
   RefreshCw,
   AlertTriangle,
   UserCheck,
+  Settings,
+  Info,
+  Wrench,
 } from 'lucide-react';
 import { SessionAlertModal } from './SessionAlertModal.tsx';
+import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { useLanguage, type SupportedLanguage } from '../core/i18n.ts';
 
@@ -152,10 +156,20 @@ export function getSessionBadgeInfo(
 
 interface AuthSessionBannerProps {
   onStartMatchAllowedChange?: (allowed: boolean) => void;
+  isBattleScreen?: boolean;
+  isSuperAdmin?: boolean;
+  onOpenSettings?: () => void;
+  onOpenSupport?: () => void;
+  onOpenDevTools?: () => void;
 }
 
 export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
   onStartMatchAllowedChange,
+  isBattleScreen = false,
+  isSuperAdmin = false,
+  onOpenSettings,
+  onOpenSupport,
+  onOpenDevTools,
 }) => {
   const { lang: language, t } = useLanguage();
   const authManager = AuthManager.getInstance();
@@ -289,9 +303,9 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
 
   return (
     <>
-      {/* Top Banner Status Bar — Frameless Player Name & Logout */}
-      <div className="bg-[#050510]/95 border-b border-[#687386]/40 px-3 py-1.5 flex items-center justify-between text-xs sm:text-sm text-[#EAF4FF] shrink-0">
-        <div className="flex items-center gap-2">
+      {/* Top Banner Status Bar — Frameless Player Name & Unified Action Menu */}
+      <div className="bg-[#050510]/95 border-b border-[#00F0FF]/25 px-3 py-1.5 flex items-center justify-between gap-2 text-xs sm:text-sm text-[#EAF4FF] shrink-0 z-40">
+        <div className="flex items-center gap-2 min-w-0">
           {user ? (
             (() => {
               const profileMeta = user.uid ? avatarManager.getUserMetadata(user.uid) : null;
@@ -304,7 +318,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
               void getRoleNameFrameClasses(userRole);
               const roleTrademarkBadge = getRoleTrademarkBadge(userRole);
               return (
-                <div className="flex items-center gap-1.5 px-1 py-0.5">
+                <div className="flex items-center gap-1.5 px-1 py-0.5 min-w-0">
                   {effectiveAvatarUrl ? (
                     <img
                       src={effectiveAvatarUrl}
@@ -316,7 +330,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
                     <UserCheck className="w-4 h-4 text-[#00F0FF] shrink-0" />
                   )}
                   <span className="inline-flex items-baseline font-bold text-[#FFB800] text-sm min-w-0">
-                    <span className="truncate max-w-[160px] sm:max-w-[220px]">
+                    <span className="truncate max-w-[140px] sm:max-w-[220px]">
                       {displayLabel}
                     </span>
                     {roleTrademarkBadge && (
@@ -329,7 +343,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
                     )}
                   </span>
                   {badgeInfo.label && (
-                    <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${badgeInfo.badgeStyle}`}>
+                    <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium shrink-0 ${badgeInfo.badgeStyle}`}>
                       {badgeInfo.label}
                     </span>
                   )}
@@ -362,7 +376,49 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
           )}
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          {isBattleScreen && (
+            <>
+              <QuickAudioToggleButton frameless />
+
+              {onOpenSettings && !isTrialMode && (
+                <button
+                  type="button"
+                  onClick={onOpenSettings}
+                  aria-label={t('Cài đặt', 'Settings')}
+                  className="flex items-center justify-center p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-[#EAF4FF] transition-all cursor-pointer shrink-0"
+                  title={t('Cài đặt', 'Settings')}
+                >
+                  <Settings className="w-4 h-4 text-[#FFB800]" />
+                </button>
+              )}
+
+              {onOpenSupport && (
+                <button
+                  type="button"
+                  onClick={onOpenSupport}
+                  aria-label={t('Thông tin', 'Information')}
+                  className="flex items-center justify-center p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-[#EAF4FF] transition-all cursor-pointer shrink-0"
+                  title={t('Thông tin', 'Information')}
+                >
+                  <Info className="w-4 h-4 text-[#00F0FF]" />
+                </button>
+              )}
+
+              {isSuperAdmin && onOpenDevTools && (
+                <button
+                  type="button"
+                  onClick={onOpenDevTools}
+                  className="font-btn flex items-center gap-1 px-2 py-1 rounded bg-transparent hover:bg-white/10 border-0 text-[#EAF4FF] text-xs font-semibold transition-all cursor-pointer shrink-0"
+                  title={t('Bảng Kiểm thử & QA (Admin)', 'QA Suite (Admin)')}
+                >
+                  <Wrench className="w-4 h-4 text-[#FFB800]" />
+                  <span className="hidden sm:inline">QA</span>
+                </button>
+              )}
+            </>
+          )}
+
           {user ? (
             <div className="flex items-center gap-1.5">
               {session.status === 'NO_SESSION' && (
@@ -376,18 +432,20 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
                   <span>{t('Kết nối', 'Connect')}</span>
                 </button>
               )}
-              <button
-                type="button"
-                onClick={handleSignOut}
-                disabled={isProcessing}
-                title={t('Đăng xuất', 'Sign Out')}
-                aria-label={t('Đăng xuất', 'Sign Out')}
-                className="flex items-center justify-center p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-[#EAF4FF] transition-all font-semibold active:scale-95 disabled:opacity-50 cursor-pointer"
-              >
-                <LogOut className="w-4 h-4 text-[#FF0055]" />
-              </button>
+              {!isBattleScreen && (
+                <button
+                  type="button"
+                  onClick={handleSignOut}
+                  disabled={isProcessing}
+                  title={t('Đăng xuất', 'Sign Out')}
+                  aria-label={t('Đăng xuất', 'Sign Out')}
+                  className="flex items-center justify-center p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-[#EAF4FF] transition-all font-semibold active:scale-95 disabled:opacity-50 cursor-pointer"
+                >
+                  <LogOut className="w-4 h-4 text-[#FF0055]" />
+                </button>
+              )}
             </div>
-          ) : (
+          ) : !isBattleScreen ? (
             <button
               onClick={handleSignIn}
               disabled={isProcessing}
@@ -400,7 +458,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
                   : t('Đăng nhập Google', 'Sign in with Google')}
               </span>
             </button>
-          )}
+          ) : null}
         </div>
       </div>
 

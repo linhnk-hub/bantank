@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import {
   X,
-  HelpCircle,
+  Info,
   Gamepad2,
   Smartphone,
   Tablet,
@@ -17,17 +17,28 @@ import {
   Wifi,
   CheckCircle2,
   Keyboard,
+  Lock,
+  Sparkles,
+  FileText,
 } from 'lucide-react';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { useLanguage } from '../core/i18n.ts';
 
+export type SupportTabId = 'ABOUT' | 'POLICY' | 'GUIDE';
+
 interface SupportModalProps {
   isOpen: boolean;
   onClose: () => void;
+  initialTab?: SupportTabId;
 }
 
-export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) => {
+export const SupportModal: React.FC<SupportModalProps> = ({
+  isOpen,
+  onClose,
+  initialTab = 'GUIDE',
+}) => {
   const { t } = useLanguage();
+  const [activeTab, setActiveTab] = useState<SupportTabId>(initialTab);
 
   if (!isOpen) return null;
 
@@ -40,14 +51,17 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
     >
       <div className="bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-lg w-full max-w-2xl shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col">
         {/* Header */}
-        <div className="px-4 sm:px-5 py-3.5 border-b border-neutral-800 flex items-center justify-between bg-[#050510]/90 shrink-0">
+        <div className="px-4 sm:px-5 py-3 border-b border-neutral-800 flex items-center justify-between bg-[#050510]/90 shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded bg-[#FFB800]/15 border border-[#FFB800]/40 flex items-center justify-center text-[#FFB800]">
-              <HelpCircle className="w-4 h-4" />
+              <Info className="w-4 h-4" />
             </div>
             <div>
-              <h2 id="support-modal-title" className="font-btn text-sm font-black uppercase tracking-wider text-[#EAF4FF]">
-                {t('Hướng dẫn', 'How to Play & Guide')}
+              <h2
+                id="support-modal-title"
+                className="font-btn text-sm sm:text-base font-black uppercase tracking-wider text-[#EAF4FF]"
+              >
+                {t('Thông tin', 'Information')}
               </h2>
             </div>
           </div>
@@ -60,14 +74,170 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
           </button>
         </div>
 
+        {/* 3-Tab Navigation Bar: Giới thiệu | Chính sách | Hướng dẫn */}
+        <div
+          data-testid="support-modal-tabs"
+          className="grid grid-cols-3 gap-1.5 px-3 sm:px-5 py-2.5 bg-[#050510]/95 border-b border-neutral-800 shrink-0"
+        >
+          <button
+            type="button"
+            data-testid="support-tab-about"
+            onClick={() => setActiveTab('ABOUT')}
+            className={`font-btn min-h-[40px] px-2 py-1.5 rounded text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === 'ABOUT'
+                ? 'bg-[#FFB800] text-[#050510] shadow-[0_0_12px_rgba(255,184,0,0.35)]'
+                : 'bg-[#0b0d1e] text-[#EAF4FF] border border-[#687386]/40 hover:border-[#FFB800]/60'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 shrink-0" />
+            <span>{t('Giới thiệu', 'About')}</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="support-tab-policy"
+            onClick={() => setActiveTab('POLICY')}
+            className={`font-btn min-h-[40px] px-2 py-1.5 rounded text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === 'POLICY'
+                ? 'bg-[#00F0FF] text-[#050510] shadow-[0_0_12px_rgba(0,240,255,0.35)]'
+                : 'bg-[#0b0d1e] text-[#EAF4FF] border border-[#687386]/40 hover:border-[#00F0FF]/60'
+            }`}
+          >
+            <FileText className="w-3.5 h-3.5 shrink-0" />
+            <span>{t('Chính sách', 'Policy')}</span>
+          </button>
+
+          <button
+            type="button"
+            data-testid="support-tab-guide"
+            onClick={() => setActiveTab('GUIDE')}
+            className={`font-btn min-h-[40px] px-2 py-1.5 rounded text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+              activeTab === 'GUIDE'
+                ? 'bg-[#FFB800] text-[#050510] shadow-[0_0_12px_rgba(255,184,0,0.35)]'
+                : 'bg-[#0b0d1e] text-[#EAF4FF] border border-[#687386]/40 hover:border-[#FFB800]/60'
+            }`}
+          >
+            <Info className="w-3.5 h-3.5 shrink-0" />
+            <span>{t('Hướng dẫn', 'Guide')}</span>
+          </button>
+        </div>
+
         {/* Body */}
-        <div className="p-4 sm:p-5 space-y-4 overflow-y-auto text-xs text-neutral-300 leading-relaxed">
-          {/* 1. Mục tiêu trận đấu */}
-          <div className="bg-[#050510]/85 border border-neutral-800 rounded-lg p-3.5 space-y-2">
-            <div className="font-btn flex items-center gap-2 text-[#FFB800] font-black uppercase tracking-wider">
-              <Shield className="w-4 h-4 shrink-0" />
-              <span>{t('1. Luật chơi & Mục tiêu', '1. Rules & Objectives')}</span>
+        <div className="p-4 sm:p-5 space-y-4 overflow-y-auto text-xs sm:text-sm text-neutral-300 leading-relaxed">
+          {/* TAB 1: GIỚI THIỆU */}
+          {activeTab === 'ABOUT' && (
+            <div className="space-y-3.5" data-testid="support-panel-about">
+              <div className="bg-[#050510]/85 border border-[#FFB800]/35 rounded-lg p-3.5 space-y-2">
+                <div className="font-btn flex items-center gap-2 text-[#FFB800] font-black uppercase tracking-wider">
+                  <Sparkles className="w-4 h-4 shrink-0" />
+                  <span>{t('Bắn Tank Online – Neo-Retro Arcade', 'Bắn Tank Online – Neo-Retro Arcade')}</span>
+                </div>
+                <p className="text-neutral-200">
+                  {t(
+                    'Trò chơi bắn xe tăng cổ điển 1990 được tái hiện trực tiếp trên trình duyệt với đồ họa Neo-Retro sắc nét, tốc độ 60 FPS mượt mà trên cả máy tính, điện thoại và máy tính bảng.',
+                    'The classic 1990 tank battle game reimagined directly in your browser with crisp Neo-Retro visuals and smooth 60 FPS gameplay across PC, mobile, and tablet.'
+                  )}
+                </p>
+              </div>
+
+              <div className="bg-[#050510]/85 border border-neutral-800 rounded-lg p-3.5 space-y-2">
+                <div className="font-btn flex items-center gap-2 text-[#00F0FF] font-black uppercase tracking-wider">
+                  <Gamepad2 className="w-4 h-4 shrink-0" />
+                  <span>{t('Tính năng nổi bật', 'Key Features')}</span>
+                </div>
+                <ul className="space-y-1.5 text-neutral-300 pl-1">
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>{t('Chiến dịch 10 Stage:', '10-Stage Campaign:')}</strong>{' '}
+                      {t(
+                        'Mỗi màn chơi gồm 30 xe tăng địch (Basic Tank, Fast Tank, Power Tank, Armor Tank) với địa hình chiến thuật đa dạng.',
+                        'Each stage features 30 enemy tanks (Basic Tank, Fast Tank, Power Tank, Armor Tank) across tactical terrains.'
+                      )}
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>{t('3 Chế độ chiến đấu:', '3 Battle Modes:')}</strong>{' '}
+                      {t(
+                        'SOLO (1 người), CO-OP AI (cùng đồng đội máy) và CO-OP ONLINE (2 người trực tuyến qua mã phòng BTxxxx).',
+                        'SOLO (1 Player), CO-OP AI (with AI partner), and CO-OP ONLINE (2 players online via BTxxxx room code).'
+                      )}
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>{t('Hệ thống 50 Cấp độ (Level):', '50-Level Progression:')}</strong>{' '}
+                      {t(
+                        'Tích lũy điểm kinh nghiệm (XP) qua từng trận đấu và lưu trữ đồng bộ theo tài khoản Google cá nhân.',
+                        'Earn XP across matches with cloud-synced progression tied to your personal Google account.'
+                      )}
+                    </span>
+                  </li>
+                </ul>
+              </div>
             </div>
+          )}
+
+          {/* TAB 2: CHÍNH SÁCH QUYỀN RIÊNG TƯ */}
+          {activeTab === 'POLICY' && (
+            <div className="space-y-3.5" data-testid="support-panel-policy">
+              <div className="bg-[#050510]/85 border border-[#00F0FF]/35 rounded-lg p-3.5 space-y-2">
+                <div className="font-btn flex items-center gap-2 text-[#00F0FF] font-black uppercase tracking-wider">
+                  <Lock className="w-4 h-4 shrink-0" />
+                  <span>{t('1. Dữ liệu Tài khoản & Xác thực', '1. Account Data & Authentication')}</span>
+                </div>
+                <p className="text-neutral-200">
+                  {t(
+                    'Trò chơi sử dụng xác thực Google OAuth chính thức (Firebase Authentication). Hệ thống chỉ ghi nhận UID, địa chỉ Gmail cá nhân, tên hiển thị và ảnh đại diện bạn chọn để đồng bộ tiến trình màn chơi và cấp độ.',
+                    'The game uses official Google OAuth (Firebase Authentication). We only store your UID, personal Gmail address, display name, and chosen avatar to sync stage progression and level.'
+                  )}
+                </p>
+              </div>
+
+              <div className="bg-[#050510]/85 border border-neutral-800 rounded-lg p-3.5 space-y-2">
+                <div className="font-btn flex items-center gap-2 text-[#FFB800] font-black uppercase tracking-wider">
+                  <Shield className="w-4 h-4 shrink-0" />
+                  <span>{t('2. Bảo vệ Phiên Thiết bị & Co-op', '2. Single-Device Session & Co-op Security')}</span>
+                </div>
+                <ul className="space-y-1.5 text-neutral-300 pl-1">
+                  <li>
+                    • <strong>{t('Một thiết bị tại một thời điểm:', 'Single Active Device:')}</strong>{' '}
+                    {t(
+                      'Mỗi tài khoản chỉ hoạt động trên 1 thiết bị cùng lúc nhằm chống xung đột dữ liệu XP và tiến độ Stage.',
+                      'Each account is active on one device at a time to prevent XP and stage progression conflicts.'
+                    )}
+                  </li>
+                  <li>
+                    • <strong>{t('Kết nối P2P Co-op Online:', 'P2P Co-op Online:')}</strong>{' '}
+                    {t(
+                      'Chế độ 2 người trực tuyến sử dụng WebRTC DataChannel để đồng bộ trạng thái trận đấu thời gian thực và tự động hủy phòng khi kết thúc.',
+                      'Online 2-player mode uses WebRTC DataChannel for real-time match sync and automatically cleans up rooms after completion.'
+                    )}
+                  </li>
+                  <li>
+                    • <strong>{t('Cam kết quyền riêng tư:', 'Privacy Commitment:')}</strong>{' '}
+                    {t(
+                      'Không chia sẻ dữ liệu cá nhân cho bên thứ ba, không chạy quảng cáo theo dõi.',
+                      'We never sell or share personal data with third parties and do not run tracking ads.'
+                    )}
+                  </li>
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {/* TAB 3: HƯỚNG DẪN */}
+          {activeTab === 'GUIDE' && (
+            <>
+              {/* 1. Mục tiêu trận đấu */}
+              <div className="bg-[#050510]/85 border border-neutral-800 rounded-lg p-3.5 space-y-2">
+                <div className="font-btn flex items-center gap-2 text-[#FFB800] font-black uppercase tracking-wider">
+                  <Shield className="w-4 h-4 shrink-0" />
+                  <span>{t('1. Luật chơi & Mục tiêu', '1. Rules & Objectives')}</span>
+                </div>
             <ul className="space-y-1.5 text-neutral-300 pl-1">
               <li className="flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
@@ -274,6 +444,8 @@ export const SupportModal: React.FC<SupportModalProps> = ({ isOpen, onClose }) =
               </li>
             </ul>
           </div>
+            </>
+          )}
         </div>
 
         {/* Footer */}

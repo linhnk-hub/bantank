@@ -232,7 +232,7 @@
 }
 
 /* M7.3.10: Unified 200% Game Logo Standard across PC, Mobile, and Tablet (320px = 2x standard 160px) */
-.unified-game-logo {
+.unified-game-logo:not(.logo-inline-row) {
   width: 320px !important;
   height: 320px !important;
   max-width: min(320px, calc(100vw - 16px)) !important;
@@ -241,3 +241,16 @@
   object-fit: contain !important;
   flex-shrink: 0;
 }
+
+.unified-game-logo.logo-inline-row {
+  width: clamp(60px, 18vw, 88px) !important;
+  height: clamp(60px, 18vw, 88px) !important;
+  min-width: clamp(60px, 18vw, 88px) !important;
+  min-height: clamp(60px, 18vw, 88px) !important;
+  max-width: 88px !important;
+  max-height: 88px !important;
+  aspect-ratio: 1 / 1 !important;
+  object-fit: contain !important;
+  flex-shrink: 0;
+}
+

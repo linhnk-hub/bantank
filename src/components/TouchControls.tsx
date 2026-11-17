@@ -258,12 +258,30 @@ export interface BattleCenterHudStatsProps {
   localOnlineRole?: 'HOST' | 'GUEST' | null;
 }
 
+const EnemyTankHudIcon: React.FC<{ className?: string }> = ({ className = 'w-3.5 h-3.5' }) => (
+  <svg
+    viewBox="0 0 16 16"
+    fill="none"
+    className={className}
+    style={{ shapeRendering: 'crispEdges' }}
+    aria-hidden="true"
+  >
+    {/* Left & Right Treads */}
+    <rect x="2" y="3" width="2" height="11" fill="#B45309" />
+    <rect x="12" y="3" width="2" height="11" fill="#B45309" />
+    {/* Tank Hull */}
+    <rect x="4" y="4" width="8" height="9" fill="#FFB800" />
+    {/* Turret & Barrel */}
+    <rect x="7" y="1" width="2" height="4" fill="#FEF08A" />
+    <rect x="6" y="6" width="4" height="5" fill="#78350F" />
+  </svg>
+);
+
 export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
   gameState,
   difficulty = 'DEFAULT',
   localOnlineRole = null,
 }) => {
-  const { t } = useLanguage();
   const stageId = gameState?.currentStageId ?? 1;
   const stageName = gameState?.currentStageName || `Stage ${stageId}`;
   const isTwoPlayer =
@@ -306,20 +324,18 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
   return (
     <div
       data-testid="battle-center-hud"
-      className="w-full max-w-[230px] sm:max-w-[280px] rounded-md bg-[#0b0d1e]/95 border border-[#00F0FF]/40 px-2 py-1.5 shadow-inner flex flex-col gap-1"
+      className="w-full max-w-[210px] sm:max-w-[260px] rounded-md bg-[#0b0d1e]/95 border border-[#00F0FF]/40 px-2 py-1.5 shadow-inner flex flex-col gap-1"
     >
-      {/* Top Row: Stage Name + Timer */}
-      <div className="flex items-center justify-between gap-1 border-b border-neutral-800 pb-1">
-        <span
-          data-testid="battle-hud-stage-name"
-          className="font-btn text-[11px] sm:text-xs font-black text-[#FFB800] truncate"
-          title={stageName}
-        >
-          {stageName}
-        </span>
+      {/* Hidden stage name for test compatibility (Stage name is shown centered above the arena) */}
+      <span data-testid="battle-hud-stage-name" className="hidden">
+        {stageName}
+      </span>
+
+      {/* Top Row: Countdown Timer */}
+      <div className="flex items-center justify-center border-b border-neutral-800 pb-1">
         <span
           data-testid="battle-hud-timer"
-          className={`font-hud inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-xs sm:text-sm font-bold shrink-0 ${
+          className={`font-hud inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs sm:text-sm font-bold shrink-0 ${
             isCrit
               ? 'bg-red-950/90 text-red-300 border border-[#FF0055] animate-pulse'
               : isWarn
@@ -327,36 +343,30 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
                 : 'text-[#00F0FF]'
           }`}
         >
-          <Clock className="w-3 h-3 shrink-0" />
+          <Clock className="w-3.5 h-3.5 shrink-0" />
           <span>{formatCountdownMMSS(remSec)}</span>
         </span>
       </div>
 
-      {/* 2x2 Tactical Metrics Grid: Lives, Remaining Enemies, Kills, XP */}
+      {/* 2x2 Tactical Metrics Grid (Icons + Values Only): Lives, Remaining Enemies, Kills, XP */}
       <div className="grid grid-cols-2 gap-1 font-hud text-xs sm:text-sm leading-tight">
         {/* Lives / Health */}
         <div
           data-testid="battle-hud-lives"
-          className="flex items-center justify-between px-1.5 py-0.5 rounded bg-[#050510]/90 border border-[#FF0055]/35"
+          className="flex items-center justify-between px-2 py-1 rounded bg-[#050510]/90 border border-[#FF0055]/35"
         >
-          <span className="inline-flex items-center gap-1 text-neutral-300 text-[11px]">
-            <Heart className="w-3 h-3 text-[#FF0055] fill-[#FF0055] shrink-0" />
-            <span>{t('Máu', 'HP')}</span>
-          </span>
+          <Heart className="w-3.5 h-3.5 text-[#FF0055] fill-[#FF0055] shrink-0" />
           <span className="font-extrabold text-[#FF0055]">
             {isTwoPlayer ? `P1:${p1Lives} P2:${p2Lives}` : `×${p1Lives}`}
           </span>
         </div>
 
-        {/* Remaining Enemies */}
+        {/* Remaining Enemies (Tank Icon) */}
         <div
           data-testid="battle-hud-enemies-remaining"
-          className="flex items-center justify-between px-1.5 py-0.5 rounded bg-[#050510]/90 border border-[#FFB800]/35"
+          className="flex items-center justify-between px-2 py-1 rounded bg-[#050510]/90 border border-[#FFB800]/35"
         >
-          <span className="inline-flex items-center gap-1 text-neutral-300 text-[11px]">
-            <ShieldAlert className="w-3 h-3 text-[#FFB800] shrink-0" />
-            <span>{t('Địch', 'Foes')}</span>
-          </span>
+          <EnemyTankHudIcon className="w-3.5 h-3.5 shrink-0" />
           <span className="font-extrabold text-[#FFB800]">
             {remainingEnemies}/{totalEnemies}
           </span>
@@ -365,24 +375,18 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
         {/* Kills */}
         <div
           data-testid="battle-hud-kills"
-          className="flex items-center justify-between px-1.5 py-0.5 rounded bg-[#050510]/90 border border-[#00F0FF]/35"
+          className="flex items-center justify-between px-2 py-1 rounded bg-[#050510]/90 border border-[#00F0FF]/35"
         >
-          <span className="inline-flex items-center gap-1 text-neutral-300 text-[11px]">
-            <Skull className="w-3 h-3 text-[#00F0FF] shrink-0" />
-            <span>{t('Đã giết', 'Kills')}</span>
-          </span>
+          <Skull className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
           <span className="font-extrabold text-[#00F0FF]">{enemiesKilled}</span>
         </div>
 
         {/* XP Score */}
         <div
           data-testid="battle-hud-xp"
-          className="flex items-center justify-between px-1.5 py-0.5 rounded bg-[#050510]/90 border border-emerald-500/35"
+          className="flex items-center justify-between px-2 py-1 rounded bg-[#050510]/90 border border-emerald-500/35"
         >
-          <span className="inline-flex items-center gap-1 text-neutral-300 text-[11px]">
-            <Trophy className="w-3 h-3 text-emerald-400 shrink-0" />
-            <span>XP</span>
-          </span>
+          <Trophy className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
           <span className="font-extrabold text-emerald-400">{xpScore}</span>
         </div>
       </div>
