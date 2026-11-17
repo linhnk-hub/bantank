@@ -311,7 +311,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             }`}
           >
             <Home className="w-4 h-4" />
-            <span>{isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('VỀ MENU', 'MAIN MENU')}</span>
+            <span>{isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('THOÁT VỀ TRANG CHỦ', 'EXIT TO HOME')}</span>
           </button>
         </div>
       </div>

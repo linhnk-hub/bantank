@@ -29,7 +29,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#050510]/85 backdrop-blur-sm pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 select-none animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#050510]/90 pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 select-none animate-in fade-in duration-150">
       <div className="bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-lg max-w-sm w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl text-center space-y-4 sm:space-y-5 scrollbar-thin">
         {!showQuitConfirm ? (
           <>
@@ -69,7 +69,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
                 className="font-btn w-full min-h-[48px] flex items-center justify-center gap-2 py-2 sm:py-2.5 px-4 rounded bg-red-950/40 hover:bg-red-900/50 text-red-300 font-semibold text-xs transition-colors border border-[#FF0055]/40 active:scale-95 cursor-pointer"
               >
                 <LogOut className="w-4 h-4 text-[#FF0055]" />
-                <span>{isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('THOÁT VỀ MENU', 'QUIT TO MENU')}</span>
+                <span>{isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('THOÁT VỀ TRANG CHỦ', 'EXIT TO HOME')}</span>
               </button>
             </div>
           </>
@@ -106,7 +106,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
                 }}
                 className="font-btn flex-1 min-h-[48px] py-2 sm:py-2.5 px-3 rounded bg-[#FF0055] hover:bg-rose-500 text-white font-bold text-xs transition-colors shadow-lg shadow-[#FF0055]/30 active:scale-95 cursor-pointer"
               >
-                {isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('THOÁT VỀ MENU', 'QUIT TO MENU')}
+                {isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('THOÁT VỀ TRANG CHỦ', 'EXIT TO HOME')}
               </button>
             </div>
           </div>

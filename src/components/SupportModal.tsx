@@ -44,7 +44,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[#050510]/88 backdrop-blur-md flex items-start justify-center pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-[#050510]/92 flex items-start justify-center pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="support-modal-title"
@@ -134,8 +134,8 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                 </div>
                 <p className="text-neutral-200">
                   {t(
-                    'Trò chơi bắn xe tăng cổ điển 1990 được tái hiện trực tiếp trên trình duyệt với đồ họa Neo-Retro sắc nét, tốc độ 60 FPS mượt mà trên cả máy tính, điện thoại và máy tính bảng.',
-                    'The classic 1990 tank battle game reimagined directly in your browser with crisp Neo-Retro visuals and smooth 60 FPS gameplay across PC, mobile, and tablet.'
+                    'Trò chơi bắn xe tăng cổ điển được tái hiện trực tiếp trên trình duyệt với đồ họa Neo-Retro sắc nét, tốc độ 60 FPS mượt mà trên cả máy tính, điện thoại và máy tính bảng.',
+                    'The classic tank battle game reimagined directly in your browser with crisp Neo-Retro visuals and smooth 60 FPS gameplay across PC, mobile, and tablet.'
                   )}
                 </p>
               </div>

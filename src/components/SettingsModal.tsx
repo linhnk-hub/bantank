@@ -227,7 +227,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   user: propUser,
   onProfileUpdated,
 }) => {
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
   const soundManager = SoundManager.getInstance();
   const musicManager = MusicManager.getInstance();
   const avatarManager = AvatarManager.getInstance();
@@ -797,7 +797,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   return (
     <div
       data-testid="settings-modal-backdrop"
-      className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 bg-[#050510]/88 backdrop-blur-md animate-fade-in select-none"
+      className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 bg-[#050510]/92 animate-fade-in select-none"
     >
       <ConfirmationPopupModal
         isOpen={Boolean(popupNotice)}
@@ -1582,10 +1582,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold font-mono bg-emerald-950 text-emerald-300 border border-emerald-700/60">
                               {t('TRUY CẬP THÀNH CÔNG', 'SIGN-IN SUCCESS')}
                             </span>
-                            <span className="text-neutral-200">{evt.note}</span>
+                            <span className="text-neutral-200">
+                              {evt.note?.startsWith('Đăng nhập thành công')
+                                ? t('Đăng nhập thành công', 'Signed in successfully')
+                                : evt.note}
+                            </span>
                           </div>
                           <span className="font-mono text-[10px] text-neutral-400">
-                            {new Date(evt.timestampMs).toLocaleString('vi-VN')}
+                            {new Date(evt.timestampMs).toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN')}
                           </span>
                         </div>
                       ))}
@@ -2836,7 +2840,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </li>
                   <li>
                     Hiện thông báo trực tiếp trên màn hình người chơi đang chơi kèm nút{' '}
-                    <strong className="text-amber-300">Thoát về Menu</strong>.
+                    <strong className="text-amber-300">Thoát về trang chủ</strong>.
                   </li>
                   <li>
                     Tại màn hình Menu chào mừng, nút <strong>ĐĂNG NHẬP</strong> và{' '}

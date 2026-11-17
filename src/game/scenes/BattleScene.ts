@@ -57,6 +57,8 @@ export class BattleScene extends Phaser.Scene {
   private p2VisualPos: { x: number; y: number } | null = null;
   private enemyVisualPositions: Map<string, { x: number; y: number }> = new Map();
   private bulletVisualPositions: Map<string, { x: number; y: number }> = new Map();
+  private activeEnemyIds: Set<string> = new Set();
+  private activeBulletIds: Set<string> = new Set();
   private lastDispatchMonotonicMs: number = 0;
   private bgTimerId: ReturnType<typeof setInterval> | null = null;
   private visibilityChangeHandler?: () => void;
@@ -527,6 +529,15 @@ export class BattleScene extends Phaser.Scene {
     this.lastStageRunSeq = state.stageRunSeq;
     this.lastTickCount = state.tickCount;
 
+    const isPausedSteady =
+      state.matchState === 'PAUSED' &&
+      this.lastMatchState === 'PAUSED' &&
+      this.visualEffects.length === 0;
+    if (isPausedSteady) {
+      this.reportHudStateIfNeeded(rawDelta, state);
+      return;
+    }
+
     const isOnlineGuest =
       this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE' &&
       CoopOnlineManager.getInstance().getRole() === 'GUEST';
@@ -552,9 +563,16 @@ export class BattleScene extends Phaser.Scene {
           this.p1VisualPos = null;
         }
 
-        this.p1Sprite.setPosition(p1X, p1Y);
-        this.p1Sprite.setTexture(`tank_p1_${state.p1.direction.toLowerCase()}`);
-        this.p1Sprite.setVisible(true);
+        if (this.p1Sprite.x !== p1X || this.p1Sprite.y !== p1Y) {
+          this.p1Sprite.setPosition(p1X, p1Y);
+        }
+        const p1TexKey = `tank_p1_${state.p1.direction.toLowerCase()}`;
+        if (this.p1Sprite.texture.key !== p1TexKey) {
+          this.p1Sprite.setTexture(p1TexKey);
+        }
+        if (!this.p1Sprite.visible) {
+          this.p1Sprite.setVisible(true);
+        }
 
         const hasShield = state.p1.isShielded || state.p1State.shieldTimer > 0;
         if (hasShield) {
@@ -565,24 +583,34 @@ export class BattleScene extends Phaser.Scene {
           const tankAlpha = pulsePhase ? 0.7 : 1.0;
           const auraAlpha = pulsePhase ? 0.95 : 0.45;
 
-          this.p1Sprite.setAlpha(tankAlpha);
+          if (this.p1Sprite.alpha !== tankAlpha) {
+            this.p1Sprite.setAlpha(tankAlpha);
+          }
 
           if (this.p1ShieldSprite) {
-            this.p1ShieldSprite.setPosition(p1X - 1, p1Y - 1);
-            this.p1ShieldSprite.setVisible(true);
-            this.p1ShieldSprite.setAlpha(auraAlpha);
+            if (this.p1ShieldSprite.x !== p1X - 1 || this.p1ShieldSprite.y !== p1Y - 1) {
+              this.p1ShieldSprite.setPosition(p1X - 1, p1Y - 1);
+            }
+            if (!this.p1ShieldSprite.visible) {
+              this.p1ShieldSprite.setVisible(true);
+            }
+            if (this.p1ShieldSprite.alpha !== auraAlpha) {
+              this.p1ShieldSprite.setAlpha(auraAlpha);
+            }
           }
         } else {
-          this.p1Sprite.setAlpha(1.0);
-          if (this.p1ShieldSprite) {
+          if (this.p1Sprite.alpha !== 1.0) {
+            this.p1Sprite.setAlpha(1.0);
+          }
+          if (this.p1ShieldSprite && this.p1ShieldSprite.visible) {
             this.p1ShieldSprite.setVisible(false);
           }
         }
       } else {
         this.p1VisualPos = null;
-        this.p1Sprite.setVisible(false);
-        this.p1Sprite.setAlpha(1.0);
-        if (this.p1ShieldSprite) this.p1ShieldSprite.setVisible(false);
+        if (this.p1Sprite.visible) this.p1Sprite.setVisible(false);
+        if (this.p1Sprite.alpha !== 1.0) this.p1Sprite.setAlpha(1.0);
+        if (this.p1ShieldSprite && this.p1ShieldSprite.visible) this.p1ShieldSprite.setVisible(false);
       }
     }
 
@@ -624,9 +652,16 @@ export class BattleScene extends Phaser.Scene {
       }
 
       if (state.p2.isAlive && (!state.p2State || !state.p2State.isDead)) {
-        this.p2Sprite.setPosition(p2RenderX, p2RenderY);
-        this.p2Sprite.setTexture(`tank_p2_${p2RenderDir.toLowerCase()}`);
-        this.p2Sprite.setVisible(true);
+        if (this.p2Sprite.x !== p2RenderX || this.p2Sprite.y !== p2RenderY) {
+          this.p2Sprite.setPosition(p2RenderX, p2RenderY);
+        }
+        const p2TexKey = `tank_p2_${p2RenderDir.toLowerCase()}`;
+        if (this.p2Sprite.texture.key !== p2TexKey) {
+          this.p2Sprite.setTexture(p2TexKey);
+        }
+        if (!this.p2Sprite.visible) {
+          this.p2Sprite.setVisible(true);
+        }
 
         const hasShield = state.p2.isShielded || (state.p2State && state.p2State.shieldTimer > 0);
         if (hasShield) {
@@ -637,32 +672,43 @@ export class BattleScene extends Phaser.Scene {
           const tankAlpha = pulsePhase ? 0.7 : 1.0;
           const auraAlpha = pulsePhase ? 0.95 : 0.45;
 
-          this.p2Sprite.setAlpha(tankAlpha);
+          if (this.p2Sprite.alpha !== tankAlpha) {
+            this.p2Sprite.setAlpha(tankAlpha);
+          }
           if (this.p2ShieldSprite) {
-            this.p2ShieldSprite.setPosition(p2RenderX - 1, p2RenderY - 1);
-            this.p2ShieldSprite.setVisible(true);
-            this.p2ShieldSprite.setAlpha(auraAlpha);
+            if (this.p2ShieldSprite.x !== p2RenderX - 1 || this.p2ShieldSprite.y !== p2RenderY - 1) {
+              this.p2ShieldSprite.setPosition(p2RenderX - 1, p2RenderY - 1);
+            }
+            if (!this.p2ShieldSprite.visible) {
+              this.p2ShieldSprite.setVisible(true);
+            }
+            if (this.p2ShieldSprite.alpha !== auraAlpha) {
+              this.p2ShieldSprite.setAlpha(auraAlpha);
+            }
           }
         } else {
-          this.p2Sprite.setAlpha(1.0);
-          if (this.p2ShieldSprite) {
+          if (this.p2Sprite.alpha !== 1.0) {
+            this.p2Sprite.setAlpha(1.0);
+          }
+          if (this.p2ShieldSprite && this.p2ShieldSprite.visible) {
             this.p2ShieldSprite.setVisible(false);
           }
         }
       } else {
         this.p2VisualPos = null;
-        this.p2Sprite.setVisible(false);
-        this.p2Sprite.setAlpha(1.0);
-        if (this.p2ShieldSprite) this.p2ShieldSprite.setVisible(false);
+        if (this.p2Sprite.visible) this.p2Sprite.setVisible(false);
+        if (this.p2Sprite.alpha !== 1.0) this.p2Sprite.setAlpha(1.0);
+        if (this.p2ShieldSprite && this.p2ShieldSprite.visible) this.p2ShieldSprite.setVisible(false);
       }
     } else {
       this.p2VisualPos = null;
-      if (this.p2Sprite) this.p2Sprite.setVisible(false);
-      if (this.p2ShieldSprite) this.p2ShieldSprite.setVisible(false);
+      if (this.p2Sprite && this.p2Sprite.visible) this.p2Sprite.setVisible(false);
+      if (this.p2ShieldSprite && this.p2ShieldSprite.visible) this.p2ShieldSprite.setVisible(false);
     }
 
-    // 4. Update Enemy Sprites
-    const activeEnemyIds = new Set<string>();
+    // 4. Update Enemy Sprites (reuse pre-allocated Set to prevent per-frame GC churn)
+    const activeEnemyIds = this.activeEnemyIds;
+    activeEnemyIds.clear();
     for (const enemy of state.enemies) {
       if (!enemy.isAlive) continue;
       activeEnemyIds.add(enemy.id);
@@ -744,8 +790,9 @@ export class BattleScene extends Phaser.Scene {
       this.enemyVisualPositions.clear();
     }
 
-    // 5. Update All Bullets (P1 + Enemies)
-    const activeBulletIds = new Set<string>();
+    // 5. Update All Bullets (P1 + Enemies) — reuse pre-allocated Set
+    const activeBulletIds = this.activeBulletIds;
+    activeBulletIds.clear();
     for (const b of state.bullets) {
       activeBulletIds.add(b.id);
       let bX = b.x;
@@ -878,34 +925,40 @@ export class BattleScene extends Phaser.Scene {
           remainingEffects.push(eff);
           if (eff.type === 'TANK_EXPLOSION' || eff.type === 'P1_EXPLOSION') {
             const progress = eff.elapsedMs / eff.totalDurationMs;
+            let nextExpTex = 'explosion_4';
+            let nextExpSize = 24;
             if (progress < 0.25) {
-              eff.sprite.setTexture('explosion_1');
-              eff.sprite.setDisplaySize(16, 16);
+              nextExpTex = 'explosion_1';
+              nextExpSize = 16;
             } else if (progress < 0.55) {
-              eff.sprite.setTexture('explosion_2');
-              eff.sprite.setDisplaySize(24, 24);
+              nextExpTex = 'explosion_2';
+              nextExpSize = 24;
             } else if (progress < 0.8) {
-              eff.sprite.setTexture('explosion_3');
-              eff.sprite.setDisplaySize(32, 32);
-            } else {
-              eff.sprite.setTexture('explosion_4');
-              eff.sprite.setDisplaySize(24, 24);
+              nextExpTex = 'explosion_3';
+              nextExpSize = 32;
+            }
+            if (eff.sprite.texture.key !== nextExpTex) {
+              eff.sprite.setTexture(nextExpTex);
+              eff.sprite.setDisplaySize(nextExpSize, nextExpSize);
             }
           } else if (eff.type === 'BASE_EXPLOSION') {
             // Distinct Eagle Base Explosion frames: radiant white, golden amber, shockwave rings
             const progress = eff.elapsedMs / eff.totalDurationMs;
+            let nextBaseTex = 'eagle_exp_4';
+            let nextBaseSize = 36;
             if (progress < 0.25) {
-              eff.sprite.setTexture('eagle_exp_1');
-              eff.sprite.setDisplaySize(24, 24);
+              nextBaseTex = 'eagle_exp_1';
+              nextBaseSize = 24;
             } else if (progress < 0.55) {
-              eff.sprite.setTexture('eagle_exp_2');
-              eff.sprite.setDisplaySize(36, 36);
+              nextBaseTex = 'eagle_exp_2';
+              nextBaseSize = 36;
             } else if (progress < 0.8) {
-              eff.sprite.setTexture('eagle_exp_3');
-              eff.sprite.setDisplaySize(48, 48);
-            } else {
-              eff.sprite.setTexture('eagle_exp_4');
-              eff.sprite.setDisplaySize(36, 36);
+              nextBaseTex = 'eagle_exp_3';
+              nextBaseSize = 48;
+            }
+            if (eff.sprite.texture.key !== nextBaseTex) {
+              eff.sprite.setTexture(nextBaseTex);
+              eff.sprite.setDisplaySize(nextBaseSize, nextBaseSize);
             }
           } else if (eff.type === 'HIT_SPARK') {
             eff.sprite.setAlpha(Math.max(0, 1.0 - eff.elapsedMs / eff.totalDurationMs));
@@ -915,8 +968,14 @@ export class BattleScene extends Phaser.Scene {
       this.visualEffects = remainingEffects;
     }
 
-    // 8. Update Dynamic Terrain (Bricks & Base)
-    this.syncDynamicTerrain(state);
+    // 8. Update Dynamic Terrain (Bricks & Base) — only scan brick tiles on combat events, state transition, or every 6 ticks
+    if (
+      newEvents.length > 0 ||
+      this.lastMatchState !== state.matchState ||
+      state.tickCount % 6 === 0
+    ) {
+      this.syncDynamicTerrain(state);
+    }
 
     // 9. Report state to React (immediately on key HUD state change or every ~100ms)
     this.reportHudStateIfNeeded(rawDelta, state);

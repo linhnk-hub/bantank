@@ -58,7 +58,6 @@ import {
 } from './components/ModeSelectionScreen.tsx';
 import { SessionAlertModal } from './components/SessionAlertModal.tsx';
 import { GameLogo } from './components/GameLogo.tsx';
-import { QuickAudioToggleButton } from './components/QuickAudioToggleButton.tsx';
 import {
   getShowOnlineNetStatsPreference,
   ONLINE_NET_STATS_PREF_EVENT,
@@ -85,7 +84,6 @@ import {
   Heart,
   Trophy,
   Settings,
-  HelpCircle,
   AlertTriangle,
   Clock,
   Eye,
@@ -1170,7 +1168,7 @@ export default function App() {
   const maintenanceModalOverlay = maintenanceInterruptAlert ? (
     <div
       data-testid="active-maintenance-interrupt-modal"
-      className="fixed inset-0 z-[130] flex items-center justify-center bg-[#050510]/88 backdrop-blur-md p-4 select-none"
+      className="fixed inset-0 z-[130] flex items-center justify-center bg-[#050510]/92 p-4 select-none"
     >
       <div className="w-full max-w-md rounded-lg border-2 border-[#FFB800] bg-[#0b0d1e] shadow-2xl overflow-hidden animate-fade-in">
         <div className="px-5 py-3.5 border-b border-neutral-800 bg-amber-950/50 flex items-center gap-2.5">
@@ -1191,7 +1189,7 @@ export default function App() {
             onClick={handleMaintenanceExitToMenu}
             className="font-btn w-full min-h-[48px] py-2.5 px-5 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-xs sm:text-sm uppercase tracking-wider transition-all shadow-lg cursor-pointer"
           >
-            {t('Thoát về Menu', 'Exit to Menu')}
+            {t('Thoát về trang chủ', 'Exit to Home')}
           </button>
         </div>
       </div>
@@ -1425,7 +1423,7 @@ export default function App() {
       {/* Support / Info Modal */}
       <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
 
-      {/* Top Battle Header: Player Name + Audio + Settings + Info (No Exit button in battle) */}
+      {/* Top Battle Header: Player Name + Horizontal Slide-Out Menu */}
       <AuthSessionBanner
         onStartMatchAllowedChange={setIsMatchAllowed}
         isBattleScreen={true}
@@ -1436,6 +1434,7 @@ export default function App() {
         }}
         onOpenSupport={() => setIsSupportOpen(true)}
         onOpenDevTools={() => setIsDevDrawerOpen(true)}
+        onQuitToHome={handleQuitToMenu}
       />
 
       {/* Co-op Online Peer Disconnection Banner */}
@@ -1461,7 +1460,7 @@ export default function App() {
               onClick={handleQuitToMenu}
               className="font-btn px-3 py-1 rounded bg-[#FF0055] hover:bg-rose-500 text-white font-bold text-xs cursor-pointer"
             >
-              {t('Về Menu Chính', 'Main Menu')}
+              {t('Thoát về trang chủ', 'Exit to Home')}
             </button>
           </div>
         </div>
@@ -1545,7 +1544,7 @@ export default function App() {
                 )}
 
                 {gameState?.matchState === 'MENU' && (
-                  <div className="absolute inset-0 bg-[#050510]/88 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-sm overflow-y-auto">
+                  <div className="absolute inset-0 bg-[#050510]/92 flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-sm overflow-y-auto">
                     <GameLogo className="mb-1.5" />
                     <p className="font-btn text-xs text-[#FFB800] font-bold mb-2">
                       {centeredStageTitle}
@@ -1632,7 +1631,7 @@ export default function App() {
 
               {/* In MENU state: Overlay allowing immediate match start */}
               {gameState?.matchState === 'MENU' && (
-                <div className="absolute inset-0 bg-[#050510]/88 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-lg overflow-y-auto">
+                <div className="absolute inset-0 bg-[#050510]/92 flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-lg overflow-y-auto">
                   <GameLogo className="mb-1.5" />
                   <p className="font-btn text-xs sm:text-sm text-[#FFB800] font-bold mb-2">
                     {centeredStageTitle}
@@ -1761,7 +1760,7 @@ export default function App() {
 
                   {/* In MENU state: Overlay allowing immediate match start */}
                   {gameState?.matchState === 'MENU' && (
-                    <div className="absolute inset-0 bg-[#050510]/88 backdrop-blur-sm flex flex-col items-center justify-start pt-4 px-6 pb-4 text-center z-20 rounded-lg overflow-y-auto">
+                    <div className="absolute inset-0 bg-[#050510]/92 flex flex-col items-center justify-start pt-4 px-6 pb-4 text-center z-20 rounded-lg overflow-y-auto">
                       <GameLogo className="mb-2" />
                       <p className="font-btn text-sm sm:text-base text-[#FFB800] font-bold mb-3">
                         {centeredStageTitle}

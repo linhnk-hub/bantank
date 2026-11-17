@@ -107,7 +107,7 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
                   : 'text-[#00F0FF] hover:text-[#FFB800]'
             } ${className}`.trim()
           : compact
-            ? `flex items-center justify-center gap-1.5 w-[76px] h-[36px] min-w-[76px] min-h-[36px] px-2 py-1 rounded border text-xs font-btn font-extrabold transition-all shadow cursor-pointer active:scale-95 touch-manipulation ${
+            ? `flex items-center justify-center w-[36px] h-[36px] min-w-[36px] min-h-[36px] px-0 py-0 rounded border text-xs font-btn font-extrabold transition-all shadow cursor-pointer active:scale-95 touch-manipulation ${
                 isBgmMuted
                   ? 'bg-[#200510]/90 border-[#FF0055]/75 text-[#FF0055] hover:bg-[#2d0717]'
                   : isAwaitingUnlock

@@ -924,7 +924,7 @@ export class PlayerStatsManager {
       timestampMs: nowMs,
       sessionId,
       deviceId: params.deviceId ?? null,
-      note: 'Đăng nhập thành công & cấp phiên thiết bị',
+      note: 'Đăng nhập thành công',
     });
     if (record.authHistory.length > MAX_AUTH_HISTORY_PER_USER) {
       record.authHistory.length = MAX_AUTH_HISTORY_PER_USER;

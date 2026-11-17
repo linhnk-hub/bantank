@@ -9,6 +9,7 @@ import { MAP_DIMENSIONS } from '../core/constants.ts';
 import { StageViewerScene, type SceneTileHoverInfo } from './scenes/StageViewerScene.ts';
 import { BattleScene } from './scenes/BattleScene.ts';
 import { GameEngine } from '../core/gameEngine.ts';
+import { CoopOnlineManager } from '../core/coopOnlineManager.ts';
 import type { GameCoreState } from '../core/types.ts';
 
 interface PhaserGameProps {
@@ -78,6 +79,14 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       backgroundColor: '#000000',
       pixelArt: true, // Crisp retro nearest-neighbor pixel rendering
       roundPixels: true,
+      render: {
+        antialias: false,
+        antialiasGL: false,
+        pixelArt: true,
+        roundPixels: true,
+        powerPreference: 'low-power',
+        transparent: false,
+      },
       scale: {
         mode: Phaser.Scale.FIT,
         autoCenter: Phaser.Scale.CENTER_BOTH,
@@ -85,6 +94,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       fps: {
         target: 60,
         forceSetTimeOut: false,
+        smoothStep: false,
       },
       scene: [activeScene],
     };
@@ -92,11 +102,26 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     const game = new Phaser.Game(config);
     gameRef.current = game;
 
-    // Handle tab visibility change for simulation pausing
+    // Handle tab visibility change for simulation pausing and zero-GPU sleep when backgrounded
     const handleVisibility = () => {
       const isVisible = document.visibilityState === 'visible';
       if (mode === 'battle' && battleSceneRef.current) {
-        battleSceneRef.current.getEngine().handleVisibilityChange(isVisible);
+        const eng = battleSceneRef.current.getEngine();
+        eng.handleVisibilityChange(isVisible);
+        const isOnlineHost =
+          eng.getGameMode() === 'TWO_PLAYERS_ONLINE' &&
+          CoopOnlineManager.getInstance().getRole() === 'HOST';
+        if (!isVisible && !isOnlineHost) {
+          game.loop.sleep();
+        } else if (isVisible) {
+          game.loop.wake();
+        }
+      } else {
+        if (!isVisible) {
+          game.loop.sleep();
+        } else {
+          game.loop.wake();
+        }
       }
     };
     document.addEventListener('visibilitychange', handleVisibility);

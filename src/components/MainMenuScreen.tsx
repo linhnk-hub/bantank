@@ -15,14 +15,9 @@ import { AvatarManager } from '../core/avatarManager.ts';
 import { PlayerStatsManager } from '../core/playerStatsManager.ts';
 import { getSessionBadgeInfo, formatAccountStatusMessage } from './AuthSessionBanner.tsx';
 import {
-  Play,
-  LogOut,
-  Settings,
-  Wrench,
   RefreshCw,
   UserCheck,
   AlertCircle,
-  Info,
   Loader2,
   Trophy,
   User,
@@ -30,7 +25,7 @@ import {
   Globe,
 } from 'lucide-react';
 import { GameLogo } from './GameLogo.tsx';
-import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
+import { TopMenuActionDrawer } from './TopMenuActionDrawer.tsx';
 import { MusicManager, type HomeBackgroundVideoConfig } from '../core/musicManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { useLanguage } from '../core/i18n.ts';
@@ -216,6 +211,20 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   }, [homeVideoConfig?.isEnabled, homeVideoUrl]);
 
   useEffect(() => {
+    const handleVisibility = () => {
+      const el = videoRef.current;
+      if (!el) return;
+      if (document.visibilityState === 'hidden') {
+        el.pause();
+      } else if (homeVideoConfig?.isEnabled) {
+        tryPlayIntroVideo();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [homeVideoConfig?.isEnabled]);
+
+  useEffect(() => {
     avatarManager.observeCatalog();
     if (user.uid) {
       avatarManager.observeUserMetadata(user.uid);
@@ -305,7 +314,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             preload="auto"
             loop={homeVideoConfig.loop !== false}
             style={{ opacity: homeVideoConfig.opacity }}
-            className="w-full h-full object-cover blur-[3px] scale-105"
+            className="w-full h-full object-cover"
             onLoadStart={() => {
               if (!musicManager.isHomeVideoLoaded(homeVideoUrl)) {
                 setIsVideoBuffering(true);
@@ -340,7 +349,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             }}
             onError={() => setIsVideoBuffering(false)}
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#050510]/65 via-[#050510]/35 to-[#050510]/85" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#050510]/72 via-[#050510]/50 to-[#050510]/88" />
         </div>
       )}
 
@@ -348,8 +357,8 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       <div className="absolute inset-0 z-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(255,184,0,0.18),rgba(5,5,16,0))] pointer-events-none" />
       <div className="absolute inset-0 z-0 bg-grid-pattern opacity-15 pointer-events-none" />
 
-      {/* Top Header Bar — Frameless Player Name & Frameless Audio, Settings, Guide, Logout Controls */}
-      <header className="sticky top-0 z-40 w-full border-b border-[#687386]/35 bg-[#050510]/95 backdrop-blur-md px-3 sm:px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 shrink-0 shadow-md">
+      {/* Top Header Bar — Frameless Player Name & Horizontal Slide-Out Action Drawer */}
+      <header className="sticky top-0 z-40 w-full border-b border-[#687386]/35 bg-[#050510]/96 px-3 sm:px-4 pt-[max(0.5rem,env(safe-area-inset-top))] pb-2 shrink-0 shadow-md">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2 min-w-0">
           {/* Left: Frameless Player Profile + Level */}
           <div className="flex items-center gap-2 min-w-0 py-0.5 text-sm">
@@ -383,73 +392,25 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             )}
           </div>
 
-          {/* Right: Frameless Quick Actions */}
-          <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-            <QuickAudioToggleButton frameless />
-
-            <button
-              type="button"
-              onClick={onOpenSettings}
-              aria-label={t('Cài đặt', 'Settings')}
-              className="flex items-center justify-center min-w-[36px] min-h-[36px] p-1.5 bg-transparent border-0 shadow-none text-[#FFB800] hover:text-[#00F0FF] transition-colors cursor-pointer active:scale-95"
-              title={t('Cài đặt', 'Settings')}
-            >
-              <Settings className="w-4 h-4" />
-            </button>
-
-            {onOpenSupport && (
-              <button
-                type="button"
-                onClick={onOpenSupport}
-                aria-label={t('Thông tin', 'Information')}
-                className="flex items-center justify-center min-w-[36px] min-h-[36px] p-1.5 bg-transparent border-0 shadow-none text-[#00F0FF] hover:text-[#FFB800] transition-colors cursor-pointer active:scale-95"
-                title={t('Thông tin', 'Information')}
-              >
-                <Info className="w-4 h-4" />
-              </button>
-            )}
-
-            {isSuperAdmin && (
-              <button
-                type="button"
-                onClick={onOpenDevTools}
-                className="flex items-center gap-1 min-h-[36px] px-2 py-1.5 bg-transparent border-0 shadow-none text-[#FFB800] hover:text-[#00F0FF] text-xs font-semibold transition-colors cursor-pointer"
-                title="QA (Admin)"
-              >
-                <Wrench className="w-4 h-4" />
-                <span className="hidden sm:inline">QA</span>
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={onSignOut}
-              disabled={isProcessing}
-              aria-label={t('Đăng xuất', 'Sign Out')}
-              className="flex items-center justify-center min-w-[36px] min-h-[36px] p-1.5 bg-transparent border-0 shadow-none text-[#FF0055] hover:text-rose-400 transition-colors active:scale-95 disabled:opacity-50 cursor-pointer"
-              title={t('Đăng xuất', 'Sign Out')}
-            >
-              <LogOut className="w-4 h-4" />
-            </button>
-          </div>
+          {/* Right: 3-Line Hamburger Slide-Out Menu (Settings, Info, QA, Exit) */}
+          <TopMenuActionDrawer
+            onOpenSettings={onOpenSettings}
+            onOpenSupport={onOpenSupport}
+            onOpenDevTools={onOpenDevTools}
+            onExit={onSignOut}
+            exitLabel={t('Thoát', 'Exit')}
+            isSuperAdmin={isSuperAdmin}
+            isExitDisabled={isProcessing}
+          />
         </div>
       </header>
 
       {/* Main Lobby Container */}
       <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-3 sm:px-4 pt-2 sm:pt-3 pb-4 max-w-4xl mx-auto w-full">
         <div className="flex flex-col items-center text-center max-w-2xl w-full">
-          {/* Single-Row Brand Header: Compact Game Logo + Slogan Side-by-Side */}
-          <div className="w-full max-w-md flex flex-row items-center justify-center gap-2.5 sm:gap-3.5 py-1 overflow-hidden">
-            <GameLogo className="logo-inline-row shrink-0" />
-            <h1 className="flex-1 min-w-0 flex items-center justify-center p-0 m-0 leading-none">
-              <img
-                src="/slogan.png"
-                alt={t('Chiến trường huyền thoại', 'Legendary Tank Battlefield')}
-                data-testid="main-menu-slogan-image"
-                className="block w-full max-w-[230px] sm:max-w-[300px] h-auto max-h-[68px] sm:max-h-[84px] object-contain p-0 m-0 drop-shadow-lg select-none pointer-events-none"
-                draggable={false}
-              />
-            </h1>
+          {/* Enlarged Centered Game Logo Hero at Top */}
+          <div className="flex justify-center items-center p-0 m-0">
+            <GameLogo />
           </div>
 
           {/* 8-Bit Arcade Player Status Bar (Level, XP Progress) & Tank IDLE Showcase */}
@@ -636,32 +597,16 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             </button>
           </div>
 
-          {/* Primary Neo-Retro Mode Confirmation CTA (Single-Tap Confirm for Selected Mode) */}
-          <div className="w-full max-w-[330px] sm:max-w-xs flex flex-col items-center gap-2 px-2 mt-3.5 mb-3">
-            <button
-              type="button"
-              data-testid="main-menu-play-btn"
-              onClick={() => handleConfirmSelectedMode(selectedModeCard)}
-              disabled={isProcessing}
-              className={`w-full min-h-[50px] py-3 px-4 neo-clip-corner bg-[#FFB800] hover:bg-[#ffc933] active:translate-y-[1px] text-[#050510] font-btn font-extrabold text-sm sm:text-base whitespace-nowrap shadow-[0_0_20px_rgba(255,184,0,0.4)] hover:shadow-[0_0_26px_rgba(255,184,0,0.65)] transition-all duration-200 flex items-center justify-center gap-2 border-2 border-[#EAF4FF]/85 touch-manipulation ${
-                isProcessing
-                  ? 'opacity-60 cursor-not-allowed'
-                  : 'cursor-pointer'
-              }`}
-            >
-              <Play className="w-4 h-4 fill-[#050510] text-[#050510] shrink-0" />
-              <span
-                data-testid="main-menu-play-gradient-text"
-                className="tracking-wider uppercase font-black"
-              >
-                {selectedModeCard === 'SOLO'
-                  ? t('VÀO CHẾ ĐỘ SOLO', 'ENTER SOLO MODE')
-                  : selectedModeCard === 'COOP_AI'
-                    ? t('VÀO CHẾ ĐỘ CO-OP AI', 'ENTER CO-OP AI')
-                    : t('VÀO CO-OP ONLINE', 'ENTER CO-OP ONLINE')}
-              </span>
-            </button>
-          </div>
+          {/* Centered Slogan Banner Below Mode Selection Cards */}
+          <h1 className="inline-flex items-center justify-center p-0 mt-4 mb-2 leading-none">
+            <img
+              src="/slogan.png"
+              alt={t('Chiến trường huyền thoại', 'Legendary Tank Battlefield')}
+              data-testid="main-menu-slogan-image"
+              className="block w-auto max-w-[260px] sm:max-w-[360px] h-auto object-contain p-0 m-0 drop-shadow-lg select-none pointer-events-none"
+              draggable={false}
+            />
+          </h1>
         </div>
       </main>
 
@@ -673,7 +618,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             data-testid="home-video-loading-banner"
             role="status"
             aria-live="polite"
-            className="relative z-10 w-full border-t border-[#FFB800]/30 bg-[#050510]/90 backdrop-blur-sm px-4 py-2 text-xs sm:text-sm text-[#FFB800] flex items-center justify-center gap-2 shrink-0"
+            className="relative z-10 w-full border-t border-[#FFB800]/30 bg-[#050510]/92 px-4 py-2 text-xs sm:text-sm text-[#FFB800] flex items-center justify-center gap-2 shrink-0"
           >
             <Loader2 className="w-4 h-4 animate-spin text-[#FFB800] shrink-0" />
             <span>{t('Đang tải Video intro...', 'Loading intro video...')}</span>

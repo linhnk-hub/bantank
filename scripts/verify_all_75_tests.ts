@@ -1759,20 +1759,20 @@ async function verifyM7313FixesAsyncSuite() {
   const m3HudSrc = readSrc('src/components/M3Hud.tsx');
   const appSrc = readSrc('src/App.tsx');
 
-  // 1. Preload & autoplay blurred looping video on Welcome & MainMenu + loading banner above <footer>
+  // 1. Preload & autoplay scrim looping video on Welcome & MainMenu (optimized without GPU blur shader) + loading banner above <footer>
   const welcomeBannerIdx = welcomeSrc.indexOf('home-video-loading-banner');
   const welcomeFooterIdx = welcomeSrc.indexOf('<footer');
   if (
     !welcomeSrc.includes('<video') ||
-    !welcomeSrc.includes('blur-[3px]') ||
+    !welcomeSrc.includes('visibilitychange') ||
     !welcomeSrc.includes('preload="auto"') ||
     welcomeBannerIdx === -1 ||
     welcomeFooterIdx === -1 ||
     welcomeBannerIdx > welcomeFooterIdx ||
-    !mainMenuSrc.includes('blur-[3px]') ||
+    !mainMenuSrc.includes('visibilitychange') ||
     !mainMenuSrc.includes('preload="auto"')
   ) {
-    throw new Error('WelcomeScreen / MainMenuScreen video preload, blur, or loading banner check failed');
+    throw new Error('WelcomeScreen / MainMenuScreen video preload, visibility pause, or loading banner check failed');
   }
 
   // 2. Public intro-bantank.mp4 file presence
@@ -1925,7 +1925,10 @@ async function verifyUiAndStageCloudSyncSuite() {
     !mainMenuScreenSrc.includes('data-testid="main-menu-slogan-image"') ||
     !mainMenuScreenSrc.includes('src="/slogan.png"') ||
     !mainMenuScreenSrc.includes('max-w-md') ||
-    !mainMenuScreenSrc.includes('data-testid="main-menu-play-gradient-text"') ||
+    mainMenuScreenSrc.includes('data-testid="main-menu-play-btn"') ||
+    !mainMenuScreenSrc.includes('TopMenuActionDrawer') ||
+    !modeSelectSrc.includes('TopMenuActionDrawer') ||
+    !authBannerSrc.includes('TopMenuActionDrawer') ||
     !confirmPopupSrc.includes('formatSentenceLineBreaks') ||
     !textureGenSrc.includes("main: '#dc2626'") ||
     !textureGenSrc.includes("main: '#eab308'") ||

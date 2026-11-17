@@ -109,6 +109,20 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     }
   }, [homeVideoConfig?.isEnabled, homeVideoUrl]);
 
+  useEffect(() => {
+    const handleVisibility = () => {
+      const el = videoRef.current;
+      if (!el) return;
+      if (document.visibilityState === 'hidden') {
+        el.pause();
+      } else if (homeVideoConfig?.isEnabled) {
+        tryPlayIntroVideo();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => document.removeEventListener('visibilitychange', handleVisibility);
+  }, [homeVideoConfig?.isEnabled]);
+
   const isMaintenanceActive = Boolean(maintenanceConfig.isActive);
   const maintenanceNoticeText =
     maintenanceConfig.message ||
@@ -130,7 +144,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             preload="auto"
             loop={homeVideoConfig.loop !== false}
             style={{ opacity: homeVideoConfig.opacity }}
-            className="w-full h-full object-cover blur-[3px] scale-105"
+            className="w-full h-full object-cover"
             onLoadStart={() => {
               if (!musicManager.isHomeVideoLoaded(homeVideoUrl)) {
                 setIsVideoBuffering(true);
@@ -165,7 +179,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             }}
             onError={() => setIsVideoBuffering(false)}
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-[#050510]/65 via-[#050510]/35 to-[#050510]/85" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#050510]/72 via-[#050510]/50 to-[#050510]/88" />
         </div>
       )}
 
@@ -347,7 +361,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             data-testid="home-video-loading-banner"
             role="status"
             aria-live="polite"
-            className="relative z-10 w-full border-t border-[#FFB800]/30 bg-[#050510]/90 backdrop-blur-sm px-4 py-2 text-xs text-[#FFB800] flex items-center justify-center gap-2 shrink-0"
+            className="relative z-10 w-full border-t border-[#FFB800]/30 bg-[#050510]/92 px-4 py-2 text-xs text-[#FFB800] flex items-center justify-center gap-2 shrink-0"
           >
             <Loader2 className="w-3.5 h-3.5 animate-spin text-[#FFB800] shrink-0" />
             <span>{t('Đang tải Video intro...', 'Loading intro video...')}</span>

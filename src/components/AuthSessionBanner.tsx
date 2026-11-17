@@ -15,18 +15,12 @@ import { SessionManager, type SessionStateSnapshot, type SessionStateStatus } fr
 import { AvatarManager } from '../core/avatarManager.ts';
 import {
   LogIn,
-  LogOut,
-  ShieldAlert,
-  WifiOff,
   RefreshCw,
   AlertTriangle,
   UserCheck,
-  Settings,
-  Info,
-  Wrench,
 } from 'lucide-react';
 import { SessionAlertModal } from './SessionAlertModal.tsx';
-import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
+import { TopMenuActionDrawer } from './TopMenuActionDrawer.tsx';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { useLanguage, type SupportedLanguage } from '../core/i18n.ts';
 
@@ -161,6 +155,7 @@ interface AuthSessionBannerProps {
   onOpenSettings?: () => void;
   onOpenSupport?: () => void;
   onOpenDevTools?: () => void;
+  onQuitToHome?: () => void;
 }
 
 export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
@@ -170,6 +165,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
   onOpenSettings,
   onOpenSupport,
   onOpenDevTools,
+  onQuitToHome,
 }) => {
   const { lang: language, t } = useLanguage();
   const authManager = AuthManager.getInstance();
@@ -377,75 +373,40 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
         </div>
 
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          {isBattleScreen && (
-            <>
-              <QuickAudioToggleButton frameless />
-
-              {onOpenSettings && !isTrialMode && (
-                <button
-                  type="button"
-                  onClick={onOpenSettings}
-                  aria-label={t('Cài đặt', 'Settings')}
-                  className="flex items-center justify-center p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-[#EAF4FF] transition-all cursor-pointer shrink-0"
-                  title={t('Cài đặt', 'Settings')}
-                >
-                  <Settings className="w-4 h-4 text-[#FFB800]" />
-                </button>
-              )}
-
-              {onOpenSupport && (
-                <button
-                  type="button"
-                  onClick={onOpenSupport}
-                  aria-label={t('Thông tin', 'Information')}
-                  className="flex items-center justify-center p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-[#EAF4FF] transition-all cursor-pointer shrink-0"
-                  title={t('Thông tin', 'Information')}
-                >
-                  <Info className="w-4 h-4 text-[#00F0FF]" />
-                </button>
-              )}
-
-              {isSuperAdmin && onOpenDevTools && (
-                <button
-                  type="button"
-                  onClick={onOpenDevTools}
-                  className="font-btn flex items-center gap-1 px-2 py-1 rounded bg-transparent hover:bg-white/10 border-0 text-[#EAF4FF] text-xs font-semibold transition-all cursor-pointer shrink-0"
-                  title={t('Bảng Kiểm thử & QA (Admin)', 'QA Suite (Admin)')}
-                >
-                  <Wrench className="w-4 h-4 text-[#FFB800]" />
-                  <span className="hidden sm:inline">QA</span>
-                </button>
-              )}
-            </>
+          {user && session.status === 'NO_SESSION' && (
+            <button
+              onClick={handleRetryAcquire}
+              disabled={isProcessing}
+              className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] transition-all font-bold text-xs active:scale-95 disabled:opacity-50"
+              title={t('Thử kết nối lại', 'Retry connection')}
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} />
+              <span>{t('Kết nối', 'Connect')}</span>
+            </button>
           )}
 
-          {user ? (
-            <div className="flex items-center gap-1.5">
-              {session.status === 'NO_SESSION' && (
-                <button
-                  onClick={handleRetryAcquire}
-                  disabled={isProcessing}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] transition-all font-bold text-xs active:scale-95 disabled:opacity-50"
-                  title={t('Thử kết nối lại', 'Retry connection')}
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} />
-                  <span>{t('Kết nối', 'Connect')}</span>
-                </button>
-              )}
-              {!isBattleScreen && (
-                <button
-                  type="button"
-                  onClick={handleSignOut}
-                  disabled={isProcessing}
-                  title={t('Đăng xuất', 'Sign Out')}
-                  aria-label={t('Đăng xuất', 'Sign Out')}
-                  className="flex items-center justify-center p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-[#EAF4FF] transition-all font-semibold active:scale-95 disabled:opacity-50 cursor-pointer"
-                >
-                  <LogOut className="w-4 h-4 text-[#FF0055]" />
-                </button>
-              )}
-            </div>
-          ) : !isBattleScreen ? (
+          {isBattleScreen ? (
+            <TopMenuActionDrawer
+              onOpenSettings={onOpenSettings}
+              onOpenSupport={onOpenSupport}
+              onOpenDevTools={onOpenDevTools}
+              onExit={onQuitToHome ?? handleSignOut}
+              exitLabel={t('Thoát về trang chủ', 'Exit to Home')}
+              isSuperAdmin={isSuperAdmin}
+              isExitDisabled={isProcessing}
+              hideSettings={isTrialMode}
+            />
+          ) : user ? (
+            <TopMenuActionDrawer
+              onOpenSettings={onOpenSettings}
+              onOpenSupport={onOpenSupport}
+              onOpenDevTools={onOpenDevTools}
+              onExit={handleSignOut}
+              exitLabel={t('Thoát', 'Exit')}
+              isSuperAdmin={isSuperAdmin}
+              isExitDisabled={isProcessing}
+            />
+          ) : (
             <button
               onClick={handleSignIn}
               disabled={isProcessing}
@@ -458,7 +419,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
                   : t('Đăng nhập Google', 'Sign in with Google')}
               </span>
             </button>
-          ) : null}
+          )}
         </div>
       </div>
 

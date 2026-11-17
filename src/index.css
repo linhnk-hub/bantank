@@ -72,6 +72,7 @@
     rgba(0, 240, 255, 0.02) 4px
   );
   opacity: 0.45;
+  contain: strict;
 }
 
 /* Tactical Grid Background */
@@ -190,6 +191,7 @@
   );
   background-size: 220% 220%;
   animation: googleBtnGradientFlow 2.6s ease-in-out infinite;
+  will-change: background-position;
 }
 
 .welcome-google-gradient-btn:hover,
@@ -201,7 +203,6 @@
     #FFB800 100%
   );
   background-size: 200% 200%;
-  filter: brightness(1.08);
 }
 
 @media (prefers-reduced-motion: reduce) {

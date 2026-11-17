@@ -16,7 +16,7 @@ import { AvatarManager } from '../core/avatarManager.ts';
 import { PlayerStatsManager } from '../core/playerStatsManager.ts';
 import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
 import { CoopOnlineLobbyPanel, type CoopLobbySubView } from './CoopOnlineLobbyModal.tsx';
-import { QuickAudioToggleButton } from './QuickAudioToggleButton.tsx';
+import { TopMenuActionDrawer } from './TopMenuActionDrawer.tsx';
 import { useLanguage } from '../core/i18n.ts';
 import { CoopOnlineManager, type CoopRoomDocument } from '../core/coopOnlineManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
@@ -27,8 +27,6 @@ import { StageMapMiniPreview } from './StageMapMiniPreview.tsx';
 import {
   ArrowLeft,
   ArrowRight,
-  Settings,
-  Wrench,
   UserCheck,
   User,
   Bot,
@@ -39,7 +37,6 @@ import {
   Lock,
   Map as MapIcon,
   Unlock,
-  Info,
 } from 'lucide-react';
 
 export type GameModeType = 'SOLO' | 'TWO_PLAYERS';
@@ -414,17 +411,11 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     if (isInsideOnlineWaitingRoom) {
       return;
     }
-    if (flowStep === 'COOP_ONLINE_LOBBY') {
-      if (onlineLobbySubView !== 'MAIN') {
-        setOnlineLobbySubView('MAIN');
-      } else {
-        setFlowStep('SELECT_MODE');
-      }
-    } else if (flowStep === 'SELECT_DIFFICULTY') {
-      setFlowStep('SELECT_MODE');
-    } else {
-      onBack();
+    if (flowStep === 'COOP_ONLINE_LOBBY' && onlineLobbySubView !== 'MAIN') {
+      setOnlineLobbySubView('MAIN');
+      return;
     }
+    onBack();
   };
 
   return (
@@ -433,8 +424,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(255,184,0,0.16),rgba(0,240,255,0.05),rgba(5,5,16,0))] pointer-events-none" />
       <div className="fixed inset-0 bg-grid-pattern opacity-35 pointer-events-none" />
 
-      {/* Top Header Bar — Frameless Player Name & Action Icons */}
-      <header className="sticky top-0 z-40 w-full border-b border-[#00F0FF]/25 bg-[#050510]/95 backdrop-blur-md px-2.5 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2 shrink-0 shadow-[0_4px_20px_rgba(0,0,0,0.75)]">
+      {/* Top Header Bar — Frameless Player Name & Horizontal Slide-Out Menu */}
+      <header className="sticky top-0 z-40 w-full border-b border-[#00F0FF]/25 bg-[#050510]/96 px-2.5 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2 shrink-0 shadow-[0_4px_20px_rgba(0,0,0,0.75)]">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2 min-w-0">
           {/* Left: Back Button (Hidden when inside Co-op Online waiting room) */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
@@ -491,41 +482,14 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               )}
             </div>
 
-            <QuickAudioToggleButton frameless />
-
-            <button
-              type="button"
-              onClick={onOpenSettings}
-              aria-label={t('Cài đặt', 'Settings')}
-              className="flex items-center justify-center p-2 rounded bg-transparent hover:bg-white/10 text-[#EAF4FF] border-0 transition-all cursor-pointer shrink-0"
-              title={t('Cài đặt Tài khoản & Media', 'Account & Media Settings')}
-            >
-              <Settings className="w-4 h-4 text-[#FFB800]" />
-            </button>
-
-            {onOpenSupport && (
-              <button
-                type="button"
-                onClick={onOpenSupport}
-                aria-label={t('Thông tin', 'Information')}
-                className="flex items-center justify-center p-2 rounded bg-transparent hover:bg-white/10 text-[#EAF4FF] border-0 transition-all cursor-pointer shrink-0"
-                title={t('Thông tin', 'Information')}
-              >
-                <Info className="w-4 h-4 text-[#00F0FF]" />
-              </button>
-            )}
-
-            {isSuperAdmin && (
-              <button
-                type="button"
-                onClick={onOpenDevTools}
-                className="font-btn flex items-center gap-1 px-2 py-1.5 rounded bg-transparent hover:bg-white/10 text-[#EAF4FF] border-0 text-xs font-semibold cursor-pointer shrink-0"
-                title={t('Bảng Kiểm thử & QA (Admin)', 'QA & Test Suite (Admin)')}
-              >
-                <Wrench className="w-4 h-4 text-[#FFB800]" />
-                <span className="hidden md:inline">QA</span>
-              </button>
-            )}
+            <TopMenuActionDrawer
+              onOpenSettings={onOpenSettings}
+              onOpenSupport={onOpenSupport}
+              onOpenDevTools={onOpenDevTools}
+              onExit={isInsideOnlineWaitingRoom ? undefined : onBack}
+              exitLabel={t('Thoát về trang chủ', 'Exit to Home')}
+              isSuperAdmin={isSuperAdmin}
+            />
           </div>
         </div>
       </header>
@@ -1087,7 +1051,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 onDifficultyChange={onDifficultyChange}
                 subView={onlineLobbySubView}
                 onSubViewChange={setOnlineLobbySubView}
-                onBackToDifficulty={() => setFlowStep('SELECT_MODE')}
+                onBackToDifficulty={onBack}
                 onOnlineMatchStarted={handleOnlineMatchStartedProp}
               />
             </div>
