@@ -1394,11 +1394,14 @@ export default function App() {
   const currentBattleStageSpec = StageManager.getInstance().getLiveCampaignStageView(
     gameState?.currentStageId ?? 1
   );
-  const centeredStageTitle = `STAGE ${currentBattleStageSpec.id}: ${currentBattleStageSpec.shortTitle.toUpperCase()}`;
+  const centeredStageTitle = `${t('MÀN', 'STAGE')} ${currentBattleStageSpec.id}: ${currentBattleStageSpec.shortTitle.toUpperCase()}`;
 
   // View 3: Battle Arena with Canvas (Only mounted when player clicked "Chơi ngay")
   return (
-    <div className="min-h-[100dvh] bg-[#050510] text-[#EAF4FF] flex flex-col justify-between font-sans select-none overflow-x-hidden selection:bg-[#FFB800] selection:text-black">
+    <div
+      translate="no"
+      className="notranslate min-h-[100dvh] bg-[#050510] text-[#EAF4FF] flex flex-col justify-between font-sans select-none overflow-x-hidden selection:bg-[#FFB800] selection:text-black"
+    >
       {/* Developer & QA Test Suite Drawer (Admin Only) */}
       {isSuperAdmin && (
         <DevToolsDrawer
@@ -1466,33 +1469,43 @@ export default function App() {
         </div>
       )}
 
-      {/* Centered Stage Headline Across All Battle Views */}
+      {/* Centered Stage Headline Across All Battle Views + Ping Pinned at Right Corner */}
       <div
         data-testid="battle-stage-center-banner"
-        className="w-full py-1.5 px-3 bg-[#050510]/90 border-b border-[#00F0FF]/15 flex items-center justify-center gap-2 shrink-0 z-30"
+        className="w-full py-1.5 px-2.5 sm:px-4 bg-[#050510]/90 border-b border-[#00F0FF]/15 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 shrink-0 z-30"
       >
-        <span className={`w-2 h-2 rounded-full shrink-0 ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
-        <h2
-          data-testid="battle-stage-center-title"
-          className="font-btn font-black text-[#FFB800] tracking-wider text-xs sm:text-sm md:text-base uppercase text-center"
-        >
-          {centeredStageTitle}
-        </h2>
-        {isCoopOnlineMatch && showOnlineNetStats && (
-          <span
-            data-testid={layout.isLandscape ? 'landscape-online-net-stats' : 'portrait-online-net-stats'}
-            className="px-1.5 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-xs font-bold shrink-0"
+        <div className="min-w-0" />
+        <div className="flex items-center justify-center gap-2 min-w-0">
+          <span className={`w-2 h-2 rounded-full shrink-0 ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
+          <h2
+            data-testid="battle-stage-center-title"
+            className="font-btn font-black text-[#FFB800] tracking-wider text-xs sm:text-sm md:text-base uppercase text-center truncate"
           >
-            {peerPingMs != null ? `${Math.round(peerPingMs)}ms` : '--ms'} • {Math.round(fps)}fps
-          </span>
-        )}
+            {centeredStageTitle}
+          </h2>
+        </div>
+        <div className="flex items-center justify-end min-w-0">
+          {isCoopOnlineMatch && showOnlineNetStats && (
+            <span
+              data-testid={layout.isLandscape ? 'landscape-online-net-stats' : 'portrait-online-net-stats'}
+              className="px-2 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-[11px] sm:text-xs font-bold shrink-0 whitespace-nowrap"
+            >
+              Ping: {peerPingMs != null ? `${Math.round(peerPingMs)}ms` : '--ms'} • {Math.round(fps)}fps
+            </span>
+          )}
+        </div>
       </div>
 
       {/* =========================================================================
           LANDSCAPE MODE (Mobile / Tablet 3-Column Ergonomic Layout - Top Aligned)
          ========================================================================= */}
       {(!isDesktop && layout.isLandscape) ? (
-        <div className="flex-1 flex flex-col justify-start w-full overflow-x-hidden overflow-y-auto">
+        <div
+          translate="no"
+          onContextMenu={(e) => e.preventDefault()}
+          onDragStart={(e) => e.preventDefault()}
+          className="battle-touch-lock notranslate flex-1 flex flex-col justify-start w-full overflow-hidden"
+        >
           {/* Landscape Main 3-Column Combat View */}
           <main className="flex-1 flex flex-row items-center justify-center w-full px-1 sm:px-2 pt-1 pb-1 overflow-x-hidden overflow-y-auto gap-1.5">
             {/* Left Column: Virtual Joystick */}
@@ -1608,9 +1621,14 @@ export default function App() {
         /* =========================================================================
             MOBILE / TABLET PORTRAIT MODE (Top-to-Bottom Stack)
            ========================================================================= */
-        <div className="flex-1 flex flex-col justify-start w-full overflow-x-hidden overflow-y-auto bg-[#050510]">
+        <div
+          translate="no"
+          onContextMenu={(e) => e.preventDefault()}
+          onDragStart={(e) => e.preventDefault()}
+          className="battle-touch-lock notranslate flex-1 flex flex-col justify-start w-full overflow-hidden bg-[#050510]"
+        >
           {/* Main Content Stack: Canvas -> Controls (with Center HUD Stats above Pause) */}
-          <div className="flex-1 flex flex-col items-center justify-start w-full overflow-x-hidden overflow-y-auto px-2 pt-1 pb-2">
+          <div className="flex-1 flex flex-col items-center justify-start w-full overflow-hidden px-2 pt-1 pb-2">
             <main
               style={{
                 width: `${layout.canvasSizePx}px`,

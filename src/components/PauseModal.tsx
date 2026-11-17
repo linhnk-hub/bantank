@@ -4,7 +4,7 @@
  */
 
 import React, { useState } from 'react';
-import { Play, RotateCcw, LogOut, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { useLanguage } from '../core/i18n.ts';
 
@@ -46,9 +46,8 @@ export const PauseModal: React.FC<PauseModalProps> = ({
               <button
                 type="button"
                 onClick={onResume}
-                className="font-btn w-full min-h-[48px] flex items-center justify-center gap-2 py-2.5 sm:py-3 px-4 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-extrabold text-xs sm:text-sm transition-all shadow-lg shadow-[#FFB800]/20 active:scale-95 cursor-pointer"
+                className="font-btn w-full min-h-[48px] flex items-center justify-center py-2.5 sm:py-3 px-4 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-extrabold text-xs sm:text-sm transition-all shadow-lg shadow-[#FFB800]/20 active:scale-95 cursor-pointer"
               >
-                <Play className="w-4 h-4 fill-black" />
                 <span>{t('TIẾP TỤC', 'RESUME')}</span>
               </button>
 
@@ -56,9 +55,8 @@ export const PauseModal: React.FC<PauseModalProps> = ({
                 <button
                   type="button"
                   onClick={onRestart}
-                  className="font-btn w-full min-h-[48px] flex items-center justify-center gap-2 py-2 sm:py-2.5 px-4 rounded bg-[#050510] hover:bg-neutral-800 text-[#EAF4FF] font-bold text-xs transition-colors border border-[#00F0FF]/40 active:scale-95 cursor-pointer"
+                  className="font-btn w-full min-h-[48px] flex items-center justify-center py-2 sm:py-2.5 px-4 rounded bg-[#050510] hover:bg-neutral-800 text-[#EAF4FF] font-bold text-xs transition-colors border border-[#00F0FF]/40 active:scale-95 cursor-pointer"
                 >
-                  <RotateCcw className="w-4 h-4 text-[#00F0FF]" />
                   <span>{t('CHƠI LẠI MÀN NÀY', 'RESTART STAGE')}</span>
                 </button>
               )}
@@ -66,9 +64,8 @@ export const PauseModal: React.FC<PauseModalProps> = ({
               <button
                 type="button"
                 onClick={() => (isTrialMode ? onQuitToMenu() : setShowQuitConfirm(true))}
-                className="font-btn w-full min-h-[48px] flex items-center justify-center gap-2 py-2 sm:py-2.5 px-4 rounded bg-red-950/40 hover:bg-red-900/50 text-red-300 font-semibold text-xs transition-colors border border-[#FF0055]/40 active:scale-95 cursor-pointer"
+                className="font-btn w-full min-h-[48px] flex items-center justify-center py-2 sm:py-2.5 px-4 rounded bg-red-950/40 hover:bg-red-900/50 text-red-300 font-semibold text-xs transition-colors border border-[#FF0055]/40 active:scale-95 cursor-pointer"
               >
-                <LogOut className="w-4 h-4 text-[#FF0055]" />
                 <span>{isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
               </button>
             </div>

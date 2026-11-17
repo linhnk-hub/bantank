@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Trophy, Award, RotateCcw, Home, Clock, Heart, Users, Loader2, ShieldCheck } from 'lucide-react';
+import { Trophy, Award, Clock, Heart, Users, Loader2, ShieldCheck } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
 import { getStartingLivesForDifficultyAndMode } from '../core/constants.ts';
 import {
@@ -140,156 +140,162 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
   const myPostReady = isOnlineGuest ? p2PostReady : p1PostReady;
   const localPlayerTag = isOnlineGuest ? 'P2' : 'P1';
 
+  const isP2Local = isCoopOnline && effectiveOnlineRole === 'GUEST';
+  const isP2Teammate = isCoop && !isP2Local;
+
   // Milestone 7.4 Campaign Stage 10 Completion Reference: HOÀN THÀNH TOÀN BỘ CHIẾN DỊCH 10 STAGE!
   const finalCampaignBannerText = t(
-    'HOÀN THÀNH TOÀN BỘ 10 STAGE!',
+    'HOÀN THÀNH TOÀN BỘ 10 MÀN!',
     'ALL 10 CAMPAIGN STAGES COMPLETED!'
   );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#050510]/88 backdrop-blur-md pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-2 sm:px-4 select-none animate-in fade-in duration-200">
-      <div className="bg-[#0b0d1e] border-2 border-[#FFB800] rounded-lg max-w-md w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-[0_0_32px_rgba(255,184,0,0.22)] overflow-hidden">
-        {/* Scrollable Content Body */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 sm:space-y-4 scrollbar-thin">
-          {/* Header */}
-          <div className="text-center space-y-1">
-            <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded bg-[#FFB800]/15 text-[#FFB800] border border-[#FFB800]/40 mb-0.5">
-              <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
-            </div>
-            <h2 className="font-btn text-xl sm:text-2xl font-black tracking-wider text-[#FFB800] uppercase">
-              {isFinalCampaignStage
-                ? t('CHINH PHỤC CHIẾN DỊCH!', 'CAMPAIGN CONQUERED!')
-                : t('CHIẾN THẮNG MÀN CHƠI!', 'STAGE CLEAR!')}
-            </h2>
-            <p className="font-hud text-sm sm:text-base text-[#00F0FF] font-bold tracking-wide">
-              STAGE {currentStageId} / {TOTAL_CAMPAIGN_STAGES} • {stageName}
-            </p>
-            {isFinalCampaignStage && (
-              <div className="font-btn inline-block px-2.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-[10px] font-extrabold">
-                {finalCampaignBannerText}
+    <div className="fixed inset-0 z-50 flex flex-col justify-between overflow-y-auto bg-[#050510]/88 backdrop-blur-md select-none animate-in fade-in duration-200">
+      <div className="flex-1 w-full flex items-start justify-center pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-4 px-2 sm:px-4">
+        <div className="bg-[#0b0d1e] border-2 border-[#FFB800] rounded-lg max-w-md w-full flex flex-col shadow-[0_0_32px_rgba(255,184,0,0.22)] overflow-hidden">
+          {/* Content Body */}
+          <div className="p-4 sm:p-5 space-y-3 sm:space-y-4">
+            {/* Header */}
+            <div className="text-center space-y-1.5">
+              <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded bg-[#FFB800]/15 text-[#FFB800] border border-[#FFB800]/40 mb-0.5">
+                <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
               </div>
-            )}
-          </div>
-
-          {/* Score & Record Display */}
-          <div className="bg-[#050510] border border-[#FFB800]/30 rounded-lg p-3 text-center space-y-1">
-            <div className="font-btn text-[11px] text-neutral-400 font-medium">
-              {isCoop
-                ? t(`TỔNG XP CỦA BẠN (${localPlayerTag})`, `YOUR TOTAL XP (${localPlayerTag})`)
-                : t('TỔNG XP TÍCH LŨY', 'TOTAL ACCUMULATED XP')}
-            </div>
-            <div className="font-hud text-3xl sm:text-4xl font-black text-[#FFB800] tracking-tight">
-              {localTotalScore.toLocaleString()} XP
-            </div>
-            <div className="font-hud flex items-center justify-center gap-1.5 pt-0.5 text-sm">
-              <Award className="w-3.5 h-3.5 text-[#FFB800]" />
-              <span className="text-neutral-400">High XP:</span>
-              <span className="font-bold text-[#EAF4FF]">{state.highScore.toLocaleString()} XP</span>
-              {isNewRecord && (
-                <span className="font-btn px-1.5 py-0.2 rounded bg-[#FFB800] text-[#050510] font-extrabold text-[10px] animate-pulse">
-                  {t('KỶ LỤC MỚI!', 'NEW RECORD!')}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Breakdown by Enemy Tier */}
-          <div className="bg-[#050510]/85 border border-[#00F0FF]/25 rounded-lg p-3 space-y-2 text-xs">
-            <div className="font-btn font-bold text-[#EAF4FF] pb-1 border-b border-neutral-800 flex justify-between items-center">
-              <span>
-                {isCoop
-                  ? t(`THÀNH TÍCH CỦA BẠN (${localPlayerTag})`, `YOUR STATS (${localPlayerTag})`)
-                  : t('BẢNG TỔNG KẾT CHIẾN DỊCH', 'STAGE COMBAT SUMMARY')}
-              </span>
-              <div className="font-hud flex items-center gap-1 text-sm text-[#00F0FF]">
-                <Clock className="w-3.5 h-3.5 text-[#00F0FF]" />
-                <span>{timeFormatted}</span>
-              </div>
-            </div>
-
-            <div className="space-y-1.5 font-mono text-[11px] sm:text-xs">
-              <div className="flex items-center justify-between text-neutral-300">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-white border border-neutral-400" />
-                  Basic Tank (1 XP):
-                </span>
-                <span className="font-hud text-sm">{counts.BASIC} {t('xe', 'tanks')} = {counts.BASIC * 1} XP</span>
-              </div>
-
-              <div className="flex items-center justify-between text-neutral-300">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-blue-500 border border-blue-300" />
-                  Fast Tank (2 XP):
-                </span>
-                <span className="font-hud text-sm">{counts.FAST} {t('xe', 'tanks')} = {counts.FAST * 2} XP</span>
-              </div>
-
-              <div className="flex items-center justify-between text-neutral-300">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 border border-emerald-300" />
-                  Power Tank (3 XP):
-                </span>
-                <span className="font-hud text-sm">{counts.POWER} {t('xe', 'tanks')} = {counts.POWER * 3} XP</span>
-              </div>
-
-              <div className="flex items-center justify-between text-neutral-300">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-black border-2 border-white" />
-                  Armor Tank (5 XP):
-                </span>
-                <span className="font-hud text-sm">{counts.ARMOR} {t('xe', 'tanks')} = {counts.ARMOR * 5} XP</span>
-              </div>
-
-              <div className="pt-1.5 border-t border-neutral-800/80 flex items-center justify-between font-bold text-emerald-400">
-                <span>
-                  {isCoop
-                    ? t(`Đã tiêu diệt (${localPlayerTag}):`, `Defeated (${localPlayerTag}):`)
-                    : t('Đã tiêu diệt:', 'Total Defeated:')}
-                </span>
-                <span className="font-hud text-sm">
-                  {isCoop
-                    ? t(
-                        `${totalDefeated} xe (Toàn đội: ${state.totalDefeatedEnemies}/30)`,
-                        `${totalDefeated} tanks (Team: ${state.totalDefeatedEnemies}/30)`
-                      )
-                    : t(`${totalDefeated} / 30 xe (Toàn bộ)`, `${totalDefeated} / 30 tanks (All)`)}
-                </span>
-              </div>
-
-              <div
-                data-testid="stageclear-lives-stat"
-                className="flex items-center justify-between text-[11px] text-neutral-300 pt-0.5"
-              >
-                <span className="flex items-center gap-1 text-[#FF0055]">
-                  <Heart className="w-3 h-3 fill-[#FF0055]" />
-                  {t('Số mạng còn lại:', 'Remaining lives:')}
-                </span>
-                <span className="font-hud text-sm font-bold text-white">
-                  {livesLeft} {t('mạng', 'lives')}
-                </span>
-              </div>
-
-              {teammateState && (
-                <div className="flex items-center justify-between text-[11px] text-neutral-400 pt-0.5">
-                  <span>{teammateLabel}</span>
-                  <span className="font-hud text-sm">{teammateLivesLeft} {t('mạng', 'lives')}</span>
+              <h2 className="font-btn text-xl sm:text-2xl font-black tracking-wider text-[#FFB800] uppercase">
+                {isFinalCampaignStage
+                  ? t('CHINH PHỤC CHIẾN DỊCH!', 'CAMPAIGN CONQUERED!')
+                  : t('CHIẾN THẮNG', 'VICTORY')}
+              </h2>
+              <p className="font-hud text-sm sm:text-base text-[#00F0FF] font-bold tracking-wide">
+                {t('MÀN', 'STAGE')} {currentStageId} • {stageName}
+              </p>
+              {isFinalCampaignStage && (
+                <div className="font-btn inline-block px-2.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-xs font-extrabold">
+                  {finalCampaignBannerText}
                 </div>
               )}
             </div>
-          </div>
-        </div>
 
-        {showCoopPostStageReady && (
-          <div
-            data-testid="stageclear-coop-ready-panel"
-            className="mx-3 sm:mx-4 mb-2 p-2.5 rounded-lg bg-[#050510]/90 border border-emerald-500/35 space-y-1.5"
-          >
-            <div className="text-[11px] font-bold text-emerald-300 text-center">
-              {t(
-                `Sẵn sàng chơi tiếp Stage ${currentStageId + 1} (cả 2 cùng sẵn sàng sẽ tự động vào màn)`,
-                `Ready for Stage ${currentStageId + 1} (auto-starts when both players are ready)`
-              )}
+            {/* Score & Record Display */}
+            <div className="bg-[#050510] border border-[#FFB800]/30 rounded-lg p-3 text-center space-y-1">
+              <div className="font-btn text-xs text-neutral-400 font-medium">
+                {isCoop
+                  ? t(`TỔNG XP CỦA BẠN (${localPlayerTag})`, `YOUR TOTAL XP (${localPlayerTag})`)
+                  : t('TỔNG XP TÍCH LŨY', 'TOTAL ACCUMULATED XP')}
+              </div>
+              <div className="font-hud text-3xl sm:text-4xl font-black text-[#FFB800] tracking-tight">
+                {localTotalScore.toLocaleString()} XP
+              </div>
+              <div className="font-hud flex items-center justify-center gap-1.5 pt-0.5 text-sm">
+                <Award className="w-3.5 h-3.5 text-[#FFB800]" />
+                <span className="text-neutral-400">{t('Kỷ lục:', 'High XP:')}</span>
+                <span className="font-bold text-[#EAF4FF]">{state.highScore.toLocaleString()} XP</span>
+                {isNewRecord && (
+                  <span className="font-btn px-1.5 py-0.2 rounded bg-[#FFB800] text-[#050510] font-extrabold text-[10px] animate-pulse">
+                    {t('KỶ LỤC MỚI!', 'NEW RECORD!')}
+                  </span>
+                )}
+              </div>
             </div>
+
+            {/* Unified Statistics Breakdown */}
+            <div className="bg-[#050510]/85 border border-[#00F0FF]/25 rounded-lg p-3 space-y-2.5 font-hud text-xs sm:text-sm">
+              <div className="font-btn font-bold text-[#EAF4FF] pb-1.5 border-b border-neutral-800 flex justify-between items-center gap-2">
+                <span>
+                  {isCoop
+                    ? t(`THÀNH TÍCH CỦA BẠN (${localPlayerTag})`, `YOUR STATS (${localPlayerTag})`)
+                    : t('THỐNG KÊ CHIẾN TÍCH', 'COMBAT STATISTICS')}
+                </span>
+                <div className="font-hud flex items-center gap-1 text-xs sm:text-sm text-[#00F0FF] shrink-0">
+                  <Clock className="w-3.5 h-3.5 text-[#00F0FF]" />
+                  <span>{timeFormatted}</span>
+                </div>
+              </div>
+
+              <div className="space-y-1.5 font-hud text-xs sm:text-sm">
+                <div className="flex items-center justify-between text-neutral-300">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-white border border-neutral-400 shrink-0" />
+                    <span>Basic Tank (1 XP):</span>
+                  </span>
+                  <span className="font-bold">{counts.BASIC} {t('xe', 'tanks')} = {counts.BASIC * 1} XP</span>
+                </div>
+
+                <div className="flex items-center justify-between text-neutral-300">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 border border-blue-300 shrink-0" />
+                    <span>Fast Tank (2 XP):</span>
+                  </span>
+                  <span className="font-bold">{counts.FAST} {t('xe', 'tanks')} = {counts.FAST * 2} XP</span>
+                </div>
+
+                <div className="flex items-center justify-between text-neutral-300">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 border border-emerald-300 shrink-0" />
+                    <span>Power Tank (3 XP):</span>
+                  </span>
+                  <span className="font-bold">{counts.POWER} {t('xe', 'tanks')} = {counts.POWER * 3} XP</span>
+                </div>
+
+                <div className="flex items-center justify-between text-neutral-300">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full bg-black border-2 border-white shrink-0" />
+                    <span>Armor Tank (5 XP):</span>
+                  </span>
+                  <span className="font-bold">{counts.ARMOR} {t('xe', 'tanks')} = {counts.ARMOR * 5} XP</span>
+                </div>
+
+                <div className="pt-1.5 border-t border-neutral-800/80 flex items-center justify-between font-bold text-emerald-400">
+                  <span>
+                    {isCoop
+                      ? t(`Đã tiêu diệt (${localPlayerTag}):`, `Defeated (${localPlayerTag}):`)
+                      : t('Tổng tiêu diệt:', 'Total Defeated:')}
+                  </span>
+                  <span>
+                    {isCoop
+                      ? t(
+                          `${totalDefeated} xe (Đội: ${state.totalDefeatedEnemies}/30)`,
+                          `${totalDefeated} tanks (Team: ${state.totalDefeatedEnemies}/30)`
+                        )
+                      : t(`${totalDefeated} / 30 xe`, `${totalDefeated} / 30 tanks`)}
+                  </span>
+                </div>
+
+                <div
+                  data-testid="stageclear-lives-stat"
+                  className="flex items-center justify-between pt-0.5 text-neutral-300"
+                >
+                  <span className={`flex items-center gap-1.5 ${isP2Local ? 'text-emerald-400' : 'text-[#FF0055]'}`}>
+                    <Heart className={`w-3.5 h-3.5 shrink-0 ${isP2Local ? 'fill-emerald-400 text-emerald-400' : 'fill-[#FF0055] text-[#FF0055]'}`} />
+                    <span>{t('Số mạng còn lại:', 'Remaining lives:')}</span>
+                  </span>
+                  <span className={`font-bold ${isP2Local ? 'text-emerald-400' : 'text-white'}`}>
+                    {livesLeft} {t('mạng', 'lives')}
+                  </span>
+                </div>
+
+                {teammateState && (
+                  <div className={`flex items-center justify-between pt-0.5 ${isP2Teammate ? 'text-emerald-400' : 'text-neutral-300'}`}>
+                    <span>{teammateLabel}</span>
+                    <span className={`font-bold ${isP2Teammate ? 'text-emerald-400' : 'text-white'}`}>
+                      {teammateLivesLeft} {t('mạng', 'lives')}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {showCoopPostStageReady && (
+            <div
+              data-testid="stageclear-coop-ready-panel"
+              className="mx-3 sm:mx-4 mb-2 p-2.5 rounded-lg bg-[#050510]/90 border border-emerald-500/35 space-y-1.5"
+            >
+              <div className="text-[11px] font-bold text-emerald-300 text-center">
+                {t(
+                  `Sẵn sàng chơi tiếp Màn ${currentStageId + 1} (cả 2 cùng sẵn sàng sẽ tự động vào màn)`,
+                  `Ready for Stage ${currentStageId + 1} (auto-starts when both players are ready)`
+                )}
+              </div>
             <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
               <div
                 className={`px-2 py-1 rounded border flex items-center justify-between ${
@@ -360,13 +366,12 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
               type="button"
               data-testid="stageclear-next-btn"
               onClick={onNextStageOrReplay}
-              className="font-btn flex-1 min-h-[48px] flex items-center justify-center gap-2 py-2.5 sm:py-3 px-3 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-extrabold text-xs whitespace-nowrap shrink-0 transition-all shadow-lg shadow-[#FFB800]/20 active:scale-95 cursor-pointer"
+              className="font-btn flex-1 min-h-[48px] flex items-center justify-center py-2.5 sm:py-3 px-3 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-extrabold text-xs whitespace-nowrap shrink-0 transition-all shadow-lg shadow-[#FFB800]/20 active:scale-95 cursor-pointer"
             >
-              <RotateCcw className="w-4 h-4 shrink-0" />
               <span>
                 {!isFinalCampaignStage
-                  ? t(`TIẾP TỤC STAGE ${currentStageId + 1}`, `NEXT STAGE ${currentStageId + 1}`)
-                  : t('CHƠI LẠI STAGE 10', 'REPLAY STAGE 10')}
+                  ? t(`TIẾP TỤC MÀN ${currentStageId + 1}`, `NEXT STAGE ${currentStageId + 1}`)
+                  : t('CHƠI LẠI MÀN 10', 'REPLAY STAGE 10')}
               </span>
             </button>
           ) : null}
@@ -376,17 +381,24 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
             data-testid={isTrialMode ? 'trial-return-login-btn' : 'stageclear-quit-menu-btn'}
             disabled={isReturningToLobby}
             onClick={onQuitToMenu}
-            className={`font-btn flex-1 min-w-[100px] min-h-[48px] flex items-center justify-center gap-1.5 py-2.5 sm:py-3 px-3 rounded font-bold text-xs whitespace-nowrap shrink-0 transition-all active:scale-95 cursor-pointer ${
+            className={`font-btn flex-1 min-w-[100px] min-h-[48px] flex items-center justify-center py-2.5 sm:py-3 px-3 rounded font-bold text-xs whitespace-nowrap shrink-0 transition-all active:scale-95 cursor-pointer ${
               isTrialMode
                 ? 'bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-extrabold shadow-lg shadow-[#FFB800]/20'
                 : 'bg-[#0b0d1e] hover:bg-neutral-800 text-[#EAF4FF] border border-[#687386]/50'
             }`}
           >
-            <Home className="w-4 h-4 shrink-0" />
             <span>{isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
           </button>
         </div>
+        </div>
       </div>
+
+      {/* Persistent Footer on Victory Screen */}
+      <footer className="w-full border-t border-neutral-800 bg-[#050510]/95 px-4 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] text-center text-xs text-[#687386] shrink-0">
+        <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
+          <span>© 2026 Bắn Tank Online</span>
+        </div>
+      </footer>
     </div>
   );
 };

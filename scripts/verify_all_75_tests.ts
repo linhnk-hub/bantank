@@ -1796,13 +1796,14 @@ async function verifyM7313FixesAsyncSuite() {
     throw new Error('App.tsx immediate WELCOME BGM / audio unlock check failed');
   }
 
-  // 5. ModeSelectionScreen hides Quay lại inside online waiting room & CoopOnlineLobbyModal checks FINISHED
+  // 5. ModeSelectionScreen keeps Quay lại visible in waiting room with clean leaveRoom() & CoopOnlineLobbyModal checks FINISHED
   if (
     !modeSelectSrc.includes('isInsideOnlineWaitingRoom') ||
-    !modeSelectSrc.includes('{!isInsideOnlineWaitingRoom && (') ||
+    !modeSelectSrc.includes('data-testid="mode-selection-back-btn"') ||
+    !modeSelectSrc.includes('leaveRoom()') ||
     !lobbySrc.includes("room.status === 'FINISHED'")
   ) {
-    throw new Error('Waiting room Quay lại hiding or FINISHED lobby guard check failed');
+    throw new Error('Waiting room Quay lại button or FINISHED lobby guard check failed');
   }
 
   // 6. GameOverModal & StageClearModal use getStartingLivesForDifficultyAndMode & localOnlineRole

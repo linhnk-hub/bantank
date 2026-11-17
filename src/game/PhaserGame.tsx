@@ -186,7 +186,12 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   }, [canvasSizePx]);
 
   return (
-    <div className="relative flex items-start justify-center w-full h-full select-none overflow-hidden p-0 m-0">
+    <div
+      translate="no"
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+      className="battle-touch-lock notranslate relative flex items-start justify-center w-full h-full select-none overflow-hidden p-0 m-0"
+    >
       {/* Crisp pixel scaling container: strictly aspect-square 1:1, 1px thin border, no rounded-corner clipping */}
       <div
         ref={containerRef}

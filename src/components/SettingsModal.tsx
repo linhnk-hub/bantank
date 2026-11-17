@@ -668,10 +668,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (res.success) {
         setAvatarLoadError(false);
         onProfileUpdated?.();
-        setPopupNotice({
-          type: 'success',
-          messages: [res.message || 'Đã cập nhật ảnh đại diện mặc định thành công.'],
-        });
       } else {
         const errText = res.message || 'Không thể chọn ảnh đại diện.';
         setFeedback({
@@ -696,10 +692,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       if (res.success) {
         setAvatarLoadError(false);
         onProfileUpdated?.();
-        setPopupNotice({
-          type: 'success',
-          messages: [res.message || `Đã cập nhật ảnh đại diện mới.`],
-        });
       } else {
         const errText = res.message || 'Không thể chọn ảnh đại diện này.';
         setFeedback({
@@ -809,7 +801,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
       <div
         data-testid="settings-modal-frame"
-        className={`bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-lg ${UNIFIED_SETTINGS_MODAL_WIDTH_CLASS} max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-[0_0_32px_rgba(0,0,0,0.85)] overflow-hidden`}
+        className={`neo-bevel-card bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-lg ${UNIFIED_SETTINGS_MODAL_WIDTH_CLASS} max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-[0_0_32px_rgba(0,0,0,0.85)] overflow-hidden`}
       >
         {/* Header */}
         <div className="bg-[#050510] px-4 py-3 border-b border-[#687386]/40 flex items-center justify-between shrink-0">
@@ -917,7 +909,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               TAB 1: THÔNG TIN (MỌI NGƯỜI CHƠI — CHỈ HIỂN THỊ HÌNH ẢNH AVATAR, KHÔNG CÓ NÚT UPLOAD)
              ========================================================================= */}
           {activeTab === 'ACCOUNT' && currentUser && (
-            <section className="neo-bevel-card bg-[#050510]/85 border border-[#687386]/40 rounded p-4 space-y-4">
+            <section className="space-y-4">
               <div className="flex items-center justify-between border-b border-[#687386]/30 pb-2.5 flex-wrap gap-2">
                 <div className="font-btn flex items-center gap-2 font-bold text-[#FFB800] uppercase tracking-wider">
                   <User className="w-4 h-4 text-[#FFB800]" />
@@ -926,7 +918,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex items-center gap-2">
                   {/* Khung tên người chơi với ký hiệu vai trò thu nhỏ viết lên trên */}
                   <div
-                    className={`px-2.5 py-1 rounded bg-[#0b0d1e] flex items-center gap-1.5 ${roleFrameClasses}`}
+                    className={`px-2.5 py-1 rounded bg-[#050510]/80 flex items-center gap-1.5 ${roleFrameClasses}`}
                   >
                     <span className="inline-flex items-baseline text-xs font-extrabold text-[#FFB800] min-w-0">
                       <span className="truncate max-w-[150px]">
@@ -946,8 +938,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Khu vực ẢNH ĐẠI DIỆN NGƯỜI CHƠI — M7.3.11.6 Section 5: Chỉ hiển thị hình ảnh Avatar, không hiển thị tên/phiên bản/trạng thái/đường dẫn và không có nút upload */}
-              <div className="p-4 rounded neo-bevel-card bg-[#0b0d1e]/90 border border-[#687386]/40 space-y-4 shadow-inner">
-                <div className="flex items-center justify-between flex-wrap gap-2 border-b border-[#687386]/30 pb-2.5">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <div className="font-btn flex items-center gap-2 font-extrabold text-[#FFB800] text-xs sm:text-sm uppercase tracking-wider">
                     <Camera className="w-4 h-4 text-[#FFB800]" />
                     <span>{t('ẢNH ĐẠI DIỆN', 'AVATAR')}</span>
@@ -955,7 +947,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Current Active Avatar Preview (Image Only + Enlarged Blurred Backdrop) */}
-                <div className="relative overflow-hidden flex items-center justify-center p-4 rounded bg-[#050510]/90 border border-[#FFB800]/40">
+                <div className="relative overflow-hidden flex items-center justify-center py-3 rounded-lg bg-[#050510]/70">
                   {effectiveAvatarUrl && !avatarLoadError && (
                     <>
                       <img
@@ -1121,7 +1113,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </form>
 
               {/* Tùy chọn hiển thị Ping & FPS khi chơi Online với người */}
-              <div className="p-3.5 rounded-xl bg-neutral-900/80 border border-neutral-800 flex flex-wrap items-center justify-between gap-3">
+              <div className="border-t border-neutral-800/80 pt-3.5 flex flex-wrap items-center justify-between gap-3">
                 <div className="space-y-0.5 min-w-0 flex-1">
                   <div className="flex items-center gap-2 font-bold text-neutral-100 text-xs">
                     <Activity className="w-4 h-4 text-sky-400 shrink-0" />
@@ -1161,7 +1153,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               {/* M7.5.1 PHẦN 1: THỐNG KÊ THÀNH TÍCH & LỊCH SỬ TRUY CẬP NGƯỜI CHƠI (THEO UID) */}
               <div
                 data-testid="system-player-statistics-section"
-                className="p-4 rounded-2xl bg-neutral-900/90 border border-neutral-800 space-y-4"
+                className="border-t border-neutral-800/80 pt-4 space-y-4"
               >
                 <div className="flex items-center justify-between flex-wrap gap-2 border-b border-neutral-800 pb-2.5">
                   <div className="flex items-center gap-2 font-extrabold text-amber-300 text-xs sm:text-sm uppercase tracking-wider">
@@ -1263,7 +1255,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* M7.5.2 Mục 6.2: Thanh tiến độ Level 0–100%, XP_NEXT, XP_REMAINING & MAX LEVEL */}
                 <div
                   data-testid="player-level-progress-panel"
-                  className="p-3.5 rounded-xl bg-neutral-950/90 border border-sky-500/25 space-y-2.5"
+                  className="py-2 space-y-2"
                 >
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2 text-xs font-extrabold font-mono text-sky-200">
@@ -1373,19 +1365,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-neutral-400">- SOLO:</span>
                         <span className="font-bold text-amber-200">
-                          Stage {playerStats.campaignByMode.SOLO.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
+                          {t('Màn', 'Stage')} {playerStats.campaignByMode.SOLO.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-neutral-400">- CO-OP AI:</span>
                         <span className="font-bold text-sky-200">
-                          Stage {playerStats.campaignByMode.COOP_AI.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
+                          {t('Màn', 'Stage')} {playerStats.campaignByMode.COOP_AI.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-neutral-400">- CO-OP Online:</span>
                         <span className="font-bold text-emerald-200">
-                          Stage {playerStats.campaignByMode.COOP_ONLINE.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
+                          {t('Màn', 'Stage')} {playerStats.campaignByMode.COOP_ONLINE.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
                         </span>
                       </div>
                     </div>
@@ -1495,8 +1487,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Lịch sử truy cập & Trạng thái hiện tại */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 border-t border-neutral-800/80 pt-3">
+                  <div className="p-2 rounded-lg bg-[#050510]/60 space-y-0.5">
                     <div className="text-[10px] text-neutral-400 flex items-center gap-1">
                       <Clock className="w-3 h-3 text-amber-400" />
                       <span>{t('Tổng số lần đăng nhập', 'Total Sign-ins')}</span>
@@ -1509,7 +1501,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
+                  <div className="p-2 rounded-lg bg-[#050510]/60 space-y-0.5">
                     <div className="text-[10px] text-neutral-400">
                       {t('Đăng nhập đầu tiên', 'First Sign-in')}
                     </div>
@@ -1520,7 +1512,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
+                  <div className="p-2 rounded-lg bg-[#050510]/60 space-y-0.5">
                     <div className="text-[10px] text-neutral-400">
                       {t('Đăng nhập gần nhất', 'Latest Sign-in')}
                     </div>
@@ -1533,7 +1525,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
 
                 {/* Chi tiết trạng thái hiện tại (Đã bỏ Timeout nhàn rỗi & Mã phiên, sửa thành Trạng thái) */}
-                <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
                   <div className="text-neutral-300">
                     {t('Trạng thái:', 'Status:')}{' '}
                     <strong
@@ -1562,7 +1554,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </span>
                   </div>
                   {recentLoginHistory.length === 0 ? (
-                    <div className="p-2.5 rounded-lg bg-neutral-950 border border-neutral-800 text-[11px] text-neutral-500">
+                    <div className="p-2 rounded-lg bg-[#050510]/60 text-[11px] text-neutral-500">
                       {t(
                         'Chưa có bản ghi lịch sử truy cập cho tài khoản này.',
                         'No sign-in history recorded for this account yet.'
@@ -1576,7 +1568,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {recentLoginHistory.map((evt) => (
                         <div
                           key={evt.id}
-                          className="px-2.5 py-1.5 rounded-lg bg-neutral-950 border border-neutral-800 flex flex-wrap items-center justify-between gap-2 text-[11px]"
+                          className="px-2.5 py-1.5 rounded bg-[#050510]/60 flex flex-wrap items-center justify-between gap-2 text-[11px]"
                         >
                           <div className="flex items-center gap-2">
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold font-mono bg-emerald-950 text-emerald-300 border border-emerald-700/60">
@@ -1604,7 +1596,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               TAB 2: HÌNH ẢNH (CHỈ DÀNH CHO ADMIN — DANH MỤC AVATAR TĨNH M7.5.1)
              ========================================================================= */}
           {activeTab === 'IMAGE_SETTINGS' && isVerifiedSuperAdmin && (
-            <section className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/40 space-y-4">
+            <section className="space-y-4">
               <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/20 pb-2.5">
                 <div className="flex items-center gap-1.5 font-extrabold text-amber-300 uppercase">
                   <Sparkles className="w-4 h-4 text-amber-400" />
@@ -1620,14 +1612,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </span>
               </div>
 
-              <div className="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 text-[11px] text-neutral-300 leading-relaxed whitespace-pre-line">
+              <p className="text-[11px] text-neutral-300 leading-relaxed whitespace-pre-line">
                 {formatSentenceLineBreaks(
                   t(
                     'Chức năng tải lên, thay thế và xóa Avatar từ trình duyệt đã được khóa cố định theo thiết lập Media Tĩnh. Toàn bộ người chơi sử dụng trực tiếp 11 mẫu Avatar chuẩn tích hợp sẵn hoặc ảnh đại diện Google cá nhân.',
                     'Browser avatar upload, replace, and delete actions are locked under Static Media Policy. All players use the 11 built-in avatars or their Google profile picture.'
                   )
                 )}
-              </div>
+              </p>
 
               {allCatalog.length > 0 && (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-80 overflow-y-auto pr-1">
@@ -1674,7 +1666,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
              ========================================================================= */}
           {activeTab === 'AUDIO_SETTINGS' && (
             <>
-              <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-4 space-y-4">
+              <section className="space-y-4">
                 <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 flex-wrap gap-2">
                   <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
                     <Music className="w-4 h-4 text-amber-400" />
@@ -1821,7 +1813,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               TAB 4: CHẾ ĐỘ CHƠI & QUẢN LÝ MÀN CHƠI STAGE 13x13 (M7.3.11 MỤC III)
              ========================================================================= */}
           {activeTab === 'GAME_MODE_SETTINGS' && canManageStagesTab && (
-            <section className="bg-neutral-950/60 border border-neutral-800 rounded-xl p-4 space-y-4">
+            <section className="space-y-4">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-bold text-neutral-100 uppercase tracking-wider">
                   <Gamepad2 className="w-4 h-4 text-amber-400" />
@@ -1833,7 +1825,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Thiết lập chi tiết thông số Độ khó & Nút Kích hoạt */}
-              <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-3.5">
+              <div className="space-y-3.5">
                 <div className="flex items-center justify-between flex-wrap gap-2">
                   <div>
                     <div className="text-xs font-extrabold text-amber-300 uppercase tracking-wider">
@@ -2158,7 +2150,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               TAB 5: CẤP QUYỀN & BẢNG MA TRẬN PHÂN QUYỀN 3 VAI TRÒ (M7.3.11.4)
              ========================================================================= */}
           {activeTab === 'ADMIN_OTHER' && canViewPermissionMatrixTab && (
-            <section className="p-4 rounded-xl bg-neutral-950/90 border border-emerald-500/40 space-y-4">
+            <section className="space-y-4">
               <div className="flex items-center justify-between border-b border-emerald-500/20 pb-2.5 flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-extrabold text-emerald-300 uppercase tracking-wider">
                   <Shield className="w-4 h-4 text-emerald-400" />
@@ -2300,7 +2292,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               {/* Role Change Audit Log Section */}
-              <div className="p-3 rounded-xl bg-neutral-900/90 border border-neutral-800 space-y-2">
+              <div className="pt-3 border-t border-neutral-800/80 space-y-2">
                 <div className="text-xs font-bold text-amber-300 flex items-center justify-between">
                   <span>Nhật ký thay đổi quyền hạn (Audit Log)</span>
                   <span className="text-[10px] font-mono text-neutral-400">
@@ -2346,7 +2338,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               TAB 6: TÀI KHOẢN (ĐÃ BỎ CỘT TIẾN ĐỘ STAGE • BẤM VÀO TÊN HIỆN CHI TIẾT TÀI KHOẢN)
              ========================================================================= */}
           {activeTab === 'USER_ACCOUNTS' && canViewAccountsTab && (
-            <section className="p-4 rounded-xl bg-neutral-950/90 border border-red-500/40 space-y-4">
+            <section className="space-y-4">
               <div className="flex items-center justify-between border-b border-neutral-800 pb-2.5 flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-extrabold text-red-300 uppercase tracking-wider">
                   <Users className="w-4 h-4 text-red-400" />
@@ -2729,7 +2721,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <div className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-0.5">
                           <div className="text-[10px] text-neutral-400">Tiến độ Chiến dịch</div>
                           <div className="font-mono text-[11px] text-amber-300 font-bold">
-                            Stage {selectedAccountDetail.unlockedStage}/{TOTAL_CAMPAIGN_STAGES} (Đã qua{' '}
+                            Màn {selectedAccountDetail.unlockedStage}/{TOTAL_CAMPAIGN_STAGES} (Đã qua{' '}
                             {selectedAccountDetail.completedStages.length} màn)
                           </div>
                         </div>
@@ -2809,7 +2801,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {activeTab === 'MAINTENANCE' && isVerifiedSuperAdmin && (
             <section
               data-testid="system-maintenance-admin-panel"
-              className="p-4 rounded-xl bg-neutral-950/90 border border-amber-500/50 space-y-4"
+              className="space-y-4"
             >
               <div className="flex items-center justify-between border-b border-amber-500/20 pb-2.5 flex-wrap gap-2">
                 <div className="flex items-center gap-2 font-extrabold text-amber-300 uppercase tracking-wider">
@@ -2830,7 +2822,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </span>
               </div>
 
-              <div className="p-3 rounded-xl bg-neutral-900/90 border border-neutral-800 text-[11px] text-neutral-300 leading-relaxed space-y-1">
+              <div className="text-[11px] text-neutral-300 leading-relaxed space-y-1">
                 <p>
                   Khi bấm <strong className="text-rose-300">Kích hoạt bảo trì</strong>:
                 </p>

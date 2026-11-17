@@ -351,7 +351,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
               <span className="w-2 h-2 rounded-full bg-[#FFB800] animate-pulse" />
               <span>
                 {t(
-                  'Chơi thử • Stage 1',
+                  'Chơi thử • Màn 1',
                   'Trial • Stage 1'
                 )}
               </span>

@@ -128,6 +128,9 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
     (e: React.PointerEvent<HTMLDivElement>) => {
       if (disabled) return;
       e.preventDefault();
+      if (typeof window !== 'undefined') {
+        try { window.getSelection()?.removeAllRanges(); } catch (_) {}
+      }
       pointerIdRef.current = e.pointerId;
       try {
         e.currentTarget.setPointerCapture(e.pointerId);
@@ -176,12 +179,15 @@ export const VirtualJoystick: React.FC<VirtualJoystickProps> = ({
   return (
     <div
       ref={baseRef}
+      translate="no"
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerCancel}
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
       style={{ width: `${size}px`, height: `${size}px` }}
-      className={`relative rounded-full select-none touch-none shrink-0 flex items-center justify-center transition-all ${
+      className={`battle-touch-lock notranslate relative rounded-full select-none touch-none shrink-0 flex items-center justify-center transition-all ${
         isDragging
           ? 'bg-neutral-900 border-2 border-amber-500/80 shadow-lg shadow-amber-500/20'
           : 'bg-neutral-900/90 border-2 border-neutral-700/80 hover:border-neutral-600 shadow-md'

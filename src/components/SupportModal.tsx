@@ -145,7 +145,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                     <span>
-                      <strong>{t('Chiến dịch 10 Stage:', '10-Stage Campaign:')}</strong>{' '}
+                      <strong>{t('Chiến dịch 10 Màn:', '10-Stage Campaign:')}</strong>{' '}
                       {t(
                         'Mỗi màn chơi gồm 30 xe tăng địch (Basic Tank, Fast Tank, Power Tank, Armor Tank) với địa hình chiến thuật đa dạng.',
                         'Each stage features 30 enemy tanks (Basic Tank, Fast Tank, Power Tank, Armor Tank) across tactical terrains.'
@@ -202,7 +202,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                   <li>
                     • <strong>{t('Một thiết bị tại một thời điểm:', 'Single Active Device:')}</strong>{' '}
                     {t(
-                      'Mỗi tài khoản chỉ hoạt động trên 1 thiết bị cùng lúc nhằm chống xung đột dữ liệu XP và tiến độ Stage.',
+                      'Mỗi tài khoản chỉ hoạt động trên 1 thiết bị cùng lúc nhằm chống xung đột dữ liệu XP và tiến độ Màn chơi.',
                       'Each account is active on one device at a time to prevent XP and stage progression conflicts.'
                     )}
                   </li>
@@ -252,7 +252,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                 <span>
                   <strong>{t('Tiêu diệt toàn bộ đội quân xe địch:', 'Eliminate All Enemy Tanks:')}</strong>{' '}
                   {t(
-                    'Tiêu diệt hết số xe tăng địch trong mỗi màn chơi để hoàn thành Stage và tiến sang chiến trường tiếp theo.',
+                    'Tiêu diệt hết số xe tăng địch trong mỗi màn chơi để hoàn thành và tiến sang chiến trường tiếp theo.',
                     'Destroy all 30 enemy tanks in each stage to clear the mission and unlock the next battlefield.'
                   )}
                 </span>

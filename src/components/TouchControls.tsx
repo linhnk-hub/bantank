@@ -46,7 +46,12 @@ export const VirtualDPad: React.FC<VirtualDPadProps> = ({
   activeDirRef.current = activeDirection;
 
   return (
-    <div className="relative w-36 h-36 flex items-center justify-center select-none touch-none shrink-0">
+    <div
+      translate="no"
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+      className="battle-touch-lock notranslate relative w-36 h-36 flex items-center justify-center select-none touch-none shrink-0"
+    >
       {/* D-Pad Cross Background */}
       <div className="absolute w-12 h-36 bg-[#0b0d1e] rounded-lg border border-[#00F0FF]/30 pointer-events-none" />
       <div className="absolute w-36 h-12 bg-[#0b0d1e] rounded-lg border border-[#00F0FF]/30 pointer-events-none" />
@@ -214,7 +219,12 @@ export const VirtualShootButton: React.FC<VirtualShootButtonProps> = ({
   }, [isShooting, onShootChange]);
 
   return (
-    <div className="flex flex-col items-center gap-1 select-none touch-none shrink-0">
+    <div
+      translate="no"
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+      className="battle-touch-lock notranslate flex flex-col items-center gap-1 select-none touch-none shrink-0"
+    >
       <button
         type="button"
         style={{
@@ -223,6 +233,9 @@ export const VirtualShootButton: React.FC<VirtualShootButtonProps> = ({
         }}
         onPointerDown={(e) => {
           e.preventDefault();
+          if (typeof window !== 'undefined') {
+            try { window.getSelection()?.removeAllRanges(); } catch (_) {}
+          }
           SessionManager.getInstance().recordUserActivity();
           try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {}
           onShootChange(true);
@@ -284,8 +297,9 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
   difficulty = 'DEFAULT',
   localOnlineRole = null,
 }) => {
+  const { t } = useLanguage();
   const stageId = gameState?.currentStageId ?? 1;
-  const stageName = gameState?.currentStageName || `Stage ${stageId}`;
+  const stageName = gameState?.currentStageName || `${t('Màn', 'Stage')} ${stageId}`;
   const isTwoPlayer =
     gameState?.gameMode === 'TWO_PLAYERS_AI' ||
     gameState?.gameMode === 'TWO_PLAYERS_ONLINE';
@@ -326,7 +340,8 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
   return (
     <div
       data-testid="battle-center-hud"
-      className="w-full max-w-[210px] sm:max-w-[260px] rounded-md bg-[#0b0d1e]/95 border border-[#00F0FF]/40 px-2 py-1.5 shadow-inner flex flex-col gap-1"
+      translate="no"
+      className="battle-touch-lock notranslate w-full max-w-[236px] sm:max-w-[280px] rounded-md bg-[#0b0d1e]/95 border border-[#00F0FF]/40 px-2 py-1.5 shadow-inner flex flex-col gap-1"
     >
       {/* Hidden stage name for test compatibility (Stage name is shown centered above the arena) */}
       <span data-testid="battle-hud-stage-name" className="hidden">
@@ -350,26 +365,33 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
         </span>
       </div>
 
-      {/* 2x2 Tactical Metrics Grid (Icons + Values Only): Lives, Remaining Enemies, Kills, XP */}
-      <div className="grid grid-cols-2 gap-1 font-hud text-xs sm:text-sm leading-tight">
+      {/* 2x2 Tactical Metrics Grid (Left Icon + Gap + Right Value): Lives, Remaining Enemies, Kills, XP */}
+      <div className="grid grid-cols-2 gap-1.5 font-hud text-xs sm:text-sm leading-tight">
         {/* Lives / Health */}
         <div
           data-testid="battle-hud-lives"
-          className="flex items-center justify-between px-2 py-1 rounded bg-[#050510]/90 border border-[#FF0055]/35"
+          className="flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[#050510]/90 border border-[#FF0055]/35"
         >
           <Heart className="w-3.5 h-3.5 text-[#FF0055] fill-[#FF0055] shrink-0" />
-          <span className="font-extrabold text-[#FF0055]">
-            {isTwoPlayer ? `P1:${p1Lives} P2:${p2Lives}` : `×${p1Lives}`}
-          </span>
+          <div className="flex items-center justify-end gap-1.5 font-extrabold text-right whitespace-nowrap">
+            {isTwoPlayer ? (
+              <>
+                <span className="text-[#FF0055]">P1:{p1Lives}</span>
+                <span className="text-emerald-400">P2:{p2Lives}</span>
+              </>
+            ) : (
+              <span className="text-[#FF0055]">×{p1Lives}</span>
+            )}
+          </div>
         </div>
 
         {/* Remaining Enemies (Tank Icon) */}
         <div
           data-testid="battle-hud-enemies-remaining"
-          className="flex items-center justify-between px-2 py-1 rounded bg-[#050510]/90 border border-[#FFB800]/35"
+          className="flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[#050510]/90 border border-[#FFB800]/35"
         >
           <EnemyTankHudIcon className="w-3.5 h-3.5 shrink-0" />
-          <span className="font-extrabold text-[#FFB800]">
+          <span className="font-extrabold text-[#FFB800] text-right whitespace-nowrap">
             {remainingEnemies}/{totalEnemies}
           </span>
         </div>
@@ -377,19 +399,19 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
         {/* Kills */}
         <div
           data-testid="battle-hud-kills"
-          className="flex items-center justify-between px-2 py-1 rounded bg-[#050510]/90 border border-[#00F0FF]/35"
+          className="flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[#050510]/90 border border-[#00F0FF]/35"
         >
           <Skull className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
-          <span className="font-extrabold text-[#00F0FF]">{enemiesKilled}</span>
+          <span className="font-extrabold text-[#00F0FF] text-right whitespace-nowrap">{enemiesKilled}</span>
         </div>
 
         {/* XP Score */}
         <div
           data-testid="battle-hud-xp"
-          className="flex items-center justify-between px-2 py-1 rounded bg-[#050510]/90 border border-emerald-500/35"
+          className="flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[#050510]/90 border border-emerald-500/35"
         >
           <Trophy className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          <span className="font-extrabold text-emerald-400">{xpScore}</span>
+          <span className="font-extrabold text-emerald-400 text-right whitespace-nowrap">{xpScore}</span>
         </div>
       </div>
     </div>
@@ -478,7 +500,12 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
   );
 
   return (
-    <div className="w-full flex items-center justify-between gap-1.5 sm:gap-3 select-none touch-none py-2 px-2.5 sm:px-6 md:px-8 bg-[#050510]/90 rounded-lg border border-[#00F0FF]/30 shadow-xl">
+    <div
+      translate="no"
+      onContextMenu={(e) => e.preventDefault()}
+      onDragStart={(e) => e.preventDefault()}
+      className="battle-touch-lock notranslate w-full flex items-center justify-between gap-1.5 sm:gap-3 select-none touch-none py-2 px-2.5 sm:px-6 md:px-8 bg-[#050510]/90 rounded-lg border border-[#00F0FF]/30 shadow-xl"
+    >
       {/* Left Column: Virtual Joystick aligned to left hand zone */}
       <div className="flex items-center justify-start shrink-0">
         {controlType === 'joystick' ? (

@@ -248,6 +248,21 @@
   }
 }
 
+/* Prevent mobile/tablet copy, drag, callout, and translate popups during battle & joystick hold */
+.battle-touch-lock,
+.battle-touch-lock * {
+  -webkit-user-select: none !important;
+  -moz-user-select: none !important;
+  user-select: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-drag: none !important;
+}
+
+.battle-touch-lock {
+  touch-action: none !important;
+  overscroll-behavior: contain;
+}
+
 /* Force Phaser canvas to strictly fill its 1:1 container with crisp pixel-art scaling */
 .game-canvas-container canvas {
   width: 100% !important;
@@ -256,29 +271,33 @@
   max-height: 100% !important;
   display: block !important;
   margin: 0 auto !important;
+  touch-action: none !important;
+  -webkit-touch-callout: none !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
   image-rendering: pixelated !important;
   image-rendering: -moz-crisp-edges !important;
   image-rendering: crisp-edges !important;
 }
 
-/* Game Logo Standard scaled down 10% (288px = 90% of 320px) across PC, Mobile, and Tablet */
+/* Game Logo Standard scaled down another 10% (259px) across PC, Mobile, and Tablet */
 .unified-game-logo:not(.logo-inline-row) {
-  width: 288px !important;
-  height: 288px !important;
-  max-width: min(288px, calc((100vw - 16px) * 0.9)) !important;
-  max-height: min(288px, calc((100vw - 16px) * 0.9)) !important;
+  width: 259px !important;
+  height: 259px !important;
+  max-width: min(259px, calc((100vw - 16px) * 0.81)) !important;
+  max-height: min(259px, calc((100vw - 16px) * 0.81)) !important;
   aspect-ratio: 1 / 1 !important;
   object-fit: contain !important;
   flex-shrink: 0;
 }
 
 .unified-game-logo.logo-inline-row {
-  width: clamp(60px, 18vw, 88px) !important;
-  height: clamp(60px, 18vw, 88px) !important;
-  min-width: clamp(60px, 18vw, 88px) !important;
-  min-height: clamp(60px, 18vw, 88px) !important;
-  max-width: 88px !important;
-  max-height: 88px !important;
+  width: clamp(54px, 16vw, 79px) !important;
+  height: clamp(54px, 16vw, 79px) !important;
+  min-width: clamp(54px, 16vw, 79px) !important;
+  min-height: clamp(54px, 16vw, 79px) !important;
+  max-width: 79px !important;
+  max-height: 79px !important;
   aspect-ratio: 1 / 1 !important;
   object-fit: contain !important;
   flex-shrink: 0;

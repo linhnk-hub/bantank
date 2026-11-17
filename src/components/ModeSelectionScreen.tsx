@@ -372,7 +372,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
         setStageSelectError(
           access.errorMessage ||
             t(
-              `Stage ${selectedStageId} đang bị khóa.`,
+              `Màn ${selectedStageId} đang bị khóa.`,
               `Stage ${selectedStageId} is locked.`
             )
         );
@@ -409,6 +409,9 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
   const handleTopBack = () => {
     if (isInsideOnlineWaitingRoom) {
+      void CoopOnlineManager.getInstance().leaveRoom().finally(() => {
+        setOnlineLobbySubView('MAIN');
+      });
       return;
     }
     if (flowStep === 'COOP_ONLINE_LOBBY' && onlineLobbySubView !== 'MAIN') {
@@ -418,8 +421,18 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     onBack();
   };
 
+  const handleTopMenuExit = () => {
+    if (isInsideOnlineWaitingRoom) {
+      void CoopOnlineManager.getInstance().leaveRoom().finally(() => {
+        onBack();
+      });
+      return;
+    }
+    onBack();
+  };
+
   return (
-    <div className="relative min-h-[100dvh] w-full flex flex-col justify-between bg-[#050510] text-[#EAF4FF] select-none overflow-x-hidden pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+    <div className="relative min-h-[100dvh] w-full flex flex-col justify-between bg-[#050510] text-[#EAF4FF] select-none overflow-x-hidden pb-[max(0.5rem,env(safe-area-inset-bottom))]">
       {/* Background Ambience */}
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(255,184,0,0.16),rgba(0,240,255,0.05),rgba(5,5,16,0))] pointer-events-none" />
       <div className="fixed inset-0 bg-grid-pattern opacity-35 pointer-events-none" />
@@ -427,20 +440,18 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       {/* Top Header Bar — Frameless Player Name & Horizontal Slide-Out Menu */}
       <header className="sticky top-0 z-40 w-full border-b border-[#00F0FF]/25 bg-[#050510]/96 px-2.5 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2 shrink-0 shadow-[0_4px_20px_rgba(0,0,0,0.75)]">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2 min-w-0">
-          {/* Left: Back Button (Hidden when inside Co-op Online waiting room) */}
+          {/* Left: Back Button (Always visible across sub-views including online waiting room) */}
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
-            {!isInsideOnlineWaitingRoom && (
-              <button
-                type="button"
-                data-testid="mode-selection-back-btn"
-                onClick={handleTopBack}
-                className="font-btn px-2 py-1.5 rounded bg-transparent hover:bg-white/10 text-[#EAF4FF] border-0 transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer text-sm font-bold"
-                title={t('Quay lại', 'Back')}
-              >
-                <ArrowLeft className="w-4 h-4 text-[#FFB800] shrink-0" />
-                <span>{t('Quay lại', 'Back')}</span>
-              </button>
-            )}
+            <button
+              type="button"
+              data-testid="mode-selection-back-btn"
+              onClick={handleTopBack}
+              className="font-btn px-2 py-1.5 rounded bg-transparent hover:bg-white/10 text-[#EAF4FF] border-0 transition-all active:scale-95 flex items-center gap-1.5 cursor-pointer text-sm font-bold"
+              title={t('Quay lại', 'Back')}
+            >
+              <ArrowLeft className="w-4 h-4 text-[#FFB800] shrink-0" />
+              <span>{t('Quay lại', 'Back')}</span>
+            </button>
           </div>
 
           {/* Right: Frameless User Profile, Audio, Settings & Info */}
@@ -486,7 +497,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               onOpenSettings={onOpenSettings}
               onOpenSupport={onOpenSupport}
               onOpenDevTools={onOpenDevTools}
-              onExit={isInsideOnlineWaitingRoom ? undefined : onBack}
+              onExit={handleTopMenuExit}
               exitLabel={t('Về trang chủ', 'Return Home')}
               isSuperAdmin={isSuperAdmin}
             />
@@ -495,7 +506,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       </header>
 
       {/* Main Content Area - Top Aligned */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-3 sm:px-4 pt-4 sm:pt-6 pb-8 max-w-5xl mx-auto w-full">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-start px-3 sm:px-4 pt-3 sm:pt-5 pb-3 sm:pb-4 max-w-5xl mx-auto w-full">
         <div className="w-full max-w-4xl flex flex-col items-center text-center">
           {/* ===================================================================
               STEP 1: CHỌN CHẾ ĐỘ CHƠI (SOLO / CO-OP AI / CO-OP ONLINE)
@@ -821,14 +832,14 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     className="w-full mb-4 p-3.5 sm:p-4 rounded-lg border border-[#00F0FF]/35 bg-[#0b0d1e]/90 text-left space-y-3 shadow-lg"
                   >
                     <div className="flex items-center justify-between flex-wrap gap-2 border-b border-neutral-800 pb-2">
-                      <div className="font-btn flex items-center gap-2 font-black text-sm text-[#FFB800] uppercase">
+                      <div className="font-btn flex items-center gap-2 font-black text-xs sm:text-sm text-[#FFB800] uppercase">
                         <MapIcon className="w-4 h-4 text-[#FFB800]" />
-                        <span>{t('MÀN CHƠI 1–10', 'STAGES 1–10')}</span>
+                        <span>{t('MÀN CHƠI', 'STAGES')}</span>
                       </div>
-                      <span className="font-hud text-base text-[#00F0FF] font-bold">
+                      <span className="font-btn text-xs sm:text-sm text-[#00F0FF] font-black uppercase">
                         {t(
-                          `Mở khóa: ${effectiveUnlockedStage}/10`,
-                          `Unlocked: ${effectiveUnlockedStage}/10`
+                          `MỞ KHÓA ${effectiveUnlockedStage}/10`,
+                          `UNLOCKED ${effectiveUnlockedStage}/10`
                         )}
                       </span>
                     </div>
@@ -847,7 +858,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                               if (!isUnlocked) {
                                 setStageSelectError(
                                   t(
-                                    `Stage ${stage.id} đang khóa (Cần qua Stage ${stage.id - 1}).`,
+                                    `Màn ${stage.id} đang khóa (Cần qua Màn ${stage.id - 1}).`,
                                     `Stage ${stage.id} locked (Clear Stage ${stage.id - 1} first).`
                                   )
                                 );
@@ -896,7 +907,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       <div className="flex-1 min-w-0 text-center sm:text-left">
                         <div className="flex items-center justify-center sm:justify-start gap-2 flex-wrap">
                           <span className="font-btn font-black text-base sm:text-lg text-[#FFB800] uppercase">
-                            {`STAGE ${selectedSpec.id}: ${selectedSpec.shortTitle}`}
+                            {`${t('MÀN', 'STAGE')} ${selectedSpec.id}: ${selectedSpec.shortTitle}`}
                           </span>
                           {selectedCompleted ? (
                             <span className="font-btn px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-700/60 text-xs font-bold">
@@ -926,7 +937,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
               <div
                 data-testid="difficulty-selection-grid"
-                className="w-full grid grid-cols-2 gap-2.5 sm:gap-3.5 mb-6 text-left"
+                className="w-full grid grid-cols-2 gap-2.5 sm:gap-3.5 mb-2 text-left"
               >
                 {/* NORMAL / DEFAULT -> Giải trí */}
                 <div
@@ -955,7 +966,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     >
                       {formatSentenceLineBreaks(
                         t(
-                          `${difficultyConfigState.profiles.DEFAULT.soloLives} mạng • ${difficultyConfigState.profiles.DEFAULT.durationSeconds} giây. Nhịp độ cân bằng, dễ làm quen.`,
+                          `${difficultyConfigState.profiles.DEFAULT.soloLives} mạng • ${difficultyConfigState.profiles.DEFAULT.durationSeconds} giây. Cân bằng.`,
                           `${difficultyConfigState.profiles.DEFAULT.soloLives} lives • ${difficultyConfigState.profiles.DEFAULT.durationSeconds}s timer. Balanced pacing.`
                         )
                       )}
@@ -975,7 +986,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                           : 'bg-[#050510] hover:bg-[#FFB800]/20 text-[#FFB800] border border-[#FFB800]/40 cursor-pointer'
                       }`}
                     >
-                      <span className="whitespace-nowrap">{t(`Vào Stage ${selectedStageId}`, `Enter Stage ${selectedStageId}`)}</span>
+                      <span className="whitespace-nowrap">{t(`Vào Màn ${selectedStageId}`, `Enter Stage ${selectedStageId}`)}</span>
                       <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                     </button>
                   </div>
@@ -1008,8 +1019,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     >
                       {formatSentenceLineBreaks(
                         t(
-                          `${difficultyConfigState.profiles.EXTREME.soloLives} mạng • ${difficultyConfigState.profiles.EXTREME.durationSeconds} giây. Quân địch tấn công dồn dập.`,
-                          `${difficultyConfigState.profiles.EXTREME.soloLives} life • ${difficultyConfigState.profiles.EXTREME.durationSeconds}s timer. Aggressive enemy assault.`
+                          `${difficultyConfigState.profiles.EXTREME.soloLives} mạng • ${difficultyConfigState.profiles.EXTREME.durationSeconds} giây. Áp lực cao.`,
+                          `${difficultyConfigState.profiles.EXTREME.soloLives} life • ${difficultyConfigState.profiles.EXTREME.durationSeconds}s timer. High pressure.`
                         )
                       )}
                     </p>
@@ -1028,7 +1039,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                           : 'bg-[#050510] hover:bg-[#FF0055]/20 text-rose-300 border border-[#FF0055]/40 cursor-pointer'
                       }`}
                     >
-                      <span className="whitespace-nowrap">{t(`Vào Stage ${selectedStageId}`, `Enter Stage ${selectedStageId}`)}</span>
+                      <span className="whitespace-nowrap">{t(`Vào Màn ${selectedStageId}`, `Enter Stage ${selectedStageId}`)}</span>
                       <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                     </button>
                   </div>

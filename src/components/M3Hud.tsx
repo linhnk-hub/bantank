@@ -104,6 +104,7 @@ export const M3Hud: React.FC<M3HudProps> = ({
     ? 'bg-amber-950/80 border-[#FFB800]/80 text-[#FFB800]'
     : 'bg-[#050510] border-[#00F0FF]/40 text-[#00F0FF]';
 
+  void TOTAL_CAMPAIGN_STAGES;
   return (
     <div className="bg-[#0b0d1e]/95 border border-[#00F0FF]/30 rounded-lg p-4 text-xs flex flex-col gap-3 shadow-xl">
       {/* Top Header: Stage, Countdown Timer, Score, High Score & Lives */}
@@ -111,7 +112,7 @@ export const M3Hud: React.FC<M3HudProps> = ({
         <div className="flex flex-wrap items-center gap-2">
           <div className="font-btn flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#FFB800]/15 border border-[#FFB800]/40 text-[#FFB800] font-bold">
             <span>
-              STAGE {state.currentStageId ?? 1}/{TOTAL_CAMPAIGN_STAGES} •{' '}
+              {t('MÀN', 'STAGE')} {state.currentStageId ?? 1} •{' '}
               {state.currentStageName || getCampaignStageSpec(state.currentStageId ?? 1).shortTitle}
             </span>
           </div>
@@ -171,14 +172,14 @@ export const M3Hud: React.FC<M3HudProps> = ({
 
           {isCoop && state.p2State && (
             <>
-              <div className="font-hud flex items-center gap-1.5 px-3 py-1 rounded bg-amber-950/60 border border-[#FFB800]/70">
-                <Heart className="w-4 h-4 text-[#FFB800] fill-[#FFB800]" />
-                <span className="text-amber-200">
+              <div className="font-hud flex items-center gap-1.5 px-3 py-1 rounded bg-emerald-950/60 border border-emerald-500/70">
+                <Heart className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+                <span className="text-emerald-300">
                   {state.gameMode === 'TWO_PLAYERS_ONLINE'
                     ? t('MẠNG P2 (ONLINE):', 'P2 LIVES (ONLINE):')
                     : t('MẠNG P2 (AI):', 'P2 LIVES (AI):')}
                 </span>
-                <span className="text-[#FFB800] font-black text-base">{state.p2State.lives}</span>
+                <span className="text-emerald-400 font-black text-base">{state.p2State.lives}</span>
               </div>
 
               {state.p2State.shieldTimer > 0 && (
@@ -261,7 +262,7 @@ export const M3Hud: React.FC<M3HudProps> = ({
               {t('CHIẾN THẮNG! Sân đấu đã được bảo vệ thành công!', 'VICTORY! The battlefield has been successfully defended!')}
             </span>
           </div>
-          <span className="font-hud text-sm px-2 py-0.5 rounded bg-emerald-800 text-white">STAGE CLEAR</span>
+          <span className="font-hud text-sm px-2 py-0.5 rounded bg-emerald-800 text-white">{t('CHIẾN THẮNG', 'VICTORY')}</span>
         </div>
       )}
 
@@ -270,7 +271,7 @@ export const M3Hud: React.FC<M3HudProps> = ({
         <div className="p-3 rounded bg-red-950/90 border border-[#FF0055] flex items-center gap-2 text-red-200 font-bold shadow-lg animate-pulse">
           <AlertTriangle className="w-5 h-5 text-[#FF0055] shrink-0" />
           <div className="flex flex-col">
-            <span className="font-btn text-sm">GAME OVER</span>
+            <span className="font-btn text-sm">{t('THẤT BẠI', 'GAME OVER')}</span>
             <span className="text-xs text-red-300 font-normal whitespace-pre-line">
               {formatSentenceLineBreaks(state.gameOverReason ?? t('Thất bại!', 'Defeat!'))}
             </span>
