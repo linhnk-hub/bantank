@@ -327,7 +327,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               >
                 {isProcessing
                   ? t('ĐANG KẾT NỐI...', 'CONNECTING...')
-                  : t('ĐĂNG NHẬP GOOGLE', 'SIGN IN WITH GOOGLE')}
+                  : t('ĐĂNG NHẬP', 'SIGN IN')}
               </span>
             </button>
 
