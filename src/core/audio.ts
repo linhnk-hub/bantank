@@ -315,8 +315,8 @@ export class SoundManager {
         };
       } else {
         this.preMuteChannelState = {
-          bgmEnabled: this.settings.bgmEnabled || true,
-          sfxEnabled: this.settings.sfxEnabled || true,
+          bgmEnabled: this.settings.bgmEnabled,
+          sfxEnabled: this.settings.sfxEnabled,
         };
       }
     } catch {
@@ -426,7 +426,7 @@ export class SoundManager {
     const nextBgmMuted = Boolean(muted);
     const restoredSfx =
       this.masterMuted && !this.settings.sfxEnabled
-        ? this.preMuteChannelState.sfxEnabled || true
+        ? this.preMuteChannelState.sfxEnabled
         : this.settings.sfxEnabled;
 
     this.masterMuted = false;
@@ -462,15 +462,11 @@ export class SoundManager {
 
   public updateSettings(partial: Partial<AudioSettings>): void {
     this.settings = { ...this.settings, ...partial };
-    if (this.settings.bgmEnabled || this.settings.sfxEnabled) {
-      this.masterMuted = false;
-      this.preMuteChannelState = {
-        bgmEnabled: this.settings.bgmEnabled,
-        sfxEnabled: this.settings.sfxEnabled,
-      };
-    } else {
-      this.masterMuted = true;
-    }
+    this.masterMuted = false;
+    this.preMuteChannelState = {
+      bgmEnabled: this.settings.bgmEnabled,
+      sfxEnabled: this.settings.sfxEnabled,
+    };
     this.saveSettings();
     this.applyVolume();
 

@@ -508,19 +508,14 @@ export default function App() {
     setGameState({ ...st });
   }, [gameEngine, clearVirtualTouchInputs, getMusicModeFromEngine]);
 
-  const handleStartMatch = useCallback(
+  const launchVerifiedMatch = useCallback(
     (
       mode: 'SOLO' | 'TWO_PLAYERS' = 'SOLO',
       twoPlayerOption?: 'P2_AI' | 'P2_REAL',
       stageId: number = 1
     ) => {
-      const isDisplacedOrPaused =
-        sessionSnapshot.status === 'DISPLACED' ||
-        sessionSnapshot.status === 'PAUSED_IDLE' ||
-        sessionSnapshot.status === 'EXPIRED';
-      if (isDisplacedOrPaused) return;
-      if (sessionSnapshot.status === 'NO_SESSION' && currentUser?.uid) {
-        void sessionManager.acquireSession(currentUser.uid);
+      if (sessionManager.getSnapshot().status !== 'ACTIVE') {
+        return;
       }
       setOnlineDisconnectMsg(null);
       const engineMode = mode === 'TWO_PLAYERS' && twoPlayerOption === 'P2_AI' ? 'TWO_PLAYERS_AI' : 'SOLO';
@@ -554,7 +549,31 @@ export default function App() {
       setGameState({ ...st });
       setAppScreen('BATTLE');
     },
-    [sessionSnapshot.status, currentUser?.uid, gameEngine, difficulty, getMusicModeFromEngine]
+    [currentUser?.uid, gameEngine, difficulty, getMusicModeFromEngine]
+  );
+
+  const handleStartMatch = useCallback(
+    (
+      mode: 'SOLO' | 'TWO_PLAYERS' = 'SOLO',
+      twoPlayerOption?: 'P2_AI' | 'P2_REAL',
+      stageId: number = 1
+    ) => {
+      const liveStatus = sessionManager.getSnapshot().status;
+      if (liveStatus === 'ACTIVE') {
+        launchVerifiedMatch(mode, twoPlayerOption, stageId);
+        return;
+      }
+      // Do not start match while session ownership is unconfirmed; if in transitional ACQUIRING/NO_SESSION state,
+      // wait for session acquisition to confirm ACTIVE ownership before launching.
+      if ((liveStatus === 'ACQUIRING' || liveStatus === 'NO_SESSION') && currentUser?.uid) {
+        void sessionManager.ensureActiveSessionForAction(currentUser.uid).then((res) => {
+          if (res.allowed && sessionManager.getSnapshot().status === 'ACTIVE') {
+            launchVerifiedMatch(mode, twoPlayerOption, stageId);
+          }
+        });
+      }
+    },
+    [currentUser?.uid, launchVerifiedMatch]
   );
 
   const handleStartOnlineMatch = useCallback(

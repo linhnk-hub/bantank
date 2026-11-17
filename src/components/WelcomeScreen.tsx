@@ -270,20 +270,20 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           )}
 
           {/* Neo-Retro V1.0 Google Sign-in & Trial Mode Call To Action Buttons */}
-          <div className="w-full max-w-[260px] flex flex-col items-center gap-2.5 px-2 mt-3 mb-4">
+          <div className="w-full max-w-[290px] sm:max-w-[320px] flex flex-col items-center gap-3 px-2 mt-3 mb-4">
             <button
               type="button"
               data-testid="welcome-google-signin-btn"
               onClick={isMaintenanceActive ? undefined : onSignIn}
               disabled={isProcessing || isMaintenanceActive}
-              className={`w-full min-h-[48px] py-3 px-4 neo-clip-corner bg-[#FFB800] hover:bg-[#ffc933] active:translate-y-[1px] text-[#050510] font-btn font-extrabold text-xs sm:text-sm whitespace-nowrap shadow-[0_0_20px_rgba(255,184,0,0.4)] hover:shadow-[0_0_26px_rgba(255,184,0,0.65)] transition-all duration-200 flex items-center justify-center gap-2 border-2 border-[#EAF4FF]/85 touch-manipulation ${
+              className={`w-full min-h-[50px] py-3 px-4 neo-clip-corner welcome-google-gradient-btn bg-[#FFB800] active:translate-y-[1px] text-white font-btn font-extrabold text-sm sm:text-base whitespace-nowrap shadow-[0_0_22px_rgba(255,94,0,0.55)] hover:shadow-[0_0_28px_rgba(255,0,85,0.75)] transition-all duration-200 flex items-center justify-center gap-2.5 border-2 border-[#EAF4FF]/90 touch-manipulation ${
                 isMaintenanceActive
                   ? 'opacity-35 grayscale pointer-events-none cursor-not-allowed'
                   : 'disabled:opacity-60 cursor-pointer disabled:cursor-not-allowed'
               }`}
             >
               {isProcessing ? (
-                <div className="w-4 h-4 border-2 border-[#050510]/40 border-t-[#050510] rounded-full animate-spin shrink-0" />
+                <div className="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin shrink-0" />
               ) : (
                 /* Google Official "G" Multi-color SVG on crisp white badge */
                 <span className="w-5 h-5 rounded-full bg-white ring-1 ring-[#050510]/30 flex items-center justify-center shrink-0 shadow-sm">
@@ -309,7 +309,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               )}
               <span
                 data-testid="welcome-signin-gradient-text"
-                className="tracking-wider uppercase font-black"
+                className="tracking-wider uppercase font-black drop-shadow-[0_1px_2px_rgba(5,5,16,0.9)]"
               >
                 {isProcessing
                   ? t('ĐANG KẾT NỐI...', 'CONNECTING...')
@@ -323,7 +323,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
                 data-testid="welcome-trial-play-btn"
                 onClick={isMaintenanceActive ? undefined : onStartTrialMode}
                 disabled={isProcessing || isMaintenanceActive}
-                className={`w-full min-h-[48px] py-3 px-4 neo-clip-corner bg-[#0b0d1e]/95 hover:bg-[#10142b] active:translate-y-[1px] text-[#00F0FF] hover:text-[#FFB800] font-btn font-extrabold text-xs sm:text-sm whitespace-nowrap border-2 border-[#00F0FF]/70 hover:border-[#FFB800] transition-all duration-200 flex items-center justify-center gap-2 shadow-[0_0_16px_rgba(0,240,255,0.2)] touch-manipulation ${
+                className={`w-full min-h-[50px] py-3 px-4 neo-clip-corner bg-[#0b0d1e]/95 hover:bg-[#10142b] active:translate-y-[1px] text-[#00F0FF] hover:text-[#FFB800] font-btn font-extrabold text-sm sm:text-base whitespace-nowrap border-2 border-[#00F0FF]/70 hover:border-[#FFB800] transition-all duration-200 flex items-center justify-center gap-2 shadow-[0_0_16px_rgba(0,240,255,0.2)] touch-manipulation ${
                   isMaintenanceActive
                     ? 'opacity-35 grayscale pointer-events-none cursor-not-allowed'
                     : 'cursor-pointer disabled:opacity-50'

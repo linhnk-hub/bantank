@@ -310,7 +310,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     session.status === 'DISPLACED' ||
     session.status === 'PAUSED_IDLE' ||
     session.status === 'EXPIRED';
-  const isSessionActive = !isSessionDisplacedOrExpired;
+  const isSessionUnverified =
+    session.status === 'CONNECTION_LOST_UNVERIFIED' ||
+    session.status === 'HEARTBEAT_REJECTED_UNCLASSIFIED';
+  const isSessionActive = !isSessionDisplacedOrExpired && !isSessionUnverified;
   const profileMeta = effectiveUid ? avatarManager.getUserMetadata(effectiveUid) : null;
   const effectiveUser = {
     ...user,

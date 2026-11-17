@@ -86,6 +86,7 @@ import {
   setShowOnlineNetStatsPreference,
 } from '../core/networkStatsPref.ts';
 import { useLanguage, tx } from '../core/i18n.ts';
+import { LanguageSelector } from './LanguageSelector.tsx';
 
 export type SettingsTabId =
   | 'ACCOUNT'
@@ -823,14 +824,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-1.5 rounded bg-[#0b0d1e] hover:bg-[#10142b] border border-[#687386]/50 text-[#EAF4FF] hover:text-[#FFB800] transition-all active:scale-95 cursor-pointer"
-            title={t('Đóng cài đặt', 'Close settings')}
-          >
-            <X className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <LanguageSelector compact />
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-1.5 rounded bg-[#0b0d1e] hover:bg-[#10142b] border border-[#687386]/50 text-[#EAF4FF] hover:text-[#FFB800] transition-all active:scale-95 cursor-pointer"
+              title={t('Đóng cài đặt', 'Close settings')}
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
 
         {/* Navigation Tabs (M7.3.9 Mục 3 & 4) */}
@@ -993,7 +997,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     type="button"
                     disabled={isBusy}
                     onClick={handleSelectGoogleAvatar}
-                    aria-label="Chọn ảnh đại diện mặc định"
+                    aria-label={t('Chọn ảnh đại diện mặc định', 'Select default avatar')}
                     className={`relative p-2.5 rounded-2xl border-2 transition-all flex items-center justify-center cursor-pointer group ${
                       selectedAvatarType === 'google' || !isSelectedCatalogActive
                         ? 'bg-amber-950/40 border-amber-500 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10'
@@ -1037,7 +1041,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         type="button"
                         disabled={isBusy || hasError}
                         onClick={() => handleSelectCatalogAvatar(item)}
-                        aria-label="Chọn ảnh đại diện"
+                        aria-label={t('Chọn ảnh đại diện', 'Select avatar')}
                         className={`relative p-2.5 rounded-2xl border-2 transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 group ${
                           isSelected
                             ? 'bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-500/10'
@@ -1078,7 +1082,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <form onSubmit={handleSaveDisplayName} className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
                 <div>
                   <label className="block text-xs font-semibold text-neutral-300 mb-1">
-                    Đổi tên
+                    {t('Đổi tên', 'Display Name')}
                   </label>
                   <div className="flex items-center gap-2">
                     <input
@@ -1086,7 +1090,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       maxLength={32}
                       value={displayName}
                       onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="(tối đa 32 ký tự)"
+                      placeholder={t('(tối đa 32 ký tự)', '(max 32 characters)')}
                       className="flex-1 px-3 py-2 rounded-xl bg-neutral-900 border border-neutral-700 text-white text-xs focus:outline-none focus:border-amber-500"
                     />
                     <button
@@ -1095,7 +1099,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       className="px-3 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1 shadow active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
                     >
                       <Save className="w-3.5 h-3.5" />
-                      <span>LƯU</span>
+                      <span>{t('LƯU', 'SAVE')}</span>
                     </button>
                   </div>
                 </div>
@@ -1121,11 +1125,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="space-y-0.5 min-w-0 flex-1">
                   <div className="flex items-center gap-2 font-bold text-neutral-100 text-xs">
                     <Activity className="w-4 h-4 text-sky-400 shrink-0" />
-                    <span>Hiển thị Ping &amp; FPS (Chơi Online 2 người)</span>
+                    <span>
+                      {t(
+                        'Hiển thị Ping & FPS (Chơi Online 2 người)',
+                        'Show Ping & FPS (2-Player Online)'
+                      )}
+                    </span>
                   </div>
                   <p className="text-[11px] text-neutral-400 leading-relaxed whitespace-pre-line">
                     {formatSentenceLineBreaks(
-                      'Hiển thị độ trễ mạng (Ping) và tốc độ khung hình (FPS) trong trận Co-op Online. Có thể bật hoặc tắt bất kỳ lúc nào.'
+                      t(
+                        'Hiển thị độ trễ mạng (Ping) và tốc độ khung hình (FPS) trong trận Co-op Online. Có thể bật hoặc tắt bất kỳ lúc nào.',
+                        'Display network latency (Ping) and frame rate (FPS) during Co-op Online matches. Can be toggled anytime.'
+                      )
                     )}
                   </p>
                 </div>
@@ -1143,7 +1155,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       : 'bg-neutral-800 text-neutral-400 border border-neutral-700 hover:text-neutral-200'
                   }`}
                 >
-                  {showOnlineNetStats ? 'ĐANG BẬT' : 'ĐANG TẮT'}
+                  {showOnlineNetStats ? t('ĐANG BẬT', 'ON') : t('ĐANG TẮT', 'OFF')}
                 </button>
               </div>
               {/* M7.5.1 PHẦN 1: THỐNG KÊ THÀNH TÍCH & LỊCH SỬ TRUY CẬP NGƯỜI CHƠI (THEO UID) */}
@@ -1154,7 +1166,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <div className="flex items-center justify-between flex-wrap gap-2 border-b border-neutral-800 pb-2.5">
                   <div className="flex items-center gap-2 font-extrabold text-amber-300 text-xs sm:text-sm uppercase tracking-wider">
                     <Trophy className="w-4 h-4 text-amber-400" />
-                    <span>THỐNG KÊ CHI TIẾT</span>
+                    <span>{t('THỐNG KÊ CHI TIẾT', 'DETAILED STATISTICS')}</span>
                   </div>
                   <span
                     className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
@@ -1163,7 +1175,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         : 'bg-neutral-800 text-neutral-400 border-neutral-700'
                     }`}
                   >
-                    Phiên: {playerStats.currentSession.isOnlineActive ? 'Online' : 'Offline'}
+                    {t('Phiên:', 'Session:')}{' '}
+                    {playerStats.currentSession.isOnlineActive ? 'Online' : 'Offline'}
                   </span>
                 </div>
 
@@ -1174,7 +1187,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="p-3 rounded-xl bg-neutral-950 border border-sky-500/30 space-y-1"
                   >
                     <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
-                      <span>Level (Cấp độ 1–50)</span>
+                      <span>{t('Level (Cấp độ 1–50)', 'Level (1–50)')}</span>
                       <Award className="w-3.5 h-3.5 text-sky-400" />
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -1200,14 +1213,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="p-3 rounded-xl bg-neutral-950 border border-purple-500/30 space-y-1"
                   >
                     <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
-                      <span>Quân hàm PvP</span>
+                      <span>{t('Quân hàm PvP', 'PvP Rank')}</span>
                       <Shield className="w-3.5 h-3.5 text-purple-400" />
                     </div>
                     <div className="text-sm font-extrabold text-purple-300 truncate">
                       {playerStats.pvpRankLabel}
                     </div>
                     <div className="text-[10px] text-neutral-400">
-                      Tách biệt hoàn toàn với Level &amp; XP
+                      {t('Tách biệt hoàn toàn với Level & XP', 'Independent from Level & XP')}
                     </div>
                   </div>
 
@@ -1216,16 +1229,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="p-3 rounded-xl bg-neutral-950 border border-amber-500/30 space-y-1"
                   >
                     <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
-                      <span>Tổng điểm XP tích lũy</span>
+                      <span>{t('Tổng điểm XP tích lũy', 'Total Accumulated XP')}</span>
                       <Trophy className="w-3.5 h-3.5 text-amber-400" />
                     </div>
                     <div className="text-sm font-extrabold font-mono tabular-nums text-amber-300">
                       {playerStats.xpVerificationStatus === 'VERIFIED'
                         ? `${playerStats.totalXp.toLocaleString('vi-VN')} XP`
-                        : 'Chưa xác minh'}
+                        : t('Chưa xác minh', 'Unverified')}
                     </div>
                     <div className="text-[10px] font-mono tabular-nums text-neutral-400">
-                      Kỷ lục trận: {playerStats.highScoreXp.toLocaleString('vi-VN')} XP
+                      {t('Kỷ lục trận:', 'Match Best:')}{' '}
+                      {playerStats.highScoreXp.toLocaleString('vi-VN')} XP
                     </div>
                   </div>
 
@@ -1234,14 +1248,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="p-3 rounded-xl bg-neutral-950 border border-emerald-500/30 space-y-1"
                   >
                     <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
-                      <span>Số dư Xu</span>
+                      <span>{t('Số dư Xu', 'Xu Balance')}</span>
                       <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
                     </div>
                     <div className="text-sm font-extrabold font-mono tabular-nums text-emerald-300">
                       {playerStats.xuBalance.toLocaleString('vi-VN')} Xu
                     </div>
                     <div className="text-[10px] text-neutral-400">
-                      Độc lập, không tự quy đổi từ XP
+                      {t('Độc lập, không tự quy đổi từ XP', 'Independent currency from XP')}
                     </div>
                   </div>
                 </div>
@@ -1254,7 +1268,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex items-center justify-between gap-2 flex-wrap">
                     <div className="flex items-center gap-2 text-xs font-extrabold font-mono text-sky-200">
                       <span>
-                        Tiến độ Level:{' '}
+                        {t('Tiến độ Level:', 'Level Progress:')}{' '}
                         {playerStats.level !== null ? `Lv. ${playerStats.level}` : 'Lv. --'}
                       </span>
                       {playerStats.isMaxLevel && (
@@ -1295,29 +1309,46 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
                   {playerStats.xpVerificationStatus !== 'VERIFIED' ? (
                     <div className="text-[11px] font-mono text-neutral-400">
-                      Trạng thái XP chưa được xác minh — hệ thống không hiển thị Level giả định.
+                      {t(
+                        'Trạng thái XP chưa được xác minh — hệ thống không hiển thị Level giả định.',
+                        'XP state unverified — system does not display assumed Level.'
+                      )}
                     </div>
                   ) : playerStats.isMaxLevel ? (
                     <div className="flex items-center justify-between gap-2 flex-wrap text-[11px] font-mono tabular-nums text-amber-200">
-                      <span>Tổng XP tích lũy: {playerStats.totalXp.toLocaleString('vi-VN')} XP</span>
-                      <span>Đã đạt cấp tối đa (MAX LEVEL) • Tiếp tục tích lũy XP</span>
+                      <span>
+                        {t('Tổng XP tích lũy:', 'Total XP:')}{' '}
+                        {playerStats.totalXp.toLocaleString('vi-VN')} XP
+                      </span>
+                      <span>
+                        {t(
+                          'Đã đạt cấp tối đa (MAX LEVEL) • Tiếp tục tích lũy XP',
+                          'MAX LEVEL reached • Continue accumulating XP'
+                        )}
+                      </span>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] font-mono tabular-nums">
                       <div className="text-neutral-300">
-                        <span className="text-neutral-500">Tổng XP: </span>
+                        <span className="text-neutral-500">
+                          {t('Tổng XP: ', 'Total XP: ')}
+                        </span>
                         <strong className="text-amber-300">
                           {playerStats.totalXp.toLocaleString('vi-VN')} XP
                         </strong>
                       </div>
                       <div className="text-neutral-300">
-                        <span className="text-neutral-500">Mốc cấp tiếp theo: </span>
+                        <span className="text-neutral-500">
+                          {t('Mốc cấp tiếp theo: ', 'Next Level XP: ')}
+                        </span>
                         <strong className="text-sky-300">
                           {(playerStats.xpNext ?? 0).toLocaleString('vi-VN')} XP
                         </strong>
                       </div>
                       <div className="text-neutral-300 sm:text-right">
-                        <span className="text-neutral-500">Còn thiếu: </span>
+                        <span className="text-neutral-500">
+                          {t('Còn thiếu: ', 'Remaining: ')}
+                        </span>
                         <strong className="text-emerald-300">
                           {(playerStats.xpRemaining ?? 0).toLocaleString('vi-VN')} XP
                         </strong>
@@ -1333,10 +1364,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="p-3 rounded-xl bg-neutral-950/90 border border-neutral-800 space-y-1.5"
                   >
                     <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
-                      Tiến độ Chiến dịch
+                      {t('Tiến độ Chiến dịch', 'Campaign Progress')}
                     </div>
                     <div className="text-xs font-extrabold font-mono text-white">
-                      Đã hoàn thành:
+                      {t('Đã hoàn thành:', 'Unlocked:')}
                     </div>
                     <div className="space-y-1 pt-0.5 border-t border-neutral-800/80 text-[10px] font-mono text-neutral-300">
                       <div className="flex items-center justify-between gap-1">
@@ -1365,15 +1396,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="p-3 rounded-xl bg-neutral-950/90 border border-neutral-800 space-y-1.5"
                   >
                     <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
-                      Trận đã hoàn thành
+                      {t('Trận đã hoàn thành', 'Matches Completed')}
                     </div>
                     <div className="flex items-baseline justify-between gap-1">
                       <span className="text-xs font-extrabold font-mono text-white">
-                        Tổng: {playerStats.matchesPlayed} trận
+                        {t(
+                          `Tổng: ${playerStats.matchesPlayed} trận`,
+                          `Total: ${playerStats.matchesPlayed}`
+                        )}
                       </span>
                       <span className="text-[10px] font-mono text-neutral-400">
-                        <span className="text-emerald-300">{playerStats.matchesWon}T</span>/
-                        <span className="text-rose-300">{playerStats.matchesLost}B</span>
+                        <span className="text-emerald-300">
+                          {playerStats.matchesWon}
+                          {t('T', 'W')}
+                        </span>
+                        /
+                        <span className="text-rose-300">
+                          {playerStats.matchesLost}
+                          {t('B', 'L')}
+                        </span>
                       </span>
                     </div>
                     <div className="space-y-1 pt-0.5 border-t border-neutral-800/80 text-[10px] font-mono text-neutral-300">
@@ -1381,24 +1422,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <span className="text-neutral-400">- SOLO:</span>
                         <span>
                           <strong className="text-white">{playerStats.matchesByMode.SOLO.played}</strong>{' '}
-                          (<span className="text-emerald-300">{playerStats.matchesByMode.SOLO.won} T</span> •{' '}
-                          <span className="text-rose-300">{playerStats.matchesByMode.SOLO.lost} B</span>)
+                          (<span className="text-emerald-300">{playerStats.matchesByMode.SOLO.won} {t('T', 'W')}</span> •{' '}
+                          <span className="text-rose-300">{playerStats.matchesByMode.SOLO.lost} {t('B', 'L')}</span>)
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-neutral-400">- CO-OP AI:</span>
                         <span>
                           <strong className="text-white">{playerStats.matchesByMode.COOP_AI.played}</strong>{' '}
-                          (<span className="text-emerald-300">{playerStats.matchesByMode.COOP_AI.won} T</span> •{' '}
-                          <span className="text-rose-300">{playerStats.matchesByMode.COOP_AI.lost} B</span>)
+                          (<span className="text-emerald-300">{playerStats.matchesByMode.COOP_AI.won} {t('T', 'W')}</span> •{' '}
+                          <span className="text-rose-300">{playerStats.matchesByMode.COOP_AI.lost} {t('B', 'L')}</span>)
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-1">
                         <span className="text-neutral-400">- CO-OP Online:</span>
                         <span>
                           <strong className="text-white">{playerStats.matchesByMode.COOP_ONLINE.played}</strong>{' '}
-                          (<span className="text-emerald-300">{playerStats.matchesByMode.COOP_ONLINE.won} T</span> •{' '}
-                          <span className="text-rose-300">{playerStats.matchesByMode.COOP_ONLINE.lost} B</span>)
+                          (<span className="text-emerald-300">{playerStats.matchesByMode.COOP_ONLINE.won} {t('T', 'W')}</span> •{' '}
+                          <span className="text-rose-300">{playerStats.matchesByMode.COOP_ONLINE.lost} {t('B', 'L')}</span>)
                         </span>
                       </div>
                     </div>
@@ -1409,10 +1450,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     className="p-3 rounded-xl bg-neutral-950/90 border border-neutral-800 space-y-1.5"
                   >
                     <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
-                      Tiêu diệt xe địch 
+                      {t('Tiêu diệt xe địch', 'Enemies Defeated')}
                     </div>
                     <div className="text-xs font-extrabold font-mono text-white">
-                      Tổng: {playerStats.totalEnemiesDefeated} xe
+                      {t(
+                        `Tổng: ${playerStats.totalEnemiesDefeated} xe`,
+                        `Total: ${playerStats.totalEnemiesDefeated}`
+                      )}
                     </div>
                     <div className="grid grid-cols-2 gap-x-2 gap-y-1 pt-0.5 border-t border-neutral-800/80 text-[10px] font-mono text-neutral-300">
                       <div className="flex items-center justify-between">
@@ -1439,10 +1483,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       Co-op Online
                     </div>
                     <div className="text-xs font-extrabold font-mono text-white">
-                      {playerStats.coopRoomsParticipated} phòng
+                      {t(
+                        `${playerStats.coopRoomsParticipated} phòng`,
+                        `${playerStats.coopRoomsParticipated} rooms`
+                      )}
                     </div>
                     <div className="text-[10px] text-neutral-500 pt-0.5 border-t border-neutral-800/80">
-                      Đã tạo hoặc tham gia
+                      {t('Đã tạo hoặc tham gia', 'Created or joined')}
                     </div>
                   </div>
                 </div>
@@ -1452,31 +1499,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
                     <div className="text-[10px] text-neutral-400 flex items-center gap-1">
                       <Clock className="w-3 h-3 text-amber-400" />
-                      <span>Tổng số lần đăng nhập</span>
+                      <span>{t('Tổng số lần đăng nhập', 'Total Sign-ins')}</span>
                     </div>
                     <div
                       data-testid="stat-total-logins"
                       className="text-xs font-extrabold font-mono text-amber-300"
                     >
-                      {playerStats.totalLogins} lần
+                      {t(`${playerStats.totalLogins} lần`, `${playerStats.totalLogins} times`)}
                     </div>
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
-                    <div className="text-[10px] text-neutral-400">Đăng nhập đầu tiên</div>
+                    <div className="text-[10px] text-neutral-400">
+                      {t('Đăng nhập đầu tiên', 'First Sign-in')}
+                    </div>
                     <div className="text-[11px] font-mono text-neutral-200">
                       {playerStats.firstLoginAtMs
                         ? new Date(playerStats.firstLoginAtMs).toLocaleString('vi-VN')
-                        : 'Chưa ghi nhận'}
+                        : t('Chưa ghi nhận', 'Not recorded')}
                     </div>
                   </div>
 
                   <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 space-y-0.5">
-                    <div className="text-[10px] text-neutral-400">Đăng nhập gần nhất</div>
+                    <div className="text-[10px] text-neutral-400">
+                      {t('Đăng nhập gần nhất', 'Latest Sign-in')}
+                    </div>
                     <div className="text-[11px] font-mono text-neutral-200">
                       {playerStats.lastLoginAtMs
                         ? new Date(playerStats.lastLoginAtMs).toLocaleString('vi-VN')
-                        : 'Chưa ghi nhận'}
+                        : t('Chưa ghi nhận', 'Not recorded')}
                     </div>
                   </div>
                 </div>
@@ -1484,7 +1535,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {/* Chi tiết trạng thái hiện tại (Đã bỏ Timeout nhàn rỗi & Mã phiên, sửa thành Trạng thái) */}
                 <div className="p-2.5 rounded-xl bg-neutral-950/80 border border-neutral-800 flex flex-wrap items-center justify-between gap-2 text-[11px]">
                   <div className="text-neutral-300">
-                    Trạng thái:{' '}
+                    {t('Trạng thái:', 'Status:')}{' '}
                     <strong
                       className={
                         playerStats.currentSession.isOnlineActive
@@ -1502,12 +1553,20 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <div className="flex items-center justify-between text-[11px] font-bold text-neutral-300">
                     <span className="flex items-center gap-1.5">
                       <History className="w-3.5 h-3.5 text-amber-400" />
-                      <span>Lịch sử truy cập ({recentLoginHistory.length}/5 lần gần nhất)</span>
+                      <span>
+                        {t(
+                          `Lịch sử truy cập (${recentLoginHistory.length}/5 lần gần nhất)`,
+                          `Sign-in History (${recentLoginHistory.length}/5 recent)`
+                        )}
+                      </span>
                     </span>
                   </div>
                   {recentLoginHistory.length === 0 ? (
                     <div className="p-2.5 rounded-lg bg-neutral-950 border border-neutral-800 text-[11px] text-neutral-500">
-                      Chưa có bản ghi lịch sử truy cập cho tài khoản này.
+                      {t(
+                        'Chưa có bản ghi lịch sử truy cập cho tài khoản này.',
+                        'No sign-in history recorded for this account yet.'
+                      )}
                     </div>
                   ) : (
                     <div
@@ -1521,7 +1580,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         >
                           <div className="flex items-center gap-2">
                             <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold font-mono bg-emerald-950 text-emerald-300 border border-emerald-700/60">
-                              TRUY CẬP THÀNH CÔNG
+                              {t('TRUY CẬP THÀNH CÔNG', 'SIGN-IN SUCCESS')}
                             </span>
                             <span className="text-neutral-200">{evt.note}</span>
                           </div>
@@ -1545,7 +1604,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/20 pb-2.5">
                 <div className="flex items-center gap-1.5 font-extrabold text-amber-300 uppercase">
                   <Sparkles className="w-4 h-4 text-amber-400" />
-                  <span>HÌNH ẢNH • DANH MỤC AVATAR TĨNH ({allCatalog.length} MẪU)</span>
+                  <span>
+                    {t(
+                      `HÌNH ẢNH • DANH MỤC AVATAR TĨNH (${allCatalog.length} MẪU)`,
+                      `IMAGES • STATIC AVATAR CATALOG (${allCatalog.length} ITEMS)`
+                    )}
+                  </span>
                 </div>
                 <span className="text-[10px] text-emerald-300 font-mono font-bold">
                   public/avatar/ava01.png .. ava11.png
@@ -1554,7 +1618,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               <div className="p-3 rounded-xl bg-neutral-950/80 border border-neutral-800 text-[11px] text-neutral-300 leading-relaxed whitespace-pre-line">
                 {formatSentenceLineBreaks(
-                  'Chức năng tải lên, thay thế và xóa Avatar từ trình duyệt đã được khóa cố định theo thiết lập Media Tĩnh. Toàn bộ người chơi sử dụng trực tiếp 11 mẫu Avatar chuẩn tích hợp sẵn hoặc ảnh đại diện Google cá nhân.'
+                  t(
+                    'Chức năng tải lên, thay thế và xóa Avatar từ trình duyệt đã được khóa cố định theo thiết lập Media Tĩnh. Toàn bộ người chơi sử dụng trực tiếp 11 mẫu Avatar chuẩn tích hợp sẵn hoặc ảnh đại diện Google cá nhân.',
+                    'Browser avatar upload, replace, and delete actions are locked under Static Media Policy. All players use the 11 built-in avatars or their Google profile picture.'
+                  )
                 )}
               </div>
 
@@ -1588,7 +1655,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
 
                         <span className="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-[10px] font-bold shrink-0">
-                          Tĩnh • Mở
+                          {t('Tĩnh • Mở', 'Static • Active')}
                         </span>
                       </div>
                     );
@@ -1611,17 +1678,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-neutral-400 font-mono hidden sm:inline">
-                      BGM &amp; SFX Độc Lập • Chỉ 1 nguồn BGM phát tại 1 thời điểm
+                      {t(
+                        'BGM & SFX Độc Lập • Chỉ 1 nguồn BGM phát tại 1 thời điểm',
+                        'Independent BGM & SFX • Single active BGM source'
+                      )}
                     </span>
                     <button
                       type="button"
                       data-testid="audio-reset-defaults-btn"
                       onClick={handleResetAudioDefaults}
                       className="px-2.5 py-1 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-700 text-neutral-200 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-all active:scale-95"
-                      title="Khôi phục cài đặt âm thanh mặc định"
+                      title={t(
+                        'Khôi phục cài đặt âm thanh mặc định',
+                        'Restore default audio settings'
+                      )}
                     >
                       <RefreshCw className="w-3 h-3 text-amber-400" />
-                      <span>Mặc định</span>
+                      <span>{t('Mặc định', 'Reset Default')}</span>
                     </button>
                   </div>
                 </div>
@@ -1635,7 +1708,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       ) : (
                         <VolumeX className="w-4 h-4 text-neutral-500" />
                       )}
-                      <span>Nhạc nền (BGM)</span>
+                      <span>{t('Nhạc nền (BGM)', 'Background Music (BGM)')}</span>
                     </div>
                     <button
                       type="button"
@@ -1646,13 +1719,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200'
                       }`}
                     >
-                      {audioSettings.bgmEnabled ? 'ĐANG BẬT' : 'ĐANG TẮT'}
+                      {audioSettings.bgmEnabled ? t('ĐANG BẬT', 'ON') : t('ĐANG TẮT', 'OFF')}
                     </button>
                   </div>
 
                   <div className="flex items-center gap-3">
                     <span className="text-[11px] text-neutral-400 w-28 shrink-0">
-                      Âm lượng nhạc nền:
+                      {t('Âm lượng nhạc nền:', 'BGM Volume:')}
                     </span>
                     <input
                       type="range"
@@ -1679,7 +1752,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       ) : (
                         <VolumeX className="w-4 h-4 text-neutral-500" />
                       )}
-                      <span>Âm thanh hiệu ứng (SFX)</span>
+                      <span>{t('Âm thanh hiệu ứng (SFX)', 'Sound Effects (SFX)')}</span>
                     </div>
                     <button
                       type="button"
@@ -1690,13 +1763,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           : 'bg-neutral-800 text-neutral-400 hover:text-neutral-200'
                       }`}
                     >
-                      {audioSettings.sfxEnabled ? 'ĐANG BẬT' : 'ĐANG TẮT'}
+                      {audioSettings.sfxEnabled ? t('ĐANG BẬT', 'ON') : t('ĐANG TẮT', 'OFF')}
                     </button>
                   </div>
 
                   <div className="flex items-center gap-3">
                     <span className="text-[11px] text-neutral-400 w-28 shrink-0">
-                      Âm lượng hiệu ứng:
+                      {t('Âm lượng hiệu ứng:', 'SFX Volume:')}
                     </span>
                     <input
                       type="range"
@@ -1718,14 +1791,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 {canShowAdminMusic && (
                   <div className="pt-3 border-t border-neutral-800 flex items-center justify-between">
                     <span className="text-[11px] text-amber-300 font-bold">
-                      Quản trị Thư viện Media &amp; Âm thanh Hệ thống
+                      {t(
+                        'Quản trị Thư viện Media & Âm thanh Hệ thống',
+                        'System Media & Audio Library Administration'
+                      )}
                     </span>
                     <button
                       type="button"
                       onClick={() => setShowMusicAdmin((v) => !v)}
                       className="px-3 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 font-bold text-[11px] transition-all cursor-pointer"
                     >
-                      {showMusicAdmin ? 'Thu gọn Quản lý Media' : 'Mở Quản lý Media'}
+                      {showMusicAdmin
+                        ? t('Thu gọn Quản lý Media', 'Collapse Media Admin')
+                        : t('Mở Quản lý Media', 'Open Media Admin')}
                     </button>
                   </div>
                 )}

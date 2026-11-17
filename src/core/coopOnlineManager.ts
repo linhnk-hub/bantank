@@ -2604,13 +2604,8 @@ export class CoopOnlineManager {
     }
 
     if (this.adapter instanceof FirestoreCoopStorageAdapter) {
-      const sessionSnap = SessionManager.getInstance().getSnapshot();
-      if (
-        sessionSnap.status === 'DISPLACED' ||
-        sessionSnap.status === 'EXPIRED' ||
-        sessionSnap.status === 'NO_SESSION' ||
-        sessionSnap.status === 'HEARTBEAT_REJECTED_UNCLASSIFIED'
-      ) {
+      const sessionCheck = await SessionManager.getInstance().ensureActiveSessionForAction(user.uid);
+      if (!sessionCheck.allowed || sessionCheck.status !== 'ACTIVE') {
         this.recordCreateRoomDiagnostic('AUTH_PRECHECK', '/coop_rooms', 'UNAUTHENTICATED');
         return {
           success: false,
@@ -2962,6 +2957,18 @@ export class CoopOnlineManager {
         errorCode: 'UNAUTHENTICATED',
         message: 'Vui lòng đăng nhập Google trước khi tham gia phòng Co-op Online.',
       };
+    }
+
+    if (this.adapter instanceof FirestoreCoopStorageAdapter) {
+      const sessionCheck = await SessionManager.getInstance().ensureActiveSessionForAction(user.uid);
+      if (!sessionCheck.allowed || sessionCheck.status !== 'ACTIVE') {
+        return {
+          success: false,
+          errorCode: 'UNAUTHENTICATED',
+          message:
+            'Phiên đăng nhập trên thiết bị này không còn hiệu lực (M7.1). Vui lòng xác thực lại phiên trước khi tham gia phòng.',
+        };
+      }
     }
 
     const { valid, normalized } = validateRoomCodeFormat(rawRoomCode);

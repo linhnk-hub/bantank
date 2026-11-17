@@ -3,13 +3,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Music } from 'lucide-react';
 import { SoundManager } from '../core/audio.ts';
 import { MusicManager } from '../core/musicManager.ts';
+import { useLanguage } from '../core/i18n.ts';
 
 export interface QuickAudioToggleButtonProps {
   compact?: boolean;
+  frameless?: boolean;
   showLabelOnDesktop?: boolean;
   className?: string;
 }
@@ -21,14 +23,17 @@ export interface QuickAudioToggleButtonProps {
  */
 export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
   compact = false,
+  frameless = false,
   className = '',
 }) => {
+  const { t } = useLanguage();
   const soundManager = SoundManager.getInstance();
   const musicManager = MusicManager.getInstance();
   const [isBgmMuted, setIsBgmMuted] = useState<boolean>(() => soundManager.isBgmMuted());
   const [isAwaitingUnlock, setIsAwaitingUnlock] = useState<boolean>(() =>
     musicManager.isAwaitingAutoplayUnlock()
   );
+  const wasAwaitingUnlockOnPointerDownRef = useRef<boolean>(false);
 
   useEffect(() => {
     const syncState = () => {
@@ -44,9 +49,19 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
     };
   }, [soundManager, musicManager]);
 
+  const handlePointerDownCapture = () => {
+    wasAwaitingUnlockOnPointerDownRef.current =
+      !soundManager.isBgmMuted() && musicManager.isAwaitingAutoplayUnlock();
+  };
+
   const handleToggle = () => {
+    const shouldUnlockOnly =
+      wasAwaitingUnlockOnPointerDownRef.current ||
+      (!soundManager.isBgmMuted() && musicManager.isAwaitingAutoplayUnlock());
+    wasAwaitingUnlockOnPointerDownRef.current = false;
+
     soundManager.unlock();
-    if (!soundManager.isBgmMuted() && musicManager.isAwaitingAutoplayUnlock()) {
+    if (shouldUnlockOnly) {
       musicManager.unlockFromUserGesture();
       setIsBgmMuted(soundManager.isBgmMuted());
       setIsAwaitingUnlock(musicManager.isAwaitingAutoplayUnlock());
@@ -58,12 +73,14 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
     setIsAwaitingUnlock(musicManager.isAwaitingAutoplayUnlock());
   };
 
-  const accessibleLabel = isBgmMuted ? 'Bật nhạc nền' : 'Tắt nhạc nền';
+  const accessibleLabel = isBgmMuted
+    ? t('Bật nhạc nền', 'Enable BGM')
+    : t('Tắt nhạc nền', 'Mute BGM');
   const titleText = isBgmMuted
-    ? 'Bật nhạc nền (tiếng súng vẫn đang bật)'
+    ? t('Bật nhạc nền (tiếng súng vẫn đang bật)', 'Enable BGM (combat SFX stays active)')
     : isAwaitingUnlock
-      ? 'Chạm để phát nhạc nền (đang chờ tương tác)'
-      : 'Tắt nhạc nền (vẫn giữ âm thanh tiếng súng)';
+      ? t('Chạm để phát nhạc nền (đang chờ tương tác)', 'Tap to unlock and play BGM')
+      : t('Tắt nhạc nền (vẫn giữ âm thanh tiếng súng)', 'Mute BGM (keep combat SFX active)');
   const bgmStateAttr = isBgmMuted
     ? 'muted'
     : isAwaitingUnlock
@@ -73,6 +90,7 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
   return (
     <button
       type="button"
+      onPointerDownCapture={handlePointerDownCapture}
       onClick={handleToggle}
       aria-label={accessibleLabel}
       aria-pressed={isBgmMuted}
@@ -80,40 +98,53 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
       data-testid="top-menu-audio-toggle-btn"
       data-bgm-state={bgmStateAttr}
       className={
-        compact
-          ? `flex items-center justify-center gap-1 min-w-[36px] min-h-[36px] px-2 py-1 rounded border text-xs font-btn font-bold transition-all shadow cursor-pointer active:scale-95 touch-manipulation ${
+        frameless
+          ? `flex items-center justify-center min-w-[36px] min-h-[36px] p-1.5 bg-transparent border-0 shadow-none text-xs font-btn font-bold transition-all cursor-pointer active:scale-95 touch-manipulation ${
               isBgmMuted
-                ? 'bg-[#200510]/90 border-[#FF0055]/75 text-[#FF0055] hover:bg-[#2d0717]'
+                ? 'text-[#FF0055] hover:text-rose-400'
                 : isAwaitingUnlock
-                  ? 'bg-[#0b0d1e] border-[#FFB800]/80 text-[#FFB800] hover:border-[#00F0FF] animate-pulse'
-                  : 'bg-[#0b0d1e] border-[#00F0FF]/60 text-[#00F0FF] hover:border-[#FFB800] hover:text-[#FFB800]'
+                  ? 'text-[#FFB800] hover:text-[#00F0FF] animate-pulse'
+                  : 'text-[#00F0FF] hover:text-[#FFB800]'
             } ${className}`.trim()
-          : `flex items-center justify-center gap-1.5 min-w-[36px] min-h-[36px] px-2.5 py-1.5 rounded border text-xs font-btn font-bold transition-all shadow cursor-pointer active:scale-95 touch-manipulation ${
-              isBgmMuted
-                ? 'bg-[#200510]/90 border-[#FF0055]/75 text-[#FF0055] hover:bg-[#2d0717]'
-                : isAwaitingUnlock
-                  ? 'bg-[#0b0d1e] border-[#FFB800]/80 text-[#FFB800] hover:border-[#00F0FF] animate-pulse'
-                  : 'bg-[#0b0d1e] hover:bg-[#10142b] border-[#00F0FF]/60 text-[#00F0FF] hover:border-[#FFB800] hover:text-[#FFB800]'
-            } ${className}`.trim()
+          : compact
+            ? `flex items-center justify-center gap-1.5 w-[76px] h-[36px] min-w-[76px] min-h-[36px] px-2 py-1 rounded border text-xs font-btn font-extrabold transition-all shadow cursor-pointer active:scale-95 touch-manipulation ${
+                isBgmMuted
+                  ? 'bg-[#200510]/90 border-[#FF0055]/75 text-[#FF0055] hover:bg-[#2d0717]'
+                  : isAwaitingUnlock
+                    ? 'bg-[#0b0d1e]/95 border-[#FFB800]/80 text-[#FFB800] hover:border-[#00F0FF] animate-pulse'
+                    : 'bg-[#0b0d1e]/95 border-[#00F0FF]/60 text-[#00F0FF] hover:border-[#FFB800] hover:text-[#FFB800]'
+              } ${className}`.trim()
+            : `flex items-center justify-center gap-1.5 min-w-[36px] min-h-[36px] px-2.5 py-1.5 rounded border text-xs font-btn font-bold transition-all shadow cursor-pointer active:scale-95 touch-manipulation ${
+                isBgmMuted
+                  ? 'bg-[#200510]/90 border-[#FF0055]/75 text-[#FF0055] hover:bg-[#2d0717]'
+                  : isAwaitingUnlock
+                    ? 'bg-[#0b0d1e] border-[#FFB800]/80 text-[#FFB800] hover:border-[#00F0FF] animate-pulse'
+                    : 'bg-[#0b0d1e] hover:bg-[#10142b] border-[#00F0FF]/60 text-[#00F0FF] hover:border-[#FFB800] hover:text-[#FFB800]'
+              } ${className}`.trim()
       }
     >
       {isBgmMuted ? (
         <span
-          className="relative inline-flex items-center justify-center w-3.5 h-3.5 shrink-0"
+          className="relative inline-flex items-center justify-center w-4 h-4 shrink-0"
           data-testid="top-menu-music-muted-icon"
           aria-hidden="true"
         >
-          <Music className="w-3.5 h-3.5 text-[#FF0055] opacity-90" />
-          <span className="pointer-events-none absolute w-[15px] h-[1.75px] bg-[#FF0055] -rotate-45 rounded-full shadow-[0_0_0_1px_rgba(5,5,16,0.95)]" />
+          <Music className="w-4 h-4 text-[#FF0055] opacity-90" />
+          <span className="pointer-events-none absolute w-[16px] h-[1.75px] bg-[#FF0055] -rotate-45 rounded-full shadow-[0_0_0_1px_rgba(5,5,16,0.95)]" />
         </span>
       ) : (
         <Music
-          className={`w-3.5 h-3.5 shrink-0 ${
+          className={`w-4 h-4 shrink-0 ${
             isAwaitingUnlock ? 'text-[#FFB800]' : 'text-[#00F0FF]'
           }`}
           data-testid="top-menu-music-active-icon"
           aria-hidden="true"
         />
+      )}
+      {compact && !frameless && (
+        <span className="text-[11px] font-extrabold tracking-wider uppercase leading-none">
+          {isBgmMuted ? 'OFF' : 'BGM'}
+        </span>
       )}
     </button>
   );

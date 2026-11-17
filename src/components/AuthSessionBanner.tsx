@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { SessionAlertModal } from './SessionAlertModal.tsx';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
+import { useLanguage, type SupportedLanguage } from '../core/i18n.ts';
 
 export interface SessionBadgeDisplay {
   label: string;
@@ -33,17 +34,24 @@ export interface SessionBadgeDisplay {
 
 export function formatAccountStatusMessage(
   rawMessage: string | null | undefined,
-  status?: SessionStateStatus
+  status?: SessionStateStatus,
+  lang: SupportedLanguage = 'vi'
 ): string {
   if (!rawMessage) {
     if (status === 'DISPLACED') {
-      return 'Tài khoản này đang được mở trên một thiết bị khác. Trận đấu hiện tại đã tạm dừng.';
+      return lang === 'en'
+        ? 'This account is currently active on another device. The current match is paused.'
+        : 'Tài khoản này đang được mở trên một thiết bị khác. Trận đấu hiện tại đã tạm dừng.';
     }
     if (status === 'PAUSED_IDLE' || status === 'EXPIRED') {
-      return 'Tài khoản đã tạm dừng sau 5 phút không hoạt động. Vui lòng đăng nhập lại để tiếp tục.';
+      return lang === 'en'
+        ? 'Account session paused due to inactivity. Please sign in again to continue.'
+        : 'Tài khoản đã tạm dừng sau 5 phút không hoạt động. Vui lòng đăng nhập lại để tiếp tục.';
     }
     if (status === 'CONNECTION_LOST_UNVERIFIED') {
-      return 'Mất kết nối mạng khi kiểm tra tài khoản. Trận đấu đang tạm dừng cho đến khi kết nối lại.';
+      return lang === 'en'
+        ? 'Network connection lost while verifying account. Match is paused until reconnected.'
+        : 'Mất kết nối mạng khi kiểm tra tài khoản. Trận đấu đang tạm dừng cho đến khi kết nối lại.';
     }
     return '';
   }
@@ -66,11 +74,13 @@ export function getSessionBadgeInfo(
   status: SessionStateStatus,
   isProcessing: boolean,
   isHeartbeatInFlight: boolean,
-  hasUser: boolean
+  hasUser: boolean,
+  lang: SupportedLanguage = 'vi'
 ): SessionBadgeDisplay {
+  const isEn = lang === 'en';
   if (isProcessing && !hasUser) {
     return {
-      label: 'Đang đăng nhập...',
+      label: isEn ? 'Signing in...' : 'Đang đăng nhập...',
       badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
       dotStyle: 'bg-amber-400 animate-pulse',
     };
@@ -78,7 +88,7 @@ export function getSessionBadgeInfo(
 
   if (!hasUser) {
     return {
-      label: 'Chưa đăng nhập',
+      label: isEn ? 'Not signed in' : 'Chưa đăng nhập',
       badgeStyle: 'bg-neutral-800 text-neutral-400 border-neutral-700',
       dotStyle: 'bg-neutral-500',
     };
@@ -88,14 +98,14 @@ export function getSessionBadgeInfo(
   switch (status) {
     case 'ACQUIRING':
       return {
-        label: 'Đang kiểm tra tài khoản...',
+        label: isEn ? 'Verifying account...' : 'Đang kiểm tra tài khoản...',
         badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
         dotStyle: 'bg-amber-400 animate-pulse',
       };
     case 'ACTIVE':
       if (isHeartbeatInFlight) {
         return {
-          label: 'Đang kiểm tra kết nối...',
+          label: isEn ? 'Checking connection...' : 'Đang kiểm tra kết nối...',
           badgeStyle: 'bg-sky-950/80 text-sky-300 border-sky-800/80',
           dotStyle: 'bg-sky-400 animate-pulse',
         };
@@ -107,33 +117,33 @@ export function getSessionBadgeInfo(
       };
     case 'CONNECTION_LOST_UNVERIFIED':
       return {
-        label: 'Mất kết nối',
+        label: isEn ? 'Connection lost' : 'Mất kết nối',
         badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
         dotStyle: 'bg-amber-400',
       };
     case 'DISPLACED':
       return {
-        label: 'Đang mở ở thiết bị khác',
+        label: isEn ? 'Active on another device' : 'Đang mở ở thiết bị khác',
         badgeStyle: 'bg-rose-950/80 text-rose-300 border-rose-800/80',
         dotStyle: 'bg-rose-500',
       };
     case 'PAUSED_IDLE':
     case 'EXPIRED':
       return {
-        label: 'Tạm dừng do ngưng thao tác',
+        label: isEn ? 'Paused due to inactivity' : 'Tạm dừng do ngưng thao tác',
         badgeStyle: 'bg-rose-950/80 text-rose-300 border-rose-800/80',
         dotStyle: 'bg-rose-500',
       };
     case 'NO_SESSION':
       return {
-        label: 'Chưa kết nối máy chủ',
+        label: isEn ? 'Server disconnected' : 'Chưa kết nối máy chủ',
         badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
         dotStyle: 'bg-amber-400',
       };
     case 'HEARTBEAT_REJECTED_UNCLASSIFIED':
     default:
       return {
-        label: 'Cần xác thực',
+        label: isEn ? 'Verification required' : 'Cần xác thực',
         badgeStyle: 'bg-amber-950/80 text-amber-300 border-amber-800/80',
         dotStyle: 'bg-amber-400 animate-pulse',
       };
@@ -147,6 +157,7 @@ interface AuthSessionBannerProps {
 export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
   onStartMatchAllowedChange,
 }) => {
+  const { lang: language, t } = useLanguage();
   const authManager = AuthManager.getInstance();
   const sessionManager = SessionManager.getInstance();
   const avatarManager = AvatarManager.getInstance();
@@ -176,7 +187,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
     const unsubSession = sessionManager.subscribe((s) => {
       setSession(s);
       if (s.status === 'NO_SESSION' && s.message) {
-        setFeedbackMsg({ type: 'error', text: formatAccountStatusMessage(s.message, s.status) });
+        setFeedbackMsg({ type: 'error', text: formatAccountStatusMessage(s.message, s.status, language) });
       }
       if (onStartMatchAllowedChange) {
         onStartMatchAllowedChange(s.status === 'ACTIVE' || authManager.isTrialMode());
@@ -192,7 +203,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
       unsubSession();
       unsubAvatar();
     };
-  }, [authManager, sessionManager, avatarManager, user?.uid, onStartMatchAllowedChange]);
+  }, [authManager, sessionManager, avatarManager, user?.uid, onStartMatchAllowedChange, language]);
 
   const handleSignIn = async () => {
     setIsProcessing(true);
@@ -202,11 +213,14 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
       if (!res.isValid) {
         setFeedbackMsg({
           type: 'error',
-          text: res.errorMessage || 'Đăng nhập không thành công.',
+          text: res.errorMessage || t('Đăng nhập không thành công.', 'Sign-in failed.'),
         });
       }
     } catch (e: any) {
-      setFeedbackMsg({ type: 'error', text: e?.message || 'Lỗi đăng nhập Google.' });
+      setFeedbackMsg({
+        type: 'error',
+        text: e?.message || t('Lỗi đăng nhập Google.', 'Google sign-in error.'),
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -216,7 +230,10 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
     setIsProcessing(true);
     try {
       await sessionManager.releaseSessionAndSignOut();
-      setFeedbackMsg({ type: 'success', text: 'Đã đăng xuất an toàn.' });
+      setFeedbackMsg({
+        type: 'success',
+        text: t('Đã đăng xuất an toàn.', 'Signed out safely.'),
+      });
     } finally {
       setIsProcessing(false);
     }
@@ -229,7 +246,10 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
     try {
       const res = await sessionManager.acquireSession(user.uid);
       if (!res.success && res.message) {
-        setFeedbackMsg({ type: 'error', text: formatAccountStatusMessage(res.message, session.status) });
+        setFeedbackMsg({
+          type: 'error',
+          text: formatAccountStatusMessage(res.message, session.status, language),
+        });
       }
     } finally {
       setIsProcessing(false);
@@ -243,7 +263,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
       const res = await sessionManager.handleUserReauthenticate();
       setFeedbackMsg({
         type: res.success ? 'success' : 'error',
-        text: formatAccountStatusMessage(res.message, session.status),
+        text: formatAccountStatusMessage(res.message, session.status, language),
       });
     } finally {
       setIsProcessing(false);
@@ -256,7 +276,8 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
     session.status,
     isProcessing,
     session.isHeartbeatInFlight ?? false,
-    Boolean(user)
+    Boolean(user),
+    language
   );
 
   const effectiveAvatarUrl = user
@@ -321,13 +342,25 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
           ) : isTrialMode ? (
             <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[#120e05]/90 border border-[#FFB800]/50 text-[#FFB800] font-bold">
               <span className="w-2 h-2 rounded-full bg-[#FFB800] animate-pulse" />
-              <span>Chế độ Chơi thử • Stage 1 (Không lưu dữ liệu)</span>
+              <span>
+                {t(
+                  'Chế độ Chơi thử • Stage 1 (Không lưu dữ liệu)',
+                  'Trial Mode • Stage 1 (Progress Not Saved)'
+                )}
+              </span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 text-[#FFB800]">
               <span className={`w-2 h-2 rounded-full ${badgeInfo.dotStyle}`} />
               <AlertTriangle className="w-3.5 h-3.5" />
-              <span>{isProcessing ? 'Đang đăng nhập...' : 'Chưa đăng nhập (Cần Gmail cá nhân để chơi)'}</span>
+              <span>
+                {isProcessing
+                  ? t('Đang đăng nhập...', 'Signing in...')
+                  : t(
+                      'Chưa đăng nhập (Cần Gmail cá nhân để chơi)',
+                      'Not signed in (Personal Gmail required to play)'
+                    )}
+              </span>
             </div>
           )}
         </div>
@@ -340,18 +373,18 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
                   onClick={handleRetryAcquire}
                   disabled={isProcessing}
                   className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] transition-all font-bold text-[11px] active:scale-95 disabled:opacity-50"
-                  title="Thử kết nối lại"
+                  title={t('Thử kết nối lại', 'Retry connection')}
                 >
                   <RefreshCw className={`w-3 h-3 ${isProcessing ? 'animate-spin' : ''}`} />
-                  <span>Kết nối máy chủ</span>
+                  <span>{t('Kết nối máy chủ', 'Connect Server')}</span>
                 </button>
               )}
               <button
                 type="button"
                 onClick={handleSignOut}
                 disabled={isProcessing}
-                title="Đăng xuất"
-                aria-label="Đăng xuất"
+                title={t('Đăng xuất', 'Sign Out')}
+                aria-label={t('Đăng xuất', 'Sign Out')}
                 className="flex items-center justify-center p-1.5 rounded bg-[#0b0d1e] hover:bg-[#10142b] border border-[#687386]/60 text-[#EAF4FF] transition-all font-semibold active:scale-95 disabled:opacity-50 cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5 text-[#FF0055]" />
@@ -364,7 +397,11 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
               className="flex items-center gap-1.5 px-3 py-1 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-bold transition-all shadow active:scale-95 disabled:opacity-50"
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span>{isProcessing ? 'Đang xác thực...' : 'Đăng nhập Google'}</span>
+              <span>
+                {isProcessing
+                  ? t('Đang xác thực...', 'Authenticating...')
+                  : t('Đăng nhập Google', 'Sign in with Google')}
+              </span>
             </button>
           )}
         </div>
@@ -379,7 +416,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
           }`}
         >
           <span className="whitespace-pre-line">
-            {formatSentenceLineBreaks(formatAccountStatusMessage(feedbackMsg.text, session.status))}
+            {formatSentenceLineBreaks(formatAccountStatusMessage(feedbackMsg.text, session.status, language))}
           </span>
           <button
             onClick={() => setFeedbackMsg(null)}

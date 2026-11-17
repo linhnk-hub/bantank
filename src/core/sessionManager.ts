@@ -120,6 +120,9 @@ export class SessionManager {
   private broadcastChannel: BroadcastChannel | null = null;
   private listeners: Set<SessionStateListener> = new Set();
   private onPauseGameCallback: (() => void) | null = null;
+  private inFlightAcquirePromise: Promise<{ success: boolean; message: string | null }> | null =
+    null;
+  private inFlightAcquireUid: string | null = null;
 
   private constructor() {
     this.deviceId = this.initDeviceId();
@@ -528,14 +531,85 @@ export class SessionManager {
   }
 
   /**
+   * Returns true if and only if session ownership is confirmed on this device (`status === 'ACTIVE'`).
+   */
+  public isSessionOwnershipConfirmed(uid?: string | null): boolean {
+    if (this.status !== 'ACTIVE' || !this.currentSessionId) {
+      return false;
+    }
+    if (uid && this.currentUid !== uid) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Returns true when session ownership is currently in a transitional verification state (`ACQUIRING`).
+   */
+  public isSessionTransitional(): boolean {
+    return this.status === 'ACQUIRING';
+  }
+
+  /**
+   * Ensures session ownership is confirmed (`status === 'ACTIVE'`) before starting a match or sensitive operation.
+   * - If `status === 'ACTIVE'` and `sessionId` is present, resolves `allowed: true` immediately.
+   * - If `status === 'ACQUIRING'` with an in-flight acquisition for `uid`, awaits it instead of blocking prematurely.
+   * - If `status === 'NO_SESSION'`, triggers `acquireSession(uid)` and verifies ownership.
+   * - For `DISPLACED`, `PAUSED_IDLE`, `EXPIRED`, `CONNECTION_LOST_UNVERIFIED`, `HEARTBEAT_REJECTED_UNCLASSIFIED`,
+   *   resolves `allowed: false` immediately without bypassing single-device locks.
+   */
+  public async ensureActiveSessionForAction(
+    uid: string | null | undefined
+  ): Promise<{ allowed: boolean; status: SessionStateStatus; message: string | null }> {
+    if (!uid) {
+      return { allowed: false, status: this.status, message: this.statusMessage };
+    }
+    if (this.isSessionOwnershipConfirmed(uid)) {
+      return { allowed: true, status: 'ACTIVE', message: null };
+    }
+    if (this.status === 'ACQUIRING') {
+      if (this.inFlightAcquirePromise && this.inFlightAcquireUid === uid) {
+        await this.inFlightAcquirePromise;
+        const ok = this.isSessionOwnershipConfirmed(uid);
+        return { allowed: ok, status: this.status, message: this.statusMessage };
+      }
+      return { allowed: false, status: this.status, message: this.statusMessage };
+    }
+    if (this.status === 'NO_SESSION') {
+      await this.acquireSession(uid);
+      const ok = this.isSessionOwnershipConfirmed(uid);
+      return { allowed: ok, status: this.status, message: this.statusMessage };
+    }
+    return { allowed: false, status: this.status, message: this.statusMessage };
+  }
+
+  /**
    * Acquires session using a Firestore Transaction enforcing First-Active-Session Wins.
    * Eliminates client Date.now() skew decisions: authority is delegated to Firestore Security Rules.
    */
   public async acquireSession(uid: string): Promise<{ success: boolean; message: string | null }> {
+    if (this.inFlightAcquirePromise && this.inFlightAcquireUid === uid && this.status === 'ACQUIRING') {
+      return this.inFlightAcquirePromise;
+    }
+
     this.status = 'ACQUIRING';
     this.currentUid = uid;
+    this.inFlightAcquireUid = uid;
     this.notify();
 
+    const task = this.performAcquireSession(uid).finally(() => {
+      if (this.inFlightAcquirePromise === task) {
+        this.inFlightAcquirePromise = null;
+        this.inFlightAcquireUid = null;
+      }
+    });
+    this.inFlightAcquirePromise = task;
+    return task;
+  }
+
+  private async performAcquireSession(
+    uid: string
+  ): Promise<{ success: boolean; message: string | null }> {
     const newSessionId = generateUUID();
     const sessionDocRef = doc(this.db, 'user_sessions', uid);
     const userAgent =
