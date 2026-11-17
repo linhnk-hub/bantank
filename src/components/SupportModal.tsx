@@ -19,7 +19,6 @@ import {
   Keyboard,
   Lock,
   Sparkles,
-  FileText,
 } from 'lucide-react';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { useLanguage } from '../core/i18n.ts';
@@ -83,13 +82,12 @@ export const SupportModal: React.FC<SupportModalProps> = ({
             type="button"
             data-testid="support-tab-about"
             onClick={() => setActiveTab('ABOUT')}
-            className={`font-btn min-h-[40px] px-2 py-1.5 rounded text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            className={`font-btn min-h-[40px] px-2 py-1.5 rounded text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center transition-all cursor-pointer ${
               activeTab === 'ABOUT'
                 ? 'bg-[#FFB800] text-[#050510] shadow-[0_0_12px_rgba(255,184,0,0.35)]'
                 : 'bg-[#0b0d1e] text-[#EAF4FF] border border-[#687386]/40 hover:border-[#FFB800]/60'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5 shrink-0" />
             <span>{t('Giới thiệu', 'About')}</span>
           </button>
 
@@ -97,13 +95,12 @@ export const SupportModal: React.FC<SupportModalProps> = ({
             type="button"
             data-testid="support-tab-policy"
             onClick={() => setActiveTab('POLICY')}
-            className={`font-btn min-h-[40px] px-2 py-1.5 rounded text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            className={`font-btn min-h-[40px] px-2 py-1.5 rounded text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center transition-all cursor-pointer ${
               activeTab === 'POLICY'
                 ? 'bg-[#00F0FF] text-[#050510] shadow-[0_0_12px_rgba(0,240,255,0.35)]'
                 : 'bg-[#0b0d1e] text-[#EAF4FF] border border-[#687386]/40 hover:border-[#00F0FF]/60'
             }`}
           >
-            <FileText className="w-3.5 h-3.5 shrink-0" />
             <span>{t('Chính sách', 'Policy')}</span>
           </button>
 
@@ -111,13 +108,12 @@ export const SupportModal: React.FC<SupportModalProps> = ({
             type="button"
             data-testid="support-tab-guide"
             onClick={() => setActiveTab('GUIDE')}
-            className={`font-btn min-h-[40px] px-2 py-1.5 rounded text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+            className={`font-btn min-h-[40px] px-2 py-1.5 rounded text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center transition-all cursor-pointer ${
               activeTab === 'GUIDE'
                 ? 'bg-[#FFB800] text-[#050510] shadow-[0_0_12px_rgba(255,184,0,0.35)]'
                 : 'bg-[#0b0d1e] text-[#EAF4FF] border border-[#687386]/40 hover:border-[#FFB800]/60'
             }`}
           >
-            <Info className="w-3.5 h-3.5 shrink-0" />
             <span>{t('Hướng dẫn', 'Guide')}</span>
           </button>
         </div>
@@ -161,8 +157,8 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                     <span>
                       <strong>{t('3 Chế độ chiến đấu:', '3 Battle Modes:')}</strong>{' '}
                       {t(
-                        'SOLO (1 người), CO-OP AI (cùng đồng đội máy) và CO-OP ONLINE (2 người trực tuyến qua mã phòng BTxxxx).',
-                        'SOLO (1 Player), CO-OP AI (with AI partner), and CO-OP ONLINE (2 players online via BTxxxx room code).'
+                        'SOLO, CO-OP AI (cùng đồng đội máy) và CO-OP ONLINE (2 người trực tuyến qua mã phòng BTxxxx).',
+                        'SOLO, CO-OP AI (with AI partner), and CO-OP ONLINE (2 players online via BTxxxx room code).'
                       )}
                     </span>
                   </li>

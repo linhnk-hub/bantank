@@ -63,7 +63,7 @@ export interface MainMenuScreenProps {
 const LobbyIdleTankShowcase: React.FC = () => (
   <div
     data-testid="lobby-tank-showcase"
-    className="inline-flex items-center justify-center px-2.5 py-1 neo-bevel-card border border-[#FFB800]/40 bg-[#050510]/85 gap-2"
+    className="p1-ready-gradient-bg inline-flex items-center justify-center px-2.5 py-1 rounded border border-[#FFB800]/80 gap-2 shadow-[0_0_12px_rgba(255,184,0,0.3)]"
   >
     <svg
       viewBox="0 0 32 32"
@@ -88,7 +88,7 @@ const LobbyIdleTankShowcase: React.FC = () => (
       <rect x="12" y="12" width="8" height="8" fill="#991B1B" />
       <rect x="14" y="14" width="4" height="4" fill="#FEE2E2" />
     </svg>
-    <span className="font-btn text-xs font-extrabold uppercase tracking-wider text-[#FFB800]">
+    <span className="font-btn text-xs font-extrabold uppercase tracking-wider text-white drop-shadow-[0_1px_2px_rgba(5,5,16,0.95)]">
       P1 READY
     </span>
   </div>

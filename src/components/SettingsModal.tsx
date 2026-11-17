@@ -2840,7 +2840,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </li>
                   <li>
                     Hiện thông báo trực tiếp trên màn hình người chơi đang chơi kèm nút{' '}
-                    <strong className="text-amber-300">Thoát về trang chủ</strong>.
+                    <strong className="text-amber-300">Về trang chủ</strong>.
                   </li>
                   <li>
                     Tại màn hình Menu chào mừng, nút <strong>ĐĂNG NHẬP</strong> và{' '}

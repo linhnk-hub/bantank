@@ -487,7 +487,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               onOpenSupport={onOpenSupport}
               onOpenDevTools={onOpenDevTools}
               onExit={isInsideOnlineWaitingRoom ? undefined : onBack}
-              exitLabel={t('Thoát về trang chủ', 'Exit to Home')}
+              exitLabel={t('Về trang chủ', 'Return Home')}
               isSuperAdmin={isSuperAdmin}
             />
           </div>
@@ -794,10 +794,10 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   <span>
                     <strong>
                       {cardMode === 'SOLO'
-                        ? t('SOLO (1 Người)', 'SOLO (1 Player)')
+                        ? 'SOLO'
                         : cardMode === 'COOP_AI'
-                        ? t('CO-OP AI', 'CO-OP AI')
-                        : t('CO-OP ONLINE', 'CO-OP ONLINE')}
+                        ? 'CO-OP AI'
+                        : 'CO-OP ONLINE'}
                     </strong>
                   </span>
                 </div>
@@ -924,31 +924,34 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 );
               })()}
 
-              <div className="w-full grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-6 text-left">
+              <div
+                data-testid="difficulty-selection-grid"
+                className="w-full grid grid-cols-2 gap-2.5 sm:gap-3.5 mb-6 text-left"
+              >
                 {/* NORMAL / DEFAULT -> Giải trí */}
                 <div
                   onClick={(e) => handleConfirmDifficulty('DEFAULT', e)}
-                  className={`p-4 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
+                  className={`p-3 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                     difficulty === 'DEFAULT'
                       ? 'bg-[#120e05]/85 border-[#FFB800] shadow-2xl ring-2 ring-[#FFB800]/25'
                       : 'bg-[#0b0d1e]/90 border-[#687386]/40 hover:border-[#FFB800]/60'
                   }`}
                 >
                   <div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-btn font-black text-[#FFB800] text-lg sm:text-xl flex items-center gap-2">
-                        <Shield className="w-5 h-5 text-[#FFB800]" />
+                    <div className="flex items-center justify-between gap-1 flex-wrap">
+                      <span className="font-btn font-black text-[#FFB800] text-sm sm:text-xl flex items-center gap-1.5 sm:gap-2">
+                        <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-[#FFB800] shrink-0" />
                         <span>{t('Giải trí', 'Casual')}</span>
                       </span>
                       {difficulty === 'DEFAULT' && (
-                        <span className="font-btn text-xs px-2 py-0.5 rounded bg-[#FFB800] text-[#050510] font-black">
+                        <span className="font-btn text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded bg-[#FFB800] text-[#050510] font-black shrink-0">
                           {t('ĐANG CHỌN', 'SELECTED')}
                         </span>
                       )}
                     </div>
                     <p
                       data-testid="difficulty-note-default"
-                      className="text-sm text-neutral-200 leading-snug mt-2 whitespace-pre-line"
+                      className="text-xs sm:text-sm text-neutral-200 leading-snug mt-2 whitespace-pre-line"
                     >
                       {formatSentenceLineBreaks(
                         t(
@@ -959,12 +962,12 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </p>
                   </div>
 
-                  <div className="mt-4 pt-3 border-t border-neutral-800/80">
+                  <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-neutral-800/80">
                     <button
                       type="button"
                       disabled={!isSessionActive || isProcessing}
                       onClick={(e) => handleConfirmDifficulty('DEFAULT', e)}
-                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 touch-manipulation shadow ${
+                      className={`font-btn w-full min-h-[44px] sm:min-h-[48px] py-2 sm:py-2.5 px-2 sm:px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-1.5 sm:gap-2 transition-all active:scale-95 touch-manipulation shadow ${
                         !isSessionActive || isProcessing
                           ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
                           : difficulty === 'DEFAULT'
@@ -972,8 +975,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                           : 'bg-[#050510] hover:bg-[#FFB800]/20 text-[#FFB800] border border-[#FFB800]/40 cursor-pointer'
                       }`}
                     >
-                      <span>{t(`Vào Stage ${selectedStageId}`, `Enter Stage ${selectedStageId}`)}</span>
-                      <ArrowRight className="w-4 h-4" />
+                      <span className="whitespace-nowrap">{t(`Vào Stage ${selectedStageId}`, `Enter Stage ${selectedStageId}`)}</span>
+                      <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                     </button>
                   </div>
                 </div>
@@ -981,27 +984,27 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 {/* HARD / EXTREME -> Thử thách */}
                 <div
                   onClick={(e) => handleConfirmDifficulty('EXTREME', e)}
-                  className={`p-4 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
+                  className={`p-3 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                     difficulty === 'EXTREME'
                       ? 'bg-[#200510]/85 border-[#FF0055] shadow-2xl ring-2 ring-[#FF0055]/25'
                       : 'bg-[#0b0d1e]/90 border-[#687386]/40 hover:border-[#FF0055]/60'
                   }`}
                 >
                   <div>
-                    <div className="flex items-center justify-between">
-                      <span className="font-btn font-black text-[#FF0055] text-lg sm:text-xl flex items-center gap-2">
-                        <Flame className="w-5 h-5 text-[#FF0055]" />
+                    <div className="flex items-center justify-between gap-1 flex-wrap">
+                      <span className="font-btn font-black text-[#FF0055] text-sm sm:text-xl flex items-center gap-1.5 sm:gap-2">
+                        <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF0055] shrink-0" />
                         <span>{t('Thử thách', 'Challenge')}</span>
                       </span>
                       {difficulty === 'EXTREME' && (
-                        <span className="font-btn text-xs px-2 py-0.5 rounded bg-[#FF0055] text-white font-black">
+                        <span className="font-btn text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded bg-[#FF0055] text-white font-black shrink-0">
                           {t('ĐANG CHỌN', 'SELECTED')}
                         </span>
                       )}
                     </div>
                     <p
                       data-testid="difficulty-note-extreme"
-                      className="text-sm text-neutral-200 leading-snug mt-2 whitespace-pre-line"
+                      className="text-xs sm:text-sm text-neutral-200 leading-snug mt-2 whitespace-pre-line"
                     >
                       {formatSentenceLineBreaks(
                         t(
@@ -1012,12 +1015,12 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </p>
                   </div>
 
-                  <div className="mt-5 pt-3 border-t border-neutral-800/80">
+                  <div className="mt-3 sm:mt-4 pt-2.5 sm:pt-3 border-t border-neutral-800/80">
                     <button
                       type="button"
                       disabled={!isSessionActive || isProcessing}
                       onClick={(e) => handleConfirmDifficulty('EXTREME', e)}
-                      className={`font-btn w-full min-h-[48px] py-2.5 px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 touch-manipulation shadow ${
+                      className={`font-btn w-full min-h-[44px] sm:min-h-[48px] py-2 sm:py-2.5 px-2 sm:px-4 rounded font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-1.5 sm:gap-2 transition-all active:scale-95 touch-manipulation shadow ${
                         !isSessionActive || isProcessing
                           ? 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
                           : difficulty === 'EXTREME'
@@ -1025,8 +1028,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                           : 'bg-[#050510] hover:bg-[#FF0055]/20 text-rose-300 border border-[#FF0055]/40 cursor-pointer'
                       }`}
                     >
-                      <span>{t(`Vào Stage ${selectedStageId}`, `Enter Stage ${selectedStageId}`)}</span>
-                      <ArrowRight className="w-4 h-4" />
+                      <span className="whitespace-nowrap">{t(`Vào Stage ${selectedStageId}`, `Enter Stage ${selectedStageId}`)}</span>
+                      <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                     </button>
                   </div>
                 </div>

@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "Tektur", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "Tektur", monospace;
+}
+
 :root {
   /* NEO-RETRO ART SYSTEM V1.0 FINAL — OFFICIAL COLOR PALETTE */
   --crt-dark: #050510;
@@ -11,14 +16,23 @@
   --steel-gray: #687386;
   --crt-white: #EAF4FF;
 
-  /* APPROVED TYPOGRAPHY */
+  /* UNIFIED GAME TYPOGRAPHY (Tektur across entire game, Press Start 2P reserved for Game Over) */
   --font-pixel: "Press Start 2P", "Tektur", monospace;
-  --font-hud: "VT323", "Tektur", monospace;
-  --font-body: "Space Grotesk", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-btn: "Tektur", "Space Grotesk", sans-serif;
+  --font-hud: "Tektur", system-ui, sans-serif;
+  --font-body: "Tektur", system-ui, sans-serif;
+  --font-btn: "Tektur", system-ui, sans-serif;
 }
 
 @layer base {
+  html,
+  body,
+  #root,
+  input,
+  textarea,
+  select {
+    font-family: var(--font-body);
+  }
+
   html,
   body,
   #root {
@@ -28,7 +42,6 @@
     padding: 0;
     background-color: var(--crt-dark);
     color: var(--crt-white);
-    font-family: var(--font-body);
     -webkit-tap-highlight-color: transparent;
   }
 
@@ -45,7 +58,7 @@
 
 .font-hud {
   font-family: var(--font-hud);
-  letter-spacing: 0.04em;
+  letter-spacing: 0.02em;
 }
 
 .font-body {
@@ -205,9 +218,25 @@
   background-size: 200% 200%;
 }
 
+/* P1 READY box animated back-and-forth gradient background */
+.p1-ready-gradient-bg {
+  background-image: linear-gradient(
+    90deg,
+    #78350f 0%,
+    #b45309 28%,
+    #be123c 55%,
+    #0e7490 82%,
+    #78350f 100%
+  );
+  background-size: 260% 260%;
+  animation: googleBtnGradientFlow 3.2s ease-in-out infinite;
+  will-change: background-position;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tank-idle-bob,
   .neo-glitch-text,
+  .p1-ready-gradient-bg,
   .animate-pulse,
   .animate-spin {
     animation: none !important;
@@ -232,12 +261,12 @@
   image-rendering: crisp-edges !important;
 }
 
-/* M7.3.10: Unified 200% Game Logo Standard across PC, Mobile, and Tablet (320px = 2x standard 160px) */
+/* Game Logo Standard scaled down 10% (288px = 90% of 320px) across PC, Mobile, and Tablet */
 .unified-game-logo:not(.logo-inline-row) {
-  width: 320px !important;
-  height: 320px !important;
-  max-width: min(320px, calc(100vw - 16px)) !important;
-  max-height: min(320px, calc(100vw - 16px)) !important;
+  width: 288px !important;
+  height: 288px !important;
+  max-width: min(288px, calc((100vw - 16px) * 0.9)) !important;
+  max-height: min(288px, calc((100vw - 16px) * 0.9)) !important;
   aspect-ratio: 1 / 1 !important;
   object-fit: contain !important;
   flex-shrink: 0;

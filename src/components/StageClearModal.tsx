@@ -383,7 +383,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
             }`}
           >
             <Home className="w-4 h-4 shrink-0" />
-            <span>{isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('THOÁT VỀ TRANG CHỦ', 'EXIT TO HOME')}</span>
+            <span>{isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
           </button>
         </div>
       </div>

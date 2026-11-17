@@ -175,12 +175,14 @@ export interface VirtualShootButtonProps {
   isShooting: boolean;
   onShootChange: (shooting: boolean) => void;
   size?: number;
+  showKeyboardHint?: boolean;
 }
 
 export const VirtualShootButton: React.FC<VirtualShootButtonProps> = ({
   isShooting,
   onShootChange,
   size = 76,
+  showKeyboardHint = false,
 }) => {
   const { t } = useLanguage();
   const isCompact = size < 70;
@@ -247,7 +249,7 @@ export const VirtualShootButton: React.FC<VirtualShootButtonProps> = ({
           {t('BẮN', 'FIRE')}
         </span>
       </button>
-      {!isCompact && <span className="font-hud text-xs text-neutral-500">SPACE / J</span>}
+      {showKeyboardHint && !isCompact && <span className="font-hud text-xs text-neutral-500">SPACE / J</span>}
     </div>
   );
 };
@@ -403,6 +405,7 @@ export interface TouchControlsProps {
   gameState?: GameCoreState | null;
   difficulty?: 'DEFAULT' | 'EXTREME';
   localOnlineRole?: 'HOST' | 'GUEST' | null;
+  showKeyboardHint?: boolean;
 }
 
 export const TouchControls: React.FC<TouchControlsProps> = ({
@@ -414,6 +417,7 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
   gameState,
   difficulty = 'DEFAULT',
   localOnlineRole = null,
+  showKeyboardHint = false,
 }) => {
   const { t } = useLanguage();
   const [activeDirection, setActiveDirection] = useState<ActiveDirection>(null);
@@ -522,6 +526,7 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
           isShooting={isShooting}
           onShootChange={handleShootChange}
           size={76}
+          showKeyboardHint={showKeyboardHint}
         />
       </div>
     </div>

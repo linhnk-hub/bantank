@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { RotateCcw, Home, Skull, Trophy, Clock, ShieldAlert, Users, Loader2 } from 'lucide-react';
+import { RotateCcw, Home, Trophy, Users, Loader2 } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
 import {
   formatCountdownMMSS,
@@ -129,15 +129,6 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-3 sm:space-y-4 scrollbar-thin">
           {/* Header */}
           <div className="text-center space-y-1.5">
-            <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded bg-[#FF0055]/15 text-[#FF0055] border border-[#FF0055]/40 mb-0.5">
-              {isTimeout ? (
-                <Clock className="w-5 h-5 sm:w-6 sm:h-6" />
-              ) : isBaseDestroyed ? (
-                <ShieldAlert className="w-5 h-5 sm:w-6 sm:h-6" />
-              ) : (
-                <Skull className="w-5 h-5 sm:w-6 sm:h-6" />
-              )}
-            </div>
             <h2 className="font-pixel text-lg sm:text-xl font-black tracking-wider text-[#FF0055] uppercase">
               GAME OVER
             </h2>
@@ -311,7 +302,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             }`}
           >
             <Home className="w-4 h-4" />
-            <span>{isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('THOÁT VỀ TRANG CHỦ', 'EXIT TO HOME')}</span>
+            <span>{isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
           </button>
         </div>
       </div>

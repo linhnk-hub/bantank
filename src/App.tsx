@@ -1189,7 +1189,7 @@ export default function App() {
             onClick={handleMaintenanceExitToMenu}
             className="font-btn w-full min-h-[48px] py-2.5 px-5 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-xs sm:text-sm uppercase tracking-wider transition-all shadow-lg cursor-pointer"
           >
-            {t('Thoát về trang chủ', 'Exit to Home')}
+            {t('Về trang chủ', 'Return Home')}
           </button>
         </div>
       </div>
@@ -1460,7 +1460,7 @@ export default function App() {
               onClick={handleQuitToMenu}
               className="font-btn px-3 py-1 rounded bg-[#FF0055] hover:bg-rose-500 text-white font-bold text-xs cursor-pointer"
             >
-              {t('Thoát về trang chủ', 'Exit to Home')}
+              {t('Về trang chủ', 'Return Home')}
             </button>
           </div>
         </div>
@@ -1821,6 +1821,7 @@ export default function App() {
                     gameState={gameState}
                     difficulty={difficulty}
                     localOnlineRole={localOnlineRole}
+                    showKeyboardHint={true}
                   />
                 </div>
               )}
