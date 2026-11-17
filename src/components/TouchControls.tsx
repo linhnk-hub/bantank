@@ -4,9 +4,28 @@
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { ArrowUp, ArrowDown, ArrowLeft, ArrowRight, Crosshair, Pause } from 'lucide-react';
+import {
+  ArrowUp,
+  ArrowDown,
+  ArrowLeft,
+  ArrowRight,
+  Crosshair,
+  Pause,
+  Heart,
+  Skull,
+  ShieldAlert,
+  Trophy,
+  Clock,
+} from 'lucide-react';
 import { VirtualJoystick } from './VirtualJoystick.tsx';
-import type { InputState } from '../core/types.ts';
+import type { GameCoreState, InputState } from '../core/types.ts';
+import {
+  ENEMY_CONFIG,
+  MATCH_TIMER_CONFIG,
+  formatCountdownMMSS,
+  getMatchDurationSecondsForDifficulty,
+  getStartingLivesForDifficultyAndMode,
+} from '../core/constants.ts';
 import { SessionManager } from '../core/sessionManager.ts';
 import { useLanguage } from '../core/i18n.ts';
 
@@ -224,11 +243,149 @@ export const VirtualShootButton: React.FC<VirtualShootButtonProps> = ({
         aria-label={t('Bắn đạn', 'Fire')}
       >
         <Crosshair style={{ width: `${iconSize}px`, height: `${iconSize}px` }} />
-        <span className={`${isCompact ? 'text-[9px]' : 'text-[10px]'} font-black tracking-widest uppercase`}>
+        <span className={`${isCompact ? 'text-[10px]' : 'text-xs'} font-black tracking-widest uppercase`}>
           {t('BẮN', 'FIRE')}
         </span>
       </button>
       {!isCompact && <span className="font-hud text-xs text-neutral-500">SPACE / J</span>}
+    </div>
+  );
+};
+
+export interface BattleCenterHudStatsProps {
+  gameState?: GameCoreState | null;
+  difficulty?: 'DEFAULT' | 'EXTREME';
+  localOnlineRole?: 'HOST' | 'GUEST' | null;
+}
+
+export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
+  gameState,
+  difficulty = 'DEFAULT',
+  localOnlineRole = null,
+}) => {
+  const { t } = useLanguage();
+  const stageId = gameState?.currentStageId ?? 1;
+  const stageName = gameState?.currentStageName || `Stage ${stageId}`;
+  const isTwoPlayer =
+    gameState?.gameMode === 'TWO_PLAYERS_AI' ||
+    gameState?.gameMode === 'TWO_PLAYERS_ONLINE';
+  const isCoopOnline = gameState?.gameMode === 'TWO_PLAYERS_ONLINE';
+
+  const p1Lives =
+    gameState?.p1State.lives ??
+    getStartingLivesForDifficultyAndMode(
+      gameState?.difficulty ?? difficulty,
+      gameState?.gameMode ?? 'SOLO'
+    );
+  const p2Lives = gameState?.p2State?.lives ?? 0;
+
+  const totalEnemies = ENEMY_CONFIG.TOTAL_COUNT;
+  const sumCounts = (counts?: { BASIC: number; FAST: number; POWER: number; ARMOR: number }) =>
+    counts ? counts.BASIC + counts.FAST + counts.POWER + counts.ARMOR : 0;
+  const enemiesKilled =
+    isCoopOnline && localOnlineRole === 'GUEST'
+      ? sumCounts(gameState?.p2Stats?.defeatedCounts)
+      : gameState?.totalDefeatedEnemies ?? sumCounts(gameState?.p1Stats?.defeatedCounts);
+  const remainingEnemies = Math.max(
+    0,
+    totalEnemies - (gameState?.totalDefeatedEnemies ?? 0)
+  );
+
+  const xpScore =
+    isCoopOnline && localOnlineRole === 'GUEST'
+      ? gameState?.p2Stats?.score ?? 0
+      : gameState?.p1Stats?.score ?? gameState?.score ?? 0;
+
+  const remSec =
+    typeof gameState?.remainingSeconds === 'number'
+      ? gameState.remainingSeconds
+      : getMatchDurationSecondsForDifficulty(gameState?.difficulty ?? difficulty);
+  const isCrit = remSec <= MATCH_TIMER_CONFIG.CRITICAL_THRESHOLD_S;
+  const isWarn = !isCrit && remSec <= MATCH_TIMER_CONFIG.WARNING_THRESHOLD_S;
+
+  return (
+    <div
+      data-testid="battle-center-hud"
+      className="w-full max-w-[230px] sm:max-w-[280px] rounded-md bg-[#0b0d1e]/95 border border-[#00F0FF]/40 px-2 py-1.5 shadow-inner flex flex-col gap-1"
+    >
+      {/* Top Row: Stage Name + Timer */}
+      <div className="flex items-center justify-between gap-1 border-b border-neutral-800 pb-1">
+        <span
+          data-testid="battle-hud-stage-name"
+          className="font-btn text-[11px] sm:text-xs font-black text-[#FFB800] truncate"
+          title={stageName}
+        >
+          {stageName}
+        </span>
+        <span
+          data-testid="battle-hud-timer"
+          className={`font-hud inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded text-xs sm:text-sm font-bold shrink-0 ${
+            isCrit
+              ? 'bg-red-950/90 text-red-300 border border-[#FF0055] animate-pulse'
+              : isWarn
+                ? 'bg-amber-950/80 text-[#FFB800]'
+                : 'text-[#00F0FF]'
+          }`}
+        >
+          <Clock className="w-3 h-3 shrink-0" />
+          <span>{formatCountdownMMSS(remSec)}</span>
+        </span>
+      </div>
+
+      {/* 2x2 Tactical Metrics Grid: Lives, Remaining Enemies, Kills, XP */}
+      <div className="grid grid-cols-2 gap-1 font-hud text-xs sm:text-sm leading-tight">
+        {/* Lives / Health */}
+        <div
+          data-testid="battle-hud-lives"
+          className="flex items-center justify-between px-1.5 py-0.5 rounded bg-[#050510]/90 border border-[#FF0055]/35"
+        >
+          <span className="inline-flex items-center gap-1 text-neutral-300 text-[11px]">
+            <Heart className="w-3 h-3 text-[#FF0055] fill-[#FF0055] shrink-0" />
+            <span>{t('Máu', 'HP')}</span>
+          </span>
+          <span className="font-extrabold text-[#FF0055]">
+            {isTwoPlayer ? `P1:${p1Lives} P2:${p2Lives}` : `×${p1Lives}`}
+          </span>
+        </div>
+
+        {/* Remaining Enemies */}
+        <div
+          data-testid="battle-hud-enemies-remaining"
+          className="flex items-center justify-between px-1.5 py-0.5 rounded bg-[#050510]/90 border border-[#FFB800]/35"
+        >
+          <span className="inline-flex items-center gap-1 text-neutral-300 text-[11px]">
+            <ShieldAlert className="w-3 h-3 text-[#FFB800] shrink-0" />
+            <span>{t('Địch', 'Foes')}</span>
+          </span>
+          <span className="font-extrabold text-[#FFB800]">
+            {remainingEnemies}/{totalEnemies}
+          </span>
+        </div>
+
+        {/* Kills */}
+        <div
+          data-testid="battle-hud-kills"
+          className="flex items-center justify-between px-1.5 py-0.5 rounded bg-[#050510]/90 border border-[#00F0FF]/35"
+        >
+          <span className="inline-flex items-center gap-1 text-neutral-300 text-[11px]">
+            <Skull className="w-3 h-3 text-[#00F0FF] shrink-0" />
+            <span>{t('Đã giết', 'Kills')}</span>
+          </span>
+          <span className="font-extrabold text-[#00F0FF]">{enemiesKilled}</span>
+        </div>
+
+        {/* XP Score */}
+        <div
+          data-testid="battle-hud-xp"
+          className="flex items-center justify-between px-1.5 py-0.5 rounded bg-[#050510]/90 border border-emerald-500/35"
+        >
+          <span className="inline-flex items-center gap-1 text-neutral-300 text-[11px]">
+            <Trophy className="w-3 h-3 text-emerald-400 shrink-0" />
+            <span>XP</span>
+          </span>
+          <span className="font-extrabold text-emerald-400">{xpScore}</span>
+        </div>
+      </div>
     </div>
   );
 };
@@ -239,6 +396,9 @@ export interface TouchControlsProps {
   isPaused: boolean;
   controlType?: 'joystick' | 'dpad';
   disablePause?: boolean;
+  gameState?: GameCoreState | null;
+  difficulty?: 'DEFAULT' | 'EXTREME';
+  localOnlineRole?: 'HOST' | 'GUEST' | null;
 }
 
 export const TouchControls: React.FC<TouchControlsProps> = ({
@@ -247,6 +407,9 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
   isPaused,
   controlType = 'joystick',
   disablePause = false,
+  gameState,
+  difficulty = 'DEFAULT',
+  localOnlineRole = null,
 }) => {
   const { t } = useLanguage();
   const [activeDirection, setActiveDirection] = useState<ActiveDirection>(null);
@@ -307,15 +470,15 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
   );
 
   return (
-    <div className="w-full flex items-center justify-between select-none touch-none py-2 px-4 sm:px-8 md:px-10 bg-[#050510]/90 rounded-lg border border-[#00F0FF]/30 shadow-xl">
+    <div className="w-full flex items-center justify-between gap-1.5 sm:gap-3 select-none touch-none py-2 px-2.5 sm:px-6 md:px-8 bg-[#050510]/90 rounded-lg border border-[#00F0FF]/30 shadow-xl">
       {/* Left Column: Virtual Joystick aligned to left hand zone */}
       <div className="flex items-center justify-start shrink-0">
         {controlType === 'joystick' ? (
           <VirtualJoystick
             activeDirection={activeDirection}
             onDirectionChange={handleDirectionChange}
-            size={120}
-            knobSize={44}
+            size={112}
+            knobSize={42}
             deadZone={14}
             disabled={isPaused}
           />
@@ -327,22 +490,27 @@ export const TouchControls: React.FC<TouchControlsProps> = ({
         )}
       </div>
 
-      {/* Center Column: Pause Button Centered (hidden in Co-op Online) */}
-      {!disablePause && (
-        <div className="flex-none flex flex-col items-center justify-center gap-1 px-2 shrink-0">
+      {/* Center Column: Battle Stats HUD (Stage Name, Lives, Enemies, Kills, XP) stacked ABOVE the Pause Button */}
+      <div className="flex-1 flex flex-col items-center justify-center gap-1.5 min-w-0">
+        <BattleCenterHudStats
+          gameState={gameState}
+          difficulty={difficulty}
+          localOnlineRole={localOnlineRole}
+        />
+
+        {!disablePause && (
           <button
             type="button"
+            data-testid="battle-center-pause-btn"
             onClick={onPauseClick}
-            className="w-12 h-12 rounded-full bg-[#0b0d1e] border border-[#FFB800]/45 hover:bg-neutral-800 text-[#FFB800] flex items-center justify-center transition-transform active:scale-90 shadow"
+            className="font-btn px-3 py-1 rounded-full bg-[#0b0d1e] border border-[#FFB800]/50 hover:bg-neutral-800 text-[#FFB800] flex items-center justify-center gap-1.5 transition-transform active:scale-95 shadow text-[11px] font-black uppercase tracking-wider cursor-pointer"
             aria-label={t('Tạm dừng', 'Pause')}
           >
-            <Pause className="w-4 h-4 fill-[#FFB800]" />
+            <Pause className="w-3.5 h-3.5 fill-[#FFB800]" />
+            <span>PAUSE</span>
           </button>
-          <span className="font-btn text-[9px] text-neutral-400 font-bold uppercase tracking-wider">
-            PAUSE (P)
-          </span>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Right Column: Shoot Action Button aligned to right hand zone */}
       <div className="flex items-center justify-end shrink-0">

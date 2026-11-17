@@ -289,8 +289,8 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
 
   return (
     <>
-      {/* Top Banner Status Bar */}
-      <div className="bg-[#050510]/95 border-b border-[#687386]/40 px-3 py-1.5 flex items-center justify-between text-xs text-[#EAF4FF] shrink-0">
+      {/* Top Banner Status Bar — Frameless Player Name & Logout */}
+      <div className="bg-[#050510]/95 border-b border-[#687386]/40 px-3 py-1.5 flex items-center justify-between text-xs sm:text-sm text-[#EAF4FF] shrink-0">
         <div className="flex items-center gap-2">
           {user ? (
             (() => {
@@ -301,38 +301,35 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
               };
               const displayLabel = getUserDisplayLabel(effectiveUser);
               const userRole = resolveUserRole(user);
+              void getRoleNameFrameClasses(userRole);
               const roleTrademarkBadge = getRoleTrademarkBadge(userRole);
               return (
-                <div
-                  className={`flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#0b0d1e]/95 ${getRoleNameFrameClasses(
-                    userRole
-                  )}`}
-                >
+                <div className="flex items-center gap-1.5 px-1 py-0.5">
                   {effectiveAvatarUrl ? (
                     <img
                       src={effectiveAvatarUrl}
                       alt={displayLabel}
-                      className="w-5 h-5 rounded-full object-cover border border-[#FFB800]/70 shrink-0"
+                      className="w-5 h-5 rounded-full object-cover shrink-0"
                       referrerPolicy="no-referrer"
                     />
                   ) : (
-                    <UserCheck className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
+                    <UserCheck className="w-4 h-4 text-[#00F0FF] shrink-0" />
                   )}
-                  <span className="inline-flex items-baseline font-bold text-[#FFB800] min-w-0">
+                  <span className="inline-flex items-baseline font-bold text-[#FFB800] text-sm min-w-0">
                     <span className="truncate max-w-[160px] sm:max-w-[220px]">
                       {displayLabel}
                     </span>
                     {roleTrademarkBadge && (
                       <sup
                         data-testid="role-trademark-badge"
-                        className="ml-0.5 text-[9px] font-black leading-none text-[#FFB800] select-none shrink-0"
+                        className="ml-0.5 text-[10px] font-black leading-none text-[#FFB800] select-none shrink-0"
                       >
                         {roleTrademarkBadge}
                       </sup>
                     )}
                   </span>
                   {badgeInfo.label && (
-                    <span className={`text-[10px] px-1.5 py-0.2 rounded border font-medium ${badgeInfo.badgeStyle}`}>
+                    <span className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${badgeInfo.badgeStyle}`}>
                       {badgeInfo.label}
                     </span>
                   )}
@@ -340,25 +337,25 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
               );
             })()
           ) : isTrialMode ? (
-            <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-[#120e05]/90 border border-[#FFB800]/50 text-[#FFB800] font-bold">
+            <div className="flex items-center gap-1.5 px-1 py-0.5 text-[#FFB800] font-bold">
               <span className="w-2 h-2 rounded-full bg-[#FFB800] animate-pulse" />
               <span>
                 {t(
-                  'Chế độ Chơi thử • Stage 1 (Không lưu dữ liệu)',
-                  'Trial Mode • Stage 1 (Progress Not Saved)'
+                  'Chơi thử • Stage 1',
+                  'Trial • Stage 1'
                 )}
               </span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 text-[#FFB800]">
               <span className={`w-2 h-2 rounded-full ${badgeInfo.dotStyle}`} />
-              <AlertTriangle className="w-3.5 h-3.5" />
+              <AlertTriangle className="w-4 h-4" />
               <span>
                 {isProcessing
                   ? t('Đang đăng nhập...', 'Signing in...')
                   : t(
-                      'Chưa đăng nhập (Cần Gmail cá nhân để chơi)',
-                      'Not signed in (Personal Gmail required to play)'
+                      'Chưa đăng nhập',
+                      'Not signed in'
                     )}
               </span>
             </div>
@@ -372,11 +369,11 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
                 <button
                   onClick={handleRetryAcquire}
                   disabled={isProcessing}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] transition-all font-bold text-[11px] active:scale-95 disabled:opacity-50"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] transition-all font-bold text-xs active:scale-95 disabled:opacity-50"
                   title={t('Thử kết nối lại', 'Retry connection')}
                 >
-                  <RefreshCw className={`w-3 h-3 ${isProcessing ? 'animate-spin' : ''}`} />
-                  <span>{t('Kết nối máy chủ', 'Connect Server')}</span>
+                  <RefreshCw className={`w-3.5 h-3.5 ${isProcessing ? 'animate-spin' : ''}`} />
+                  <span>{t('Kết nối', 'Connect')}</span>
                 </button>
               )}
               <button
@@ -385,9 +382,9 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
                 disabled={isProcessing}
                 title={t('Đăng xuất', 'Sign Out')}
                 aria-label={t('Đăng xuất', 'Sign Out')}
-                className="flex items-center justify-center p-1.5 rounded bg-[#0b0d1e] hover:bg-[#10142b] border border-[#687386]/60 text-[#EAF4FF] transition-all font-semibold active:scale-95 disabled:opacity-50 cursor-pointer"
+                className="flex items-center justify-center p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-[#EAF4FF] transition-all font-semibold active:scale-95 disabled:opacity-50 cursor-pointer"
               >
-                <LogOut className="w-3.5 h-3.5 text-[#FF0055]" />
+                <LogOut className="w-4 h-4 text-[#FF0055]" />
               </button>
             </div>
           ) : (
@@ -396,7 +393,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
               disabled={isProcessing}
               className="flex items-center gap-1.5 px-3 py-1 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-bold transition-all shadow active:scale-95 disabled:opacity-50"
             >
-              <LogIn className="w-3.5 h-3.5" />
+              <LogIn className="w-4 h-4" />
               <span>
                 {isProcessing
                   ? t('Đang xác thực...', 'Authenticating...')

@@ -12,6 +12,7 @@ import { GameOverModal } from './components/GameOverModal.tsx';
 import { StageClearModal } from './components/StageClearModal.tsx';
 import {
   TouchControls,
+  BattleCenterHudStats,
   VirtualJoystick,
   VirtualShootButton,
   type ActiveDirection,
@@ -73,7 +74,6 @@ import {
   buildMaintenanceNoticeMessage,
 } from './core/maintenanceManager.ts';
 import { useLanguage } from './core/i18n.ts';
-import { LanguageSelector } from './components/LanguageSelector.tsx';
 import {
   RotateCcw,
   Pause,
@@ -227,12 +227,8 @@ export default function App() {
     };
   }, []);
 
-  // On desktop PC with fine mouse pointer, default touch controls to hidden to maximize canvas size
-  const [showTouchControls, setShowTouchControls] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    const desktop = window.innerWidth >= 1024 && window.matchMedia('(pointer: fine)').matches;
-    return !desktop;
-  });
+  // Default touch controls & center battle HUD to visible across devices
+  const [showTouchControls, setShowTouchControls] = useState<boolean>(true);
 
   // Passive orientation detection hook (responds to physical OS rotation only)
   useOrientation();
@@ -1461,67 +1457,13 @@ export default function App() {
          ========================================================================= */}
       {(!isDesktop && layout.isLandscape) ? (
         <div className="flex-1 flex flex-col justify-start h-[100dvh] max-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]">
-          {/* Slim Landscape Top HUD (32px) — Sticky Top Menu */}
-          <header className="sticky top-0 z-40 h-8 bg-[#050510]/95 backdrop-blur-md border-b border-[#00F0FF]/30 px-2 sm:px-3 flex items-center justify-between text-xs shrink-0 shadow">
-            {/* Left: Stage Status */}
-            <div className="flex items-center gap-1.5">
-              <span className="font-btn font-extrabold text-[#FFB800] tracking-wider text-xs">
-                STAGE {gameState?.currentStageId ?? 1}
-              </span>
+          {/* Clean Frameless Landscape Top Bar */}
+          <header className="sticky top-0 z-40 h-9 bg-[#050510]/95 backdrop-blur-md border-b border-[#00F0FF]/25 px-3 flex items-center justify-between text-xs sm:text-sm shrink-0">
+            <div className="flex items-center gap-2">
               <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
-            </div>
-
-            {/* Center: Live Match Metrics (No remaining enemy count per M7.3 IV) */}
-            <div className="font-hud flex items-center gap-2 sm:gap-3 text-sm">
-              {(() => {
-                const remSec =
-                  typeof gameState?.remainingSeconds === 'number'
-                    ? gameState.remainingSeconds
-                    : getMatchDurationSecondsForDifficulty(gameState?.difficulty ?? difficulty);
-                const isCrit = remSec <= MATCH_TIMER_CONFIG.CRITICAL_THRESHOLD_S;
-                const isWarn = !isCrit && remSec <= MATCH_TIMER_CONFIG.WARNING_THRESHOLD_S;
-                return (
-                  <div
-                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold ${
-                      isCrit
-                        ? 'bg-red-950/90 border-[#FF0055] text-red-300 animate-pulse'
-                        : isWarn
-                        ? 'bg-amber-950/80 border-[#FFB800]/80 text-[#FFB800]'
-                        : 'bg-[#0b0d1e] border-[#00F0FF]/40 text-[#00F0FF]'
-                    }`}
-                    title={t('Thời gian còn lại của trận đấu', 'Remaining match time')}
-                  >
-                    <Clock className="w-3 h-3" />
-                    <span>{formatCountdownMMSS(remSec)}</span>
-                  </div>
-                );
-              })()}
-              <div className="flex items-center gap-1 text-[#FFB800]">
-                <Trophy className="w-3.5 h-3.5" />
-                <span className="font-bold">
-                  {(isCoopOnlineMatch && localOnlineRole === 'GUEST'
-                    ? gameState?.p2Stats?.score ?? 0
-                    : gameState?.p1Stats?.score ?? gameState?.score ?? 0)}{' '}
-                  XP
-                </span>
-              </div>
-              <div className="flex items-center gap-1 text-[#FF0055] font-bold" title="Mạng P1">
-                <Heart className="w-3.5 h-3.5 fill-[#FF0055]" />
-                <span>
-                  P1×
-                  {gameState?.p1State.lives ??
-                    getStartingLivesForDifficultyAndMode(
-                      gameState?.difficulty ?? difficulty,
-                      gameState?.gameMode ?? 'SOLO'
-                    )}
-                </span>
-              </div>
-              {(gameState?.gameMode === 'TWO_PLAYERS_AI' || gameState?.gameMode === 'TWO_PLAYERS_ONLINE') && gameState?.p2State && (
-                <div className="flex items-center gap-1 text-emerald-400 font-bold" title="Mạng P2">
-                  <Heart className="w-3.5 h-3.5 fill-emerald-500" />
-                  <span>P2×{gameState.p2State.lives}</span>
-                </div>
-              )}
+              <span className="font-btn font-extrabold text-[#FFB800] tracking-wider text-xs sm:text-sm">
+                {gameState?.currentStageName || `STAGE ${gameState?.currentStageId ?? 1}`}
+              </span>
               {isCoopOnlineMatch && showOnlineNetStats && (
                 <span
                   data-testid="landscape-online-net-stats"
@@ -1532,22 +1474,9 @@ export default function App() {
               )}
             </div>
 
-            {/* Right: Quick Action Buttons */}
-            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-              <LanguageSelector compact />
-              {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
-              <QuickAudioToggleButton compact />
-
-              {!isCoopOnlineMatch && (
-                <button
-                  type="button"
-                  onClick={isPaused ? handleResume : handlePause}
-                  className="font-btn flex items-center gap-1 px-2 py-0.5 rounded bg-[#0b0d1e] hover:bg-neutral-800 border border-[#FFB800]/40 text-[#EAF4FF] text-xs font-semibold shadow cursor-pointer"
-                >
-                  {isPaused ? <Play className="w-3 h-3 fill-white" /> : <Pause className="w-3 h-3 fill-white" />}
-                  <span className="hidden xs:inline">{isPaused ? t('Tiếp tục', 'Resume') : t('Tạm dừng', 'Pause')}</span>
-                </button>
-              )}
+            {/* Right: Frameless Quick Action Buttons (No LanguageSelector in Battle) */}
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              <QuickAudioToggleButton frameless />
 
               <button
                 type="button"
@@ -1556,27 +1485,36 @@ export default function App() {
                   setIsSettingsOpen(true);
                 }}
                 aria-label={t('Cài đặt', 'Settings')}
-                className="flex items-center justify-center p-1 rounded bg-[#0b0d1e] border border-[#FFB800]/40 hover:border-[#FFB800] text-neutral-300 text-xs font-semibold cursor-pointer"
+                className="flex items-center justify-center p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 cursor-pointer"
                 title={t('Cài đặt', 'Settings')}
               >
-                <Settings className="w-3.5 h-3.5 text-[#FFB800]" />
+                <Settings className="w-4 h-4 text-[#FFB800]" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsSupportOpen(true)}
+                className="flex items-center justify-center p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 cursor-pointer"
+                title={t('Hướng dẫn điều khiển', 'Controls Guide')}
+              >
+                <HelpCircle className="w-4 h-4 text-[#00F0FF]" />
               </button>
 
               {isSuperAdmin && (
                 <button
                   type="button"
                   onClick={() => setIsDevDrawerOpen(true)}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded bg-[#0b0d1e] border border-[#FFB800]/40 hover:border-[#FFB800] text-neutral-300 text-xs font-semibold cursor-pointer"
+                  className="flex items-center gap-1 px-2 py-1 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 text-xs font-semibold cursor-pointer"
                   title={t('Bảng Kiểm thử & QA (Admin)', 'QA Suite (Admin)')}
                 >
-                  <Wrench className="w-3 h-3 text-[#FFB800]" />
+                  <Wrench className="w-4 h-4 text-[#FFB800]" />
                 </button>
               )}
             </div>
           </header>
 
-          {/* Landscape Main 3-Column Combat View - Top Aligned */}
-          <main className="flex-1 flex flex-row items-start justify-center w-full min-h-[calc(100dvh-32px)] px-1 sm:px-2 pt-1 pb-1 overflow-x-hidden overflow-y-auto">
+          {/* Landscape Main 3-Column Combat View */}
+          <main className="flex-1 flex flex-row items-center justify-center w-full min-h-[calc(100dvh-36px)] px-1 sm:px-2 pt-1 pb-1 overflow-x-hidden overflow-y-auto gap-1.5">
             {/* Left Column: Virtual Joystick */}
             <div
               style={{
@@ -1595,73 +1533,89 @@ export default function App() {
               />
             </div>
 
-            {/* Center Column: Game Canvas Maximized 1:1 Aspect Ratio (Top Aligned) */}
-            <div
-              style={{
-                width: `${layout.canvasSizePx}px`,
-                height: `${layout.canvasSizePx}px`,
-                maxWidth: `${layout.canvasSizePx}px`,
-                maxHeight: `${layout.canvasSizePx}px`,
-              }}
-              className="flex-none flex items-start justify-center overflow-hidden p-0 relative mx-auto"
-            >
-              <PhaserGame
-                mode="battle"
-                engine={gameEngine}
-                onStateUpdate={setGameState}
-                onFpsUpdate={setFps}
-                onPause={handlePause}
-                canvasSizePx={layout.canvasSizePx}
-              />
+            {/* Center Column: Game Canvas + Battle Center HUD Stats & Pause */}
+            <div className="flex-none flex flex-col items-center justify-center gap-1.5 mx-auto">
+              <div
+                style={{
+                  width: `${layout.canvasSizePx}px`,
+                  height: `${layout.canvasSizePx}px`,
+                  maxWidth: `${layout.canvasSizePx}px`,
+                  maxHeight: `${layout.canvasSizePx}px`,
+                }}
+                className="flex-none flex items-start justify-center overflow-hidden p-0 relative mx-auto"
+              >
+                <PhaserGame
+                  mode="battle"
+                  engine={gameEngine}
+                  onStateUpdate={setGameState}
+                  onFpsUpdate={setFps}
+                  onPause={handlePause}
+                  canvasSizePx={layout.canvasSizePx}
+                />
 
-              {isLocalSpectator && (
-                <div
-                  data-testid="mobile-spectator-banner"
-                  className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1 rounded bg-sky-950/90 border border-[#00F0FF]/60 text-sky-200 text-[11px] font-bold shadow-lg whitespace-nowrap"
-                >
-                  <Eye className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
-                  <span>{t('Đã hết mạng — Đang xem đồng đội thi đấu', 'Out of lives — Spectating teammate')}</span>
-                </div>
-              )}
-
-              {/* In MENU state: Overlay allowing immediate match start */}
-              {gameState?.matchState === 'MENU' && (
-                <div className="absolute inset-0 bg-[#050510]/88 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-sm overflow-y-auto">
-                  <GameLogo className="mb-1.5" />
-                  <p className="font-btn text-xs text-[#FFB800] font-bold mb-2">
-                    STAGE {gameState?.currentStageId ?? 1}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={isMatchAllowed ? handleRestart : undefined}
-                    disabled={!isMatchAllowed}
-                    className={`font-btn py-2 px-5 rounded font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 shrink-0 ${
-                      isMatchAllowed
-                        ? 'bg-[#FFB800] hover:bg-amber-400 text-[#050510] shadow-[#FFB800]/30 cursor-pointer'
-                        : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
-                    }`}
+                {isLocalSpectator && (
+                  <div
+                    data-testid="mobile-spectator-banner"
+                    className="pointer-events-none absolute top-2 left-1/2 -translate-x-1/2 z-30 flex items-center gap-1.5 px-3 py-1 rounded bg-sky-950/90 border border-[#00F0FF]/60 text-sky-200 text-xs font-bold shadow-lg whitespace-nowrap"
                   >
-                    <Play className={`w-3.5 h-3.5 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
-                    <span>
-                      {isMatchAllowed
-                        ? t('BẮT ĐẦU TRẬN ĐẤU', 'START BATTLE')
-                        : t('ĐĂNG NHẬP GMAIL ĐỂ BẮT ĐẦU', 'SIGN IN WITH GMAIL TO START')}
-                    </span>
-                  </button>
-                </div>
-              )}
+                    <Eye className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
+                    <span>{t('Đang xem đồng đội', 'Spectating teammate')}</span>
+                  </div>
+                )}
+
+                {gameState?.matchState === 'MENU' && (
+                  <div className="absolute inset-0 bg-[#050510]/88 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-sm overflow-y-auto">
+                    <GameLogo className="mb-1.5" />
+                    <p className="font-btn text-xs text-[#FFB800] font-bold mb-2">
+                      STAGE {gameState?.currentStageId ?? 1}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={isMatchAllowed ? handleRestart : undefined}
+                      disabled={!isMatchAllowed}
+                      className={`font-btn py-2 px-5 rounded font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                        isMatchAllowed
+                          ? 'bg-[#FFB800] hover:bg-amber-400 text-[#050510] shadow-[#FFB800]/30 cursor-pointer'
+                          : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
+                      }`}
+                    >
+                      <Play className={`w-3.5 h-3.5 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
+                      <span>
+                        {isMatchAllowed
+                          ? t('BẮT ĐẦU TRẬN ĐẤU', 'START BATTLE')
+                          : t('ĐĂNG NHẬP GMAIL ĐỂ BẮT ĐẦU', 'SIGN IN WITH GMAIL TO START')}
+                      </span>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Right Column: Virtual Shoot Action Button */}
+            {/* Right Column: Battle Center HUD Stats (above Pause) + Virtual Shoot Button */}
             <div
               style={{
                 width: `${layout.rightControlWidthPx}px`,
-                minWidth: '90px',
+                minWidth: '110px',
               }}
-              className={`flex-1 self-stretch flex items-center justify-center ${
+              className={`flex-1 self-stretch flex flex-col items-center justify-center gap-2 ${
                 isLocalSpectator ? 'pointer-events-none opacity-40' : ''
               }`}
             >
+              <BattleCenterHudStats
+                gameState={gameState}
+                difficulty={difficulty}
+                localOnlineRole={localOnlineRole}
+              />
+              {!isCoopOnlineMatch && (
+                <button
+                  type="button"
+                  onClick={isPaused ? handleResume : handlePause}
+                  className="font-btn px-2.5 py-1 rounded-full bg-[#0b0d1e] hover:bg-neutral-800 border border-[#FFB800]/50 text-[#FFB800] text-[11px] font-black flex items-center gap-1 shadow cursor-pointer"
+                >
+                  {isPaused ? <Play className="w-3 h-3 fill-[#FFB800]" /> : <Pause className="w-3 h-3 fill-[#FFB800]" />}
+                  <span>PAUSE</span>
+                </button>
+              )}
               <VirtualShootButton
                 isShooting={landscapeShooting}
                 onShootChange={handleLandscapeShootChange}
@@ -1675,82 +1629,27 @@ export default function App() {
             MOBILE / TABLET PORTRAIT MODE (Dedicated 100dvh Top-to-Bottom Stack)
            ========================================================================= */
         <div className="flex-1 flex flex-col justify-start h-[100dvh] max-h-[100dvh] w-full overflow-x-hidden overflow-y-auto pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] bg-[#050510]">
-          {/* Slim Portrait Top HUD — Sticky Top Menu */}
-          <header className="sticky top-0 z-40 h-9 bg-[#050510]/95 backdrop-blur-md border-b border-[#00F0FF]/30 px-2.5 sm:px-3 flex items-center justify-between text-xs shrink-0 shadow">
+          {/* Clean Frameless Portrait Top Bar */}
+          <header className="sticky top-0 z-40 h-10 bg-[#050510]/95 backdrop-blur-md border-b border-[#00F0FF]/25 px-3 flex items-center justify-between text-xs sm:text-sm shrink-0">
             {/* Left: Stage Status */}
-            <div className="flex items-center gap-2">
-              <span className="font-btn font-extrabold text-[#FFB800] tracking-wider text-xs">
-                STAGE {gameState?.currentStageId ?? 1}
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={`w-2 h-2 rounded-full shrink-0 ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
+              <span className="font-btn font-extrabold text-[#FFB800] tracking-wider text-xs sm:text-sm truncate">
+                {gameState?.currentStageName || `STAGE ${gameState?.currentStageId ?? 1}`}
               </span>
-              <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
-            </div>
-
-            {/* Center: Live Match Metrics (No remaining enemy count per M7.3 IV) */}
-            <div className="font-hud flex items-center gap-2 text-sm">
-              {(() => {
-                const remSec =
-                  typeof gameState?.remainingSeconds === 'number'
-                    ? gameState.remainingSeconds
-                    : getMatchDurationSecondsForDifficulty(gameState?.difficulty ?? difficulty);
-                const isCrit = remSec <= MATCH_TIMER_CONFIG.CRITICAL_THRESHOLD_S;
-                const isWarn = !isCrit && remSec <= MATCH_TIMER_CONFIG.WARNING_THRESHOLD_S;
-                return (
-                  <div
-                    className={`flex items-center gap-1 px-1.5 py-0.5 rounded border font-bold ${
-                      isCrit
-                        ? 'bg-red-950/90 border-[#FF0055] text-red-300 animate-pulse'
-                        : isWarn
-                        ? 'bg-amber-950/80 border-[#FFB800]/80 text-[#FFB800]'
-                        : 'bg-[#0b0d1e] border-[#00F0FF]/40 text-[#00F0FF]'
-                    }`}
-                    title={t('Thời gian còn lại của trận đấu', 'Remaining match time')}
-                  >
-                    <Clock className="w-3 h-3" />
-                    <span>{formatCountdownMMSS(remSec)}</span>
-                  </div>
-                );
-              })()}
-              <div className="flex items-center gap-1 text-[#FFB800]">
-                <Trophy className="w-3.5 h-3.5" />
-                <span className="font-bold">
-                  {(isCoopOnlineMatch && localOnlineRole === 'GUEST'
-                    ? gameState?.p2Stats?.score ?? 0
-                    : gameState?.p1Stats?.score ?? gameState?.score ?? 0)}{' '}
-                  XP
-                </span>
-              </div>
-              <div className="flex items-center gap-1 text-[#FF0055] font-bold" title="Mạng P1">
-                <Heart className="w-3.5 h-3.5 fill-[#FF0055]" />
-                <span>
-                  P1×
-                  {gameState?.p1State.lives ??
-                    getStartingLivesForDifficultyAndMode(
-                      gameState?.difficulty ?? difficulty,
-                      gameState?.gameMode ?? 'SOLO'
-                    )}
-                </span>
-              </div>
-              {(gameState?.gameMode === 'TWO_PLAYERS_AI' || gameState?.gameMode === 'TWO_PLAYERS_ONLINE') && gameState?.p2State && (
-                <div className="flex items-center gap-1 text-emerald-400 font-bold" title="Mạng P2">
-                  <Heart className="w-3.5 h-3.5 fill-emerald-500" />
-                  <span>P2×{gameState.p2State.lives}</span>
-                </div>
-              )}
               {isCoopOnlineMatch && showOnlineNetStats && (
                 <span
                   data-testid="portrait-online-net-stats"
-                  className="px-1.5 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-xs font-bold"
+                  className="px-1.5 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-xs font-bold shrink-0"
                 >
                   {peerPingMs != null ? `${Math.round(peerPingMs)}ms` : '--ms'} • {Math.round(fps)}fps
                 </span>
               )}
             </div>
 
-            {/* Right: Quick Action Buttons */}
-            <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
-              <LanguageSelector compact />
-              {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
-              <QuickAudioToggleButton compact />
+            {/* Right: Frameless Quick Action Buttons (No LanguageSelector in Battle) */}
+            <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+              <QuickAudioToggleButton frameless />
 
               <button
                 type="button"
@@ -1759,36 +1658,36 @@ export default function App() {
                   setIsSettingsOpen(true);
                 }}
                 aria-label={t('Cài đặt', 'Settings')}
-                className="p-1 rounded bg-[#0b0d1e] border border-[#FFB800]/40 hover:border-[#FFB800] text-neutral-300 cursor-pointer"
+                className="p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 cursor-pointer"
                 title={t('Cài đặt', 'Settings')}
               >
-                <Settings className="w-3.5 h-3.5 text-[#FFB800]" />
+                <Settings className="w-4 h-4 text-[#FFB800]" />
               </button>
 
               <button
                 type="button"
                 onClick={() => setIsSupportOpen(true)}
-                className="p-1 rounded bg-[#0b0d1e] border border-[#00F0FF]/40 hover:border-[#00F0FF] text-neutral-300 cursor-pointer"
+                className="p-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 cursor-pointer"
                 title={t('Hướng dẫn điều khiển', 'Controls Guide')}
               >
-                <HelpCircle className="w-3.5 h-3.5 text-[#00F0FF]" />
+                <HelpCircle className="w-4 h-4 text-[#00F0FF]" />
               </button>
 
               {isSuperAdmin && (
                 <button
                   type="button"
                   onClick={() => setIsDevDrawerOpen(true)}
-                  className="font-btn flex items-center gap-1 px-1.5 py-1 rounded bg-[#0b0d1e] border border-[#FFB800]/40 hover:border-[#FFB800] text-neutral-300 text-[10px] font-semibold cursor-pointer"
+                  className="font-btn flex items-center gap-1 px-2 py-1 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 text-xs font-semibold cursor-pointer"
                   title={t('Bảng Kiểm thử & QA (Admin)', 'QA Suite (Admin)')}
                 >
-                  <Wrench className="w-3 h-3 text-[#FFB800]" />
+                  <Wrench className="w-4 h-4 text-[#FFB800]" />
                   <span>QA</span>
                 </button>
               )}
             </div>
           </header>
 
-          {/* Main Content Stack: HUD -> Canvas -> Controls -> Safe Bottom Spacer */}
+          {/* Main Content Stack: Canvas -> Controls (with Center HUD Stats above Pause) */}
           <div className="flex-1 flex flex-col items-center justify-start w-full overflow-x-hidden overflow-y-auto px-2 pt-1 pb-2">
             <main
               style={{
@@ -1812,20 +1711,20 @@ export default function App() {
               {gameState?.matchState === 'MENU' && (
                 <div className="absolute inset-0 bg-[#050510]/88 backdrop-blur-sm flex flex-col items-center justify-start pt-2 px-3 pb-3 text-center z-20 rounded-lg overflow-y-auto">
                   <GameLogo className="mb-1.5" />
-                  <p className="font-btn text-xs text-[#FFB800] font-bold mb-2">
+                  <p className="font-btn text-xs sm:text-sm text-[#FFB800] font-bold mb-2">
                     STAGE {gameState?.currentStageId ?? 1}
                   </p>
                   <button
                     type="button"
                     onClick={isMatchAllowed ? handleRestart : undefined}
                     disabled={!isMatchAllowed}
-                    className={`font-btn py-2 px-5 rounded font-extrabold text-xs shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 shrink-0 ${
+                    className={`font-btn py-2 px-5 rounded font-extrabold text-xs sm:text-sm shadow-lg transition-transform active:scale-95 flex items-center gap-1.5 shrink-0 ${
                       isMatchAllowed
                         ? 'bg-[#FFB800] hover:bg-amber-400 text-[#050510] shadow-[#FFB800]/30 cursor-pointer'
                         : 'bg-neutral-800 text-neutral-500 border border-neutral-700 cursor-not-allowed'
                     }`}
                   >
-                    <Play className={`w-3.5 h-3.5 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
+                    <Play className={`w-4 h-4 ${isMatchAllowed ? 'fill-black' : 'fill-neutral-500'}`} />
                     <span>
                       {isMatchAllowed
                         ? t('BẮT ĐẦU TRẬN ĐẤU', 'START BATTLE')
@@ -1839,14 +1738,14 @@ export default function App() {
             {isLocalSpectator && (
               <div
                 data-testid="mobile-spectator-banner"
-                className="mt-2 px-3 py-1.5 rounded bg-sky-950/90 border border-[#00F0FF]/60 text-sky-200 text-xs font-bold flex items-center gap-2 shadow"
+                className="mt-2 px-3 py-1.5 rounded bg-sky-950/90 border border-[#00F0FF]/60 text-sky-200 text-xs sm:text-sm font-bold flex items-center gap-2 shadow"
               >
                 <Eye className="w-4 h-4 text-[#00F0FF] shrink-0" />
-                <span>{t('Bạn đã hết mạng — Đang ở chế độ Xem đồng đội', 'Out of lives — Spectating teammate')}</span>
+                <span>{t('Đã hết mạng — Đang xem đồng đội', 'Out of lives — Spectating teammate')}</span>
               </div>
             )}
 
-            {/* Controls Cluster */}
+            {/* Controls Cluster with Center Battle HUD Stats between Joystick and Shoot Button, above Pause */}
             <div
               style={{
                 width: `${layout.canvasSizePx}px`,
@@ -1863,6 +1762,9 @@ export default function App() {
                 isPaused={isPaused || isLocalSpectator}
                 controlType="joystick"
                 disablePause={isCoopOnlineMatch}
+                gameState={gameState}
+                difficulty={difficulty}
+                localOnlineRole={localOnlineRole}
               />
             </div>
 
@@ -1879,22 +1781,19 @@ export default function App() {
             ENLARGED DESKTOP PC MODE (8/4 Grid Layout with Top Alignment)
            ========================================================================= */
         <div className="flex-1 flex flex-col justify-start w-full">
-          {/* Header (M7.3.10: Sticky Top Menu with Safe Area & Quick Audio Mute/Unmute) */}
-          <header className="border-b border-[#00F0FF]/25 bg-[#050510]/95 backdrop-blur-md px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 sticky top-0 z-40 shadow-md">
+          {/* Header — Frameless Top Menu Action Buttons & No LanguageSelector in Battle */}
+          <header className="border-b border-[#00F0FF]/25 bg-[#050510]/95 backdrop-blur-md px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2 sticky top-0 z-40 shadow-md">
             <div className="max-w-[1560px] mx-auto flex items-center justify-between gap-2">
               {/* Stage Indicator */}
               <div className="flex items-center gap-2">
-                <span className="font-btn text-[10px] sm:text-xs px-2.5 py-0.5 rounded bg-[#FFB800]/15 text-[#FFB800] border border-[#FFB800]/40 font-bold">
-                  STAGE {gameState?.currentStageId ?? 1}
+                <span className="font-btn text-xs sm:text-sm text-[#FFB800] font-bold">
+                  {gameState?.currentStageName || `STAGE ${gameState?.currentStageId ?? 1}`}
                 </span>
               </div>
 
-              {/* Header Right Actions */}
-              <div className="flex items-center gap-1.5 text-xs">
-                <LanguageSelector compact />
-
-                {/* M7.3.10 Section 3: Quick Audio Mute/Unmute Button */}
-                <QuickAudioToggleButton showLabelOnDesktop />
+              {/* Header Right Actions (Frameless) */}
+              <div className="flex items-center gap-2 text-xs sm:text-sm">
+                <QuickAudioToggleButton frameless showLabelOnDesktop />
 
                 {!isTrialMode && (
                   <button
@@ -1904,29 +1803,29 @@ export default function App() {
                       setIsSettingsOpen(true);
                     }}
                     aria-label={t('Cài đặt', 'Settings')}
-                    className="flex items-center justify-center p-1.5 rounded bg-[#0b0d1e] border border-[#FFB800]/40 hover:border-[#FFB800] text-neutral-200 font-semibold transition-all shadow cursor-pointer"
+                    className="flex items-center justify-center p-2 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 font-semibold transition-all cursor-pointer"
                     title={t('Cài đặt Tài khoản & Media', 'Account & Media Settings')}
                   >
-                    <Settings className="w-3.5 h-3.5 text-[#FFB800]" />
+                    <Settings className="w-4 h-4 text-[#FFB800]" />
                   </button>
                 )}
 
                 <button
                   type="button"
                   onClick={() => setIsSupportOpen(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-[#0b0d1e] border border-[#00F0FF]/40 hover:border-[#00F0FF] text-neutral-200 font-semibold transition-all shadow cursor-pointer"
+                  className="flex items-center justify-center p-2 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 font-semibold transition-all cursor-pointer"
                   title={t('Hướng dẫn điều khiển', 'Controls Guide')}
                 >
-                  <HelpCircle className="w-3.5 h-3.5 text-[#00F0FF]" />
+                  <HelpCircle className="w-4 h-4 text-[#00F0FF]" />
                 </button>
 
                 {isSuperAdmin && (
                   <button
                     type="button"
                     onClick={() => setIsDevDrawerOpen(true)}
-                    className="font-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-[#0b0d1e] border border-[#FFB800]/40 hover:border-[#FFB800] text-neutral-200 font-semibold transition-all shadow cursor-pointer"
+                    className="font-btn flex items-center gap-1.5 px-2.5 py-1.5 rounded bg-transparent hover:bg-white/10 border-0 text-neutral-200 font-semibold transition-all cursor-pointer"
                   >
-                    <Wrench className="w-3.5 h-3.5 text-[#FFB800]" />
+                    <Wrench className="w-4 h-4 text-[#FFB800]" />
                     <span className="hidden sm:inline">QA Suite</span>
                   </button>
                 )}
@@ -1934,7 +1833,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setIsMenuExpanded((v) => !v)}
-                  className="p-1.5 rounded bg-[#0b0d1e] hover:bg-neutral-800 text-neutral-300 transition-all sm:hidden"
+                  className="p-1.5 rounded bg-transparent hover:bg-white/10 text-neutral-300 transition-all sm:hidden"
                   aria-label="Thu gọn/Mở rộng Menu"
                 >
                   {isMenuExpanded ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
@@ -2090,6 +1989,9 @@ export default function App() {
                     isPaused={isPaused || isLocalSpectator}
                     controlType="joystick"
                     disablePause={isCoopOnlineMatch}
+                    gameState={gameState}
+                    difficulty={difficulty}
+                    localOnlineRole={localOnlineRole}
                   />
                 </div>
               )}
