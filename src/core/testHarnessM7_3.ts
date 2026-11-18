@@ -7030,16 +7030,15 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       !regularTabIds.includes('USER_ACCOUNTS') &&
       !regularTabIds.includes('SYSTEM_LOGS') &&
       !regularTabIds.includes('CONTACT_MESSAGES') &&
-      superAdminTabLabels.length === 9 &&
+      superAdminTabLabels.length === 8 &&
       superAdminTabLabels[0] === 'Thông tin' &&
       superAdminTabLabels[1] === 'Hình ảnh' &&
       superAdminTabLabels[2] === 'Media' &&
       superAdminTabLabels[3] === 'Chế độ chơi' &&
-      superAdminTabLabels[4] === 'Cấp quyền' &&
-      superAdminTabLabels[5] === 'Tài khoản' &&
-      superAdminTabLabels[6] === 'LOG HỆ THỐNG' &&
-      superAdminTabLabels[7] === 'BẢO TRÌ' &&
-      superAdminTabLabels[8] === 'Tin nhắn';
+      superAdminTabLabels[4] === 'Tài khoản' &&
+      superAdminTabLabels[5] === 'LOG HỆ THỐNG' &&
+      superAdminTabLabels[6] === 'BẢO TRÌ' &&
+      superAdminTabLabels[7] === 'Tin nhắn';
 
     // 2. Kiểm tra phân trang danh sách Tài khoản (tối đa 10 tài khoản/trang, Trước/Sau) & bảo mật quyền truy cập (Mục 3)
     const seedAccounts = Array.from({ length: 25 }, (_, idx) => {
@@ -8444,7 +8443,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const tc2Pass =
       mm.canManageMusic() === true &&
       sm.canManageActionSounds() === true &&
-      adminTabs.length === 9 &&
+      adminTabs.length === 8 &&
       adminTabs.some((t) => t.id === 'CONTACT_MESSAGES') &&
       hasRolePermission('ADMIN', 'MANAGE_STAGES') &&
       hasRolePermission('ADMIN', 'MANAGE_AUDIO_SYSTEM') &&
@@ -8645,8 +8644,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       hasRolePermission('MOD', 'VIEW_ACCOUNT_LIST') &&
       hasRolePermission('MOD', 'VIEW_ACCOUNT_DETAILS') &&
       hasRolePermission('MOD', 'VIEW_AUDIT_AND_MONITORING') &&
-      modTabs.some((t) => t.id === 'USER_ACCOUNTS') &&
-      modTabs.some((t) => t.id === 'ADMIN_OTHER');
+      modTabs.some((t) => t.id === 'USER_ACCOUNTS');
 
     mm.setUserRole('MOD');
     sm.setActionSoundAdminRole('MOD');
@@ -9174,9 +9172,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const playerTabs = getAvailableSettingsTabsForRole('PLAYER').map((t) => t.id);
     const section3UnifiedLayoutOk =
       UNIFIED_SETTINGS_MODAL_WIDTH_CLASS === 'w-full max-w-4xl' &&
-      adminTabs.length === 9 &&
+      adminTabs.length === 8 &&
       adminTabs.includes('USER_ACCOUNTS') &&
-      adminTabs.includes('ADMIN_OTHER') &&
       adminTabs.includes('IMAGE_SETTINGS') &&
       adminTabs.includes('SYSTEM_LOGS') &&
       adminTabs.includes('MAINTENANCE') &&
@@ -9186,7 +9183,6 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       !modTabs.includes('SYSTEM_LOGS') &&
       !modTabs.includes('CONTACT_MESSAGES') &&
       !playerTabs.includes('USER_ACCOUNTS') &&
-      !playerTabs.includes('ADMIN_OTHER') &&
       !playerTabs.includes('SYSTEM_LOGS') &&
       !playerTabs.includes('CONTACT_MESSAGES');
 

@@ -515,9 +515,6 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 <div className="font-btn text-[13px] sm:text-base font-extrabold text-[#EAF4FF] leading-tight whitespace-nowrap drop-shadow">
                   SOLO
                 </div>
-                <div className="text-xs text-[#EAF4FF]/85 leading-tight mt-0.5 drop-shadow">
-                  {t('Đơn đấu', '1 Player')}
-                </div>
               </div>
             </button>
 
@@ -561,9 +558,6 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 <div className="font-btn text-[13px] sm:text-base font-extrabold text-[#EAF4FF] leading-tight whitespace-nowrap drop-shadow">
                   CO-OP AI
                 </div>
-                <div className="text-xs text-[#EAF4FF]/85 leading-tight mt-0.5 drop-shadow">
-                  {t('Cùng AI', 'With AI')}
-                </div>
               </div>
             </button>
 
@@ -606,9 +600,6 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               <div className="relative z-10">
                 <div className="font-btn text-[13px] sm:text-base font-extrabold text-[#EAF4FF] leading-tight whitespace-nowrap tracking-tight drop-shadow">
                   CO-OP ONLINE
-                </div>
-                <div className="text-xs text-[#EAF4FF]/85 leading-tight mt-0.5 drop-shadow">
-                  {t('2 Người', 'Online 2P')}
                 </div>
               </div>
             </button>

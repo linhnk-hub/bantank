@@ -4799,9 +4799,73 @@ export class AvatarManager {
     this.userUnsubscribes.clear();
   }
 
+  private peerProfileHints = new Map<
+    string,
+    {
+      displayName?: string | null;
+      avatarType?: PlayerAvatarType;
+      avatarId?: string | null;
+      photoURL?: string | null;
+      updatedAtMs: number;
+    }
+  >();
+
+  public setPeerProfileHint(
+    uid: string | null | undefined,
+    hint: {
+      displayName?: string | null;
+      avatarType?: PlayerAvatarType;
+      avatarId?: string | null;
+      photoURL?: string | null;
+    }
+  ): void {
+    if (!uid) return;
+    const existing = this.peerProfileHints.get(uid);
+    const avatarType: PlayerAvatarType =
+      hint.avatarType === 'catalog'
+        ? 'catalog'
+        : hint.avatarType === 'google'
+          ? 'google'
+          : existing?.avatarType ?? 'google';
+    const avatarId =
+      avatarType === 'catalog' && typeof hint.avatarId === 'string' && hint.avatarId.trim()
+        ? hint.avatarId.trim()
+        : avatarType === 'catalog'
+          ? existing?.avatarId ?? null
+          : null;
+    const displayName =
+      typeof hint.displayName === 'string' && hint.displayName.trim()
+        ? hint.displayName.trim()
+        : existing?.displayName ?? null;
+    const photoURL =
+      typeof hint.photoURL === 'string' && hint.photoURL.trim()
+        ? hint.photoURL.trim()
+        : existing?.photoURL ?? null;
+    const nowMs = Date.now();
+    this.peerProfileHints.set(uid, {
+      displayName,
+      avatarType,
+      avatarId,
+      photoURL,
+      updatedAtMs: nowMs,
+    });
+    const cached = this.userMetadataCache.get(uid);
+    if (!cached || cached.avatarUpdatedAtMs === 0 || nowMs >= cached.avatarUpdatedAtMs) {
+      this.userMetadataCache.set(uid, {
+        uid,
+        displayName: displayName ?? cached?.displayName ?? null,
+        avatarType,
+        avatarId,
+        avatarUpdatedAtMs: nowMs,
+      });
+    }
+    this.notify();
+  }
+
   public clearSessionStateOnSignOut(): void {
     this.stopAllSubscriptions();
     this.userMetadataCache.clear();
+    this.peerProfileHints.clear();
     this.lastFirestoreDiagnostic = null;
     this.recoveredForUid = null;
     this.recoveryInflight = null;
@@ -4825,6 +4889,18 @@ export class AvatarManager {
       this.userMetadataCache.set(uid, merged);
       return merged;
     }
+    const peerHint = this.peerProfileHints.get(uid);
+    if (peerHint && (!cached || cached.avatarUpdatedAtMs === 0 || peerHint.updatedAtMs >= cached.avatarUpdatedAtMs)) {
+      const mergedPeer: UserProfileAvatarMetadata = {
+        uid,
+        displayName: peerHint.displayName ?? cached?.displayName ?? null,
+        avatarType: peerHint.avatarType ?? 'google',
+        avatarId: peerHint.avatarType === 'catalog' ? peerHint.avatarId ?? null : null,
+        avatarUpdatedAtMs: peerHint.updatedAtMs,
+      };
+      this.userMetadataCache.set(uid, mergedPeer);
+      return mergedPeer;
+    }
     return cached;
   }
 
@@ -4841,13 +4917,14 @@ export class AvatarManager {
       this.ensureUserAvatarSubscribed(uid);
     }
     const meta = uid ? this.getUserMetadata(uid) : null;
+    const peerPhotoUrl = uid ? this.peerProfileHints.get(uid)?.photoURL ?? null : null;
     return resolvePlayerAvatarUrl({
       uid,
       userMeta: meta,
       catalogItems: this.catalogItems,
       resolvedStorageUrls: this.resolvedStorageUrls,
       failedStoragePaths: this.failedStoragePaths,
-      photoURL: fallbackPhotoUrl,
+      photoURL: fallbackPhotoUrl ?? peerPhotoUrl,
     });
   }
 

@@ -434,8 +434,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                   </h3>
                   <p className="text-xs text-[#EAF4FF]/80 leading-relaxed">
                     {t(
-                      'Nhập Mã phòng định dạng BTxxxx (và mật khẩu nếu phòng có khóa) để tham gia phối hợp cùng đồng đội.',
-                      'Enter a BTxxxx room code (and password if locked) to join and fight alongside your partner.'
+                      'Nhập Mã phòng (và mật khẩu nếu phòng có khóa) để tham gia phối hợp cùng đồng đội.',
+                      'Enter a room code (and password if locked) to join and fight alongside your partner.'
                     )}
                   </p>
                 </div>
@@ -498,15 +498,10 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                         {t('Giải trí', 'Casual')}
                       </div>
                       <div className="text-[10px] text-neutral-300 leading-snug">
-                        {t('3 mạng • 120s • Cân bằng.', '3 Lives • 120s • Balanced.')}
+                        {t('3 mạng • 120s • Cân bằng', '3 Lives • 120s • Balanced')}
                       </div>
                     </div>
                   </div>
-                  {createDifficulty === 'DEFAULT' && (
-                    <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded bg-amber-500 text-black font-black font-mono shrink-0">
-                      {t('CHỌN', 'ON')}
-                    </span>
-                  )}
                 </button>
 
                 <button
@@ -525,15 +520,10 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                         {t('Thử thách', 'Challenge')}
                       </div>
                       <div className="text-[10px] text-neutral-300 leading-snug">
-                        {t('1 mạng • 60s • Áp lực cao.', '1 Life • 60s • High pressure.')}
+                        {t('1 mạng • 60s • Áp lực cao', '1 Life • 60s • High pressure')}
                       </div>
                     </div>
                   </div>
-                  {createDifficulty === 'EXTREME' && (
-                    <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded bg-rose-600 text-white font-black font-mono shrink-0">
-                      {t('CHỌN', 'ON')}
-                    </span>
-                  )}
                 </button>
               </div>
             </div>
@@ -1058,15 +1048,22 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
 
       {/* 2 Player Slots */}
       {(() => {
-        const hostAvatarUrl = avatarManager.getEffectivePlayerAvatarUrl({
+        const rawHostAvatarUrl = avatarManager.getEffectivePlayerAvatarUrl({
           uid: room.hostUid,
           photoURL: role === 'HOST' ? user?.photoURL : null,
         });
-        const guestAvatarUrl = room.guestUid
+        const hostAvatarUrl =
+          rawHostAvatarUrl && !hostAvatarBroken ? rawHostAvatarUrl : '/avatar/ava01.png';
+        const rawGuestAvatarUrl = room.guestUid
           ? avatarManager.getEffectivePlayerAvatarUrl({
               uid: room.guestUid,
               photoURL: role === 'GUEST' ? user?.photoURL : null,
             })
+          : null;
+        const guestAvatarUrl = room.guestUid
+          ? rawGuestAvatarUrl && !guestAvatarBroken
+            ? rawGuestAvatarUrl
+            : '/avatar/ava03.png'
           : null;
 
         return (
@@ -1075,13 +1072,16 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
             <div className="p-3.5 rounded-xl bg-neutral-950/80 border border-amber-500/40 flex items-center justify-between gap-2">
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="w-9 h-9 rounded-full bg-amber-500/20 border border-amber-500/40 overflow-hidden flex items-center justify-center text-amber-300 shrink-0">
-                  {hostAvatarUrl && !hostAvatarBroken ? (
+                  {hostAvatarUrl ? (
                     <img
                       src={hostAvatarUrl}
                       alt={room.hostDisplayName}
                       data-testid="coop-lobby-host-avatar"
+                      referrerPolicy="no-referrer"
                       className="w-full h-full object-cover"
-                      onError={() => setHostAvatarBroken(true)}
+                      onError={() => {
+                        if (!hostAvatarBroken) setHostAvatarBroken(true);
+                      }}
                     />
                   ) : (
                     <UserCheck className="w-4 h-4" />
@@ -1107,7 +1107,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                 </div>
               </div>
               <span
-                className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border shrink-0 whitespace-nowrap ${
+                className={`px-2.5 py-1 rounded border text-[10px] font-black uppercase inline-flex items-center justify-center text-center shrink-0 whitespace-nowrap ${
                   room.hostReady
                     ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
                     : 'bg-neutral-900 text-neutral-400 border-neutral-700'
@@ -1129,13 +1129,16 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                 <>
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="w-9 h-9 rounded-full bg-emerald-500/20 border border-emerald-500/40 overflow-hidden flex items-center justify-center text-emerald-300 shrink-0">
-                      {guestAvatarUrl && !guestAvatarBroken ? (
+                      {guestAvatarUrl ? (
                         <img
                           src={guestAvatarUrl}
                           alt={resolvedGuestName}
                           data-testid="coop-lobby-guest-avatar"
+                          referrerPolicy="no-referrer"
                           className="w-full h-full object-cover"
-                          onError={() => setGuestAvatarBroken(true)}
+                          onError={() => {
+                            if (!guestAvatarBroken) setGuestAvatarBroken(true);
+                          }}
                         />
                       ) : (
                         <Users className="w-4 h-4" />
@@ -1162,7 +1165,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <span
-                      className={`w-[116px] min-h-[28px] px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase inline-flex items-center justify-center text-center shrink-0 whitespace-nowrap ${
+                      className={`px-2.5 py-1 rounded border text-[10px] font-black uppercase inline-flex items-center justify-center text-center shrink-0 whitespace-nowrap ${
                         room.guestReady
                           ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
                           : 'bg-neutral-900 text-neutral-400 border-neutral-700'
@@ -1182,7 +1185,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                           'Mời người chơi P2 ra khỏi phòng',
                           'Remove P2 from the room'
                         )}
-                        className="w-[116px] min-h-[28px] px-2.5 py-1 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 font-black text-[10px] uppercase inline-flex items-center justify-center gap-1 shrink-0 whitespace-nowrap transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                        className="px-2.5 py-1 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 font-black text-[10px] uppercase inline-flex items-center justify-center gap-1 shrink-0 whitespace-nowrap transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                       >
                         <UserX className="w-3 h-3 shrink-0" />
                         <span>{t('Mời ra', 'Kick')}</span>

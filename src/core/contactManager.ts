@@ -5,6 +5,7 @@
 
 import {
   collection,
+  deleteDoc,
   doc,
   getDocs,
   limit,
@@ -296,5 +297,26 @@ export async function updateContactMessageStatus(
     await updateDoc(doc(db, 'contact_messages', cleanId), payload);
   } catch (err) {
     handleFirestoreError(err, 'update', path);
+  }
+}
+
+export async function deleteContactMessage(messageId: string): Promise<void> {
+  const auth = getFirebaseAuth();
+  const currentUser = auth.currentUser;
+  if (!currentUser || !isAdminUser(currentUser)) {
+    throw new Error('PERMISSION_DENIED_ADMIN_ONLY');
+  }
+
+  const cleanId = (messageId || '').trim();
+  if (!cleanId) {
+    throw new Error('INVALID_MESSAGE_ID');
+  }
+
+  const db = getFirebaseDb();
+  const path = `contact_messages/${cleanId}`;
+  try {
+    await deleteDoc(doc(db, 'contact_messages', cleanId));
+  } catch (err) {
+    handleFirestoreError(err, 'delete', path);
   }
 }

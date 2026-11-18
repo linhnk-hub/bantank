@@ -132,14 +132,14 @@
         <div class="hidden sm:flex items-center gap-2.5">
           <!-- Bộ chuyển ngôn ngữ VI | EN -->
           <div
-            class="inline-flex items-center rounded border border-[#687386]/60 bg-[#0b0d1e] p-0.5 font-btn text-xs font-bold tracking-wider"
+            class="inline-flex h-8 items-center rounded border border-[#687386]/60 bg-[#0b0d1e] p-0.5 font-btn text-xs font-bold tracking-wider"
             role="group"
             aria-label="Language selector"
           >
             <button
               type="button"
               data-lang-switch="vi"
-              class="lang-btn px-2 py-1 rounded-sm transition-colors bg-[#FFB800] text-[#050510] font-black"
+              class="lang-btn h-full inline-flex items-center justify-center px-2 rounded-sm transition-colors bg-[#FFB800] text-[#050510] font-black"
             >
               VI
             </button>
@@ -147,7 +147,7 @@
             <button
               type="button"
               data-lang-switch="en"
-              class="lang-btn px-2 py-1 rounded-sm transition-colors text-[#EAF4FF]/75 hover:text-[#00F0FF]"
+              class="lang-btn h-full inline-flex items-center justify-center px-2 rounded-sm transition-colors text-[#EAF4FF]/75 hover:text-[#00F0FF]"
             >
               EN
             </button>
@@ -157,14 +157,14 @@
         <!-- Nút mở menu trên Mobile -->
         <div class="flex items-center gap-1.5 sm:hidden">
           <div
-            class="inline-flex items-center rounded border border-[#687386]/60 bg-[#0b0d1e] p-0.5 font-btn text-[11px] font-bold"
+            class="inline-flex h-8 items-center rounded border border-[#687386]/60 bg-[#0b0d1e] p-0.5 font-btn text-[11px] font-bold"
             role="group"
             aria-label="Language selector mobile"
           >
             <button
               type="button"
               data-lang-switch="vi"
-              class="lang-btn px-1.5 py-1 rounded-sm transition-colors bg-[#FFB800] text-[#050510] font-black"
+              class="lang-btn h-full inline-flex items-center justify-center px-1.5 rounded-sm transition-colors bg-[#FFB800] text-[#050510] font-black"
             >
               VI
             </button>
@@ -172,7 +172,7 @@
             <button
               type="button"
               data-lang-switch="en"
-              class="lang-btn px-1.5 py-1 rounded-sm transition-colors text-[#EAF4FF]/75 hover:text-[#00F0FF]"
+              class="lang-btn h-full inline-flex items-center justify-center px-1.5 rounded-sm transition-colors text-[#EAF4FF]/75 hover:text-[#00F0FF]"
             >
               EN
             </button>
@@ -180,16 +180,16 @@
           <button
             id="mobile-menu-toggle"
             type="button"
-            class="p-2 rounded bg-[#0b0d1e] border border-[#687386]/50 text-[#EAF4FF] hover:text-[#FFB800]"
+            class="h-8 w-8 inline-flex items-center justify-center rounded bg-[#0b0d1e] border border-[#687386]/50 text-[#EAF4FF] hover:text-[#FFB800]"
             aria-label="Mở menu điều hướng"
             aria-expanded="false"
           >
-            <svg id="icon-menu-open" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <svg id="icon-menu-open" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <line x1="4" y1="6" x2="20" y2="6"></line>
               <line x1="4" y1="12" x2="20" y2="12"></line>
               <line x1="4" y1="18" x2="20" y2="18"></line>
             </svg>
-            <svg id="icon-menu-close" class="w-5 h-5 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <svg id="icon-menu-close" class="w-4 h-4 hidden" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <line x1="18" y1="6" x2="6" y2="18"></line>
               <line x1="6" y1="6" x2="18" y2="18"></line>
             </svg>
@@ -251,9 +251,6 @@
       <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 relative z-10 space-y-6">
         <!-- Phần mở đầu tiêu đề trang -->
         <div class="space-y-4 pb-4 border-b border-neutral-800/90">
-          <div class="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold uppercase tracking-wider">
-            <span>Tài liệu pháp lý công khai • Bắn Tank Online</span>
-          </div>
           <h1 class="text-3xl sm:text-4xl lg:text-5xl font-black uppercase tracking-tight text-white leading-tight">
             Chính sách <span class="text-amber-400">Quyền riêng tư</span>
           </h1>
@@ -659,10 +656,6 @@
         <div class="pt-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-neutral-500">
           <div>© 2026 Bắn Tank Online</div>
           <div class="flex items-center gap-4">
-            <a href="/" class="hover:text-neutral-300 transition-colors">Trang chủ</a>
-            <span>•</span>
-            <a href="/privacy.html" class="hover:text-neutral-300 transition-colors">Chính sách quyền riêng tư</a>
-            <span>•</span>
             <a href="#top" class="hover:text-neutral-300 transition-colors">Lên đầu trang ↑</a>
           </div>
         </div>

@@ -631,9 +631,6 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                         <h2 className="font-btn text-lg sm:text-xl font-black text-[#EAF4FF] tracking-wide">
                           SOLO
                         </h2>
-                        <p className="text-xs sm:text-sm text-[#FFB800] font-semibold">
-                          {t('1 Người chơi', '1 Player')}
-                        </p>
                       </div>
                     </div>
 
@@ -698,9 +695,6 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                         <h2 className="font-btn text-lg sm:text-xl font-black text-[#EAF4FF] tracking-wide">
                           CO-OP AI
                         </h2>
-                        <p className="text-xs sm:text-sm text-[#00F0FF] font-semibold">
-                          {t('Cùng đồng đội AI', 'With AI Partner')}
-                        </p>
                       </div>
                     </div>
 
@@ -765,9 +759,6 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                         <h2 className="font-btn text-lg sm:text-xl font-black text-[#EAF4FF] tracking-wide">
                           CO-OP ONLINE
                         </h2>
-                        <p className="text-xs sm:text-sm text-[#00F0FF] font-semibold">
-                          {t('2 Người trực tuyến', '2 Players Online')}
-                        </p>
                       </div>
                     </div>
 
@@ -951,21 +942,14 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                         <Shield className="w-4 h-4 sm:w-5 sm:h-5 text-[#FFB800] shrink-0" />
                         <span>{t('Giải trí', 'Casual')}</span>
                       </span>
-                      {difficulty === 'DEFAULT' && (
-                        <span className="font-btn text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded bg-[#FFB800] text-[#050510] font-black shrink-0">
-                          {t('ĐANG CHỌN', 'SELECTED')}
-                        </span>
-                      )}
                     </div>
                     <p
                       data-testid="difficulty-note-default"
                       className="text-xs sm:text-sm text-neutral-200 leading-snug mt-2 whitespace-pre-line"
                     >
-                      {formatSentenceLineBreaks(
-                        t(
-                          `${difficultyConfigState.profiles.DEFAULT.soloLives} mạng • ${difficultyConfigState.profiles.DEFAULT.durationSeconds} giây. Cân bằng.`,
-                          `${difficultyConfigState.profiles.DEFAULT.soloLives} lives • ${difficultyConfigState.profiles.DEFAULT.durationSeconds}s timer. Balanced pacing.`
-                        )
+                      {t(
+                        `${difficultyConfigState.profiles.DEFAULT.soloLives} mạng • ${difficultyConfigState.profiles.DEFAULT.durationSeconds} giây\nCân bằng`,
+                        `${difficultyConfigState.profiles.DEFAULT.soloLives} lives • ${difficultyConfigState.profiles.DEFAULT.durationSeconds}s timer\nBalanced pacing`
                       )}
                     </p>
                   </div>
@@ -1004,21 +988,14 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                         <Flame className="w-4 h-4 sm:w-5 sm:h-5 text-[#FF0055] shrink-0" />
                         <span>{t('Thử thách', 'Challenge')}</span>
                       </span>
-                      {difficulty === 'EXTREME' && (
-                        <span className="font-btn text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded bg-[#FF0055] text-white font-black shrink-0">
-                          {t('ĐANG CHỌN', 'SELECTED')}
-                        </span>
-                      )}
                     </div>
                     <p
                       data-testid="difficulty-note-extreme"
                       className="text-xs sm:text-sm text-neutral-200 leading-snug mt-2 whitespace-pre-line"
                     >
-                      {formatSentenceLineBreaks(
-                        t(
-                          `${difficultyConfigState.profiles.EXTREME.soloLives} mạng • ${difficultyConfigState.profiles.EXTREME.durationSeconds} giây. Áp lực cao.`,
-                          `${difficultyConfigState.profiles.EXTREME.soloLives} life • ${difficultyConfigState.profiles.EXTREME.durationSeconds}s timer. High pressure.`
-                        )
+                      {t(
+                        `${difficultyConfigState.profiles.EXTREME.soloLives} mạng • ${difficultyConfigState.profiles.EXTREME.durationSeconds} giây\nÁp lực cao`,
+                        `${difficultyConfigState.profiles.EXTREME.soloLives} life • ${difficultyConfigState.profiles.EXTREME.durationSeconds}s timer\nHigh pressure`
                       )}
                     </p>
                   </div>

@@ -880,7 +880,7 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                       void handleSaveStage();
                     }}
                     data-testid="btn-save-stage-draft"
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs transition-colors shadow cursor-pointer"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded bg-sky-600 hover:bg-sky-500 disabled:opacity-50 text-white font-bold text-xs transition-colors shadow cursor-pointer"
                   >
                     <Save className="w-3.5 h-3.5" />
                     {isCloudSyncing ? 'Đang lưu...' : 'Lưu màn chơi'}
@@ -892,7 +892,7 @@ export const StageEditorPanel: React.FC<StageEditorPanelProps> = ({
                       void handleActivateStage(currentManagedStage);
                     }}
                     data-testid="btn-activate-stage"
-                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs transition-colors shadow cursor-pointer"
+                    className="flex-1 flex items-center justify-center gap-1.5 py-2 px-3 rounded bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold text-xs transition-colors shadow cursor-pointer"
                   >
                     <Play className="w-3.5 h-3.5" />
                     {isCloudSyncing ? 'Đang kích hoạt...' : 'Kích hoạt màn chơi'}

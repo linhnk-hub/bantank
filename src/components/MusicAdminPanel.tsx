@@ -499,7 +499,7 @@ export const MusicAdminPanel: React.FC = () => {
               data-testid="loop-activate-btn"
               disabled={isCloudSyncing}
               onClick={() => void handleActivateLoopConfig()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs shadow active:scale-95 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs shadow active:scale-95 transition-all cursor-pointer"
             >
               <Rocket className="w-3.5 h-3.5" />
               <span>Kích hoạt</span>
@@ -634,7 +634,7 @@ export const MusicAdminPanel: React.FC = () => {
               data-testid="media-assignments-activate-btn"
               disabled={isCloudSyncing}
               onClick={() => void handleActivateAssignments()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs shadow active:scale-95 transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs shadow active:scale-95 transition-all cursor-pointer"
             >
               <Rocket className="w-3.5 h-3.5" />
               <span>Kích hoạt</span>
@@ -959,7 +959,7 @@ export const MusicAdminPanel: React.FC = () => {
                   data-testid="activate-home-video-btn"
                   disabled={isCloudSyncing}
                   onClick={() => void handleActivateHomeVideoSettings()}
-                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs shadow cursor-pointer"
+                  className="flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-black font-extrabold text-xs shadow cursor-pointer"
                 >
                   <Rocket className="w-3.5 h-3.5" />
                   <span>{isVideoDirty ? 'Kích hoạt thay đổi' : 'Kích hoạt'}</span>
@@ -1067,7 +1067,7 @@ export const MusicAdminPanel: React.FC = () => {
                       type="button"
                       data-testid={`admin-action-sfx-activate-${slot.id}`}
                       onClick={() => handleActivateActionSfx(slot.id, slot.label)}
-                      className="px-2.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/50 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
+                      className="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-500 text-white border border-emerald-400/50 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors shadow-sm"
                       title={`Bật file SFX tĩnh cho ${slot.label}`}
                     >
                       <CheckCircle2 className="w-3 h-3" />

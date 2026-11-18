@@ -12,9 +12,11 @@ import {
   MessageSquare,
   RefreshCw,
   Search,
+  Trash2,
 } from 'lucide-react';
 import {
   CONTACT_PAGE_SIZE,
+  deleteContactMessage,
   fetchContactMessagesForAdmin,
   filterAndSearchContactMessages,
   getContactTagLabel,
@@ -110,6 +112,19 @@ export const ContactAdminPanel: React.FC = () => {
       );
     } catch {
       setErrorMsg(t('Cập nhật đánh dấu quan trọng thất bại.', 'Failed to update highlight status.'));
+    } finally {
+      setMutatingId(null);
+    }
+  };
+
+  const handleDeleteMessage = async (msg: ContactMessageRecord) => {
+    setMutatingId(msg.messageId);
+    setErrorMsg(null);
+    try {
+      await deleteContactMessage(msg.messageId);
+      setMessages((prev) => prev.filter((m) => m.messageId !== msg.messageId));
+    } catch {
+      setErrorMsg(t('Xóa tin nhắn thất bại.', 'Failed to delete message.'));
     } finally {
       setMutatingId(null);
     }
@@ -254,13 +269,13 @@ export const ContactAdminPanel: React.FC = () => {
                   <span className="font-mono text-neutral-400">({msg.senderEmail})</span>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <button
                     type="button"
                     data-testid={`admin-contact-seen-btn-${msg.messageId}`}
                     disabled={mutatingId === msg.messageId}
                     onClick={() => void handleToggleSeen(msg)}
-                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50 border ${
+                    className={`px-2.5 py-1.5 rounded text-[11px] font-extrabold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50 border ${
                       msg.isSeen
                         ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/60 hover:bg-emerald-900/80'
                         : 'bg-neutral-900 text-[#EAF4FF] border-neutral-700 hover:border-emerald-400 hover:text-emerald-300'
@@ -269,7 +284,7 @@ export const ContactAdminPanel: React.FC = () => {
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>
                       {msg.isSeen
-                        ? t('Đã xác nhận xem', 'Confirmed Seen')
+                        ? t('Đã xem', 'Seen')
                         : t('Xác nhận đã xem', 'Mark Seen')}
                     </span>
                   </button>
@@ -280,7 +295,7 @@ export const ContactAdminPanel: React.FC = () => {
                     disabled={mutatingId === msg.messageId}
                     onClick={() => void handleToggleHighlight(msg)}
                     title={t('Đánh dấu góp ý quan trọng', 'Highlight important feedback')}
-                    className={`px-2.5 py-1.5 rounded-lg text-[11px] font-extrabold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50 border ${
+                    className={`px-2.5 py-1.5 rounded text-[11px] font-extrabold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50 border ${
                       msg.isHighlighted
                         ? 'bg-[#FFB800] text-[#050510] border-[#FFB800] shadow-[0_0_10px_rgba(255,184,0,0.4)]'
                         : 'bg-neutral-900 text-neutral-300 border-neutral-700 hover:border-[#FFB800] hover:text-[#FFB800]'
@@ -288,6 +303,18 @@ export const ContactAdminPanel: React.FC = () => {
                   >
                     <Lightbulb className="w-3.5 h-3.5" />
                     <span>{t('Quan trọng', 'Highlight')}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    data-testid={`admin-contact-delete-btn-${msg.messageId}`}
+                    disabled={mutatingId === msg.messageId}
+                    onClick={() => void handleDeleteMessage(msg)}
+                    title={t('Xóa tin nhắn', 'Delete message')}
+                    className="px-2.5 py-1.5 rounded text-[11px] font-extrabold flex items-center gap-1 cursor-pointer transition-all disabled:opacity-50 border bg-rose-950/70 text-rose-300 border-rose-500/60 hover:bg-rose-900/80 hover:text-white"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>{t('Xóa', 'Delete')}</span>
                   </button>
                 </div>
               </div>
@@ -309,7 +336,7 @@ export const ContactAdminPanel: React.FC = () => {
             type="button"
             disabled={paginated.pageIndex <= 0}
             onClick={() => setPageIndex((p) => Math.max(0, p - 1))}
-            className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <ChevronLeft className="w-3.5 h-3.5" />
             <span>{t('Trang trước', 'Prev')}</span>
@@ -318,7 +345,7 @@ export const ContactAdminPanel: React.FC = () => {
             type="button"
             disabled={paginated.pageIndex >= paginated.totalPages - 1}
             onClick={() => setPageIndex((p) => Math.min(paginated.totalPages - 1, p + 1))}
-            className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <span>{t('Trang sau', 'Next')}</span>
             <ChevronRight className="w-3.5 h-3.5" />

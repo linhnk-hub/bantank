@@ -160,6 +160,7 @@ export interface UserAccountsPaginationAdapter {
   }>;
   upsertRecord?(record: Partial<UserAccountSummary> & { uid: string }): UserAccountSummary;
   updateRole?(uid: string, newRole: UserRoleType): boolean;
+  deleteRecord?(uid: string): boolean;
   getAllRecords?(): UserAccountSummary[];
 }
 
@@ -304,6 +305,10 @@ export class InMemoryUserAccountsPaginationAdapter implements UserAccountsPagina
     });
     this.recordsByUid.set(uid, sanitizeUserAccountSummary(existing));
     return true;
+  }
+
+  public deleteRecord(uid: string): boolean {
+    return this.recordsByUid.delete(uid);
   }
 
   public getAllRecords(): UserAccountSummary[] {
@@ -905,6 +910,46 @@ export class AuthManager {
     this.permissionDiagnostics = [];
   }
 
+  private deletedAccountUids: Set<string> = new Set();
+
+  private getDeletedAccountsStorageKey(): string {
+    return 'bantank_deleted_user_uids_v1';
+  }
+
+  private getDeletedAccountUids(): Set<string> {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const raw = window.localStorage.getItem(this.getDeletedAccountsStorageKey());
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            for (const id of parsed) {
+              if (typeof id === 'string' && id.trim()) {
+                this.deletedAccountUids.add(id.trim());
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // Ignore storage errors
+    }
+    return this.deletedAccountUids;
+  }
+
+  private saveDeletedAccountUids(): void {
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.setItem(
+          this.getDeletedAccountsStorageKey(),
+          JSON.stringify(Array.from(this.deletedAccountUids))
+        );
+      }
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
   private getProfileStorageKey(user: { uid?: string; email?: string | null }): string {
     return `bantank_profile_${user.uid || user.email || 'default'}`;
   }
@@ -1340,8 +1385,10 @@ export class AuthManager {
       }
 
       // 3. Chuẩn hóa sơ bộ danh sách để sắp xếp tất định theo (lastLoginAtMs DESC, uid ASC)
+      const deletedUids = this.getDeletedAccountUids();
       const preliminaryList: Array<{ uid: string; data: Record<string, unknown>; sortLoginMs: number }> = [];
       for (const [uid, data] of rawDocsByUid.entries()) {
+        if (deletedUids.has(uid)) continue;
         const adminEntry = adminRolesByUid.get(uid);
         const sortLoginMs =
           parseFirestoreTimestampMs(data.lastLoginAt) ||
@@ -1813,6 +1860,88 @@ export class AuthManager {
           : rawMsg || 'Không thể lưu thay đổi phân quyền và Audit Log nguyên tử lên Firestore.',
       };
     }
+  }
+
+  /**
+   * Xóa tài khoản người chơi khỏi danh sách tài khoản (Chỉ dành cho Admin duy nhất linhnk2013@gmail.com).
+   * Không cho phép xóa tài khoản Admin duy nhất hoặc tự xóa chính mình.
+   */
+  public async deleteUserAccount(params: {
+    targetUid: string;
+    targetEmail?: string;
+    targetDisplayName?: string;
+    overrideCallerForTesting?: ValidatedUserAccount | User | null;
+  }): Promise<{
+    success: boolean;
+    errorMessage?: string;
+  }> {
+    const caller =
+      'overrideCallerForTesting' in params
+        ? params.overrideCallerForTesting
+        : this.getCurrentUser();
+
+    if (!caller || !isAdminUser(caller)) {
+      return {
+        success: false,
+        errorMessage: 'Truy cập bị từ chối: Chỉ Admin duy nhất mới có quyền xóa tài khoản.',
+      };
+    }
+
+    const cleanUid = (params.targetUid || '').trim();
+    const cleanEmail = (params.targetEmail || '').trim().toLowerCase();
+    if (!cleanUid) {
+      return {
+        success: false,
+        errorMessage: 'UID tài khoản cần xóa không hợp lệ.',
+      };
+    }
+
+    if (cleanUid === caller.uid || cleanEmail === ADMIN_EMAIL.toLowerCase()) {
+      return {
+        success: false,
+        errorMessage: 'Không thể xóa tài khoản Admin duy nhất của hệ thống.',
+      };
+    }
+
+    this.getDeletedAccountUids().add(cleanUid);
+    this.saveDeletedAccountUids();
+    setVerifiedServerRoleForUid(cleanUid, 'PLAYER');
+
+    if (this.customPaginationAdapter?.deleteRecord) {
+      this.customPaginationAdapter.deleteRecord(cleanUid);
+    }
+
+    try {
+      const db = getFirebaseDb();
+      await Promise.allSettled([
+        deleteDoc(doc(db, 'users', cleanUid)),
+        deleteDoc(doc(db, 'user_sessions', cleanUid)),
+        deleteDoc(doc(db, 'admins', cleanUid)),
+      ]);
+    } catch {
+      // Ignore individual Firestore delete errors when rules restrict physical doc removal
+    }
+
+    SystemAuditLogger.getInstance().recordEvent({
+      severity: 'WARNING',
+      category: 'ADMIN_MOD_ACTION',
+      eventType: 'ROLE_PERMISSION_CHANGED',
+      message: `Admin đã xóa tài khoản ${params.targetDisplayName || cleanEmail || cleanUid} (${cleanUid}) khỏi danh sách tài khoản.`,
+      uid: caller.uid || null,
+      userEmail: caller.email || null,
+      source: 'AuthManager.deleteUserAccount',
+      outcome: 'SUCCESS',
+      skipDeduplication: true,
+      metadata: {
+        targetUid: cleanUid,
+        targetEmail: cleanEmail,
+        targetDisplayName: params.targetDisplayName || '',
+      },
+    });
+
+    return {
+      success: true,
+    };
   }
 
   /**

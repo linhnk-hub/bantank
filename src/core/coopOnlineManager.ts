@@ -13,7 +13,8 @@ import {
   type Unsubscribe,
 } from 'firebase/firestore';
 import { getFirebaseDb } from './firebaseConfig.ts';
-import { getUserDisplayLabel } from './authManager.ts';
+import { AuthManager, getUserDisplayLabel } from './authManager.ts';
+import { AvatarManager } from './avatarManager.ts';
 import { SessionManager } from './sessionManager.ts';
 import {
   MATCH_TIMER_CONFIG,
@@ -148,6 +149,15 @@ export type CoopDataChannelMessage =
       timestamp: number;
     }
   | { type: 'PLAYER_LEFT'; role: 'HOST' | 'GUEST'; reason: string; timestamp: number }
+  | {
+      type: 'PEER_PROFILE_SYNC';
+      uid: string;
+      displayName?: string | null;
+      avatarType?: 'google' | 'catalog';
+      avatarId?: string | null;
+      photoURL?: string | null;
+      timestamp: number;
+    }
   | { type: 'PING'; timestamp: number }
   | { type: 'PONG'; pingTimestamp: number; timestamp: number };
 
@@ -5159,6 +5169,11 @@ export class CoopOnlineManager {
       return;
     }
 
+    if (msg.type === 'PEER_PROFILE_SYNC') {
+      this.applyRemotePeerProfileHint(msg.uid, msg);
+      return;
+    }
+
     if (msg.type === 'GUEST_RETURN_TO_LOBBY_ACK' && this.role === 'HOST') {
       const resolvers = this.guestReturnAckResolvers.splice(0, this.guestReturnAckResolvers.length);
       resolvers.forEach((fn) => fn(msg.nextRoomCode));
@@ -6184,6 +6199,10 @@ export class CoopOnlineManager {
         void this.startHostWebRTCOffer(room.roomCode, room.guestUid);
       }
 
+      if (sig?.rtcAnswer) {
+        this.extractAndApplyPeerProfileFromSdpJson(room.guestUid, sig.rtcAnswer);
+      }
+
       // Khi Guest gửi Answer -> Host áp dụng Answer + ICE của Guest
       if (this.peerConnection && sig?.rtcAnswer && !this.hasAppliedRemoteAnswer) {
         this.hasAppliedRemoteAnswer = true;
@@ -6192,6 +6211,9 @@ export class CoopOnlineManager {
         void this.enqueueOrAddRemoteIceCandidatesJson(sig.guestIceCandidates);
       }
     } else if (this.role === 'GUEST') {
+      if (sig?.rtcOffer) {
+        this.extractAndApplyPeerProfileFromSdpJson(room.hostUid, sig.rtcOffer);
+      }
       // Khi Host đã đăng Offer -> Guest tạo Answer 1 lần
       if (sig?.rtcOffer && this.hasSentAnswerForOffer !== sig.rtcOffer) {
         this.hasSentAnswerForOffer = sig.rtcOffer;
@@ -6199,6 +6221,92 @@ export class CoopOnlineManager {
       } else if (this.peerConnection && sig?.hostIceCandidates) {
         void this.enqueueOrAddRemoteIceCandidatesJson(sig.hostIceCandidates);
       }
+    }
+  }
+
+  private buildLocalPeerProfileHint(): {
+    uid: string;
+    displayName: string | null;
+    avatarType: 'google' | 'catalog';
+    avatarId: string | null;
+    photoURL: string | null;
+  } {
+    const currentUser = AuthManager.getInstance().getCurrentUser();
+    const fallbackUid =
+      this.role === 'HOST'
+        ? this.currentRoom?.hostUid || ''
+        : this.currentRoom?.guestUid || '';
+    const uid = currentUser?.uid || fallbackUid;
+    const avatarMgr = AvatarManager.getInstance();
+    const meta = uid ? avatarMgr.getUserMetadata(uid) : null;
+    const avatarType: 'google' | 'catalog' = meta?.avatarType === 'catalog' ? 'catalog' : 'google';
+    const avatarId = avatarType === 'catalog' ? meta?.avatarId ?? null : null;
+    const displayName =
+      meta?.displayName ||
+      (currentUser ? getUserDisplayLabel(currentUser) : null) ||
+      (this.role === 'HOST'
+        ? this.currentRoom?.hostDisplayName || null
+        : this.currentRoom?.guestDisplayName || null);
+    const effectiveUrl = uid
+      ? avatarMgr.getEffectivePlayerAvatarUrl({
+          uid,
+          photoURL: currentUser?.photoURL ?? null,
+        })
+      : currentUser?.photoURL ?? null;
+    return {
+      uid,
+      displayName,
+      avatarType,
+      avatarId,
+      photoURL: effectiveUrl || currentUser?.photoURL || null,
+    };
+  }
+
+  private applyRemotePeerProfileHint(
+    fallbackUid: string | null | undefined,
+    hint:
+      | {
+          uid?: string | null;
+          displayName?: string | null;
+          avatarType?: 'google' | 'catalog';
+          avatarId?: string | null;
+          photoURL?: string | null;
+        }
+      | null
+      | undefined
+  ): void {
+    if (!hint) return;
+    const targetUid = (typeof hint.uid === 'string' && hint.uid.trim()) || fallbackUid;
+    if (!targetUid) return;
+    AvatarManager.getInstance().setPeerProfileHint(targetUid, {
+      displayName: hint.displayName ?? null,
+      avatarType: hint.avatarType === 'catalog' ? 'catalog' : 'google',
+      avatarId: hint.avatarType === 'catalog' ? hint.avatarId ?? null : null,
+      photoURL: hint.photoURL ?? null,
+    });
+    this.notifyListeners();
+  }
+
+  private extractAndApplyPeerProfileFromSdpJson(
+    fallbackUid: string | null | undefined,
+    sdpJson: string | null | undefined
+  ): void {
+    if (!sdpJson) return;
+    try {
+      const parsed = JSON.parse(sdpJson) as {
+        peerProfile?: {
+          uid?: string | null;
+          displayName?: string | null;
+          avatarType?: 'google' | 'catalog';
+          avatarId?: string | null;
+          photoURL?: string | null;
+        };
+      };
+      if (parsed && parsed.peerProfile) {
+        this.applyRemotePeerProfileHint(fallbackUid, parsed.peerProfile);
+      }
+    } catch {
+      // Ignore malformed SDP JSON
     }
   }
 
@@ -6250,9 +6358,15 @@ export class CoopOnlineManager {
       await this.waitForIceGatheringShort(pc, 500);
 
       initialWriteDone = true;
+      const localOfferDesc = pc.localDescription || offer;
+      const offerPayload = {
+        type: localOfferDesc.type,
+        sdp: localOfferDesc.sdp,
+        peerProfile: this.buildLocalPeerProfileHint(),
+      };
       await this.adapter.updateSignaling(roomCode, {
         guestUid,
-        rtcOffer: JSON.stringify(pc.localDescription || offer),
+        rtcOffer: JSON.stringify(offerPayload),
         rtcAnswer: null,
         hostIceCandidates: JSON.stringify(candidates),
         guestIceCandidates: null,
@@ -6303,7 +6417,12 @@ export class CoopOnlineManager {
       if (hostIceJson) {
         await this.enqueueOrAddRemoteIceCandidatesJson(hostIceJson);
       }
-      const offerDesc = JSON.parse(rtcOfferJson) as RTCSessionDescriptionInit;
+      this.extractAndApplyPeerProfileFromSdpJson(this.currentRoom?.hostUid, rtcOfferJson);
+      const parsedOffer = JSON.parse(rtcOfferJson) as RTCSessionDescriptionInit;
+      const offerDesc: RTCSessionDescriptionInit = {
+        type: parsedOffer.type,
+        sdp: parsedOffer.sdp,
+      };
       await pc.setRemoteDescription(offerDesc);
       await this.flushPendingRemoteIceCandidates();
 
@@ -6312,9 +6431,15 @@ export class CoopOnlineManager {
       await this.waitForIceGatheringShort(pc, 500);
 
       initialWriteDone = true;
+      const localAnswerDesc = pc.localDescription || answer;
+      const answerPayload = {
+        type: localAnswerDesc.type,
+        sdp: localAnswerDesc.sdp,
+        peerProfile: this.buildLocalPeerProfileHint(),
+      };
       await this.adapter.updateSignaling(roomCode, {
         guestUid: this.currentRoom?.guestUid || null,
-        rtcAnswer: JSON.stringify(pc.localDescription || answer),
+        rtcAnswer: JSON.stringify(answerPayload),
         guestIceCandidates: JSON.stringify(candidates),
         updatedAt: Date.now(),
       });
@@ -6332,7 +6457,12 @@ export class CoopOnlineManager {
       if (guestIceJson) {
         await this.enqueueOrAddRemoteIceCandidatesJson(guestIceJson);
       }
-      const answerDesc = JSON.parse(rtcAnswerJson) as RTCSessionDescriptionInit;
+      this.extractAndApplyPeerProfileFromSdpJson(this.currentRoom?.guestUid, rtcAnswerJson);
+      const parsedAnswer = JSON.parse(rtcAnswerJson) as RTCSessionDescriptionInit;
+      const answerDesc: RTCSessionDescriptionInit = {
+        type: parsedAnswer.type,
+        sdp: parsedAnswer.sdp,
+      };
       if (this.peerConnection.signalingState === 'have-local-offer') {
         await this.peerConnection.setRemoteDescription(answerDesc);
         await this.flushPendingRemoteIceCandidates();
@@ -6479,10 +6609,25 @@ export class CoopOnlineManager {
           true
         );
       }
-      // Send initial P2P PING for immediate latency measurement
+      // Send initial P2P PING and PEER_PROFILE_SYNC for immediate latency & avatar sync
       const pingNow = Date.now();
       this.lastPingSentAt = pingNow;
       this.sendOverDataChannel({ type: 'PING', timestamp: pingNow }, true);
+      const localProfile = this.buildLocalPeerProfileHint();
+      if (localProfile.uid) {
+        this.sendOverDataChannel(
+          {
+            type: 'PEER_PROFILE_SYNC',
+            uid: localProfile.uid,
+            displayName: localProfile.displayName,
+            avatarType: localProfile.avatarType,
+            avatarId: localProfile.avatarId,
+            photoURL: localProfile.photoURL,
+            timestamp: pingNow,
+          },
+          true
+        );
+      }
     };
 
     dc.onmessage = (ev) => {

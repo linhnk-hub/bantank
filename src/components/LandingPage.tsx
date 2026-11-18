@@ -400,11 +400,11 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <button
               type="button"
               onClick={() => setMobileMenuOpen((v) => !v)}
-              className="p-2 rounded-lg bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-white"
+              className="h-8 w-8 inline-flex items-center justify-center rounded bg-neutral-900 border border-neutral-800 text-neutral-300 hover:text-white"
               aria-label={mobileMenuOpen ? 'Đóng menu' : 'Mở menu điều hướng'}
               aria-expanded={mobileMenuOpen}
             >
-              {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+              {mobileMenuOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
             </button>
           </div>
         </div>
@@ -529,11 +529,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
               {/* Cột trái: Thông điệp thương hiệu & Nút hành động */}
               <div className="lg:col-span-7 space-y-6 text-left">
-                <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold uppercase tracking-wider">
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>Chiến trường huyền thoại • Trực tuyến trên trình duyệt</span>
-                </div>
-
                 <div className="space-y-3">
                   <h1
                     id="hero-heading"
@@ -1281,20 +1276,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
               © {LANDING_SUPPORT_CONTACT.copyrightYear} {LANDING_SUPPORT_CONTACT.brandName}
             </div>
             <div className="flex items-center gap-4">
-              <a
-                href="/"
-                className="hover:text-neutral-300 transition-colors"
-              >
-                Trang chủ
-              </a>
-              <span>•</span>
-              <a
-                href={LANDING_SUPPORT_CONTACT.privacyPolicyUrl}
-                className="hover:text-neutral-300 transition-colors"
-              >
-                Chính sách quyền riêng tư
-              </a>
-              <span>•</span>
               <a
                 href="#top"
                 onClick={() => handleSelectSection(null)}

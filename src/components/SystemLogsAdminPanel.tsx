@@ -990,7 +990,7 @@ export const SystemLogsAdminPanel: React.FC<SystemLogsAdminPanelProps> = ({ user
                 type="button"
                 disabled={queryResult.currentPage <= 1}
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
-                className="px-3 py-1.5 rounded-lg bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
                 <span>Trang trước</span>
@@ -999,7 +999,7 @@ export const SystemLogsAdminPanel: React.FC<SystemLogsAdminPanelProps> = ({ user
                 type="button"
                 disabled={queryResult.currentPage >= queryResult.totalPages}
                 onClick={() => setPage((p) => Math.min(queryResult.totalPages, p + 1))}
-                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40"
+                className="px-3 py-1.5 rounded bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40"
               >
                 <span>Trang sau</span>
                 <ChevronRight className="w-3.5 h-3.5" />
