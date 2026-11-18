@@ -800,20 +800,12 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
           {flowStep === 'SELECT_DIFFICULTY' && (
             <>
               <div className="mb-4 flex flex-col items-center">
-                <div className="font-btn inline-flex items-center gap-2 px-3 py-1 rounded bg-[#0c0e24] border border-[#FFB800]/40 text-xs sm:text-sm text-[#FFB800] mb-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                  <span>
-                    <strong>
-                      {cardMode === 'SOLO'
-                        ? 'SOLO'
-                        : cardMode === 'COOP_AI'
-                        ? 'CO-OP AI'
-                        : 'CO-OP ONLINE'}
-                    </strong>
-                  </span>
-                </div>
-                <h1 className="font-btn text-[clamp(1.35rem,5.5vw,2.5rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-[#FFB800] to-amber-600 tracking-wide sm:tracking-wider drop-shadow-lg uppercase">
-                  {t('CHỌN MÀN & ĐỘ KHÓ', 'STAGE & DIFFICULTY')}
+                <h1 className="font-btn text-[clamp(1.5rem,5.5vw,2.4rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-[#FFB800] to-amber-600 tracking-wide sm:tracking-wider drop-shadow-lg uppercase">
+                  {cardMode === 'SOLO'
+                    ? 'SOLO'
+                    : cardMode === 'COOP_AI'
+                    ? 'CO-OP AI'
+                    : 'CO-OP ONLINE'}
                 </h1>
               </div>
 
@@ -1054,8 +1046,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
           {flowStep === 'COOP_ONLINE_LOBBY' && (
             <div className="w-full text-left">
               <div className="mb-5 text-center">
-                <h1 className="font-btn text-[clamp(1.25rem,5vw,2.2rem)] font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-200 via-[#00F0FF] to-sky-500 uppercase">
-                  {t('KẾT NỐI PHÒNG CO-OP ONLINE', 'CO-OP ONLINE ROOM CONNECTION')}
+                <h1 className="font-btn text-[clamp(1.5rem,5.5vw,2.4rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-200 via-[#00F0FF] to-sky-500 tracking-wide sm:tracking-wider drop-shadow-lg uppercase">
+                  CO-OP ONLINE
                 </h1>
               </div>
 

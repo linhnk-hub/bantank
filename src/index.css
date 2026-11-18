@@ -16,8 +16,8 @@
   --steel-gray: #687386;
   --crt-white: #EAF4FF;
 
-  /* UNIFIED GAME TYPOGRAPHY (Tektur across entire game, Press Start 2P reserved for Game Over) */
-  --font-pixel: "Press Start 2P", "Tektur", monospace;
+  /* UNIFIED GAME TYPOGRAPHY (Single Tektur font across entire game) */
+  --font-pixel: "Tektur", system-ui, sans-serif;
   --font-hud: "Tektur", system-ui, sans-serif;
   --font-body: "Tektur", system-ui, sans-serif;
   --font-btn: "Tektur", system-ui, sans-serif;

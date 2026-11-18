@@ -19,6 +19,8 @@ import {
   Keyboard,
   Lock,
   Sparkles,
+  Mail,
+  ExternalLink,
 } from 'lucide-react';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { useLanguage } from '../core/i18n.ts';
@@ -157,8 +159,8 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                     <span>
                       <strong>{t('3 Chế độ chiến đấu:', '3 Battle Modes:')}</strong>{' '}
                       {t(
-                        'SOLO, CO-OP AI (cùng đồng đội máy) và CO-OP ONLINE (2 người trực tuyến qua mã phòng BTxxxx).',
-                        'SOLO, CO-OP AI (with AI partner), and CO-OP ONLINE (2 players online via BTxxxx room code).'
+                        'SOLO, CO-OP AI (cùng đồng đội máy) và CO-OP ONLINE (2 người chơi trực tuyến).',
+                        'SOLO, CO-OP AI (with AI partner), and CO-OP ONLINE (2 players online).'
                       )}
                     </span>
                   </li>
@@ -173,6 +175,36 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                     </span>
                   </li>
                 </ul>
+              </div>
+
+              <div className="bg-[#050510]/85 border border-neutral-800 rounded-lg p-3.5 space-y-2">
+                <div className="font-btn flex items-center gap-2 text-[#FFB800] font-black uppercase tracking-wider">
+                  <Mail className="w-4 h-4 shrink-0" />
+                  <span>{t('Liên hệ & Chi tiết', 'Contact & Details')}</span>
+                </div>
+                <div className="space-y-2 text-neutral-300">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span>{t('Email liên hệ:', 'Contact Email:')}</span>
+                    <a
+                      href="mailto:admin@bantank.online"
+                      className="text-[#00F0FF] hover:text-cyan-300 font-bold underline"
+                    >
+                      admin@bantank.online
+                    </a>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span>{t('Trang giới thiệu chi tiết:', 'Detailed Overview Page:')}</span>
+                    <a
+                      href="/landing.html"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[#FFB800] hover:text-amber-300 font-bold underline"
+                    >
+                      <span>landing.html</span>
+                      <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                    </a>
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -221,6 +253,21 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                     )}
                   </li>
                 </ul>
+              </div>
+
+              <div className="bg-[#050510]/85 border border-[#00F0FF]/30 rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-2">
+                <span className="text-neutral-200 font-medium">
+                  {t('Xem tài liệu chính sách quyền riêng tư đầy đủ:', 'View full Privacy Policy document:')}
+                </span>
+                <a
+                  href="/privacy.html"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[#00F0FF] hover:text-cyan-300 font-bold underline"
+                >
+                  <span>privacy.html</span>
+                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                </a>
               </div>
             </div>
           )}

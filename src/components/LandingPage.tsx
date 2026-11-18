@@ -395,47 +395,8 @@ export const LandingPage: React.FC<LandingPageProps> = ({
             </a>
           </nav>
 
-          {/* Cụm nút hành động bên phải */}
-          <div className="hidden sm:flex items-center gap-2.5">
-            {!isAuthenticated && onStartTrialMode && (
-              <button
-                type="button"
-                onClick={handleTrialAction}
-                disabled={isProcessing}
-                className="px-3.5 py-2 rounded-xl bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 hover:border-amber-500/50 text-amber-300 font-bold text-xs uppercase tracking-wider transition-all active:scale-[0.98] disabled:opacity-50"
-              >
-                Chơi thử
-              </button>
-            )}
-
-            <button
-              type="button"
-              onClick={handlePrimaryPlayAction}
-              disabled={isProcessing}
-              className="px-4 sm:px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs sm:text-sm uppercase tracking-wider transition-all shadow-lg shadow-amber-500/20 flex items-center gap-2 active:scale-[0.98] disabled:opacity-50"
-            >
-              <Play className="w-4 h-4 fill-current" />
-              <span>
-                {isProcessing
-                  ? 'Đang kết nối...'
-                  : isAuthenticated
-                  ? 'Vào game'
-                  : 'Chơi ngay'}
-              </span>
-            </button>
-          </div>
-
           {/* Nút mở menu trên Mobile */}
           <div className="flex items-center gap-2 sm:hidden">
-            <button
-              type="button"
-              onClick={handlePrimaryPlayAction}
-              disabled={isProcessing}
-              className="px-3 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-neutral-950 font-black text-xs uppercase tracking-wider flex items-center gap-1.5 shadow"
-            >
-              <Play className="w-3.5 h-3.5 fill-current" />
-              <span>{isAuthenticated ? 'Vào game' : 'Chơi ngay'}</span>
-            </button>
             <button
               type="button"
               onClick={() => setMobileMenuOpen((v) => !v)}
@@ -495,22 +456,6 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                   Quyền riêng tư
                 </span>
               </a>
-            </div>
-            <div className="pt-2 flex flex-col gap-2">
-              {!isAuthenticated && onStartTrialMode && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    closeMobileMenu();
-                    handleTrialAction();
-                  }}
-                  disabled={isProcessing}
-                  className="w-full py-2.5 rounded-xl bg-neutral-950 border border-amber-500/40 text-amber-300 font-bold text-xs uppercase tracking-wider flex items-center justify-center gap-2"
-                >
-                  <Gamepad2 className="w-4 h-4" />
-                  <span>Chơi thử ngay</span>
-                </button>
-              )}
             </div>
           </nav>
         )}
@@ -627,7 +572,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                       className="px-6 py-4 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-amber-300 border border-amber-500/40 hover:border-amber-400 font-bold text-sm sm:text-base uppercase tracking-wider transition-all flex items-center justify-center gap-2.5 active:scale-[0.99] disabled:opacity-50"
                     >
                       <Gamepad2 className="w-5 h-5" />
-                      <span>Chơi thử Màn 1 (Không cần đăng nhập)</span>
+                      <span>CHƠI THỬ</span>
                     </button>
                   )}
                 </div>

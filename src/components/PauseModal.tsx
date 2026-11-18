@@ -66,7 +66,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
                 onClick={() => (isTrialMode ? onQuitToMenu() : setShowQuitConfirm(true))}
                 className="font-btn w-full min-h-[48px] flex items-center justify-center py-2 sm:py-2.5 px-4 rounded bg-red-950/40 hover:bg-red-900/50 text-red-300 font-semibold text-xs transition-colors border border-[#FF0055]/40 active:scale-95 cursor-pointer"
               >
-                <span>{isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
+                <span>{t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
               </button>
             </div>
           </>
@@ -103,7 +103,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
                 }}
                 className="font-btn flex-1 min-h-[48px] py-2 sm:py-2.5 px-3 rounded bg-[#FF0055] hover:bg-rose-500 text-white font-bold text-xs transition-colors shadow-lg shadow-[#FF0055]/30 active:scale-95 cursor-pointer"
               >
-                {isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('VỀ TRANG CHỦ', 'RETURN HOME')}
+                {t('VỀ TRANG CHỦ', 'RETURN HOME')}
               </button>
             </div>
           </div>

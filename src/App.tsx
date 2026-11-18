@@ -1469,13 +1469,12 @@ export default function App() {
         </div>
       )}
 
-      {/* Centered Stage Headline Across All Battle Views + Ping Pinned at Right Corner */}
+      {/* Centered Stage Headline Across All Battle Views + Ping/FPS Below Stage Name in Co-op Online */}
       <div
         data-testid="battle-stage-center-banner"
-        className="w-full py-1.5 px-2.5 sm:px-4 bg-[#050510]/90 border-b border-[#00F0FF]/15 grid grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-2 shrink-0 z-30"
+        className="w-full py-1.5 px-2.5 sm:px-4 bg-[#050510]/90 border-b border-[#00F0FF]/15 flex flex-col items-center justify-center gap-1 shrink-0 z-30"
       >
-        <div className="min-w-0" />
-        <div className="flex items-center justify-center gap-2 min-w-0">
+        <div className="flex items-center justify-center gap-2 min-w-0 max-w-full">
           <span className={`w-2 h-2 rounded-full shrink-0 ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
           <h2
             data-testid="battle-stage-center-title"
@@ -1484,16 +1483,14 @@ export default function App() {
             {centeredStageTitle}
           </h2>
         </div>
-        <div className="flex items-center justify-end min-w-0">
-          {isCoopOnlineMatch && showOnlineNetStats && (
-            <span
-              data-testid={layout.isLandscape ? 'landscape-online-net-stats' : 'portrait-online-net-stats'}
-              className="px-2 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-[11px] sm:text-xs font-bold shrink-0 whitespace-nowrap"
-            >
-              Ping: {peerPingMs != null ? `${Math.round(peerPingMs)}ms` : '--ms'} • {Math.round(fps)}fps
-            </span>
-          )}
-        </div>
+        {isCoopOnlineMatch && showOnlineNetStats && (
+          <span
+            data-testid={layout.isLandscape ? 'landscape-online-net-stats' : 'portrait-online-net-stats'}
+            className="px-2 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-[11px] sm:text-xs font-bold shrink-0 whitespace-nowrap"
+          >
+            Ping: {peerPingMs != null ? `${Math.round(peerPingMs)}ms` : '--ms'} • {Math.round(fps)}fps
+          </span>
+        )}
       </div>
 
       {/* =========================================================================
@@ -1721,11 +1718,21 @@ export default function App() {
               <div className="bg-[#0b0d1e] border border-[#00F0FF]/30 rounded-lg overflow-hidden shadow-2xl flex flex-col justify-start">
                 {/* Viewport Header */}
                 <div className="bg-[#050510] px-4 py-2.5 border-b border-neutral-800 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-2.5">
-                    <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
-                    <span className="font-btn font-semibold text-[#FFB800]">
-                      {centeredStageTitle} {isPaused ? '(PAUSED)' : ''}
-                    </span>
+                  <div className="flex flex-col items-start gap-1">
+                    <div className="flex items-center gap-2.5">
+                      <span className={`w-2 h-2 rounded-full ${isPaused ? 'bg-[#FFB800]' : 'bg-emerald-500 animate-pulse'}`} />
+                      <span className="font-btn font-semibold text-[#FFB800]">
+                        {centeredStageTitle} {isPaused ? '(PAUSED)' : ''}
+                      </span>
+                    </div>
+                    {isCoopOnlineMatch && showOnlineNetStats && (
+                      <span
+                        data-testid="desktop-online-net-stats"
+                        className="font-hud px-2 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-xs font-bold"
+                      >
+                        Ping: {peerPingMs != null ? `${Math.round(peerPingMs)} ms` : '-- ms'} • {Math.round(fps)} FPS
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-2">
@@ -1814,16 +1821,7 @@ export default function App() {
                     <span>{t('Xem hướng dẫn điều khiển trong mục Thông tin', 'View controls guide in Information')}</span>
                   </button>
                   <div className="font-hud flex items-center gap-2 text-sm">
-                    {isCoopOnlineMatch && showOnlineNetStats ? (
-                      <span
-                        data-testid="desktop-online-net-stats"
-                        className="px-2 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] font-bold"
-                      >
-                        Ping: {peerPingMs != null ? `${Math.round(peerPingMs)} ms` : '-- ms'} • {Math.round(fps)} FPS
-                      </span>
-                    ) : (
-                      <span className="text-neutral-500">{Math.round(fps)} FPS</span>
-                    )}
+                    <span className="text-neutral-500">{Math.round(fps)} FPS</span>
                   </div>
                 </div>
               </div>

@@ -185,16 +185,18 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
               <div className="font-hud text-3xl sm:text-4xl font-black text-[#FFB800] tracking-tight">
                 {localTotalScore.toLocaleString()} XP
               </div>
-              <div className="font-hud flex items-center justify-center gap-1.5 pt-0.5 text-sm">
-                <Award className="w-3.5 h-3.5 text-[#FFB800]" />
-                <span className="text-neutral-400">{t('Kỷ lục:', 'High XP:')}</span>
-                <span className="font-bold text-[#EAF4FF]">{state.highScore.toLocaleString()} XP</span>
-                {isNewRecord && (
-                  <span className="font-btn px-1.5 py-0.2 rounded bg-[#FFB800] text-[#050510] font-extrabold text-[10px] animate-pulse">
-                    {t('KỶ LỤC MỚI!', 'NEW RECORD!')}
-                  </span>
-                )}
-              </div>
+              {!isTrialMode && (
+                <div className="font-hud flex items-center justify-center gap-1.5 pt-0.5 text-sm">
+                  <Award className="w-3.5 h-3.5 text-[#FFB800]" />
+                  <span className="text-neutral-400">{t('Kỷ lục:', 'High XP:')}</span>
+                  <span className="font-bold text-[#EAF4FF]">{state.highScore.toLocaleString()} XP</span>
+                  {isNewRecord && (
+                    <span className="font-btn px-1.5 py-0.2 rounded bg-[#FFB800] text-[#050510] font-extrabold text-[10px] animate-pulse">
+                      {t('KỶ LỤC MỚI!', 'NEW RECORD!')}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Unified Statistics Breakdown */}
@@ -387,7 +389,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
                 : 'bg-[#0b0d1e] hover:bg-neutral-800 text-[#EAF4FF] border border-[#687386]/50'
             }`}
           >
-            <span>{isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
+            <span>{t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
           </button>
         </div>
         </div>

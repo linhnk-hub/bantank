@@ -13,7 +13,6 @@ import {
   Users,
   ShieldCheck,
   Play,
-  ArrowLeft,
   AlertCircle,
   Loader2,
   UserCheck,
@@ -306,17 +305,6 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
     }
   };
 
-  const handleLeaveLobby = async () => {
-    setIsBusy(true);
-    try {
-      await coopManager.leaveRoom();
-      setSubView('MAIN');
-      setErrorMsg(null);
-    } finally {
-      setIsBusy(false);
-    }
-  };
-
   const handleRetryWebRTC = async () => {
     setErrorMsg(null);
     setIsBusy(true);
@@ -509,8 +497,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                       <div className="font-black text-xs sm:text-sm truncate">
                         {t('Giải trí', 'Casual')}
                       </div>
-                      <div className="text-[10px] text-neutral-400 truncate">
-                        {t('3 mạng • 120s', '3 Lives • 120s')}
+                      <div className="text-[10px] text-neutral-300 leading-snug">
+                        {t('3 mạng • 120s • Cân bằng.', '3 Lives • 120s • Balanced.')}
                       </div>
                     </div>
                   </div>
@@ -536,8 +524,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                       <div className="font-black text-xs sm:text-sm truncate">
                         {t('Thử thách', 'Challenge')}
                       </div>
-                      <div className="text-[10px] text-neutral-400 truncate">
-                        {t('1 mạng • 60s', '1 Life • 60s')}
+                      <div className="text-[10px] text-neutral-300 leading-snug">
+                        {t('1 mạng • 60s • Áp lực cao.', '1 Life • 60s • High pressure.')}
                       </div>
                     </div>
                   </div>
@@ -994,7 +982,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
               <div className="flex items-center gap-1.5 text-xs font-extrabold text-amber-300 font-mono uppercase">
                 <MapIcon className="w-3.5 h-3.5 text-amber-400" />
                 <span>
-                  {t('Màn chơi phòng:', 'Room Stage:')} {lobbyStageSpec.name}
+                  {t('Màn chơi:', 'Stage:')} {lobbyStageSpec.name}
                 </span>
               </div>
               <span className="text-[10px] font-mono text-neutral-400">
@@ -1174,7 +1162,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <span
-                      className={`text-[10px] font-black uppercase px-2.5 py-1 rounded-lg border shrink-0 whitespace-nowrap ${
+                      className={`w-[116px] min-h-[28px] px-2.5 py-1 rounded-lg border text-[10px] font-black uppercase inline-flex items-center justify-center text-center shrink-0 whitespace-nowrap ${
                         room.guestReady
                           ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
                           : 'bg-neutral-900 text-neutral-400 border-neutral-700'
@@ -1194,7 +1182,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                           'Mời người chơi P2 ra khỏi phòng',
                           'Remove P2 from the room'
                         )}
-                        className="px-2.5 py-1 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 font-bold text-[10px] uppercase flex items-center gap-1 shrink-0 whitespace-nowrap transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                        className="w-[116px] min-h-[28px] px-2.5 py-1 rounded-lg bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 font-black text-[10px] uppercase inline-flex items-center justify-center gap-1 shrink-0 whitespace-nowrap transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                       >
                         <UserX className="w-3 h-3 shrink-0" />
                         <span>{t('Mời ra', 'Kick')}</span>
@@ -1216,17 +1204,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
       })()}
 
       {/* Action Buttons */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-neutral-800">
-        <button
-          type="button"
-          onClick={handleLeaveLobby}
-          disabled={isBusy}
-          className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-bold text-xs transition-all cursor-pointer"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>{t('Rời phòng', 'Leave Room')}</span>
-        </button>
-
+      <div className="flex flex-wrap items-center justify-end gap-3 pt-2 border-t border-neutral-800">
         <div className="flex items-center gap-2.5">
           <button
             type="button"

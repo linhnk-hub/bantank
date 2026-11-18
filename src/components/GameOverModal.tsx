@@ -137,7 +137,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           <div className="p-4 sm:p-5 space-y-3 sm:space-y-4">
             {/* Header */}
             <div className="text-center space-y-1.5">
-              <h2 className="font-pixel text-lg sm:text-xl font-black tracking-wider text-[#FF0055] uppercase">
+              <h2 className="font-btn text-xl sm:text-2xl font-black tracking-wider text-[#FF0055] uppercase">
                 {t('THẤT BẠI', 'GAME OVER')}
               </h2>
               <p className="font-hud text-sm sm:text-base text-[#00F0FF] font-bold tracking-wide">
@@ -158,16 +158,18 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
               <div className="font-hud text-3xl sm:text-4xl font-black text-[#FFB800] tracking-tight">
                 {localTotalScore.toLocaleString()} XP
               </div>
-              <div className="font-hud flex items-center justify-center gap-1.5 pt-0.5 text-sm">
-                <Trophy className="w-3.5 h-3.5 text-[#FFB800]" />
-                <span className="text-neutral-400">{t('Kỷ lục:', 'High XP:')}</span>
-                <span className="font-bold text-[#EAF4FF]">{state.highScore.toLocaleString()} XP</span>
-                {isNewRecord && (
-                  <span className="font-btn px-1.5 py-0.2 rounded bg-[#FFB800] text-[#050510] font-extrabold text-[10px] animate-pulse">
-                    {t('KỶ LỤC MỚI!', 'NEW RECORD!')}
-                  </span>
-                )}
-              </div>
+              {!isTrialMode && (
+                <div className="font-hud flex items-center justify-center gap-1.5 pt-0.5 text-sm">
+                  <Trophy className="w-3.5 h-3.5 text-[#FFB800]" />
+                  <span className="text-neutral-400">{t('Kỷ lục:', 'High XP:')}</span>
+                  <span className="font-bold text-[#EAF4FF]">{state.highScore.toLocaleString()} XP</span>
+                  {isNewRecord && (
+                    <span className="font-btn px-1.5 py-0.2 rounded bg-[#FFB800] text-[#050510] font-extrabold text-[10px] animate-pulse">
+                      {t('KỶ LỤC MỚI!', 'NEW RECORD!')}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Unified Statistics Breakdown */}
@@ -310,7 +312,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                   : 'bg-[#0b0d1e] hover:bg-neutral-800 text-[#EAF4FF] border border-[#687386]/50'
               }`}
             >
-              <span>{isTrialMode ? t('Quay về màn hình đăng nhập', 'Return to Login') : t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
+              <span>{t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
             </button>
           </div>
         </div>

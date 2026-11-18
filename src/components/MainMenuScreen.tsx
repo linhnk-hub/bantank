@@ -487,7 +487,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 handleSelectModeCard('SOLO');
                 handleConfirmSelectedMode('SOLO');
               }}
-              className={`min-h-[90px] p-2 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
+              className={`min-h-[82px] p-2 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                 selectedModeCard === 'SOLO'
                   ? 'border-2 border-[#FFB800] bg-[#120e05]/95 ring-2 ring-[#FFB800]/30 shadow-[0_0_16px_rgba(255,184,0,0.28)]'
                   : 'border border-[#687386]/50 hover:border-[#FFB800]/70 opacity-95'
@@ -498,23 +498,12 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 <span className="font-hud text-sm font-bold">1P</span>
               </div>
               <div>
-                <div className="font-btn text-sm sm:text-base font-extrabold text-[#EAF4FF] leading-tight">
+                <div className="font-btn text-[13px] sm:text-base font-extrabold text-[#EAF4FF] leading-tight whitespace-nowrap">
                   SOLO
                 </div>
                 <div className="text-xs text-[#EAF4FF]/80 leading-tight mt-0.5">
                   {t('Đơn đấu', '1 Player')}
                 </div>
-              </div>
-              <div
-                className={`mt-1.5 text-[11px] font-btn font-black uppercase tracking-wider px-1.5 py-0.5 text-center ${
-                  selectedModeCard === 'SOLO'
-                    ? 'bg-[#FFB800] text-[#050510]'
-                    : 'bg-[#050510] text-[#FFB800] border border-[#FFB800]/40'
-                }`}
-              >
-                {selectedModeCard === 'SOLO'
-                  ? t('ĐANG CHỌN', 'SELECTED')
-                  : t('CHỌN', 'SELECT')}
               </div>
             </button>
 
@@ -526,7 +515,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 handleSelectModeCard('COOP_AI');
                 handleConfirmSelectedMode('COOP_AI');
               }}
-              className={`min-h-[90px] p-2 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
+              className={`min-h-[82px] p-2 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                 selectedModeCard === 'COOP_AI'
                   ? 'border-2 border-[#00F0FF] bg-[#051624]/95 ring-2 ring-[#00F0FF]/30 shadow-[0_0_16px_rgba(0,240,255,0.28)]'
                   : 'border border-[#687386]/50 hover:border-[#00F0FF]/70 opacity-95'
@@ -537,23 +526,12 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 <span className="font-hud text-sm font-bold">P1+AI</span>
               </div>
               <div>
-                <div className="font-btn text-sm sm:text-base font-extrabold text-[#EAF4FF] leading-tight">
+                <div className="font-btn text-[13px] sm:text-base font-extrabold text-[#EAF4FF] leading-tight whitespace-nowrap">
                   CO-OP AI
                 </div>
                 <div className="text-xs text-[#EAF4FF]/80 leading-tight mt-0.5">
                   {t('Cùng AI', 'With AI')}
                 </div>
-              </div>
-              <div
-                className={`mt-1.5 text-[11px] font-btn font-black uppercase tracking-wider px-1.5 py-0.5 text-center ${
-                  selectedModeCard === 'COOP_AI'
-                    ? 'bg-[#00F0FF] text-[#050510]'
-                    : 'bg-[#050510] text-[#00F0FF] border border-[#00F0FF]/40'
-                }`}
-              >
-                {selectedModeCard === 'COOP_AI'
-                  ? t('ĐANG CHỌN', 'SELECTED')
-                  : t('CHỌN', 'SELECT')}
               </div>
             </button>
 
@@ -565,7 +543,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 handleSelectModeCard('COOP_ONLINE');
                 handleConfirmSelectedMode('COOP_ONLINE');
               }}
-              className={`min-h-[90px] p-1.5 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
+              className={`min-h-[82px] p-2 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                 selectedModeCard === 'COOP_ONLINE'
                   ? 'border-2 border-[#FFB800] bg-[#120e05]/95 ring-2 ring-[#FFB800]/30 shadow-[0_0_16px_rgba(255,184,0,0.28)]'
                   : 'border border-[#687386]/50 hover:border-[#FFB800]/70 opacity-95'
@@ -576,23 +554,12 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 <span className="font-hud text-sm font-bold">2P</span>
               </div>
               <div>
-                <div className="font-btn text-[11px] sm:text-sm font-extrabold text-[#EAF4FF] leading-tight whitespace-nowrap tracking-tight">
+                <div className="font-btn text-[13px] sm:text-base font-extrabold text-[#EAF4FF] leading-tight whitespace-nowrap tracking-tight">
                   CO-OP ONLINE
                 </div>
                 <div className="text-xs text-[#EAF4FF]/80 leading-tight mt-0.5">
                   {t('2 Người', 'Online 2P')}
                 </div>
-              </div>
-              <div
-                className={`mt-1.5 text-[11px] font-btn font-black uppercase tracking-wider px-1.5 py-0.5 text-center ${
-                  selectedModeCard === 'COOP_ONLINE'
-                    ? 'bg-[#FFB800] text-[#050510]'
-                    : 'bg-[#050510] text-[#FFB800] border border-[#FFB800]/40'
-                }`}
-              >
-                {selectedModeCard === 'COOP_ONLINE'
-                  ? t('ĐANG CHỌN', 'SELECTED')
-                  : t('CHỌN', 'SELECT')}
               </div>
             </button>
           </div>

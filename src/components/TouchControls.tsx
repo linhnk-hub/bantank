@@ -392,7 +392,7 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
         >
           <EnemyTankHudIcon className="w-3.5 h-3.5 shrink-0" />
           <span className="font-extrabold text-[#FFB800] text-right whitespace-nowrap">
-            {remainingEnemies}/{totalEnemies}
+            {remainingEnemies}
           </span>
         </div>
 
