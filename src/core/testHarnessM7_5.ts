@@ -39,6 +39,20 @@ import { SoundManager, GAME_ACTION_SOUND_SLOTS } from './audio.ts';
 import { AvatarManager } from './avatarManager.ts';
 import { StageProgressionManager } from './stageProgression.ts';
 import { getAvailableSettingsTabsForRole } from '../components/SettingsModal.tsx';
+import { spawnBullet } from './bullet.ts';
+import {
+  applyDeterministicBulletImpact,
+  createRuntimeTerrainState,
+  getBrickMask,
+} from './terrain.ts';
+import { GameEngine } from './gameEngine.ts';
+import { TILE_TYPES } from './types.ts';
+import {
+  CONTACT_PAGE_SIZE,
+  filterAndSearchContactMessages,
+  paginateContactMessages,
+  type ContactMessageRecord,
+} from './contactManager.ts';
 
 export interface M75TestResult {
   id: string;
@@ -341,8 +355,12 @@ export function runAllM7_5Tests(): { results: M75TestResult[] } {
       settingsSrc.includes('Quân hàm PvP') &&
       settingsSrc.includes('Tổng điểm XP') &&
       settingsSrc.includes('Số dư Xu') &&
-      settingsSrc.includes('Tổng số lần đăng nhập') &&
-      settingsSrc.includes('Lịch sử truy cập') &&
+      settingsSrc.includes('Số lần đăng nhập') &&
+      settingsSrc.includes('Lần đầu tiên') &&
+      settingsSrc.includes('Lần gần nhất') &&
+      !settingsSrc.includes('Lịch sử truy cập') &&
+      !settingsSrc.includes('player-auth-history-list') &&
+      !settingsSrc.includes('Trạng thái:') &&
       userProfileSrc.includes('data-testid="profile-player-level-card"') &&
       adminLogsSrc.includes('data-testid="subtab-level-audit"');
 
@@ -965,6 +983,176 @@ export function runAllM7_5Tests(): { results: M75TestResult[] } {
       name: 'Group E.4: Bảo toàn nguyên vẹn firestore.rules, storage.rules và public/landing.html theo đúng ràng buộc Phần 7',
       passed: rulesIntact,
       details: `rulesIntact=${rulesIntact}, landingHtmlExists=${landingHtmlExists}`,
+    });
+  }
+
+  // M7_5_F1: Power Tank bullet destructive power is 2x all other tanks (brick sub-tiles & player lives)
+  {
+    const mkEnemy = (enemyType: 'BASIC' | 'FAST' | 'POWER' | 'ARMOR') => ({
+      id: `e_${enemyType}`,
+      x: 64,
+      y: 64,
+      direction: 'DOWN' as const,
+      speed: 60,
+      type: 'enemy' as const,
+      enemyType,
+      tier: 1,
+      isAlive: true,
+      isShielded: false,
+    });
+    const p1Tank = {
+      id: 'p1',
+      x: 64,
+      y: 192,
+      direction: 'UP' as const,
+      speed: 90,
+      type: 'player' as const,
+      tier: 1,
+      isAlive: true,
+      isShielded: false,
+    };
+
+    const p1Bullet = spawnBullet(p1Tank, null);
+    const basicBullet = spawnBullet(mkEnemy('BASIC'), null);
+    const fastBullet = spawnBullet(mkEnemy('FAST'), null);
+    const armorBullet = spawnBullet(mkEnemy('ARMOR'), null);
+    const powerBullet = spawnBullet(mkEnemy('POWER'), null);
+
+    const powerValuesOk =
+      p1Bullet?.power === 1 &&
+      basicBullet?.power === 1 &&
+      fastBullet?.power === 1 &&
+      armorBullet?.power === 1 &&
+      powerBullet?.power === 2;
+
+    // Brick sub-tile test: normal (power 1) destroys 2 front sub-tiles (remaining = 2); Power (power 2) destroys all 4 (remaining = 0)
+    const terrNormal = createRuntimeTerrainState();
+    terrNormal.currentMap[4][4] = TILE_TYPES.BRICK;
+    terrNormal.brickSubTiles['4_4'] = 0b1111;
+    applyDeterministicBulletImpact(
+      terrNormal,
+      4,
+      4,
+      { left: 70, right: 74, top: 64, bottom: 68 },
+      'DOWN',
+      1
+    );
+    const remNormal = getBrickMask(terrNormal, 4, 4);
+
+    const terrPower = createRuntimeTerrainState();
+    terrPower.currentMap[4][4] = TILE_TYPES.BRICK;
+    terrPower.brickSubTiles['4_4'] = 0b1111;
+    applyDeterministicBulletImpact(
+      terrPower,
+      4,
+      4,
+      { left: 70, right: 74, top: 64, bottom: 68 },
+      'DOWN',
+      2
+    );
+    const remPower = getBrickMask(terrPower, 4, 4);
+
+    // Player life damage test: Power bullet deducts 2 lives vs 1 life for regular enemy bullet
+    const engPower = new GameEngine(undefined, undefined, false);
+    const stPower = engPower.getState();
+    stPower.p1.isShielded = false;
+    stPower.p1State.shieldTimer = 0;
+    const livesBefore = stPower.p1State.lives;
+    stPower.bullets.push({
+      id: 'eb_power_test',
+      ownerId: 'enemy_1_POWER',
+      ownerType: 'enemy',
+      x: stPower.p1.x + 6,
+      y: stPower.p1.y - 2,
+      direction: 'DOWN',
+      speed: 160,
+      power: 2,
+    });
+    engPower.stepTick({ up: false, down: false, left: false, right: false, shoot: false });
+    const livesAfterPower = stPower.p1State.lives;
+
+    const passed =
+      powerValuesOk &&
+      remNormal === 0b1100 &&
+      remPower === 0 &&
+      livesBefore - livesAfterPower === 2;
+
+    results.push({
+      id: 'M7_5_F1',
+      name: 'Group F.1: Đạn xe tank Power có sức công phá gấp đôi (power=2, phá 2 lớp gạch & trừ 2 máu)',
+      passed,
+      details: `powerValuesOk=${powerValuesOk}, remNormal=${remNormal}, remPower=${remPower}, deltaLives=${livesBefore - livesAfterPower}`,
+    });
+  }
+
+  // M7_5_F2: SupportModal updates, Top Menu Liên hệ, ContactManager 5/page pagination & Admin CONTACT_MESSAGES RBAC
+  {
+    const supportSrc = readWorkspaceFile('src/components/SupportModal.tsx');
+    const contactSrc = readWorkspaceFile('src/components/ContactModal.tsx');
+    const contactAdminSrc = readWorkspaceFile('src/components/ContactAdminPanel.tsx');
+    const drawerSrc = readWorkspaceFile('src/components/TopMenuActionDrawer.tsx');
+
+    const supportOk =
+      !supportSrc.includes('Neo-Retro Arcade') &&
+      supportSrc.includes('CHIẾN TRƯỜNG HUYỀN THOẠI') &&
+      supportSrc.includes('href="/landing.html"') &&
+      supportSrc.includes('href="/privacy.html"') &&
+      supportSrc.includes('[Chi tiết]') &&
+      !supportSrc.includes('Trang giới thiệu chi tiết:') &&
+      !supportSrc.includes('Xem tài liệu chính sách quyền riêng tư đầy đủ:');
+
+    const contactModalOk =
+      contactSrc.includes('[Góp ý]') &&
+      contactSrc.includes('[Báo lỗi]') &&
+      contactSrc.includes('1000') &&
+      contactSrc.includes('Đã gửi thành công') &&
+      !contactSrc.includes('type="file"') &&
+      drawerSrc.includes('MessageSquare') &&
+      contactAdminSrc.includes('Lightbulb');
+
+    const adminTabs = getAvailableSettingsTabsForRole('ADMIN').map((t) => t.id);
+    const modTabs = getAvailableSettingsTabsForRole('MOD').map((t) => t.id);
+    const playerTabs = getAvailableSettingsTabsForRole('PLAYER').map((t) => t.id);
+    const rbacOk =
+      adminTabs.includes('CONTACT_MESSAGES') &&
+      !modTabs.includes('CONTACT_MESSAGES') &&
+      !playerTabs.includes('CONTACT_MESSAGES');
+
+    const sampleMsgs: ContactMessageRecord[] = Array.from({ length: 7 }, (_, i) => ({
+      messageId: `msg_${i + 1}`,
+      senderUid: `uid_${i + 1}`,
+      senderEmail: `player${i + 1}@gmail.com`,
+      senderName: `Player ${i + 1}`,
+      tag: i % 2 === 0 ? 'FEEDBACK' : 'BUG_REPORT',
+      title: `Tiêu đề ${i + 1}`,
+      content: `Nội dung ${i + 1}`,
+      isSeen: i === 0,
+      isHighlighted: i === 2,
+      createdAtMs: 1_700_000_000_000 + i * 1000,
+      updatedAtMs: 1_700_000_000_000 + i * 1000,
+      seenAtMs: i === 0 ? 1_700_000_005_000 : null,
+    }));
+    const page1 = paginateContactMessages(sampleMsgs, 0, CONTACT_PAGE_SIZE);
+    const page2 = paginateContactMessages(sampleMsgs, 1, CONTACT_PAGE_SIZE);
+    const filteredHighlighted = filterAndSearchContactMessages(sampleMsgs, {
+      statusFilter: 'HIGHLIGHTED',
+      searchText: 'Player 3',
+    });
+
+    const paginationAndFilterOk =
+      CONTACT_PAGE_SIZE === 5 &&
+      page1.items.length === 5 &&
+      page2.items.length === 2 &&
+      page1.totalPages === 2 &&
+      filteredHighlighted.length === 1 &&
+      filteredHighlighted[0].messageId === 'msg_3';
+
+    const passed = supportOk && contactModalOk && rbacOk && paginationAndFilterOk;
+    results.push({
+      id: 'M7_5_F2',
+      name: 'Group F.2: Cập nhật Thông tin [Chi tiết], Top Menu Liên hệ (1000 ký tự, không upload), Admin Liên hệ (5 tin/trang, highlight)',
+      passed,
+      details: `supportOk=${supportOk}, contactModalOk=${contactModalOk}, rbacOk=${rbacOk}, paginationAndFilterOk=${paginationAndFilterOk}`,
     });
   }
 

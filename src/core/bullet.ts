@@ -50,6 +50,8 @@ export function spawnBullet(
     by = tank.y + 6;
   }
 
+  const isPowerEnemy = (tank as { enemyType?: string }).enemyType === 'POWER';
+
   return {
     id: `b_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
     ownerId: tank.id,
@@ -57,7 +59,7 @@ export function spawnBullet(
     y: by,
     direction: tank.direction,
     speed: BULLET_CONFIG.SPEED_PX_S,
-    power: 1,
+    power: isPowerEnemy ? 2 : 1,
   };
 }
 
@@ -116,7 +118,8 @@ export function updateBullet(
         row,
         col,
         bulletBox,
-        bullet.direction
+        bullet.direction,
+        bullet.power ?? 1
       );
 
       if (impactResult.hit) {

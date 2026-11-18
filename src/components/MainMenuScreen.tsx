@@ -53,6 +53,7 @@ export interface MainMenuScreenProps {
   onDifficultyChange?: (d: 'DEFAULT' | 'EXTREME') => void;
   onOpenSettings: () => void;
   onOpenSupport?: () => void;
+  onOpenContact?: () => void;
   onOpenDevTools: () => void;
   isSuperAdmin?: boolean;
 }
@@ -106,6 +107,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   onRetryAcquire,
   onOpenSettings,
   onOpenSupport,
+  onOpenContact,
   onOpenDevTools,
   isSuperAdmin = false,
 }) => {
@@ -396,6 +398,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
           <TopMenuActionDrawer
             onOpenSettings={onOpenSettings}
             onOpenSupport={onOpenSupport}
+            onOpenContact={onOpenContact}
             onOpenDevTools={onOpenDevTools}
             onExit={onSignOut}
             exitLabel={t('Thoát', 'Exit')}

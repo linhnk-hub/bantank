@@ -65,7 +65,10 @@
         "displayName": { "type": "string", "minLength": 1, "maxLength": 40 },
         "avatarType": { "type": "string", "enum": ["google", "catalog"] },
         "avatarId": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "avatarUpdatedAt": { "type": "string", "format": "date-time" }
+        "avatarUpdatedAt": { "type": "string", "format": "date-time" },
+        "firstLoginAt": { "type": "string", "format": "date-time" },
+        "lastLoginAt": { "type": "string", "format": "date-time" },
+        "loginCount": { "type": "number" }
       },
       "required": ["avatarType", "avatarId", "avatarUpdatedAt"]
     },
@@ -362,6 +365,43 @@
         "version": { "type": "number" }
       },
       "required": ["isActive", "startAtMs", "endAtMs", "message", "updatedAt", "updatedBy", "version"]
+    },
+    "ContactMessage": {
+      "title": "ContactMessage",
+      "description": "Tin nhắn góp ý / báo lỗi từ người chơi gửi tới Quản trị viên tại /contact_messages/{messageId}.",
+      "type": "object",
+      "properties": {
+        "messageId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderEmail": { "type": "string", "minLength": 6, "maxLength": 254 },
+        "senderName": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "tag": { "type": "string", "enum": ["FEEDBACK", "BUG_REPORT"] },
+        "title": { "type": "string", "minLength": 1, "maxLength": 150 },
+        "content": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "isSeen": { "type": "boolean" },
+        "isHighlighted": { "type": "boolean" },
+        "seenAt": { "type": ["string", "null"], "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "messageId",
+        "senderUid",
+        "senderEmail",
+        "senderName",
+        "tag",
+        "title",
+        "content",
+        "isSeen",
+        "isHighlighted",
+        "createdAt",
+        "updatedAt"
+      ]
     }
   },
   "firestore": {
@@ -396,6 +436,10 @@
     "/system_config/{docId}": {
       "schema": { "$ref": "#/entities/SystemAudioConfig" },
       "description": "Cấu hình hệ thống (/system_config/audio, /system_config/media, /system_config/stages_catalog, /system_config/action_sfx, /system_config/difficulty, /system_config/maintenance)."
+    },
+    "/contact_messages/{messageId}": {
+      "schema": { "$ref": "#/entities/ContactMessage" },
+      "description": "Hộp thư góp ý và báo lỗi từ người chơi đã xác thực Gmail cá nhân gửi tới Admin."
     }
   }
 }

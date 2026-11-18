@@ -65,6 +65,7 @@ export interface ModeSelectionScreenProps {
   onDifficultyChange: (d: 'DEFAULT' | 'EXTREME') => void;
   onOpenSettings: () => void;
   onOpenSupport?: () => void;
+  onOpenContact?: () => void;
   onOpenDevTools: () => void;
   selectedMode?: GameModeType;
   onSelectedModeChange?: (mode: GameModeType) => void;
@@ -144,6 +145,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   onDifficultyChange,
   onOpenSettings,
   onOpenSupport,
+  onOpenContact,
   onOpenDevTools,
   selectedMode: controlledMode,
   onSelectedModeChange,
@@ -496,6 +498,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
             <TopMenuActionDrawer
               onOpenSettings={onOpenSettings}
               onOpenSupport={onOpenSupport}
+              onOpenContact={onOpenContact}
               onOpenDevTools={onOpenDevTools}
               onExit={handleTopMenuExit}
               exitLabel={t('Về trang chủ', 'Return Home')}

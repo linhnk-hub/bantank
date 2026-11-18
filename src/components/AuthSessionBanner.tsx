@@ -154,6 +154,7 @@ interface AuthSessionBannerProps {
   isSuperAdmin?: boolean;
   onOpenSettings?: () => void;
   onOpenSupport?: () => void;
+  onOpenContact?: () => void;
   onOpenDevTools?: () => void;
   onQuitToHome?: () => void;
 }
@@ -164,6 +165,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
   isSuperAdmin = false,
   onOpenSettings,
   onOpenSupport,
+  onOpenContact,
   onOpenDevTools,
   onQuitToHome,
 }) => {
@@ -386,6 +388,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
             <TopMenuActionDrawer
               onOpenSettings={onOpenSettings}
               onOpenSupport={onOpenSupport}
+              onOpenContact={onOpenContact}
               onOpenDevTools={onOpenDevTools}
               onExit={onQuitToHome ?? handleSignOut}
               exitLabel={t('Về trang chủ', 'Return Home')}
@@ -397,6 +400,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
             <TopMenuActionDrawer
               onOpenSettings={onOpenSettings}
               onOpenSupport={onOpenSupport}
+              onOpenContact={onOpenContact}
               onOpenDevTools={onOpenDevTools}
               onExit={handleSignOut}
               exitLabel={t('Thoát', 'Exit')}

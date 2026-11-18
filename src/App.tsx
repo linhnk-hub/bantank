@@ -20,6 +20,7 @@ import {
 import { DevToolsDrawer } from './components/DevToolsDrawer.tsx';
 import { SettingsModal, type SettingsTabId } from './components/SettingsModal.tsx';
 import { SupportModal } from './components/SupportModal.tsx';
+import { ContactModal } from './components/ContactModal.tsx';
 import { SoundManager } from './core/audio.ts';
 import { MusicManager, type GameModeScope } from './core/musicManager.ts';
 import {
@@ -106,6 +107,7 @@ export default function App() {
   const [authErrorMsg, setAuthErrorMsg] = useState<string | null>(null);
   const [logoutSuccessNotice, setLogoutSuccessNotice] = useState<string | null>(null);
   const [isSupportOpen, setIsSupportOpen] = useState<boolean>(false);
+  const [isContactOpen, setIsContactOpen] = useState<boolean>(false);
   const [onlineDisconnectMsg, setOnlineDisconnectMsg] = useState<string | null>(null);
   const [isReturningToLobby, setIsReturningToLobby] = useState<boolean>(false);
   const [returnToLobbyError, setReturnToLobbyError] = useState<string | null>(null);
@@ -1249,6 +1251,12 @@ export default function App() {
 
         <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
 
+        <ContactModal
+          isOpen={isContactOpen}
+          onClose={() => setIsContactOpen(false)}
+          isAuthenticated={Boolean(currentUser && !isTrialMode)}
+        />
+
         <MainMenuScreen
           user={{
             uid: currentUser.uid,
@@ -1303,6 +1311,7 @@ export default function App() {
             setIsSettingsOpen(true);
           }}
           onOpenSupport={() => setIsSupportOpen(true)}
+          onOpenContact={() => setIsContactOpen(true)}
           onOpenDevTools={() => setIsDevDrawerOpen(true)}
           isSuperAdmin={isSuperAdmin}
         />
@@ -1345,6 +1354,12 @@ export default function App() {
 
         <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
 
+        <ContactModal
+          isOpen={isContactOpen}
+          onClose={() => setIsContactOpen(false)}
+          isAuthenticated={Boolean(currentUser && !isTrialMode)}
+        />
+
         <ModeSelectionScreen
           user={{
             uid: currentUser.uid,
@@ -1368,6 +1383,7 @@ export default function App() {
             setIsSettingsOpen(true);
           }}
           onOpenSupport={() => setIsSupportOpen(true)}
+          onOpenContact={() => setIsContactOpen(true)}
           onOpenDevTools={() => setIsDevDrawerOpen(true)}
           selectedMode={selectedMode}
           onSelectedModeChange={setSelectedMode}
@@ -1426,6 +1442,13 @@ export default function App() {
       {/* Support / Info Modal */}
       <SupportModal isOpen={isSupportOpen} onClose={() => setIsSupportOpen(false)} />
 
+      {/* Contact / Feedback Modal */}
+      <ContactModal
+        isOpen={isContactOpen}
+        onClose={() => setIsContactOpen(false)}
+        isAuthenticated={Boolean(currentUser && !isTrialMode)}
+      />
+
       {/* Top Battle Header: Player Name + Horizontal Slide-Out Menu */}
       <AuthSessionBanner
         onStartMatchAllowedChange={setIsMatchAllowed}
@@ -1436,6 +1459,7 @@ export default function App() {
           setIsSettingsOpen(true);
         }}
         onOpenSupport={() => setIsSupportOpen(true)}
+        onOpenContact={() => setIsContactOpen(true)}
         onOpenDevTools={() => setIsDevDrawerOpen(true)}
         onQuitToHome={handleQuitToMenu}
       />

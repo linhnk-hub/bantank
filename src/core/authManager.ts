@@ -1135,14 +1135,19 @@ export class AuthManager {
           : '';
       const targetDisplayName = existingCustomDisplayName || googleDisplayName;
 
-      // Bước 1: Thử ghi đầy đủ với lastLoginAt & email (nếu Rules mới đã được Publish)
+      // Bước 1: Thử ghi đầy đủ với lastLoginAt, firstLoginAt, loginCount & email
       const fullPayload: Record<string, unknown> = {
         uid: targetUser.uid,
         email: (targetUser.email || '').trim().toLowerCase(),
         avatarType,
         avatarId,
         avatarUpdatedAt: existing?.avatarUpdatedAt ?? serverTimestamp(),
+        firstLoginAt: existing?.firstLoginAt ?? existing?.createdAt ?? serverTimestamp(),
         lastLoginAt: serverTimestamp(),
+        loginCount:
+          typeof existing?.loginCount === 'number' && Number.isInteger(existing.loginCount) && existing.loginCount >= 1
+            ? existing.loginCount
+            : 1,
       };
       if (targetDisplayName) {
         fullPayload.displayName = targetDisplayName.slice(0, 40);

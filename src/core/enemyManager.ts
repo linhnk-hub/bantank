@@ -527,7 +527,7 @@ export class EnemyManager {
    * Applies damage to an enemy tank.
    * Returns true if the enemy was destroyed.
    */
-  public damageEnemy(enemyId: string): { destroyed: boolean; score: number; enemy?: EnemyTank } {
+  public damageEnemy(enemyId: string, damage: number = 1): { destroyed: boolean; score: number; enemy?: EnemyTank } {
     const enemy = this.activeEnemies.find((e) => e.id === enemyId);
     if (!enemy || !enemy.isAlive) {
       return { destroyed: false, score: 0 };
@@ -541,7 +541,8 @@ export class EnemyManager {
       return { destroyed: false, score: 0, enemy };
     }
 
-    enemy.hp -= 1;
+    const effectiveDamage = Math.max(1, Math.floor(damage || 1));
+    enemy.hp -= effectiveDamage;
     if (enemy.hp <= 0) {
       enemy.isAlive = false;
       this.activeEnemies = this.activeEnemies.filter((e) => e.id !== enemyId);

@@ -18,9 +18,7 @@ import {
   CheckCircle2,
   Keyboard,
   Lock,
-  Sparkles,
   Mail,
-  ExternalLink,
 } from 'lucide-react';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { useLanguage } from '../core/i18n.ts';
@@ -127,8 +125,28 @@ export const SupportModal: React.FC<SupportModalProps> = ({
             <div className="space-y-3.5" data-testid="support-panel-about">
               <div className="bg-[#050510]/85 border border-[#FFB800]/35 rounded-lg p-3.5 space-y-2">
                 <div className="font-btn flex items-center gap-2 text-[#FFB800] font-black uppercase tracking-wider">
-                  <Sparkles className="w-4 h-4 shrink-0" />
-                  <span>{t('Bắn Tank Online – Neo-Retro Arcade', 'Bắn Tank Online – Neo-Retro Arcade')}</span>
+                  <svg
+                    viewBox="0 0 32 32"
+                    className="w-5 h-5 shrink-0"
+                    style={{ shapeRendering: 'crispEdges' }}
+                    aria-hidden="true"
+                  >
+                    <rect x="4" y="6" width="4" height="20" fill="#B45309" />
+                    <rect x="4" y="8" width="2" height="3" fill="#FBBF24" />
+                    <rect x="4" y="14" width="2" height="3" fill="#FBBF24" />
+                    <rect x="4" y="20" width="2" height="3" fill="#FBBF24" />
+                    <rect x="24" y="6" width="4" height="20" fill="#B45309" />
+                    <rect x="26" y="8" width="2" height="3" fill="#FBBF24" />
+                    <rect x="26" y="14" width="2" height="3" fill="#FBBF24" />
+                    <rect x="26" y="20" width="2" height="3" fill="#FBBF24" />
+                    <rect x="8" y="8" width="16" height="16" fill="#D97706" />
+                    <rect x="10" y="10" width="12" height="12" fill="#F59E0B" />
+                    <rect x="14" y="2" width="4" height="9" fill="#D97706" />
+                    <rect x="15" y="2" width="2" height="8" fill="#FDE68A" />
+                    <rect x="12" y="12" width="8" height="8" fill="#92400E" />
+                    <rect x="14" y="14" width="4" height="4" fill="#FEF3C7" />
+                  </svg>
+                  <span>{t('Bắn Tank Online – CHIẾN TRƯỜNG HUYỀN THOẠI', 'Bắn Tank Online – LEGENDARY BATTLEFIELD')}</span>
                 </div>
                 <p className="text-neutral-200">
                   {t(
@@ -192,16 +210,15 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                       admin@bantank.online
                     </a>
                   </div>
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <span>{t('Trang giới thiệu chi tiết:', 'Detailed Overview Page:')}</span>
+                  <div>
                     <a
                       href="/landing.html"
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[#FFB800] hover:text-amber-300 font-bold underline"
+                      data-testid="support-about-details-link"
+                      className="inline-flex items-center text-[#FFB800] hover:text-amber-300 font-bold underline"
                     >
-                      <span>landing.html</span>
-                      <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                      {t('[Chi tiết]', '[Details]')}
                     </a>
                   </div>
                 </div>
@@ -255,18 +272,15 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                 </ul>
               </div>
 
-              <div className="bg-[#050510]/85 border border-[#00F0FF]/30 rounded-lg p-3.5 flex flex-wrap items-center justify-between gap-2">
-                <span className="text-neutral-200 font-medium">
-                  {t('Xem tài liệu chính sách quyền riêng tư đầy đủ:', 'View full Privacy Policy document:')}
-                </span>
+              <div className="bg-[#050510]/85 border border-[#00F0FF]/30 rounded-lg p-3.5 flex items-center">
                 <a
                   href="/privacy.html"
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-[#00F0FF] hover:text-cyan-300 font-bold underline"
+                  data-testid="support-policy-details-link"
+                  className="inline-flex items-center text-[#00F0FF] hover:text-cyan-300 font-bold underline"
                 >
-                  <span>privacy.html</span>
-                  <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                  {t('[Chi tiết]', '[Details]')}
                 </a>
               </div>
             </div>

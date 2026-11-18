@@ -20,7 +20,7 @@
  *      while `totalXp` continues accumulating.
  */
 
-import { collection, doc, getDoc, getDocs, getDocsFromServer, limit, onSnapshot, query, Timestamp } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, getDocsFromServer, limit, onSnapshot, query, serverTimestamp, setDoc, Timestamp, updateDoc } from 'firebase/firestore';
 import { getFirebaseDb } from './firebaseConfig.ts';
 import {
   AuthManager,
@@ -108,7 +108,9 @@ export interface CloudUserStatsFields {
   totalXp: number | null;
   xu: number | null;
   createdAtMs: number | null;
+  firstLoginAtMs: number | null;
   lastLoginAtMs: number | null;
+  loginCount: number | null;
 }
 
 export interface PlayerFullStatisticsSnapshot {
@@ -258,6 +260,7 @@ export class PlayerStatsManager {
   private cloudReadStatusByUid = new Map<string, 'IDLE' | 'LOADING' | 'VERIFIED' | 'ERROR'>();
   private cloudReadErrorCodeByUid = new Map<string, string | null>();
   private firestoreUnsubByUid = new Map<string, () => void>();
+  private syncedCloudLoginSessionKeys = new Set<string>();
   private recordedMatchRunKeys = new Set<string>();
   private listeners = new Set<() => void>();
   private boundWindowRef: unknown = null;
@@ -708,7 +711,9 @@ export class PlayerStatsManager {
               totalXp: null,
               xu: null,
               createdAtMs: null,
+              firstLoginAtMs: null,
               lastLoginAtMs: null,
+              loginCount: null,
             });
             this.cloudReadStatusByUid.set(uid, 'VERIFIED');
             this.cloudReadErrorCodeByUid.set(uid, null);
@@ -876,6 +881,12 @@ export class PlayerStatsManager {
     const parsedXuCheck = validateTotalXpValue(data.xu);
     const parsedXu = parsedXuCheck.valid ? parsedXuCheck.sanitizedXp : null;
 
+    const rawLoginCount = data.loginCount;
+    const parsedLoginCount =
+      typeof rawLoginCount === 'number' && Number.isInteger(rawLoginCount) && rawLoginCount >= 1
+        ? rawLoginCount
+        : null;
+
     this.cloudFieldsByUid.set(uid, {
       uid,
       storedLevel: parsedStoredLevel,
@@ -883,9 +894,60 @@ export class PlayerStatsManager {
       totalXp: audit?.resolvedVerifiedTotalXp ?? null,
       xu: parsedXu,
       createdAtMs: parseTimestampFieldMs(data.createdAt),
+      firstLoginAtMs: parseTimestampFieldMs(data.firstLoginAt),
       lastLoginAtMs: parseTimestampFieldMs(data.lastLoginAt),
+      loginCount: parsedLoginCount,
     });
     this.notify();
+  }
+
+  private async syncLoginStatsToFirestore(
+    uid: string,
+    sessionId: string,
+    localTotalLogins: number
+  ): Promise<void> {
+    const dedupKey = `${uid}:${sessionId}`;
+    if (this.syncedCloudLoginSessionKeys.has(dedupKey)) return;
+
+    const currentUser = AuthManager.getInstance().getCurrentUser();
+    if (!currentUser || currentUser.uid !== uid || !validatePersonalGmailUser(currentUser).isValid) {
+      return;
+    }
+
+    const db = getFirebaseDb();
+    if (!db) return;
+
+    this.syncedCloudLoginSessionKeys.add(dedupKey);
+    try {
+      const userRef = doc(db, 'users', uid);
+      const snap = await getDoc(userRef);
+      if (snap.exists()) {
+        const existing = snap.data() as Record<string, unknown>;
+        const prevCount =
+          typeof existing.loginCount === 'number' && Number.isInteger(existing.loginCount) && existing.loginCount >= 1
+            ? existing.loginCount
+            : 0;
+        const nextCount = Math.max(1, prevCount + 1, localTotalLogins);
+        await updateDoc(userRef, {
+          firstLoginAt: existing.firstLoginAt ?? existing.createdAt ?? existing.lastLoginAt ?? serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+          loginCount: nextCount,
+        }).catch(() => {});
+      } else {
+        await setDoc(userRef, {
+          uid,
+          email: (currentUser.email || '').trim().toLowerCase(),
+          avatarType: 'google',
+          avatarId: null,
+          avatarUpdatedAt: serverTimestamp(),
+          firstLoginAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+          loginCount: Math.max(1, localTotalLogins),
+        }).catch(() => {});
+      }
+    } catch {
+      // Non-fatal fallback: local per-UID stats already saved
+    }
   }
 
   /**
@@ -931,6 +993,7 @@ export class PlayerStatsManager {
     }
 
     this.savePerUidStats(record);
+    void this.syncLoginStatsToFirestore(uid, sessionId, record.totalLogins);
 
     const logger = SystemAuditLogger.getInstance();
     const scopeKey = `session:${uid}:${sessionId}`;
@@ -1306,6 +1369,12 @@ export class PlayerStatsManager {
       sessionSnap.uid === cleanUid && sessionSnap.status === 'ACTIVE';
 
     let firstLoginAtMs = localStats.firstLoginAtMs;
+    if (cloudStats?.firstLoginAtMs) {
+      firstLoginAtMs =
+        firstLoginAtMs === null
+          ? cloudStats.firstLoginAtMs
+          : Math.min(firstLoginAtMs, cloudStats.firstLoginAtMs);
+    }
     if (cloudStats?.createdAtMs) {
       firstLoginAtMs =
         firstLoginAtMs === null
@@ -1332,6 +1401,7 @@ export class PlayerStatsManager {
 
     const totalLogins = Math.max(
       localStats.totalLogins,
+      cloudStats?.loginCount ?? 0,
       isSessionActiveForThisUid || lastLoginAtMs !== null ? 1 : 0
     );
 

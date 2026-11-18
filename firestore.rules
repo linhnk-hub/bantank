@@ -526,6 +526,8 @@ service cloud.firestore {
         && data.lastLoginAt == request.time
         && isValidUserAvatarFields(data, uid)
         && (!('displayName' in data) || isValidUserDisplayNameField(data))
+        && (!('firstLoginAt' in data) || (data.firstLoginAt is timestamp && data.firstLoginAt == request.time))
+        && (!('loginCount' in data) || (data.loginCount is int && data.loginCount >= 1 && data.loginCount <= 1000000))
         && !('role' in data)
         && !('isAdmin' in data)
         && !('isSuperAdmin' in data)
@@ -539,7 +541,9 @@ service cloud.firestore {
           'avatarType',
           'avatarId',
           'avatarUpdatedAt',
-          'lastLoginAt'
+          'firstLoginAt',
+          'lastLoginAt',
+          'loginCount'
         ]);
     }
 
@@ -599,9 +603,35 @@ service cloud.firestore {
             && (!('email' in existing()) || incoming().email == existing().email)
           )
         )
+        && (
+          !('firstLoginAt' in incoming())
+          || (
+            incoming().firstLoginAt is timestamp
+            && (
+              !('firstLoginAt' in existing())
+                ? (
+                  incoming().firstLoginAt == request.time
+                  || (('createdAt' in existing()) && incoming().firstLoginAt == existing().createdAt)
+                  || (('lastLoginAt' in existing()) && incoming().firstLoginAt == existing().lastLoginAt)
+                )
+                : incoming().firstLoginAt == existing().firstLoginAt
+            )
+          )
+        )
+        && (
+          !('loginCount' in incoming())
+          || (
+            incoming().loginCount is int
+            && incoming().loginCount >= 1
+            && incoming().loginCount <= 1000000
+            && (!('loginCount' in existing()) || !(existing().loginCount is int) || incoming().loginCount >= existing().loginCount)
+          )
+        )
         && incoming().diff(existing()).affectedKeys().hasOnly([
           'email',
-          'lastLoginAt'
+          'firstLoginAt',
+          'lastLoginAt',
+          'loginCount'
         ]);
     }
 
@@ -1790,6 +1820,103 @@ service cloud.firestore {
       allow get, list: if isStaffModOrAdmin();
       allow create: if isAdmin() && isValidRoleAuditLogDoc(incoming(), logId);
       allow update, delete: if false;
+    }
+
+    // =========================================================================
+    // 11. Collection Rules: /contact_messages/{messageId}
+    //     - Người chơi Gmail cá nhân xác thực chỉ được phép tạo (create) tin nhắn của chính mình.
+    //     - Admin duy nhất (linhnk2013@gmail.com) có quyền đọc danh sách, xác nhận đã xem & highlight quan trọng.
+    // =========================================================================
+    function isValidContactMessageCreate(data, messageId) {
+      return data.keys().hasAll([
+          'messageId',
+          'senderUid',
+          'senderEmail',
+          'senderName',
+          'tag',
+          'title',
+          'content',
+          'isSeen',
+          'isHighlighted',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'messageId',
+          'senderUid',
+          'senderEmail',
+          'senderName',
+          'tag',
+          'title',
+          'content',
+          'isSeen',
+          'isHighlighted',
+          'seenAt',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.messageId == messageId
+        && data.senderUid is string
+        && data.senderUid == request.auth.uid
+        && data.senderEmail is string
+        && data.senderEmail.size() >= 6
+        && data.senderEmail.size() <= 254
+        && data.senderEmail.lower() == request.auth.token.email.lower()
+        && data.senderName is string
+        && data.senderName.size() >= 1
+        && data.senderName.size() <= 80
+        && data.tag in ['FEEDBACK', 'BUG_REPORT']
+        && data.title is string
+        && data.title.size() >= 1
+        && data.title.size() <= 150
+        && data.content is string
+        && data.content.size() >= 1
+        && data.content.size() <= 1000
+        && data.isSeen is bool
+        && data.isSeen == false
+        && data.isHighlighted is bool
+        && data.isHighlighted == false
+        && (!('seenAt' in data) || data.seenAt == null)
+        && data.createdAt is timestamp
+        && data.createdAt == request.time
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    function isValidContactMessageAdminUpdate(messageId) {
+      return incoming().diff(existing()).affectedKeys().hasOnly([
+          'isSeen',
+          'isHighlighted',
+          'seenAt',
+          'updatedAt'
+        ])
+        && incoming().messageId == existing().messageId
+        && incoming().messageId == messageId
+        && incoming().senderUid == existing().senderUid
+        && incoming().senderEmail == existing().senderEmail
+        && incoming().senderName == existing().senderName
+        && incoming().tag == existing().tag
+        && incoming().title == existing().title
+        && incoming().content == existing().content
+        && incoming().createdAt == existing().createdAt
+        && incoming().isSeen is bool
+        && incoming().isHighlighted is bool
+        && incoming().updatedAt is timestamp
+        && incoming().updatedAt == request.time
+        && (!('seenAt' in incoming()) || incoming().seenAt == null || incoming().seenAt is timestamp);
+    }
+
+    match /contact_messages/{messageId} {
+      allow get: if isValidId(messageId)
+        && (isAdmin() || (isVerifiedPersonalGmail() && existing().senderUid == request.auth.uid));
+      allow list: if isAdmin();
+      allow create: if isValidId(messageId)
+        && isVerifiedPersonalGmail()
+        && isValidContactMessageCreate(incoming(), messageId);
+      allow update: if isValidId(messageId)
+        && isAdmin()
+        && isValidContactMessageAdminUpdate(messageId);
+      allow delete: if isValidId(messageId) && isAdmin();
     }
   }
 }

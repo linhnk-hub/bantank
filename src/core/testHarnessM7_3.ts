@@ -7029,7 +7029,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       !regularTabIds.includes('ADMIN_OTHER') &&
       !regularTabIds.includes('USER_ACCOUNTS') &&
       !regularTabIds.includes('SYSTEM_LOGS') &&
-      superAdminTabLabels.length === 8 &&
+      !regularTabIds.includes('CONTACT_MESSAGES') &&
+      superAdminTabLabels.length === 9 &&
       superAdminTabLabels[0] === 'Thông tin' &&
       superAdminTabLabels[1] === 'Hình ảnh' &&
       superAdminTabLabels[2] === 'Media' &&
@@ -7037,7 +7038,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       superAdminTabLabels[4] === 'Cấp quyền' &&
       superAdminTabLabels[5] === 'Tài khoản' &&
       superAdminTabLabels[6] === 'LOG HỆ THỐNG' &&
-      superAdminTabLabels[7] === 'BẢO TRÌ';
+      superAdminTabLabels[7] === 'BẢO TRÌ' &&
+      superAdminTabLabels[8] === 'Liên hệ';
 
     // 2. Kiểm tra phân trang danh sách Tài khoản (tối đa 10 tài khoản/trang, Trước/Sau) & bảo mật quyền truy cập (Mục 3)
     const seedAccounts = Array.from({ length: 25 }, (_, idx) => {
@@ -8442,7 +8444,8 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const tc2Pass =
       mm.canManageMusic() === true &&
       sm.canManageActionSounds() === true &&
-      adminTabs.length === 8 &&
+      adminTabs.length === 9 &&
+      adminTabs.some((t) => t.id === 'CONTACT_MESSAGES') &&
       hasRolePermission('ADMIN', 'MANAGE_STAGES') &&
       hasRolePermission('ADMIN', 'MANAGE_AUDIO_SYSTEM') &&
       hasRolePermission('ADMIN', 'MANAGE_AVATAR_CATALOG') &&
@@ -9171,18 +9174,21 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
     const playerTabs = getAvailableSettingsTabsForRole('PLAYER').map((t) => t.id);
     const section3UnifiedLayoutOk =
       UNIFIED_SETTINGS_MODAL_WIDTH_CLASS === 'w-full max-w-4xl' &&
-      adminTabs.length === 8 &&
+      adminTabs.length === 9 &&
       adminTabs.includes('USER_ACCOUNTS') &&
       adminTabs.includes('ADMIN_OTHER') &&
       adminTabs.includes('IMAGE_SETTINGS') &&
       adminTabs.includes('SYSTEM_LOGS') &&
       adminTabs.includes('MAINTENANCE') &&
+      adminTabs.includes('CONTACT_MESSAGES') &&
       modTabs.includes('USER_ACCOUNTS') &&
       !modTabs.includes('IMAGE_SETTINGS') &&
       !modTabs.includes('SYSTEM_LOGS') &&
+      !modTabs.includes('CONTACT_MESSAGES') &&
       !playerTabs.includes('USER_ACCOUNTS') &&
       !playerTabs.includes('ADMIN_OTHER') &&
-      !playerTabs.includes('SYSTEM_LOGS');
+      !playerTabs.includes('SYSTEM_LOGS') &&
+      !playerTabs.includes('CONTACT_MESSAGES');
 
     // 2. Mục 4: Khôi phục cài đặt âm thanh mặc định trong SoundManager
     const tempSoundMgr = SoundManager.getInstance();

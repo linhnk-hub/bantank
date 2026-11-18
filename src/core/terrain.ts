@@ -117,7 +117,8 @@ export function applyDeterministicBulletImpact(
   row: number,
   col: number,
   bulletBox: AABB,
-  direction: Direction
+  direction: Direction,
+  bulletPower: number = 1
 ): { hit: boolean; destroyedMask: number; remainingMask: number } {
   const mask = getBrickMask(state, row, col);
   if (mask === 0) {
@@ -128,6 +129,7 @@ export function applyDeterministicBulletImpact(
   const tileY = row * MAP_DIMENSIONS.TILE_SIZE_PX;
   const xMid = tileX + 8;
   const yMid = tileY + 8;
+  const doubleDepth = bulletPower >= 2;
 
   let bitsToDestroy = 0;
 
@@ -142,6 +144,9 @@ export function applyDeterministicBulletImpact(
     } else if (bulletBox.top < yMid && (mask & SUB_TILE_MASKS.TL)) {
       leftCandidateBit = SUB_TILE_MASKS.TL;
     }
+    if (doubleDepth && leftCandidateBit !== 0) {
+      leftCandidateBit = (SUB_TILE_MASKS.BL | SUB_TILE_MASKS.TL) & mask;
+    }
 
     // Right column candidate: BR (front face) or TR (rear face)
     let rightCandidateBit = 0;
@@ -149,6 +154,9 @@ export function applyDeterministicBulletImpact(
       rightCandidateBit = SUB_TILE_MASKS.BR;
     } else if (bulletBox.top < yMid && (mask & SUB_TILE_MASKS.TR)) {
       rightCandidateBit = SUB_TILE_MASKS.TR;
+    }
+    if (doubleDepth && rightCandidateBit !== 0) {
+      rightCandidateBit = (SUB_TILE_MASKS.BR | SUB_TILE_MASKS.TR) & mask;
     }
 
     if (overlapLeft > 0 && overlapRight > 0) {
@@ -181,6 +189,9 @@ export function applyDeterministicBulletImpact(
     } else if (bulletBox.bottom > yMid && (mask & SUB_TILE_MASKS.BL)) {
       leftCandidateBit = SUB_TILE_MASKS.BL;
     }
+    if (doubleDepth && leftCandidateBit !== 0) {
+      leftCandidateBit = (SUB_TILE_MASKS.TL | SUB_TILE_MASKS.BL) & mask;
+    }
 
     // Right column candidate: TR (front face) or BR (rear face)
     let rightCandidateBit = 0;
@@ -188,6 +199,9 @@ export function applyDeterministicBulletImpact(
       rightCandidateBit = SUB_TILE_MASKS.TR;
     } else if (bulletBox.bottom > yMid && (mask & SUB_TILE_MASKS.BR)) {
       rightCandidateBit = SUB_TILE_MASKS.BR;
+    }
+    if (doubleDepth && rightCandidateBit !== 0) {
+      rightCandidateBit = (SUB_TILE_MASKS.TR | SUB_TILE_MASKS.BR) & mask;
     }
 
     if (overlapLeft > 0 && overlapRight > 0) {
@@ -220,6 +234,9 @@ export function applyDeterministicBulletImpact(
     } else if (bulletBox.left < xMid && (mask & SUB_TILE_MASKS.TL)) {
       topCandidateBit = SUB_TILE_MASKS.TL;
     }
+    if (doubleDepth && topCandidateBit !== 0) {
+      topCandidateBit = (SUB_TILE_MASKS.TR | SUB_TILE_MASKS.TL) & mask;
+    }
 
     // Bottom row candidate: BR (front face) or BL (rear face)
     let bottomCandidateBit = 0;
@@ -227,6 +244,9 @@ export function applyDeterministicBulletImpact(
       bottomCandidateBit = SUB_TILE_MASKS.BR;
     } else if (bulletBox.left < xMid && (mask & SUB_TILE_MASKS.BL)) {
       bottomCandidateBit = SUB_TILE_MASKS.BL;
+    }
+    if (doubleDepth && bottomCandidateBit !== 0) {
+      bottomCandidateBit = (SUB_TILE_MASKS.BR | SUB_TILE_MASKS.BL) & mask;
     }
 
     if (overlapTop > 0 && overlapBottom > 0) {
@@ -259,6 +279,9 @@ export function applyDeterministicBulletImpact(
     } else if (bulletBox.right > xMid && (mask & SUB_TILE_MASKS.TR)) {
       topCandidateBit = SUB_TILE_MASKS.TR;
     }
+    if (doubleDepth && topCandidateBit !== 0) {
+      topCandidateBit = (SUB_TILE_MASKS.TL | SUB_TILE_MASKS.TR) & mask;
+    }
 
     // Bottom row candidate: BL (front face) or BR (rear face)
     let bottomCandidateBit = 0;
@@ -266,6 +289,9 @@ export function applyDeterministicBulletImpact(
       bottomCandidateBit = SUB_TILE_MASKS.BL;
     } else if (bulletBox.right > xMid && (mask & SUB_TILE_MASKS.BR)) {
       bottomCandidateBit = SUB_TILE_MASKS.BR;
+    }
+    if (doubleDepth && bottomCandidateBit !== 0) {
+      bottomCandidateBit = (SUB_TILE_MASKS.BL | SUB_TILE_MASKS.BR) & mask;
     }
 
     if (overlapTop > 0 && overlapBottom > 0) {

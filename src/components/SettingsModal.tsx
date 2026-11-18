@@ -30,12 +30,11 @@ import {
   Terminal,
   Trophy,
   Award,
-  Clock,
-  History,
   Wrench,
   Power,
   Rocket,
   Mail,
+  MessageSquare,
 } from 'lucide-react';
 import { SoundManager, type AudioSettings } from '../core/audio.ts';
 import { MusicManager } from '../core/musicManager.ts';
@@ -79,6 +78,7 @@ import {
 import { MusicAdminPanel } from './MusicAdminPanel.tsx';
 import { StageEditorPanel } from './StageEditorPanel.tsx';
 import { SystemLogsAdminPanel } from './SystemLogsAdminPanel.tsx';
+import { ContactAdminPanel } from './ContactAdminPanel.tsx';
 import { ConfirmationPopupModal } from './ConfirmationPopupModal.tsx';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import {
@@ -96,7 +96,8 @@ export type SettingsTabId =
   | 'ADMIN_OTHER'
   | 'USER_ACCOUNTS'
   | 'SYSTEM_LOGS'
-  | 'MAINTENANCE';
+  | 'MAINTENANCE'
+  | 'CONTACT_MESSAGES';
 
 /**
  * M7.3.11.6 Section 3: Kích thước khung chuẩn đồng nhất cho tất cả các mục con trong Cài đặt hệ thống
@@ -199,6 +200,11 @@ export function getAvailableSettingsTabsForRole(
     tabs.push({
       id: 'MAINTENANCE',
       label: 'BẢO TRÌ',
+      adminOnly: true,
+    });
+    tabs.push({
+      id: 'CONTACT_MESSAGES',
+      label: 'Liên hệ',
       adminOnly: true,
     });
   }
@@ -772,6 +778,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         return <Terminal className="w-3.5 h-3.5" />;
       case 'MAINTENANCE':
         return <Wrench className="w-3.5 h-3.5" />;
+      case 'CONTACT_MESSAGES':
+        return <MessageSquare className="w-3.5 h-3.5" />;
     }
   };
 
@@ -781,10 +789,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     ...tab,
     icon: getTabIcon(tab.id),
   }));
-
-  const recentLoginHistory = playerStats.authHistory
-    .filter((evt) => evt.eventType === 'LOGIN')
-    .slice(0, 5);
 
   return (
     <div
@@ -869,7 +873,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 ? t('Nhật ký', 'System Logs')
                                 : tab.id === 'MAINTENANCE'
                                   ? t('Bảo trì', 'Maintenance')
-                                  : tab.label}
+                                  : tab.id === 'CONTACT_MESSAGES'
+                                    ? t('Liên hệ', 'Contact')
+                                    : tab.label}
                 </span>
               </button>
             );
@@ -1470,123 +1476,41 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                   </div>
 
-                  <div className="p-3 rounded-xl bg-neutral-950/90 border border-neutral-800 space-y-1.5">
+                  <div
+                    data-testid="stat-card-login-summary"
+                    className="p-3 rounded-xl bg-neutral-950/90 border border-neutral-800 space-y-1.5"
+                  >
                     <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
-                      Co-op Online
+                      {t('Thống kê đăng nhập', 'Sign-in Summary')}
                     </div>
-                    <div className="text-xs font-extrabold font-mono text-white">
-                      {t(
-                        `${playerStats.coopRoomsParticipated} phòng`,
-                        `${playerStats.coopRoomsParticipated} rooms`
-                      )}
-                    </div>
-                    <div className="text-[10px] text-neutral-500 pt-0.5 border-t border-neutral-800/80">
-                      {t('Đã tạo hoặc tham gia', 'Created or joined')}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Lịch sử truy cập & Trạng thái hiện tại */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 border-t border-neutral-800/80 pt-3">
-                  <div className="p-2 rounded-lg bg-[#050510]/60 space-y-0.5">
-                    <div className="text-[10px] text-neutral-400 flex items-center gap-1">
-                      <Clock className="w-3 h-3 text-amber-400" />
-                      <span>{t('Tổng số lần đăng nhập', 'Total Sign-ins')}</span>
-                    </div>
-                    <div
-                      data-testid="stat-total-logins"
-                      className="text-xs font-extrabold font-mono text-amber-300"
-                    >
-                      {t(`${playerStats.totalLogins} lần`, `${playerStats.totalLogins} times`)}
-                    </div>
-                  </div>
-
-                  <div className="p-2 rounded-lg bg-[#050510]/60 space-y-0.5">
-                    <div className="text-[10px] text-neutral-400">
-                      {t('Đăng nhập đầu tiên', 'First Sign-in')}
-                    </div>
-                    <div className="text-[11px] font-mono text-neutral-200">
-                      {playerStats.firstLoginAtMs
-                        ? new Date(playerStats.firstLoginAtMs).toLocaleString('vi-VN')
-                        : t('Chưa ghi nhận', 'Not recorded')}
-                    </div>
-                  </div>
-
-                  <div className="p-2 rounded-lg bg-[#050510]/60 space-y-0.5">
-                    <div className="text-[10px] text-neutral-400">
-                      {t('Đăng nhập gần nhất', 'Latest Sign-in')}
-                    </div>
-                    <div className="text-[11px] font-mono text-neutral-200">
-                      {playerStats.lastLoginAtMs
-                        ? new Date(playerStats.lastLoginAtMs).toLocaleString('vi-VN')
-                        : t('Chưa ghi nhận', 'Not recorded')}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Chi tiết trạng thái hiện tại (Đã bỏ Timeout nhàn rỗi & Mã phiên, sửa thành Trạng thái) */}
-                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
-                  <div className="text-neutral-300">
-                    {t('Trạng thái:', 'Status:')}{' '}
-                    <strong
-                      className={
-                        playerStats.currentSession.isOnlineActive
-                          ? 'text-emerald-300'
-                          : 'text-neutral-400'
-                      }
-                    >
-                      {playerStats.currentSession.status}
-                    </strong>
-                  </div>
-                </div>
-
-                {/* Lịch sử truy cập (Chỉ thống kê 5 lần truy cập thành công gần nhất của tài khoản) */}
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-neutral-300">
-                    <span className="flex items-center gap-1.5">
-                      <History className="w-3.5 h-3.5 text-amber-400" />
-                      <span>
-                        {t(
-                          `Lịch sử truy cập (${recentLoginHistory.length}/5 lần gần nhất)`,
-                          `Sign-in History (${recentLoginHistory.length}/5 recent)`
-                        )}
-                      </span>
-                    </span>
-                  </div>
-                  {recentLoginHistory.length === 0 ? (
-                    <div className="p-2 rounded-lg bg-[#050510]/60 text-[11px] text-neutral-500">
-                      {t(
-                        'Chưa có bản ghi lịch sử truy cập cho tài khoản này.',
-                        'No sign-in history recorded for this account yet.'
-                      )}
-                    </div>
-                  ) : (
-                    <div
-                      data-testid="player-auth-history-list"
-                      className="max-h-36 overflow-y-auto space-y-1 pr-1"
-                    >
-                      {recentLoginHistory.map((evt) => (
-                        <div
-                          key={evt.id}
-                          className="px-2.5 py-1.5 rounded bg-[#050510]/60 flex flex-wrap items-center justify-between gap-2 text-[11px]"
+                    <div className="space-y-1 pt-0.5 border-t border-neutral-800/80 text-[10px] font-mono text-neutral-300">
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-neutral-400">{t('Số lần đăng nhập:', 'Sign-ins:')}</span>
+                        <strong
+                          data-testid="stat-total-logins"
+                          className="text-amber-300 font-extrabold"
                         >
-                          <div className="flex items-center gap-2">
-                            <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold font-mono bg-emerald-950 text-emerald-300 border border-emerald-700/60">
-                              {t('TRUY CẬP THÀNH CÔNG', 'SIGN-IN SUCCESS')}
-                            </span>
-                            <span className="text-neutral-200">
-                              {evt.note?.startsWith('Đăng nhập thành công')
-                                ? t('Đăng nhập thành công', 'Signed in successfully')
-                                : evt.note}
-                            </span>
-                          </div>
-                          <span className="font-mono text-[10px] text-neutral-400">
-                            {new Date(evt.timestampMs).toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN')}
-                          </span>
-                        </div>
-                      ))}
+                          {t(`${playerStats.totalLogins} lần`, `${playerStats.totalLogins} times`)}
+                        </strong>
+                      </div>
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-neutral-400">{t('Lần đầu tiên:', 'First:')}</span>
+                        <span className="text-neutral-200 text-right">
+                          {playerStats.firstLoginAtMs
+                            ? new Date(playerStats.firstLoginAtMs).toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN')
+                            : t('Chưa ghi nhận', 'Not recorded')}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-1.5">
+                        <span className="text-neutral-400">{t('Lần gần nhất:', 'Latest:')}</span>
+                        <span className="text-neutral-200 text-right">
+                          {playerStats.lastLoginAtMs
+                            ? new Date(playerStats.lastLoginAtMs).toLocaleString(lang === 'en' ? 'en-US' : 'vi-VN')
+                            : t('Chưa ghi nhận', 'Not recorded')}
+                        </span>
+                      </div>
                     </div>
-                  )}
+                  </div>
                 </div>
               </div>
             </section>
@@ -2917,6 +2841,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
               </div>
             </section>
+          )}
+
+          {/* =========================================================================
+              TAB 9: LIÊN HỆ NGƯỜI CHƠI (CHỈ DÀNH CHO ADMIN linhnk2013@gmail.com)
+             ========================================================================= */}
+          {activeTab === 'CONTACT_MESSAGES' && isVerifiedSuperAdmin && (
+            <ContactAdminPanel />
           )}
         </div>
 

@@ -1571,7 +1571,7 @@ export class GameEngine {
         const enemyBox = getTankHitbox(enemy.x, enemy.y);
         if (intersectAABB(bulletBox, enemyBox)) {
           consumedBulletIds.add(pb.id);
-          const hitResult = this.enemyManager.damageEnemy(enemy.id);
+          const hitResult = this.enemyManager.damageEnemy(enemy.id, pb.power ?? 1);
           if (hitResult.destroyed) {
             this.state.totalDefeatedEnemies++;
             this.scoreManager.recordEnemyDefeated(enemy.id, enemy.enemyType);
@@ -1623,9 +1623,10 @@ export class GameEngine {
 
           // If P1 has active shield: absorb bullet completely, take NO damage!
           if (!this.state.p1.isShielded && this.state.p1State.shieldTimer <= 0) {
-            // If P1 is NOT shielded: P1 dies with dedicated P1_EXPLOSION!
+            // If P1 is NOT shielded: P1 dies with dedicated P1_EXPLOSION (Power tank deals 2x life damage)!
+            const bulletDamage = Math.max(1, Math.floor(eb.power || 1));
             this.emitCombatEvent('P1_EXPLOSION', this.state.p1.x + 8, this.state.p1.y + 8);
-            this.state.p1State.lives = Math.max(0, this.state.p1State.lives - 1);
+            this.state.p1State.lives = Math.max(0, this.state.p1State.lives - bulletDamage);
             this.state.p1State.isDead = true;
             this.state.p1.isAlive = false;
             this.state.p1State.waitingForClearSpawn = false;
@@ -1658,8 +1659,9 @@ export class GameEngine {
         if (intersectAABB(bulletBox, p2Box)) {
           consumedBulletIds.add(eb.id);
           if (!this.state.p2.isShielded && this.state.p2State.shieldTimer <= 0) {
+            const bulletDamage = Math.max(1, Math.floor(eb.power || 1));
             this.emitCombatEvent('TANK_EXPLOSION', this.state.p2.x + 8, this.state.p2.y + 8);
-            this.state.p2State.lives = Math.max(0, this.state.p2State.lives - 1);
+            this.state.p2State.lives = Math.max(0, this.state.p2State.lives - bulletDamage);
             this.state.p2State.isDead = true;
             this.state.p2.isAlive = false;
             this.state.p2State.waitingForClearSpawn = false;
