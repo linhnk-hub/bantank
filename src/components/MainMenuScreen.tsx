@@ -490,21 +490,32 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 handleSelectModeCard('SOLO');
                 handleConfirmSelectedMode('SOLO');
               }}
-              className={`min-h-[82px] p-2 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
+              className={`relative overflow-hidden min-h-[82px] p-2 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                 selectedModeCard === 'SOLO'
                   ? 'border-2 border-[#FFB800] bg-[#120e05]/95 ring-2 ring-[#FFB800]/30 shadow-[0_0_16px_rgba(255,184,0,0.28)]'
                   : 'border border-[#687386]/50 hover:border-[#FFB800]/70 opacity-95'
               }`}
             >
-              <div className="flex items-center justify-between text-[#FFB800] mb-1">
+              <img
+                src="./avatar/ava01.png"
+                alt=""
+                aria-hidden="true"
+                className="lobby-ava-fade-single pointer-events-none select-none absolute inset-0 w-full h-full object-cover object-center z-0"
+                draggable={false}
+              />
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#050510]/85 via-[#050510]/55 to-[#050510]/45 z-0"
+              />
+              <div className="relative z-10 flex items-center justify-between text-[#FFB800] mb-1">
                 <User className="w-4 h-4 shrink-0" />
                 <span className="font-hud text-sm font-bold">1P</span>
               </div>
-              <div>
-                <div className="font-btn text-[13px] sm:text-base font-extrabold text-[#EAF4FF] leading-tight whitespace-nowrap">
+              <div className="relative z-10">
+                <div className="font-btn text-[13px] sm:text-base font-extrabold text-[#EAF4FF] leading-tight whitespace-nowrap drop-shadow">
                   SOLO
                 </div>
-                <div className="text-xs text-[#EAF4FF]/80 leading-tight mt-0.5">
+                <div className="text-xs text-[#EAF4FF]/85 leading-tight mt-0.5 drop-shadow">
                   {t('Đơn đấu', '1 Player')}
                 </div>
               </div>
@@ -518,21 +529,39 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 handleSelectModeCard('COOP_AI');
                 handleConfirmSelectedMode('COOP_AI');
               }}
-              className={`min-h-[82px] p-2 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
+              className={`relative overflow-hidden min-h-[82px] p-2 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                 selectedModeCard === 'COOP_AI'
                   ? 'border-2 border-[#00F0FF] bg-[#051624]/95 ring-2 ring-[#00F0FF]/30 shadow-[0_0_16px_rgba(0,240,255,0.28)]'
                   : 'border border-[#687386]/50 hover:border-[#00F0FF]/70 opacity-95'
               }`}
             >
-              <div className="flex items-center justify-between text-[#00F0FF] mb-1">
+              <img
+                src="./avatar/ava01.png"
+                alt=""
+                aria-hidden="true"
+                className="lobby-ava-fade-pair-a pointer-events-none select-none absolute inset-0 w-full h-full object-cover object-center z-0"
+                draggable={false}
+              />
+              <img
+                src="./avatar/ava07.png"
+                alt=""
+                aria-hidden="true"
+                className="lobby-ava-fade-pair-b pointer-events-none select-none absolute inset-0 w-full h-full object-cover object-center z-0"
+                draggable={false}
+              />
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#050510]/85 via-[#050510]/55 to-[#050510]/45 z-0"
+              />
+              <div className="relative z-10 flex items-center justify-between text-[#00F0FF] mb-1">
                 <Bot className="w-4 h-4 shrink-0" />
                 <span className="font-hud text-sm font-bold">P1+AI</span>
               </div>
-              <div>
-                <div className="font-btn text-[13px] sm:text-base font-extrabold text-[#EAF4FF] leading-tight whitespace-nowrap">
+              <div className="relative z-10">
+                <div className="font-btn text-[13px] sm:text-base font-extrabold text-[#EAF4FF] leading-tight whitespace-nowrap drop-shadow">
                   CO-OP AI
                 </div>
-                <div className="text-xs text-[#EAF4FF]/80 leading-tight mt-0.5">
+                <div className="text-xs text-[#EAF4FF]/85 leading-tight mt-0.5 drop-shadow">
                   {t('Cùng AI', 'With AI')}
                 </div>
               </div>
@@ -546,21 +575,39 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 handleSelectModeCard('COOP_ONLINE');
                 handleConfirmSelectedMode('COOP_ONLINE');
               }}
-              className={`min-h-[82px] p-2 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
+              className={`relative overflow-hidden min-h-[82px] p-2 sm:p-3 neo-bevel-card text-left transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                 selectedModeCard === 'COOP_ONLINE'
                   ? 'border-2 border-[#FFB800] bg-[#120e05]/95 ring-2 ring-[#FFB800]/30 shadow-[0_0_16px_rgba(255,184,0,0.28)]'
                   : 'border border-[#687386]/50 hover:border-[#FFB800]/70 opacity-95'
               }`}
             >
-              <div className="flex items-center justify-between text-[#FFB800] mb-1">
+              <img
+                src="./avatar/ava01.png"
+                alt=""
+                aria-hidden="true"
+                className="lobby-ava-fade-pair-a pointer-events-none select-none absolute inset-0 w-full h-full object-cover object-center z-0"
+                draggable={false}
+              />
+              <img
+                src="./avatar/ava03.png"
+                alt=""
+                aria-hidden="true"
+                className="lobby-ava-fade-pair-b pointer-events-none select-none absolute inset-0 w-full h-full object-cover object-center z-0"
+                draggable={false}
+              />
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 bg-gradient-to-t from-[#050510]/85 via-[#050510]/55 to-[#050510]/45 z-0"
+              />
+              <div className="relative z-10 flex items-center justify-between text-[#FFB800] mb-1">
                 <Globe className="w-4 h-4 shrink-0" />
                 <span className="font-hud text-sm font-bold">2P</span>
               </div>
-              <div>
-                <div className="font-btn text-[13px] sm:text-base font-extrabold text-[#EAF4FF] leading-tight whitespace-nowrap tracking-tight">
+              <div className="relative z-10">
+                <div className="font-btn text-[13px] sm:text-base font-extrabold text-[#EAF4FF] leading-tight whitespace-nowrap tracking-tight drop-shadow">
                   CO-OP ONLINE
                 </div>
-                <div className="text-xs text-[#EAF4FF]/80 leading-tight mt-0.5">
+                <div className="text-xs text-[#EAF4FF]/85 leading-tight mt-0.5 drop-shadow">
                   {t('2 Người', 'Online 2P')}
                 </div>
               </div>

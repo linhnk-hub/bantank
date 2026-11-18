@@ -207,23 +207,24 @@ export default function App() {
     MaintenanceManager.getInstance().startCloudSync();
     SoundManager.getInstance().unlock();
     void SoundManager.getInstance().preloadStaticActionSfxBinaries();
+    MusicManager.getInstance().preloadStaticBgmBuffers();
     const unlockAudio = () => {
       SoundManager.getInstance().unlock();
       MusicManager.getInstance().unlockFromUserGesture();
     };
-    window.addEventListener('pointerdown', unlockAudio, { passive: true });
-    window.addEventListener('pointerup', unlockAudio, { passive: true });
-    window.addEventListener('touchend', unlockAudio, { passive: true });
-    window.addEventListener('click', unlockAudio, { passive: true });
-    window.addEventListener('keydown', unlockAudio, { passive: true });
-    window.addEventListener('touchstart', unlockAudio, { passive: true });
+    window.addEventListener('pointerdown', unlockAudio, { capture: true, passive: true });
+    window.addEventListener('pointerup', unlockAudio, { capture: true, passive: true });
+    window.addEventListener('touchend', unlockAudio, { capture: true, passive: true });
+    window.addEventListener('click', unlockAudio, { capture: true, passive: true });
+    window.addEventListener('keydown', unlockAudio, { capture: true, passive: true });
+    window.addEventListener('touchstart', unlockAudio, { capture: true, passive: true });
     return () => {
-      window.removeEventListener('pointerdown', unlockAudio);
-      window.removeEventListener('pointerup', unlockAudio);
-      window.removeEventListener('touchend', unlockAudio);
-      window.removeEventListener('click', unlockAudio);
-      window.removeEventListener('keydown', unlockAudio);
-      window.removeEventListener('touchstart', unlockAudio);
+      window.removeEventListener('pointerdown', unlockAudio, true);
+      window.removeEventListener('pointerup', unlockAudio, true);
+      window.removeEventListener('touchend', unlockAudio, true);
+      window.removeEventListener('click', unlockAudio, true);
+      window.removeEventListener('keydown', unlockAudio, true);
+      window.removeEventListener('touchstart', unlockAudio, true);
     };
   }, []);
 

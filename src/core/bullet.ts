@@ -11,7 +11,7 @@ import {
   type RuntimeTerrainState,
 } from './types.ts';
 import { getBulletHitbox, checkHitboxVsTerrain } from './physics.ts';
-import { applyDeterministicBulletImpact, destroyBase } from './terrain.ts';
+import { applyDeterministicBulletImpact, applyPowerSteelImpact, destroyBase } from './terrain.ts';
 
 export interface BulletUpdateResult {
   isAlive: boolean;
@@ -102,7 +102,10 @@ export function updateBullet(
     }
 
     if (type === TILE_TYPES.STEEL) {
-      // Steel is immune to tier 1 bullets
+      // Power tank bullets (power >= 2) destroy 50% of a steel wall tile per hit; tier-1 bullets are blocked
+      if ((bullet.power ?? 1) >= 2) {
+        applyPowerSteelImpact(terrain, row, col, bullet.direction);
+      }
       return { isAlive: false, hitObstacle: true, hitSteel: true };
     }
 

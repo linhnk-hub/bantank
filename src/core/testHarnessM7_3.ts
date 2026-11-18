@@ -7039,7 +7039,7 @@ export function runAllM7_3Tests(): M7_3SuiteSummary {
       superAdminTabLabels[5] === 'Tài khoản' &&
       superAdminTabLabels[6] === 'LOG HỆ THỐNG' &&
       superAdminTabLabels[7] === 'BẢO TRÌ' &&
-      superAdminTabLabels[8] === 'Liên hệ';
+      superAdminTabLabels[8] === 'Tin nhắn';
 
     // 2. Kiểm tra phân trang danh sách Tài khoản (tối đa 10 tài khoản/trang, Trước/Sau) & bảo mật quyền truy cập (Mục 3)
     const seedAccounts = Array.from({ length: 25 }, (_, idx) => {

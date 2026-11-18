@@ -23,6 +23,7 @@ export function createRuntimeTerrainState(
   const currentMap: number[][] = [];
   const initialMap: number[][] = [];
   const brickSubTiles: Record<string, number> = {};
+  const steelSubTiles: Record<string, number> = {};
 
   for (let r = 0; r < sourceMap.length; r++) {
     const row = sourceMap[r];
@@ -34,6 +35,8 @@ export function createRuntimeTerrainState(
       initRow.push(tileType);
       if (tileType === TILE_TYPES.BRICK) {
         brickSubTiles[`${r}_${c}`] = SUB_TILE_MASKS.ALL; // 15 = 0b1111
+      } else if (tileType === TILE_TYPES.STEEL) {
+        steelSubTiles[`${r}_${c}`] = SUB_TILE_MASKS.ALL; // 15 = 0b1111
       }
     }
     currentMap.push(newRow);
@@ -44,8 +47,82 @@ export function createRuntimeTerrainState(
     currentMap,
     initialMap,
     brickSubTiles,
+    steelSubTiles,
     isBaseDestroyed: false,
   };
+}
+
+/**
+ * Returns the 4-bit sub-tile mask for a steel wall at (row, col).
+ * If the tile is not steel or completely destroyed, returns 0.
+ */
+export function getSteelMask(
+  state: RuntimeTerrainState,
+  row: number,
+  col: number
+): number {
+  if (
+    row < 0 ||
+    row >= MAP_DIMENSIONS.ROWS ||
+    col < 0 ||
+    col >= MAP_DIMENSIONS.COLS
+  ) {
+    return 0;
+  }
+  if (state.currentMap[row][col] !== TILE_TYPES.STEEL) {
+    return 0;
+  }
+  const mask = state.steelSubTiles?.[`${row}_${col}`];
+  return typeof mask === 'number' ? mask : SUB_TILE_MASKS.ALL;
+}
+
+/**
+ * Applies a Power tank (power >= 2) bullet impact against a STEEL wall tile.
+ * Destroys 50% of the steel tile (2 sub-tiles facing the impact direction) per hit.
+ */
+export function applyPowerSteelImpact(
+  state: RuntimeTerrainState,
+  row: number,
+  col: number,
+  direction: Direction
+): { hit: boolean; destroyedMask: number; remainingMask: number } {
+  const mask = getSteelMask(state, row, col);
+  if (mask === 0) {
+    return { hit: false, destroyedMask: 0, remainingMask: 0 };
+  }
+
+  let frontHalf = 0;
+  let rearHalf = 0;
+  if (direction === 'UP') {
+    frontHalf = SUB_TILE_MASKS.BL | SUB_TILE_MASKS.BR;
+    rearHalf = SUB_TILE_MASKS.TL | SUB_TILE_MASKS.TR;
+  } else if (direction === 'DOWN') {
+    frontHalf = SUB_TILE_MASKS.TL | SUB_TILE_MASKS.TR;
+    rearHalf = SUB_TILE_MASKS.BL | SUB_TILE_MASKS.BR;
+  } else if (direction === 'LEFT') {
+    frontHalf = SUB_TILE_MASKS.TR | SUB_TILE_MASKS.BR;
+    rearHalf = SUB_TILE_MASKS.TL | SUB_TILE_MASKS.BL;
+  } else {
+    frontHalf = SUB_TILE_MASKS.TL | SUB_TILE_MASKS.BL;
+    rearHalf = SUB_TILE_MASKS.TR | SUB_TILE_MASKS.BR;
+  }
+
+  const bitsToDestroy = (mask & frontHalf) !== 0 ? (mask & frontHalf) : (mask & rearHalf);
+  if (bitsToDestroy === 0) {
+    return { hit: false, destroyedMask: 0, remainingMask: mask };
+  }
+
+  if (!state.steelSubTiles) {
+    state.steelSubTiles = {};
+  }
+  const key = `${row}_${col}`;
+  const remainingMask = mask & ~bitsToDestroy;
+  state.steelSubTiles[key] = remainingMask;
+  if (remainingMask === 0) {
+    state.currentMap[row][col] = TILE_TYPES.EMPTY;
+  }
+
+  return { hit: true, destroyedMask: bitsToDestroy, remainingMask };
 }
 
 /**

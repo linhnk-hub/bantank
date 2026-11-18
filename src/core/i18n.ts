@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 export type SupportedLanguage = 'vi' | 'en';
 
@@ -97,12 +97,15 @@ export function useLanguage(): {
     };
   }, []);
 
-  const setLang = (next: SupportedLanguage) => {
+  const setLang = useCallback((next: SupportedLanguage) => {
     setLangState(next);
     setSavedLanguage(next);
-  };
+  }, []);
 
-  const t = (viText: string, enText: string): string => (lang === 'en' ? enText : viText);
+  const t = useCallback(
+    (viText: string, enText: string): string => (lang === 'en' ? enText : viText),
+    [lang]
+  );
 
   return { lang, setLang, t };
 }

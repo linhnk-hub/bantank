@@ -1688,6 +1688,8 @@ export class MusicManager {
   private isCloudSyncInProgress: boolean = false;
   private sharedSyncError: string | null = null;
   private hasPendingAutoplayUnlockListener: boolean = false;
+  private hasCustomCloudAdapter: boolean = false;
+  private staticBgmPreloadStarted: boolean = false;
   private awaitingAutoplayUnlock: boolean = false;
   private autoplayUnlockHandler: (() => void) | null = null;
   private customBufferDecoder:
@@ -1702,12 +1704,20 @@ export class MusicManager {
   private constructor() {
     this.registerCanonicalStaticBgmTracks();
     this.loadPersistedState();
+    this.preloadStaticBgmBuffers();
     try {
       const globalRef = globalThis as unknown as {
         __bantankMusicManagerSync?: () => void;
+        __bantankMusicUnlockCallback?: () => void;
       };
       globalRef.__bantankMusicManagerSync = () => {
         this.onVolumeOrToggleChanged();
+      };
+      globalRef.__bantankMusicUnlockCallback = () => {
+        this.decodeCachedStaticBgmBlobs();
+        if (this.awaitingAutoplayUnlock) {
+          this.unlockFromUserGesture();
+        }
       };
     } catch {
       // ignore
@@ -1739,6 +1749,66 @@ export class MusicManager {
     }
   }
 
+  public preloadStaticBgmBuffers(): void {
+    if (
+      this.staticBgmPreloadStarted ||
+      this.hasCustomCloudAdapter ||
+      typeof window === 'undefined' ||
+      typeof fetch !== 'function'
+    ) {
+      return;
+    }
+    this.staticBgmPreloadStarted = true;
+    for (const spec of STATIC_BGM_TRACK_SPECS) {
+      void fetch(spec.runtimeUrl)
+        .then(async (res) => {
+          if (!res.ok) return;
+          const ab = await res.arrayBuffer();
+          if (ab.byteLength <= 0) return;
+          this.rawBlobs.set(spec.id, ab);
+          this.decodeCachedStaticBgmBlobs();
+        })
+        .catch(() => {
+          // Stream URL fallback remains available
+        });
+    }
+  }
+
+  private decodeCachedStaticBgmBlobs(): void {
+    if (this.hasCustomCloudAdapter || typeof window === 'undefined') return;
+    const ctx = SoundManager.getInstance().initContext();
+    if (!ctx || typeof ctx.decodeAudioData !== 'function') return;
+
+    for (const spec of STATIC_BGM_TRACK_SPECS) {
+      if (this.audioBuffers.has(spec.id)) continue;
+      const raw = this.rawBlobs.get(spec.id);
+      if (!raw) continue;
+      if (this.loadingTrackPromises.has(`decode_${spec.id}`)) continue;
+
+      const decodePromise = ctx
+        .decodeAudioData(raw.slice(0))
+        .then((decoded) => {
+          this.audioBuffers.set(spec.id, decoded);
+          if (
+            this.awaitingAutoplayUnlock &&
+            ctx.state === 'running' &&
+            !this.isPaused &&
+            !this.previewTrackId &&
+            this.activeTrackId === spec.id &&
+            SoundManager.getInstance().getSettings().bgmEnabled
+          ) {
+            this.unlockFromUserGesture();
+          }
+          return true;
+        })
+        .catch(() => false)
+        .finally(() => {
+          this.loadingTrackPromises.delete(`decode_${spec.id}`);
+        });
+      this.loadingTrackPromises.set(`decode_${spec.id}`, decodePromise);
+    }
+  }
+
   public static getInstance(): MusicManager {
     if (!MusicManager.instance) {
       MusicManager.instance = new MusicManager();
@@ -1755,6 +1825,7 @@ export class MusicManager {
       getChannelData: (channel: number) => Float32Array;
     }>
   ): void {
+    this.hasCustomCloudAdapter = true;
     this.stopSharedConfigSubscription();
     this.cloudAdapter = adapter;
     this.customBufferDecoder = customDecoder ?? null;
@@ -4563,16 +4634,27 @@ export class MusicManager {
    * để tự động mở khóa AudioContext và phát nhạc nền ngay sau tương tác.
    */
   private removeAutoplayUnlockListeners(): void {
-    if (typeof window === 'undefined' || !this.autoplayUnlockHandler) {
+    if (!this.autoplayUnlockHandler) {
       this.hasPendingAutoplayUnlockListener = false;
       return;
     }
     const handler = this.autoplayUnlockHandler;
-    window.removeEventListener('pointerdown', handler);
-    window.removeEventListener('pointerup', handler);
-    window.removeEventListener('touchend', handler);
-    window.removeEventListener('click', handler);
-    window.removeEventListener('keydown', handler);
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('pointerdown', handler, true);
+      window.removeEventListener('pointerup', handler, true);
+      window.removeEventListener('touchstart', handler, true);
+      window.removeEventListener('touchend', handler, true);
+      window.removeEventListener('click', handler, true);
+      window.removeEventListener('keydown', handler, true);
+    }
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('pointerdown', handler, true);
+      document.removeEventListener('pointerup', handler, true);
+      document.removeEventListener('touchstart', handler, true);
+      document.removeEventListener('touchend', handler, true);
+      document.removeEventListener('click', handler, true);
+      document.removeEventListener('keydown', handler, true);
+    }
     this.autoplayUnlockHandler = null;
     this.hasPendingAutoplayUnlockListener = false;
   }
@@ -4594,14 +4676,25 @@ export class MusicManager {
 
   public unlockFromUserGesture(): void {
     try {
-      SoundManager.getInstance().unlock();
-      if (this.isPaused || !SoundManager.getInstance().getSettings().bgmEnabled) {
+      const soundManager = SoundManager.getInstance();
+      soundManager.unlock();
+      this.decodeCachedStaticBgmBlobs();
+      if (this.isPaused || !soundManager.getSettings().bgmEnabled) {
         this.awaitingAutoplayUnlock = false;
         this.removeAutoplayUnlockListeners();
         return;
       }
+      // If decoded Web Audio buffer is ready and we are currently stuck on a paused HTMLAudioElement or idle, switch cleanly
+      if (
+        this.activeTrackId &&
+        this.audioBuffers.has(this.activeTrackId) &&
+        (!this.currentSource || !this.isPlaying || this.awaitingAutoplayUnlock)
+      ) {
+        this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
+        return;
+      }
       if (this.currentAudioElement && this.currentAudioElement.paused) {
-        const targetVol = SoundManager.getInstance().getSettings().bgmVolume;
+        const targetVol = soundManager.getSettings().bgmVolume;
         this.currentAudioElement.volume = Math.max(0, Math.min(1, targetVol));
         const p = this.currentAudioElement.play();
         if (p && typeof p.then === 'function') {
@@ -4611,7 +4704,9 @@ export class MusicManager {
             this.removeAutoplayUnlockListeners();
             this.notify();
           }).catch(() => {
-            // Browser still requires another gesture type (e.g., touchend/click after touchstart)
+            this.isPlaying = false;
+            this.awaitingAutoplayUnlock = true;
+            this.ensureAutoplayInteractionUnlock();
           });
         } else {
           this.isPlaying = true;
@@ -4621,7 +4716,7 @@ export class MusicManager {
         }
         return;
       }
-      if (!this.isPlaying || this.awaitingAutoplayUnlock) {
+      if (!this.isPlaying || this.awaitingAutoplayUnlock || this.activeSources.size === 0) {
         this.syncPlaybackWithContext(this.activeContext.stageId, this.activeContext.mode);
       }
     } catch {
@@ -4640,20 +4735,32 @@ export class MusicManager {
     };
 
     this.autoplayUnlockHandler = handleFirstInteraction;
-    window.addEventListener('pointerdown', handleFirstInteraction, { passive: true });
-    window.addEventListener('pointerup', handleFirstInteraction, { passive: true });
-    window.addEventListener('touchend', handleFirstInteraction, { passive: true });
-    window.addEventListener('click', handleFirstInteraction, { passive: true });
-    window.addEventListener('keydown', handleFirstInteraction, { passive: true });
+    window.addEventListener('pointerdown', handleFirstInteraction, { capture: true, passive: true });
+    window.addEventListener('pointerup', handleFirstInteraction, { capture: true, passive: true });
+    window.addEventListener('touchstart', handleFirstInteraction, { capture: true, passive: true });
+    window.addEventListener('touchend', handleFirstInteraction, { capture: true, passive: true });
+    window.addEventListener('click', handleFirstInteraction, { capture: true, passive: true });
+    window.addEventListener('keydown', handleFirstInteraction, { capture: true, passive: true });
+    if (typeof document !== 'undefined') {
+      document.addEventListener('pointerdown', handleFirstInteraction, { capture: true, passive: true });
+      document.addEventListener('pointerup', handleFirstInteraction, { capture: true, passive: true });
+      document.addEventListener('touchstart', handleFirstInteraction, { capture: true, passive: true });
+      document.addEventListener('touchend', handleFirstInteraction, { capture: true, passive: true });
+      document.addEventListener('click', handleFirstInteraction, { capture: true, passive: true });
+      document.addEventListener('keydown', handleFirstInteraction, { capture: true, passive: true });
+    }
   }
 
   public syncMenuPlayback(): void {
     this.isPaused = false;
+    const isActivelyRunningAudio =
+      (this.currentAudioElement && !this.currentAudioElement.paused) ||
+      (this.currentSource && SoundManager.getInstance().initContext()?.state === 'running');
     if (
       this.activeContext.stageId === 0 &&
       this.activeContext.mode === 'HOME' &&
-      this.currentAudioElement &&
-      !this.currentAudioElement.paused &&
+      isActivelyRunningAudio &&
+      !this.awaitingAutoplayUnlock &&
       SoundManager.getInstance().getSettings().bgmEnabled
     ) {
       this.isPlaying = true;
@@ -4678,6 +4785,25 @@ export class MusicManager {
     const soundManager = SoundManager.getInstance();
     const audioSettings = soundManager.getSettings();
 
+    // If the exact resolved track is ALREADY actively playing cleanly (not paused, not awaiting unlock),
+    // avoid tearing down and recreating the element/source across async auth or screen re-renders.
+    const isAlreadyPlayingSameTrack =
+      audioSettings.bgmEnabled &&
+      !this.isPaused &&
+      !this.awaitingAutoplayUnlock &&
+      resolved.trackId &&
+      this.activeTrackId === resolved.trackId &&
+      this.isPlaying &&
+      this.activeSources.size > 0 &&
+      ((this.currentAudioElement && !this.currentAudioElement.paused) ||
+        (this.currentSource && soundManager.initContext()?.state === 'running') ||
+        (typeof Audio === 'undefined' && typeof window === 'undefined'));
+
+    if (isAlreadyPlayingSameTrack) {
+      this.notify();
+      return;
+    }
+
     this.activeTrackId = resolved.trackId;
 
     // Always stop all previous custom BGM sources and procedural BGM first
@@ -4699,7 +4825,6 @@ export class MusicManager {
       // Lock procedural BGM off so two BGM tracks can never overlap even on pointerdown/keydown unlock()
       soundManager.setCustomBgmActive(true);
       soundManager.stopBgm();
-      this.isPlaying = true;
       this.startTrackBufferPlayback(resolved.trackId);
     } else if (resolved.trackId && this.soundCatalog.has(resolved.trackId)) {
       const targetId = resolved.trackId;
@@ -4714,7 +4839,6 @@ export class MusicManager {
           this.activeTrackId === targetId &&
           SoundManager.getInstance().getSettings().bgmEnabled
         ) {
-          this.isPlaying = true;
           this.startTrackBufferPlayback(targetId);
           this.notify();
         }
@@ -4745,6 +4869,7 @@ export class MusicManager {
         onended: null as (() => void) | null,
       };
       this.activeSources.add(virtualSource);
+      this.isPlaying = true;
       return;
     }
 
@@ -4813,10 +4938,13 @@ export class MusicManager {
             this.notify();
           })
           .catch(() => {
+            this.isPlaying = false;
             this.awaitingAutoplayUnlock = true;
             this.ensureAutoplayInteractionUnlock();
             this.notify();
           });
+      } else {
+        this.isPlaying = true;
       }
     } catch {
       this.stopAllCustomSources();
@@ -4873,21 +5001,37 @@ export class MusicManager {
         onended: null as (() => void) | null,
       };
       this.activeSources.add(virtualSource);
+      this.isPlaying = true;
       return;
     }
 
     if ((ctx as AudioContext).state === 'suspended') {
+      this.awaitingAutoplayUnlock = true;
+      this.ensureAutoplayInteractionUnlock();
       try {
         const resumeResult = (ctx as AudioContext).resume?.();
-        if (resumeResult && typeof resumeResult.catch === 'function') {
-          resumeResult.catch(() => {
-            this.ensureAutoplayInteractionUnlock();
-          });
+        if (resumeResult && typeof resumeResult.then === 'function') {
+          resumeResult
+            .then(() => {
+              if ((ctx as AudioContext).state === 'running') {
+                this.awaitingAutoplayUnlock = false;
+                this.removeAutoplayUnlockListeners();
+                this.isPlaying = true;
+                this.notify();
+              }
+            })
+            .catch(() => {
+              this.awaitingAutoplayUnlock = true;
+              this.ensureAutoplayInteractionUnlock();
+            });
         }
       } catch {
-        // fallback below
+        // fallback handled by listeners
       }
-      this.ensureAutoplayInteractionUnlock();
+    } else {
+      this.awaitingAutoplayUnlock = false;
+      this.removeAutoplayUnlockListeners();
+      this.isPlaying = true;
     }
 
     const startOffset = this.loopConfig.skipSilence ? meta.trimBounds.trimStartSec : 0;

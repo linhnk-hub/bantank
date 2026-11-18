@@ -17,6 +17,7 @@ export interface TopMenuActionDrawerProps {
   isSuperAdmin?: boolean;
   isExitDisabled?: boolean;
   hideSettings?: boolean;
+  onOpenChange?: (isOpen: boolean) => void;
 }
 
 /**
@@ -35,10 +36,15 @@ export const TopMenuActionDrawer: React.FC<TopMenuActionDrawerProps> = ({
   isSuperAdmin = false,
   isExitDisabled = false,
   hideSettings = false,
+  onOpenChange,
 }) => {
   const { t } = useLanguage();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    onOpenChange?.(isOpen);
+  }, [isOpen, onOpenChange]);
 
   useEffect(() => {
     if (!isOpen) return;

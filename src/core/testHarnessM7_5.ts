@@ -42,8 +42,10 @@ import { getAvailableSettingsTabsForRole } from '../components/SettingsModal.tsx
 import { spawnBullet } from './bullet.ts';
 import {
   applyDeterministicBulletImpact,
+  applyPowerSteelImpact,
   createRuntimeTerrainState,
   getBrickMask,
+  getSteelMask,
 } from './terrain.ts';
 import { GameEngine } from './gameEngine.ts';
 import { TILE_TYPES } from './types.ts';
@@ -355,9 +357,11 @@ export function runAllM7_5Tests(): { results: M75TestResult[] } {
       settingsSrc.includes('Quân hàm PvP') &&
       settingsSrc.includes('Tổng điểm XP') &&
       settingsSrc.includes('Số dư Xu') &&
-      settingsSrc.includes('Số lần đăng nhập') &&
+      settingsSrc.includes('data-testid="stat-total-logins"') &&
+      settingsSrc.includes('Tổng: ${playerStats.totalLogins}') &&
       settingsSrc.includes('Lần đầu tiên') &&
       settingsSrc.includes('Lần gần nhất') &&
+      !settingsSrc.includes('Phiên:') &&
       !settingsSrc.includes('Lịch sử truy cập') &&
       !settingsSrc.includes('player-auth-history-list') &&
       !settingsSrc.includes('Trạng thái:') &&
@@ -1052,7 +1056,26 @@ export function runAllM7_5Tests(): { results: M75TestResult[] } {
     );
     const remPower = getBrickMask(terrPower, 4, 4);
 
-    // Player life damage test: Power bullet deducts 2 lives vs 1 life for regular enemy bullet
+    // Steel wall test: Power (power 2) destroys 50% (2 sub-tiles) per hit -> 2 hits to clear completely
+    const terrSteel = createRuntimeTerrainState();
+    terrSteel.currentMap[5][5] = TILE_TYPES.STEEL;
+    const steelInitialMask = getSteelMask(terrSteel, 5, 5);
+    const steelHit1Cleared = applyPowerSteelImpact(terrSteel, 5, 5, 'DOWN');
+    const steelAfterHit1 = getSteelMask(terrSteel, 5, 5);
+    const steelTileAfterHit1 = terrSteel.currentMap[5][5];
+    const steelHit2Cleared = applyPowerSteelImpact(terrSteel, 5, 5, 'DOWN');
+    const steelAfterHit2 = getSteelMask(terrSteel, 5, 5);
+    const steelTileAfterHit2 = terrSteel.currentMap[5][5];
+    const steelPowerOk =
+      steelInitialMask === 0b1111 &&
+      steelHit1Cleared &&
+      steelAfterHit1 === 0b1100 &&
+      steelTileAfterHit1 === TILE_TYPES.STEEL &&
+      steelHit2Cleared &&
+      steelAfterHit2 === 0 &&
+      steelTileAfterHit2 === TILE_TYPES.EMPTY;
+
+    // Player life damage test: Power bullet deducts only 1 life (same as regular enemy bullet)
     const engPower = new GameEngine(undefined, undefined, false);
     const stPower = engPower.getState();
     stPower.p1.isShielded = false;
@@ -1075,13 +1098,14 @@ export function runAllM7_5Tests(): { results: M75TestResult[] } {
       powerValuesOk &&
       remNormal === 0b1100 &&
       remPower === 0 &&
-      livesBefore - livesAfterPower === 2;
+      steelPowerOk &&
+      livesBefore - livesAfterPower === 1;
 
     results.push({
       id: 'M7_5_F1',
-      name: 'Group F.1: Đạn xe tank Power có sức công phá gấp đôi (power=2, phá 2 lớp gạch & trừ 2 máu)',
+      name: 'Group F.1: Đạn xe tank Power phá 2 lớp gạch, phá 50% tường thép mỗi phát & trừ 1 máu người chơi',
       passed,
-      details: `powerValuesOk=${powerValuesOk}, remNormal=${remNormal}, remPower=${remPower}, deltaLives=${livesBefore - livesAfterPower}`,
+      details: `powerValuesOk=${powerValuesOk}, remNormal=${remNormal}, remPower=${remPower}, steelPowerOk=${steelPowerOk}, deltaLives=${livesBefore - livesAfterPower}`,
     });
   }
 

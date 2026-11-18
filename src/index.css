@@ -237,6 +237,9 @@
   .tank-idle-bob,
   .neo-glitch-text,
   .p1-ready-gradient-bg,
+  .lobby-ava-fade-single,
+  .lobby-ava-fade-pair-a,
+  .lobby-ava-fade-pair-b,
   .animate-pulse,
   .animate-spin {
     animation: none !important;
@@ -246,6 +249,100 @@
   .crt-scanlines::after {
     opacity: 0.2;
   }
+}
+
+/* Looping fade animations for Home Mode Cards background avatars */
+@keyframes lobbyAvaSingleFade {
+  0%,
+  100% {
+    opacity: 0.14;
+  }
+  50% {
+    opacity: 0.42;
+  }
+}
+
+@keyframes lobbyAvaPairFirstFade {
+  0% {
+    opacity: 0;
+  }
+  15%,
+  42% {
+    opacity: 0.42;
+  }
+  55%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes lobbyAvaPairSecondFade {
+  0%,
+  48% {
+    opacity: 0;
+  }
+  63%,
+  90% {
+    opacity: 0.42;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.lobby-ava-fade-single {
+  animation: lobbyAvaSingleFade 4.5s ease-in-out infinite;
+  will-change: opacity;
+}
+
+.lobby-ava-fade-pair-a {
+  animation: lobbyAvaPairFirstFade 7s ease-in-out infinite;
+  will-change: opacity;
+}
+
+.lobby-ava-fade-pair-b {
+  animation: lobbyAvaPairSecondFade 7s ease-in-out infinite;
+  will-change: opacity;
+}
+
+/* Synchronized Neo-Retro Game Scrollbars (Vertical & Horizontal) */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 184, 0, 0.78) #050510;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #050510;
+  border-left: 1px solid rgba(0, 240, 255, 0.16);
+  border-top: 1px solid rgba(0, 240, 255, 0.16);
+}
+
+::-webkit-scrollbar-thumb {
+  background: linear-gradient(180deg, #FFB800 0%, #d97706 100%);
+  border: 1.5px solid #0b0d1e;
+  border-radius: 3px;
+  box-shadow: inset 0 0 4px rgba(255, 255, 255, 0.25);
+}
+
+::-webkit-scrollbar-thumb:horizontal {
+  background: linear-gradient(90deg, #FFB800 0%, #00F0FF 100%);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(180deg, #00F0FF 0%, #FFB800 100%);
+}
+
+::-webkit-scrollbar-thumb:horizontal:hover {
+  background: linear-gradient(90deg, #00F0FF 0%, #FFB800 100%);
+}
+
+::-webkit-scrollbar-corner {
+  background: #050510;
 }
 
 /* Prevent mobile/tablet copy, drag, callout, and translate popups during battle & joystick hold */

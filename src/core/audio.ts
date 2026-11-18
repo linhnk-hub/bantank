@@ -540,12 +540,26 @@ export class SoundManager {
     const ctx = this.initContext();
     if (!ctx) return;
 
+    const triggerMusicUnlock = () => {
+      try {
+        const globalRef = globalThis as unknown as {
+          __bantankMusicUnlockCallback?: () => void;
+        };
+        if (typeof globalRef.__bantankMusicUnlockCallback === 'function') {
+          globalRef.__bantankMusicUnlockCallback();
+        }
+      } catch {
+        // Ignore
+      }
+    };
+
     if (ctx.state === 'suspended') {
       ctx.resume().then(() => {
         this.isUnlocked = true;
         if (this.settings.bgmEnabled && !this.isBgmPlaying && !this.customBgmActive) {
           this.startBgm();
         }
+        triggerMusicUnlock();
       }).catch(() => {
         // user interaction retry
       });
@@ -554,6 +568,7 @@ export class SoundManager {
       if (this.settings.bgmEnabled && !this.isBgmPlaying && !this.customBgmActive) {
         this.startBgm();
       }
+      triggerMusicUnlock();
     }
   }
 

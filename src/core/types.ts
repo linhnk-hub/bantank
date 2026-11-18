@@ -123,6 +123,7 @@ export interface RuntimeTerrainState {
   currentMap: number[][];
   initialMap?: number[][];
   brickSubTiles: Record<string, number>; // key: `${row}_${col}` -> bitmask 0..15
+  steelSubTiles?: Record<string, number>; // key: `${row}_${col}` -> bitmask 0..15
   isBaseDestroyed: boolean;
 }
 

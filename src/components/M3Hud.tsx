@@ -406,7 +406,7 @@ export const M3Hud: React.FC<M3HudProps> = ({
                               ? 'text-blue-400'
                               : e.enemyType === 'POWER'
                               ? 'text-emerald-400'
-                              : 'px-1 py-0.5 rounded bg-black border border-white text-white'
+                              : 'text-[#b07b56]'
                           }`}
                         >
                           {e.enemyType === 'BASIC'

@@ -1623,8 +1623,8 @@ export class GameEngine {
 
           // If P1 has active shield: absorb bullet completely, take NO damage!
           if (!this.state.p1.isShielded && this.state.p1State.shieldTimer <= 0) {
-            // If P1 is NOT shielded: P1 dies with dedicated P1_EXPLOSION (Power tank deals 2x life damage)!
-            const bulletDamage = Math.max(1, Math.floor(eb.power || 1));
+            // If P1 is NOT shielded: P1 loses exactly 1 life per hit (Power tank deals 2x terrain damage only)
+            const bulletDamage = 1;
             this.emitCombatEvent('P1_EXPLOSION', this.state.p1.x + 8, this.state.p1.y + 8);
             this.state.p1State.lives = Math.max(0, this.state.p1State.lives - bulletDamage);
             this.state.p1State.isDead = true;
@@ -1659,7 +1659,7 @@ export class GameEngine {
         if (intersectAABB(bulletBox, p2Box)) {
           consumedBulletIds.add(eb.id);
           if (!this.state.p2.isShielded && this.state.p2State.shieldTimer <= 0) {
-            const bulletDamage = Math.max(1, Math.floor(eb.power || 1));
+            const bulletDamage = 1;
             this.emitCombatEvent('TANK_EXPLOSION', this.state.p2.x + 8, this.state.p2.y + 8);
             this.state.p2State.lives = Math.max(0, this.state.p2State.lives - bulletDamage);
             this.state.p2State.isDead = true;

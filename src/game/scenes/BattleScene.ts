@@ -104,6 +104,7 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private renderedBrickMasks: Map<string, number> = new Map();
+  private renderedSteelMasks: Map<string, number> = new Map();
   private hudSyncAccumulatorMs: number = 0;
   private lastHudSignature: string = '';
 
@@ -993,6 +994,7 @@ export class BattleScene extends Phaser.Scene {
     this.terrainSprites.forEach((obj) => obj.destroy());
     this.terrainSprites.clear();
     this.renderedBrickMasks.clear();
+    this.renderedSteelMasks.clear();
     this.baseSprites = [];
 
     const state = this.engine.getState();
@@ -1036,7 +1038,14 @@ export class BattleScene extends Phaser.Scene {
           continue;
         }
 
-        // STEEL, WATER, GRASS, ICE
+        if (tileType === TILE_TYPES.STEEL) {
+          const initialMask = terrain.steelSubTiles?.[`${r}_${c}`] ?? SUB_TILE_MASKS.ALL;
+          this.renderSteelTile(r, c, initialMask);
+          this.renderedSteelMasks.set(`${r}_${c}`, initialMask);
+          continue;
+        }
+
+        // WATER, GRASS, ICE
         const img = this.add.image(x, y, `tile_${tileType}`);
         img.setOrigin(0, 0);
         img.setDisplaySize(tileSize, tileSize);
@@ -1094,6 +1103,53 @@ export class BattleScene extends Phaser.Scene {
     this.terrainSprites.set(key, container);
   }
 
+  private renderSteelTile(r: number, c: number, mask: number): void {
+    const key = `steel_${r}_${c}`;
+    const oldObj = this.terrainSprites.get(key);
+    if (oldObj) {
+      oldObj.destroy();
+      this.terrainSprites.delete(key);
+    }
+
+    if (mask === 0) return;
+
+    const x = c * 16;
+    const y = r * 16;
+
+    if (mask === SUB_TILE_MASKS.ALL) {
+      const img = this.add.image(x, y, 'tile_2');
+      img.setOrigin(0, 0);
+      img.setDisplaySize(16, 16);
+      img.setDepth(1);
+      (img as any).renderedMask = mask;
+      this.terrainSprites.set(key, img);
+      return;
+    }
+
+    const container = this.add.container(x, y);
+    container.setDepth(1);
+
+    if (mask & SUB_TILE_MASKS.TL) {
+      const sub = this.add.image(0, 0, 'steel_sub_tl').setOrigin(0, 0).setDisplaySize(8, 8);
+      container.add(sub);
+    }
+    if (mask & SUB_TILE_MASKS.TR) {
+      const sub = this.add.image(8, 0, 'steel_sub_tr').setOrigin(0, 0).setDisplaySize(8, 8);
+      container.add(sub);
+    }
+    if (mask & SUB_TILE_MASKS.BL) {
+      const sub = this.add.image(0, 8, 'steel_sub_bl').setOrigin(0, 0).setDisplaySize(8, 8);
+      container.add(sub);
+    }
+    if (mask & SUB_TILE_MASKS.BR) {
+      const sub = this.add.image(8, 8, 'steel_sub_br').setOrigin(0, 0).setDisplaySize(8, 8);
+      container.add(sub);
+    }
+
+    (container as any).renderedMask = mask;
+    this.terrainSprites.set(key, container);
+  }
+
   private syncDynamicTerrain(state: GameCoreState): void {
     const terrain = state.terrain;
 
@@ -1134,6 +1190,32 @@ export class BattleScene extends Phaser.Scene {
         }
       } else {
         this.renderBrickTile(r, c, mask);
+      }
+    }
+
+    // Sync only modified steel tiles (damaged by Power tank bullets)
+    const steelTiles = terrain.steelSubTiles;
+    if (steelTiles) {
+      for (const key in steelTiles) {
+        const mask = steelTiles[key];
+        const prevMask = this.renderedSteelMasks.get(key);
+        if (prevMask === mask) continue;
+
+        this.renderedSteelMasks.set(key, mask);
+        const sepIdx = key.indexOf('_');
+        const r = parseInt(key.slice(0, sepIdx), 10);
+        const c = parseInt(key.slice(sepIdx + 1), 10);
+        const spriteKey = `steel_${r}_${c}`;
+        const existing = this.terrainSprites.get(spriteKey);
+
+        if (mask === 0) {
+          if (existing) {
+            existing.destroy();
+            this.terrainSprites.delete(spriteKey);
+          }
+        } else {
+          this.renderSteelTile(r, c, mask);
+        }
       }
     }
 

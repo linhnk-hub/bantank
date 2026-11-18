@@ -193,12 +193,23 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                     </span>
                   </li>
                 </ul>
+                <div className="pt-2 border-t border-neutral-800/80">
+                  <a
+                    href="/landing.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="support-about-details-link"
+                    className="inline-flex items-center text-[#FFB800] hover:text-amber-300 font-bold underline"
+                  >
+                    {t('[Chi tiết]', '[Details]')}
+                  </a>
+                </div>
               </div>
 
               <div className="bg-[#050510]/85 border border-neutral-800 rounded-lg p-3.5 space-y-2">
                 <div className="font-btn flex items-center gap-2 text-[#FFB800] font-black uppercase tracking-wider">
                   <Mail className="w-4 h-4 shrink-0" />
-                  <span>{t('Liên hệ & Chi tiết', 'Contact & Details')}</span>
+                  <span>{t('Liên hệ', 'Contact')}</span>
                 </div>
                 <div className="space-y-2 text-neutral-300">
                   <div className="flex flex-wrap items-center gap-1.5">
@@ -208,17 +219,6 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                       className="text-[#00F0FF] hover:text-cyan-300 font-bold underline"
                     >
                       admin@bantank.online
-                    </a>
-                  </div>
-                  <div>
-                    <a
-                      href="/landing.html"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      data-testid="support-about-details-link"
-                      className="inline-flex items-center text-[#FFB800] hover:text-amber-300 font-bold underline"
-                    >
-                      {t('[Chi tiết]', '[Details]')}
                     </a>
                   </div>
                 </div>
@@ -245,7 +245,7 @@ export const SupportModal: React.FC<SupportModalProps> = ({
               <div className="bg-[#050510]/85 border border-neutral-800 rounded-lg p-3.5 space-y-2">
                 <div className="font-btn flex items-center gap-2 text-[#FFB800] font-black uppercase tracking-wider">
                   <Shield className="w-4 h-4 shrink-0" />
-                  <span>{t('2. Bảo vệ Phiên Thiết bị & Co-op', '2. Single-Device Session & Co-op Security')}</span>
+                  <span>{t('2. Bảo vệ Phiên đăng nhập & Co-op', '2. Single Login Session & Co-op Security')}</span>
                 </div>
                 <ul className="space-y-1.5 text-neutral-300 pl-1">
                   <li>
@@ -270,18 +270,17 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                     )}
                   </li>
                 </ul>
-              </div>
-
-              <div className="bg-[#050510]/85 border border-[#00F0FF]/30 rounded-lg p-3.5 flex items-center">
-                <a
-                  href="/privacy.html"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid="support-policy-details-link"
-                  className="inline-flex items-center text-[#00F0FF] hover:text-cyan-300 font-bold underline"
-                >
-                  {t('[Chi tiết]', '[Details]')}
-                </a>
+                <div className="pt-2 border-t border-neutral-800/80">
+                  <a
+                    href="/privacy.html"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="support-policy-details-link"
+                    className="inline-flex items-center text-[#00F0FF] hover:text-cyan-300 font-bold underline"
+                  >
+                    {t('[Chi tiết]', '[Details]')}
+                  </a>
+                </div>
               </div>
             </div>
           )}

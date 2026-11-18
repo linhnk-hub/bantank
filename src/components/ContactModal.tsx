@@ -137,7 +137,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({
               id="contact-modal-title"
               className="font-btn text-sm sm:text-base font-black uppercase tracking-wider text-[#EAF4FF]"
             >
-              {t('Liên hệ', 'Contact')}
+              {t('Tin nhắn', 'Messages')}
             </h2>
           </div>
           <button
@@ -176,7 +176,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({
           {/* Tag Selection */}
           <div className="space-y-1.5">
             <label className="block text-xs font-bold uppercase tracking-wider text-neutral-300">
-              {t('Chọn phân loại', 'Select Tag')}
+              {t('Chọn mục đích', 'Select Purpose')}
             </label>
             <div className="grid grid-cols-2 gap-2">
               <button

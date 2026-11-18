@@ -82,7 +82,7 @@ export const LANDING_PAGE_FEATURES: readonly LandingPageFeatureItem[] = [
     description:
       'Đối đầu 30 xe tăng địch trong mỗi màn chơi thuộc 4 chủng loại chiến thuật khác nhau, đồng thời bảo vệ Căn cứ Đại Bàng tại trung tâm tuyến dưới bản đồ.',
     highlights: [
-      '4 loại xe địch: Tank Basic màu trắng (1HP, chạy thường), Tank Fast màu xanh biển (1HP, chạy nhanh nhất), Tank Power màu xanh lá cây (2HP, chạy thường), Tank Armor màu đen viền trắng (4HP, chạy chậm nhất)',
+      '4 loại xe địch: Tank Basic màu trắng (1HP, chạy thường), Tank Fast màu xanh biển (1HP, chạy nhanh nhất), Tank Power màu xanh lá cây (2HP, chạy thường), Tank Armor màu nâu đất (4HP, chạy chậm nhất)',
       'Địa hình tương tác: Tường gạch phá hủy chi tiết 4x4, tường thép, rừng cây ẩn nấp, sông nước và băng trượt',
       'Khiên bảo vệ bất tử tạm thời khi xuất kích hoặc vừa hồi sinh trên chiến trường',
     ],
@@ -651,7 +651,7 @@ export const LandingPage: React.FC<LandingPageProps> = ({
                         <span className="px-2 py-1 rounded bg-emerald-950/80 border border-emerald-500 text-[10px] font-mono text-emerald-300">
                           POWER
                         </span>
-                        <span className="px-2 py-1 rounded bg-black border border-white text-[10px] font-mono text-white">
+                        <span className="px-2 py-1 rounded bg-[#4a2a18]/90 border border-[#b07b56] text-[10px] font-mono text-[#d6a77a]">
                           ARMOR
                         </span>
                       </div>

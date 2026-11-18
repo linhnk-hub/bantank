@@ -452,8 +452,9 @@ export function generateTileTextures(scene: Phaser.Scene): void {
   generateShieldTexture(scene);
   generateEnemyBulletTexture(scene);
 
-  // 15. BRICK 8x8 SUB-TILES
+  // 15. BRICK & STEEL 8x8 SUB-TILES
   generateBrickSubTileTextures(scene);
+  generateSteelSubTileTextures(scene);
 
   // 16. EXPLOSION & HIT SPARK EFFECTS
   generateExplosionTextures(scene);
@@ -900,6 +901,31 @@ function drawSubTile(ctx: CanvasRenderingContext2D, srcX: number, srcY: number):
   }
 }
 
+function generateSteelSubTileTextures(scene: Phaser.Scene): void {
+  const keys = ['steel_sub_tl', 'steel_sub_tr', 'steel_sub_bl', 'steel_sub_br'] as const;
+  for (const key of keys) {
+    if (!scene.textures.exists(key)) {
+      const canvas = scene.textures.createCanvas(key, 8, 8);
+      if (canvas) {
+        const ctx = canvas.getContext();
+        ctx.fillStyle = '#2b2b2b';
+        ctx.fillRect(0, 0, 8, 8);
+        ctx.fillStyle = '#b0b8c0';
+        ctx.fillRect(1, 1, 6, 6);
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(1, 1, 6, 1);
+        ctx.fillRect(1, 1, 1, 6);
+        ctx.fillStyle = '#5a626a';
+        ctx.fillRect(1, 6, 6, 1);
+        ctx.fillRect(6, 1, 1, 6);
+        ctx.fillStyle = '#e8ecf0';
+        ctx.fillRect(3, 3, 2, 2);
+        canvas.refresh();
+      }
+    }
+  }
+}
+
 export const ENEMY_PALETTES = {
   // Tank Basic: màu trắng (1HP, chạy thường)
   BASIC: {
@@ -925,13 +951,13 @@ export const ENEMY_PALETTES = {
     track: '#052e16',
     trackLight: '#4ade80',
   },
-  // Tank Armor: màu đen viền trắng (4HP, chạy chậm nhất)
+  // Tank Armor: màu nâu đất (4HP, chạy chậm nhất — phân biệt rõ ràng với màu đỏ của P1)
   ARMOR: {
-    main: '#09090b',
-    light: '#ffffff',
-    dark: '#ffffff',
-    track: '#09090b',
-    trackLight: '#ffffff',
+    main: '#7c4a2d',
+    light: '#b07b56',
+    dark: '#4a2a18',
+    track: '#2e190e',
+    trackLight: '#946243',
   },
 } as const;
 
@@ -941,7 +967,7 @@ function generateEnemyTextures(scene: Phaser.Scene): void {
 
   for (const t of types) {
     const pal = ENEMY_PALETTES[t];
-    const isArmorBlackWhite = t === 'ARMOR';
+    const isArmorBlackWhite = false;
 
     for (const dir of directions) {
       const key = `tank_${t.toLowerCase()}_${dir}`;

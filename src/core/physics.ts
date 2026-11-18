@@ -11,7 +11,7 @@ import {
   type Direction,
   type RuntimeTerrainState,
 } from './types.ts';
-import { getBrickMask } from './terrain.ts';
+import { getBrickMask, getSteelMask } from './terrain.ts';
 
 /**
  * Checks intersection of two half-open intervals:
@@ -199,20 +199,54 @@ export function checkHitboxVsTerrain(
         continue;
       }
 
-      // STEEL: blocks both
+      // STEEL: blocks both; supports partial 8x8 sub-tiles when damaged by Power tank bullets
       if (tileType === TILE_TYPES.STEEL) {
-        const tileBox: AABB = {
-          left: c * tileSize,
-          right: (c + 1) * tileSize,
-          top: r * tileSize,
-          bottom: (r + 1) * tileSize,
-        };
-        if (intersectAABB(box, tileBox)) {
-          return {
-            collides: true,
-            isOutOfBounds: false,
-            hitTile: { row: r, col: c, type: tileType },
+        const mask = getSteelMask(terrain, r, c);
+        if (mask === 0) {
+          continue;
+        }
+        if (mask === SUB_TILE_MASKS.ALL) {
+          const tileBox: AABB = {
+            left: c * tileSize,
+            right: (c + 1) * tileSize,
+            top: r * tileSize,
+            bottom: (r + 1) * tileSize,
           };
+          if (intersectAABB(box, tileBox)) {
+            return {
+              collides: true,
+              isOutOfBounds: false,
+              hitTile: { row: r, col: c, type: tileType, mask },
+            };
+          }
+          continue;
+        }
+
+        const tileX = c * tileSize;
+        const tileY = r * tileSize;
+        if (mask & SUB_TILE_MASKS.TL) {
+          const subBox: AABB = { left: tileX, right: tileX + 8, top: tileY, bottom: tileY + 8 };
+          if (intersectAABB(box, subBox)) {
+            return { collides: true, isOutOfBounds: false, hitTile: { row: r, col: c, type: tileType, mask } };
+          }
+        }
+        if (mask & SUB_TILE_MASKS.TR) {
+          const subBox: AABB = { left: tileX + 8, right: tileX + 16, top: tileY, bottom: tileY + 8 };
+          if (intersectAABB(box, subBox)) {
+            return { collides: true, isOutOfBounds: false, hitTile: { row: r, col: c, type: tileType, mask } };
+          }
+        }
+        if (mask & SUB_TILE_MASKS.BL) {
+          const subBox: AABB = { left: tileX, right: tileX + 8, top: tileY + 8, bottom: tileY + 16 };
+          if (intersectAABB(box, subBox)) {
+            return { collides: true, isOutOfBounds: false, hitTile: { row: r, col: c, type: tileType, mask } };
+          }
+        }
+        if (mask & SUB_TILE_MASKS.BR) {
+          const subBox: AABB = { left: tileX + 8, right: tileX + 16, top: tileY + 8, bottom: tileY + 16 };
+          if (intersectAABB(box, subBox)) {
+            return { collides: true, isOutOfBounds: false, hitTile: { row: r, col: c, type: tileType, mask } };
+          }
         }
         continue;
       }

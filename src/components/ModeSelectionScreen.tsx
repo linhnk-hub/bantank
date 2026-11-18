@@ -204,6 +204,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   const playerStatsMgr = PlayerStatsManager.getInstance();
   const effectiveUid = user.uid || firebaseUser?.uid || '';
   const [avatarError, setAvatarError] = useState(false);
+  const [isTopMenuOpen, setIsTopMenuOpen] = useState(false);
   const [, setAvatarTick] = useState(0);
   const [playerStats, setPlayerStats] = useState(() =>
     playerStatsMgr.getPlayerStatisticsSnapshot(effectiveUid)
@@ -458,7 +459,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
           {/* Right: Frameless User Profile, Audio, Settings & Info */}
           <div className="flex items-center gap-1 sm:gap-2 min-w-0">
-            <div className="flex items-center gap-1.5 sm:gap-2 px-1 py-1 text-sm min-w-0">
+            <div className={`${isTopMenuOpen ? 'hidden sm:flex' : 'flex'} items-center gap-1.5 sm:gap-2 px-1 py-1 text-sm min-w-0`}>
               {resolvedAvatarUrl && !avatarError ? (
                 <img
                   src={resolvedAvatarUrl}
@@ -503,6 +504,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               onExit={handleTopMenuExit}
               exitLabel={t('Về trang chủ', 'Return Home')}
               isSuperAdmin={isSuperAdmin}
+              onOpenChange={setIsTopMenuOpen}
             />
           </div>
         </div>
@@ -936,7 +938,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               >
                 {/* NORMAL / DEFAULT -> Giải trí */}
                 <div
-                  onClick={(e) => handleConfirmDifficulty('DEFAULT', e)}
+                  onClick={() => onDifficultyChange('DEFAULT')}
                   className={`p-3 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                     difficulty === 'DEFAULT'
                       ? 'bg-[#120e05]/85 border-[#FFB800] shadow-2xl ring-2 ring-[#FFB800]/25'
@@ -981,7 +983,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                           : 'bg-[#050510] hover:bg-[#FFB800]/20 text-[#FFB800] border border-[#FFB800]/40 cursor-pointer'
                       }`}
                     >
-                      <span className="whitespace-nowrap">{t(`Vào Màn ${selectedStageId}`, `Enter Stage ${selectedStageId}`)}</span>
+                      <span className="whitespace-nowrap">{t('Bắt đầu', 'Start')}</span>
                       <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                     </button>
                   </div>
@@ -989,7 +991,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
                 {/* HARD / EXTREME -> Thử thách */}
                 <div
-                  onClick={(e) => handleConfirmDifficulty('EXTREME', e)}
+                  onClick={() => onDifficultyChange('EXTREME')}
                   className={`p-3 sm:p-5 rounded-lg border-2 transition-all cursor-pointer touch-manipulation flex flex-col justify-between ${
                     difficulty === 'EXTREME'
                       ? 'bg-[#200510]/85 border-[#FF0055] shadow-2xl ring-2 ring-[#FF0055]/25'
@@ -1034,7 +1036,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                           : 'bg-[#050510] hover:bg-[#FF0055]/20 text-rose-300 border border-[#FF0055]/40 cursor-pointer'
                       }`}
                     >
-                      <span className="whitespace-nowrap">{t(`Vào Màn ${selectedStageId}`, `Enter Stage ${selectedStageId}`)}</span>
+                      <span className="whitespace-nowrap">{t('Bắt đầu', 'Start')}</span>
                       <ArrowRight className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" />
                     </button>
                   </div>

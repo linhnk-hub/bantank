@@ -1936,7 +1936,7 @@ async function verifyUiAndStageCloudSyncSuite() {
     !textureGenSrc.includes("main: '#ffffff'") ||
     !textureGenSrc.includes("main: '#2563eb'") ||
     !textureGenSrc.includes("main: '#16a34a'") ||
-    !textureGenSrc.includes("main: '#09090b'")
+    !textureGenSrc.includes("main: '#7c4a2d'")
   ) {
     throw new Error('WelcomeScreen / MainMenuScreen / ConfirmationPopupModal / Tank Colors consistency check failed');
   }

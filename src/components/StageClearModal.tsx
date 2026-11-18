@@ -240,7 +240,7 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
 
                 <div className="flex items-center justify-between text-neutral-300">
                   <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-black border-2 border-white shrink-0" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-[#7c4a2d] border border-[#b07b56] shrink-0" />
                     <span>Armor Tank (5 XP):</span>
                   </span>
                   <span className="font-bold">{counts.ARMOR} {t('xe', 'tanks')} = {counts.ARMOR * 5} XP</span>

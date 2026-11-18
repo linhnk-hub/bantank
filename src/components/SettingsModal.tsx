@@ -204,7 +204,7 @@ export function getAvailableSettingsTabsForRole(
     });
     tabs.push({
       id: 'CONTACT_MESSAGES',
-      label: 'Liên hệ',
+      label: 'Tin nhắn',
       adminOnly: true,
     });
   }
@@ -822,14 +822,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
           <div className="flex items-center gap-2">
             <LanguageSelector compact />
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-1.5 rounded bg-[#0b0d1e] hover:bg-[#10142b] border border-[#687386]/50 text-[#EAF4FF] hover:text-[#FFB800] transition-all active:scale-95 cursor-pointer"
-              title={t('Đóng cài đặt', 'Close settings')}
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
         </div>
 
@@ -874,7 +866,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                 : tab.id === 'MAINTENANCE'
                                   ? t('Bảo trì', 'Maintenance')
                                   : tab.id === 'CONTACT_MESSAGES'
-                                    ? t('Liên hệ', 'Contact')
+                                    ? t('Tin nhắn', 'Messages')
                                     : tab.label}
                 </span>
               </button>
@@ -1166,16 +1158,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <Trophy className="w-4 h-4 text-amber-400" />
                     <span>{t('THỐNG KÊ CHI TIẾT', 'DETAILED STATISTICS')}</span>
                   </div>
-                  <span
-                    className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border ${
-                      playerStats.currentSession.isOnlineActive
-                        ? 'bg-emerald-950/80 text-emerald-300 border-emerald-600/60'
-                        : 'bg-neutral-800 text-neutral-400 border-neutral-700'
-                    }`}
-                  >
-                    {t('Phiên:', 'Session:')}{' '}
-                    {playerStats.currentSession.isOnlineActive ? 'Online' : 'Offline'}
-                  </span>
                 </div>
 
                 {/* 4 trụ cột phân biệt rõ: Level • Quân hàm PvP • Điểm XP • Số dư Xu */}
@@ -1403,15 +1385,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           `Total: ${playerStats.matchesPlayed}`
                         )}
                       </span>
-                      <span className="text-[10px] font-mono text-neutral-400">
+                      <span className="text-xs font-extrabold font-mono text-neutral-400">
                         <span className="text-emerald-300">
-                          {playerStats.matchesWon}
-                          {t('T', 'W')}
+                          {playerStats.matchesWon} {t('T', 'W')}
                         </span>
-                        /
+                        {' / '}
                         <span className="text-rose-300">
-                          {playerStats.matchesLost}
-                          {t('B', 'L')}
+                          {playerStats.matchesLost} {t('B', 'L')}
                         </span>
                       </span>
                     </div>
@@ -1470,8 +1450,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         <strong className="text-emerald-400">{playerStats.defeatedByType.POWER}</strong>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-neutral-300">Armor:</span>
-                        <strong className="px-1 rounded bg-black border border-white text-white">{playerStats.defeatedByType.ARMOR}</strong>
+                        <span className="text-[#b07b56]">Armor:</span>
+                        <strong className="text-[#b07b56]">{playerStats.defeatedByType.ARMOR}</strong>
                       </div>
                     </div>
                   </div>
@@ -1483,16 +1463,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider">
                       {t('Thống kê đăng nhập', 'Sign-in Summary')}
                     </div>
+                    <div
+                      data-testid="stat-total-logins"
+                      className="text-xs font-extrabold font-mono text-white"
+                    >
+                      {t(`Tổng: ${playerStats.totalLogins} lần`, `Total: ${playerStats.totalLogins}`)}
+                    </div>
                     <div className="space-y-1 pt-0.5 border-t border-neutral-800/80 text-[10px] font-mono text-neutral-300">
-                      <div className="flex items-center justify-between gap-1.5">
-                        <span className="text-neutral-400">{t('Số lần đăng nhập:', 'Sign-ins:')}</span>
-                        <strong
-                          data-testid="stat-total-logins"
-                          className="text-amber-300 font-extrabold"
-                        >
-                          {t(`${playerStats.totalLogins} lần`, `${playerStats.totalLogins} times`)}
-                        </strong>
-                      </div>
                       <div className="flex items-center justify-between gap-1.5">
                         <span className="text-neutral-400">{t('Lần đầu tiên:', 'First:')}</span>
                         <span className="text-neutral-200 text-right">
@@ -2858,7 +2835,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             onClick={onClose}
             className="font-btn min-h-[44px] py-2 px-5 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-extrabold text-xs transition-transform active:scale-95 shadow cursor-pointer"
           >
-            {t('ĐÓNG CÀI ĐẶT', 'CLOSE SETTINGS')}
+            {t('ĐÓNG', 'CLOSE')}
           </button>
         </div>
       </div>

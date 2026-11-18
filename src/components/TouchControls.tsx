@@ -365,55 +365,109 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
         </span>
       </div>
 
-      {/* 2x2 Tactical Metrics Grid (Left Icon + Gap + Right Value): Lives, Remaining Enemies, Kills, XP */}
-      <div className="grid grid-cols-2 gap-1.5 font-hud text-xs sm:text-sm leading-tight">
-        {/* Lives / Health */}
-        <div
-          data-testid="battle-hud-lives"
-          className="flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[#050510]/90 border border-[#FF0055]/35"
-        >
-          <Heart className="w-3.5 h-3.5 text-[#FF0055] fill-[#FF0055] shrink-0" />
-          <div className="flex items-center justify-end gap-1.5 font-extrabold text-right whitespace-nowrap">
-            {isTwoPlayer ? (
-              <>
-                <span className="text-[#FF0055]">P1:{p1Lives}</span>
-                <span className="text-emerald-400">P2:{p2Lives}</span>
-              </>
-            ) : (
-              <span className="text-[#FF0055]">×{p1Lives}</span>
-            )}
+      {/* Tactical Metrics Grid */}
+      {isCoopOnline ? (
+        <div className="flex flex-col gap-1.5 font-hud text-xs sm:text-sm leading-tight">
+          {/* Row 1: Full-width Combined P1/P2 Lives matching 2 upper slots */}
+          <div
+            data-testid="battle-hud-lives"
+            className="w-full flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[#050510]/90 border border-[#FF0055]/35"
+          >
+            <Heart className="w-3.5 h-3.5 text-[#FF0055] fill-[#FF0055] shrink-0" />
+            <div className="flex items-center justify-end gap-3 font-extrabold text-right whitespace-nowrap">
+              <span className="text-[#FF0055]">P1:{p1Lives}</span>
+              <span className="text-emerald-400">P2:{p2Lives}</span>
+            </div>
+          </div>
+
+          {/* Row 2: 3 Columns — Remaining Enemies, Local Player Kills, XP */}
+          <div className="grid grid-cols-3 gap-1.5">
+            {/* Remaining Enemies */}
+            <div
+              data-testid="battle-hud-enemies-remaining"
+              className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-[#FFB800]/35 min-w-0"
+            >
+              <EnemyTankHudIcon className="w-3.5 h-3.5 shrink-0" />
+              <span className="font-extrabold text-[#FFB800] text-right whitespace-nowrap">
+                {remainingEnemies}
+              </span>
+            </div>
+
+            {/* Kills */}
+            <div
+              data-testid="battle-hud-kills"
+              className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-[#00F0FF]/35 min-w-0"
+            >
+              <Skull className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
+              <span className="font-extrabold text-[#00F0FF] text-right whitespace-nowrap">
+                {enemiesKilled}
+              </span>
+            </div>
+
+            {/* XP Score (replaced Trophy icon with XP text) */}
+            <div
+              data-testid="battle-hud-xp"
+              className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-emerald-500/35 min-w-0"
+            >
+              <span className="font-black text-emerald-400 shrink-0 text-[11px] sm:text-xs">
+                XP
+              </span>
+              <span className="font-extrabold text-emerald-400 text-right whitespace-nowrap">
+                {xpScore}
+              </span>
+            </div>
           </div>
         </div>
+      ) : (
+        <div className="grid grid-cols-2 gap-1.5 font-hud text-xs sm:text-sm leading-tight">
+          {/* Lives / Health */}
+          <div
+            data-testid="battle-hud-lives"
+            className="flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[#050510]/90 border border-[#FF0055]/35"
+          >
+            <Heart className="w-3.5 h-3.5 text-[#FF0055] fill-[#FF0055] shrink-0" />
+            <div className="flex items-center justify-end gap-1.5 font-extrabold text-right whitespace-nowrap">
+              {isTwoPlayer ? (
+                <>
+                  <span className="text-[#FF0055]">P1:{p1Lives}</span>
+                  <span className="text-emerald-400">P2:{p2Lives}</span>
+                </>
+              ) : (
+                <span className="text-[#FF0055]">×{p1Lives}</span>
+              )}
+            </div>
+          </div>
 
-        {/* Remaining Enemies (Tank Icon) */}
-        <div
-          data-testid="battle-hud-enemies-remaining"
-          className="flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[#050510]/90 border border-[#FFB800]/35"
-        >
-          <EnemyTankHudIcon className="w-3.5 h-3.5 shrink-0" />
-          <span className="font-extrabold text-[#FFB800] text-right whitespace-nowrap">
-            {remainingEnemies}
-          </span>
-        </div>
+          {/* Remaining Enemies (Tank Icon) */}
+          <div
+            data-testid="battle-hud-enemies-remaining"
+            className="flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[#050510]/90 border border-[#FFB800]/35"
+          >
+            <EnemyTankHudIcon className="w-3.5 h-3.5 shrink-0" />
+            <span className="font-extrabold text-[#FFB800] text-right whitespace-nowrap">
+              {remainingEnemies}
+            </span>
+          </div>
 
-        {/* Kills */}
-        <div
-          data-testid="battle-hud-kills"
-          className="flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[#050510]/90 border border-[#00F0FF]/35"
-        >
-          <Skull className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
-          <span className="font-extrabold text-[#00F0FF] text-right whitespace-nowrap">{enemiesKilled}</span>
-        </div>
+          {/* Kills */}
+          <div
+            data-testid="battle-hud-kills"
+            className="flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[#050510]/90 border border-[#00F0FF]/35"
+          >
+            <Skull className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
+            <span className="font-extrabold text-[#00F0FF] text-right whitespace-nowrap">{enemiesKilled}</span>
+          </div>
 
-        {/* XP Score */}
-        <div
-          data-testid="battle-hud-xp"
-          className="flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[#050510]/90 border border-emerald-500/35"
-        >
-          <Trophy className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-          <span className="font-extrabold text-emerald-400 text-right whitespace-nowrap">{xpScore}</span>
+          {/* XP Score */}
+          <div
+            data-testid="battle-hud-xp"
+            className="flex items-center justify-between gap-2 px-2.5 py-1 rounded bg-[#050510]/90 border border-emerald-500/35"
+          >
+            <Trophy className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="font-extrabold text-emerald-400 text-right whitespace-nowrap">{xpScore}</span>
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

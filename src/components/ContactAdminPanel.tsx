@@ -24,7 +24,7 @@ import {
   type ContactSeenFilter,
   type ContactTag,
 } from '../core/contactManager.ts';
-import { useLanguage } from '../core/i18n.ts';
+import { getSavedLanguage, tx, useLanguage } from '../core/i18n.ts';
 
 export const ContactAdminPanel: React.FC = () => {
   const { t, lang } = useLanguage();
@@ -45,15 +45,16 @@ export const ContactAdminPanel: React.FC = () => {
       setMessages(list);
     } catch {
       setErrorMsg(
-        t(
-          'Không thể tải danh sách liên hệ từ Firestore.',
-          'Unable to load contact messages from Firestore.'
+        tx(
+          getSavedLanguage(),
+          'Không thể tải danh sách tin nhắn từ Firestore.',
+          'Unable to load messages from Firestore.'
         )
       );
     } finally {
       setIsLoading(false);
     }
-  }, [t]);
+  }, []);
 
   useEffect(() => {
     void loadMessages();
@@ -120,7 +121,7 @@ export const ContactAdminPanel: React.FC = () => {
       <div className="flex items-center justify-between flex-wrap gap-2 border-b border-amber-500/20 pb-2.5">
         <div className="flex items-center gap-2 font-extrabold text-amber-300 uppercase tracking-wider">
           <MessageSquare className="w-4 h-4 text-[#00F0FF]" />
-          <span>{t('HỘP THƯ LIÊN HỆ NGƯỜI CHƠI', 'PLAYER CONTACT INBOX')}</span>
+          <span>{t('DANH SÁCH TIN NHẮN', 'MESSAGE LIST')}</span>
         </div>
         <button
           type="button"
@@ -184,7 +185,7 @@ export const ContactAdminPanel: React.FC = () => {
         </div>
       ) : paginated.items.length === 0 ? (
         <div className="p-6 rounded-xl bg-neutral-950/90 border border-neutral-800 text-center text-neutral-400 text-xs">
-          {t('Không có tin liên hệ nào phù hợp.', 'No matching contact messages.')}
+          {t('Không tìm thấy', 'Not found')}
         </div>
       ) : (
         <div className="space-y-2.5" data-testid="admin-contact-list">
