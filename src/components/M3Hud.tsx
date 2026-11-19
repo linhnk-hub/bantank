@@ -177,7 +177,7 @@ export const M3Hud: React.FC<M3HudProps> = ({
                 <span className="text-emerald-300">
                   {state.gameMode === 'TWO_PLAYERS_ONLINE'
                     ? t('MẠNG P2 (ONLINE):', 'P2 LIVES (ONLINE):')
-                    : t('MẠNG P2 (AI):', 'P2 LIVES (AI):')}
+                    : t('MẠNG P2 (A.I):', 'P2 LIVES (A.I):')}
                 </span>
                 <span className="text-emerald-400 font-black text-base">{state.p2State.lives}</span>
               </div>
@@ -189,6 +189,67 @@ export const M3Hud: React.FC<M3HudProps> = ({
                 </div>
               )}
             </>
+          )}
+
+          {state.itemSystem && state.itemSystem.eagleShieldSecondsRemaining > 0 && (
+            <div
+              data-testid="hud-eagle-shield-timer"
+              className="font-hud flex items-center gap-1 px-2.5 py-1 rounded bg-cyan-950/85 border border-cyan-400 text-cyan-300 text-xs font-bold animate-pulse"
+            >
+              <Shield className="w-3.5 h-3.5 text-cyan-300" />
+              <span>
+                {t('KHIÊN ĐẠI BÀNG:', 'EAGLE SHIELD:')}{' '}
+                {state.itemSystem.eagleShieldSecondsRemaining}s
+              </span>
+            </div>
+          )}
+
+          {state.itemSystem && state.itemSystem.p1Effects.firepowerSecondsRemaining > 0 && (
+            <div
+              data-testid="hud-p1-firepower-timer"
+              className="font-hud flex items-center gap-1 px-2.5 py-1 rounded bg-amber-950/85 border border-amber-400 text-amber-300 text-xs font-bold"
+            >
+              <span>
+                {t('P1 CÔNG PHÁ x2:', 'P1 FIREPOWER x2:')}{' '}
+                {state.itemSystem.p1Effects.firepowerSecondsRemaining}s
+              </span>
+            </div>
+          )}
+
+          {state.itemSystem && state.itemSystem.p1Effects.speedBoostSecondsRemaining > 0 && (
+            <div
+              data-testid="hud-p1-speed-timer"
+              className="font-hud flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-950/85 border border-emerald-400 text-emerald-300 text-xs font-bold"
+            >
+              <span>
+                {t('P1 TĂNG TỐC x2:', 'P1 SPEED x2:')}{' '}
+                {state.itemSystem.p1Effects.speedBoostSecondsRemaining}s
+              </span>
+            </div>
+          )}
+
+          {isCoop && state.itemSystem && state.itemSystem.p2Effects.firepowerSecondsRemaining > 0 && (
+            <div
+              data-testid="hud-p2-firepower-timer"
+              className="font-hud flex items-center gap-1 px-2.5 py-1 rounded bg-amber-950/85 border border-amber-400 text-amber-300 text-xs font-bold"
+            >
+              <span>
+                {t('P2 CÔNG PHÁ x2:', 'P2 FIREPOWER x2:')}{' '}
+                {state.itemSystem.p2Effects.firepowerSecondsRemaining}s
+              </span>
+            </div>
+          )}
+
+          {isCoop && state.itemSystem && state.itemSystem.p2Effects.speedBoostSecondsRemaining > 0 && (
+            <div
+              data-testid="hud-p2-speed-timer"
+              className="font-hud flex items-center gap-1 px-2.5 py-1 rounded bg-emerald-950/85 border border-emerald-400 text-emerald-300 text-xs font-bold"
+            >
+              <span>
+                {t('P2 TĂNG TỐC x2:', 'P2 SPEED x2:')}{' '}
+                {state.itemSystem.p2Effects.speedBoostSecondsRemaining}s
+              </span>
+            </div>
           )}
         </div>
 

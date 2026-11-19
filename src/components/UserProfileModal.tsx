@@ -292,30 +292,29 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             )}
           </div>
 
-          {/* M7.5.2 Mục 6.2: Thông tin Level (1–50), Tiến độ XP & Tách biệt Quân hàm PvP / Xu trong Hồ sơ */}
+          {/* BTO-PROGRESSION-MODES-V1.4: Hệ thống 17 Cấp bậc Quân hàm, Tiến độ XP & Quy đổi Sao ⭐ (25 XP = 1 Sao) */}
           <div
             data-testid="profile-player-level-card"
-            className="p-3.5 rounded-2xl bg-neutral-950/85 border border-sky-500/30 space-y-2.5"
+            className="p-3.5 rounded-2xl bg-neutral-950/85 border border-amber-500/30 space-y-2.5"
           >
             <div className="flex items-center justify-between gap-2 flex-wrap">
-              <div className="flex items-center gap-1.5 font-mono font-extrabold text-xs text-sky-300">
-                <Award className="w-4 h-4 text-sky-400 shrink-0" />
+              <div className="flex items-center gap-1.5 font-mono font-extrabold text-xs text-amber-300">
+                <Award className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>
-                  Level hiện tại:{' '}
-                  {playerStats.level !== null ? `Lv. ${playerStats.level}` : 'Lv. --'}
+                  Quân hàm hiện tại: {playerStats.rankNameVi}
                 </span>
-                {playerStats.isMaxLevel && (
+                {playerStats.isMaxRank && (
                   <span
                     data-testid="profile-max-level-badge"
                     className="px-1.5 py-0.5 rounded bg-amber-500 text-black text-[9px] font-black uppercase"
                   >
-                    MAX LEVEL
+                    CẤP BẬC TỐI ĐA
                   </span>
                 )}
               </div>
               <span className="text-[11px] font-mono font-bold tabular-nums text-amber-300">
                 {playerStats.xpVerificationStatus === 'VERIFIED'
-                  ? `${playerStats.levelProgressPercent}%`
+                  ? `${playerStats.rankProgressPercent}%`
                   : '--%'}
               </span>
             </div>
@@ -325,66 +324,70 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               role="progressbar"
               aria-valuemin={0}
               aria-valuemax={100}
-              aria-valuenow={Math.round(playerStats.levelProgressPercent)}
+              aria-valuenow={Math.round(playerStats.rankProgressPercent)}
               className="w-full h-2 rounded-lg bg-neutral-800 border border-neutral-700/80 overflow-hidden"
             >
               <svg viewBox="0 0 100 10" preserveAspectRatio="none" className="w-full h-full block">
                 <rect
                   x="0"
                   y="0"
-                  width={playerStats.levelProgressPercent}
+                  width={playerStats.rankProgressPercent}
                   height="10"
-                  className={playerStats.isMaxLevel ? 'fill-amber-400' : 'fill-sky-400'}
+                  className={playerStats.isMaxRank ? 'fill-amber-400' : 'fill-sky-400'}
                 />
               </svg>
             </div>
 
             {playerStats.xpVerificationStatus !== 'VERIFIED' ? (
               <div className="text-[11px] font-mono text-neutral-400">
-                Chưa xác minh XP — hệ thống không hiển thị Level giả định.
+                Chưa xác minh XP — hệ thống không hiển thị Quân hàm giả định.
               </div>
-            ) : playerStats.isMaxLevel ? (
+            ) : playerStats.isMaxRank ? (
               <div className="text-[11px] font-mono tabular-nums text-amber-200 flex items-center justify-between flex-wrap gap-1">
                 <span>Tổng XP: {playerStats.totalXp.toLocaleString('vi-VN')} XP</span>
-                <span>MAX LEVEL (Không vượt quá Cấp 50)</span>
+                <span>CẤP BẬC TỐI ĐA (Đại tướng)</span>
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono tabular-nums text-neutral-300">
                 <div>
                   <span className="text-neutral-500 block">Tổng XP</span>
                   <strong className="text-amber-300">
-                    {playerStats.totalXp.toLocaleString('vi-VN')}
+                    {playerStats.totalXp.toLocaleString('vi-VN')} XP
                   </strong>
                 </div>
                 <div>
-                  <span className="text-neutral-500 block">Cấp kế tiếp</span>
+                  <span className="text-neutral-500 block">
+                    {playerStats.nextRankNameVi || 'Quân hàm kế'}
+                  </span>
                   <strong className="text-sky-300">
-                    {(playerStats.xpNext ?? 0).toLocaleString('vi-VN')} XP
+                    {(playerStats.rankXpNext ?? 0).toLocaleString('vi-VN')} XP
                   </strong>
                 </div>
                 <div className="text-right">
                   <span className="text-neutral-500 block">Còn thiếu</span>
                   <strong className="text-emerald-300">
-                    {(playerStats.xpRemaining ?? 0).toLocaleString('vi-VN')} XP
+                    {(playerStats.rankXpRemaining ?? 0).toLocaleString('vi-VN')} XP
                   </strong>
                 </div>
               </div>
             )}
 
             <div className="grid grid-cols-2 gap-2 pt-2 border-t border-neutral-800/80 text-[10px]">
-              <div className="p-2 rounded-lg bg-neutral-900/90 border border-purple-500/25 flex items-center gap-1.5 min-w-0">
-                <Shield className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <div className="p-2 rounded-lg bg-neutral-900/90 border border-amber-500/25 flex items-center gap-1.5 min-w-0">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <div className="truncate">
-                  <span className="text-neutral-400 block">Quân hàm PvP</span>
-                  <strong className="text-purple-300 font-bold">{playerStats.pvpRankLabel}</strong>
+                  <span className="text-neutral-400 block">Số dư Sao ⭐ (25 XP = 1 Sao)</span>
+                  <strong className="text-amber-300 font-mono tabular-nums">
+                    {playerStats.starBalance.toLocaleString('vi-VN')} ⭐
+                  </strong>
                 </div>
               </div>
-              <div className="p-2 rounded-lg bg-neutral-900/90 border border-emerald-500/25 flex items-center gap-1.5 min-w-0">
-                <Sparkles className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+              <div className="p-2 rounded-lg bg-neutral-900/90 border border-sky-500/25 flex items-center gap-1.5 min-w-0">
+                <Shield className="w-3.5 h-3.5 text-sky-400 shrink-0" />
                 <div className="truncate">
-                  <span className="text-neutral-400 block">Số dư Xu</span>
-                  <strong className="text-emerald-300 font-mono tabular-nums">
-                    {playerStats.xuBalance.toLocaleString('vi-VN')} Xu
+                  <span className="text-neutral-400 block">XP lẻ chưa quy đổi</span>
+                  <strong className="text-sky-300 font-mono tabular-nums">
+                    {playerStats.unconvertedXp} / 25 XP (Còn {playerStats.xpToNextStar} XP → +1 ⭐)
                   </strong>
                 </div>
               </div>

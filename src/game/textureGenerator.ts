@@ -1471,5 +1471,126 @@ export function generateEagleExplosionTextures(scene: Phaser.Scene): void {
       canvas.refresh();
     }
   }
+
+  generateSupportItemTextures(scene);
 }
+
+/**
+ * Generates 4 distinct 16x16 pixel-art Support Item textures:
+ * - `item_bomb`: BOMB (Bom — destroys up to 2 alive enemy tanks)
+ * - `item_eagle_shield`: EAGLE_SHIELD (Khiên Đại Bàng — 2 steel side walls for 10s)
+ * - `item_firepower`: FIREPOWER (Tăng Công Phá — 2x brick/steel/enemy damage for 10s)
+ * - `item_speed_boost`: SPEED_BOOST (Tăng Tốc — 2x movement speed for 10s)
+ */
+export function generateSupportItemTextures(scene: Phaser.Scene): void {
+  const drawBadgeFrame = (
+    ctx: CanvasRenderingContext2D,
+    borderColor: string,
+    bgColor: string
+  ) => {
+    ctx.clearRect(0, 0, 16, 16);
+    ctx.fillStyle = '#090d16';
+    ctx.fillRect(0, 0, 16, 16);
+    ctx.fillStyle = borderColor;
+    ctx.fillRect(1, 1, 14, 14);
+    ctx.fillStyle = bgColor;
+    ctx.fillRect(2, 2, 12, 12);
+    // Corner rivets
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(2, 2, 1, 1);
+    ctx.fillRect(13, 2, 1, 1);
+    ctx.fillRect(2, 13, 1, 1);
+    ctx.fillRect(13, 13, 1, 1);
+  };
+
+  // 1. BOMB (`item_bomb`) - Crimson frame with classic dark bomb & burning fuse spark
+  if (!scene.textures.exists('item_bomb')) {
+    const canvas = scene.textures.createCanvas('item_bomb', 16, 16);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      drawBadgeFrame(ctx, '#f43f5e', '#4c0519');
+      // Bomb spherical body
+      ctx.fillStyle = '#1e293b';
+      ctx.fillRect(5, 6, 6, 6);
+      ctx.fillRect(4, 7, 8, 4);
+      ctx.fillRect(6, 5, 4, 8);
+      // Highlight
+      ctx.fillStyle = '#94a3b8';
+      ctx.fillRect(5, 7, 2, 2);
+      // Fuse cap & spark
+      ctx.fillStyle = '#cbd5e1';
+      ctx.fillRect(7, 4, 2, 1);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(9, 3, 2, 1);
+      ctx.fillStyle = '#fef08a';
+      ctx.fillRect(11, 2, 2, 2);
+      canvas.refresh();
+    }
+  }
+
+  // 2. EAGLE_SHIELD (`item_eagle_shield`) - Steel-cyan frame with silver armor shield & gold crest
+  if (!scene.textures.exists('item_eagle_shield')) {
+    const canvas = scene.textures.createCanvas('item_eagle_shield', 16, 16);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      drawBadgeFrame(ctx, '#38bdf8', '#082f49');
+      // Outer metallic shield silhouette
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillRect(4, 3, 8, 6);
+      ctx.fillRect(5, 9, 6, 2);
+      ctx.fillRect(6, 11, 4, 1);
+      ctx.fillRect(7, 12, 2, 1);
+      // Inner steel plate
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(5, 4, 6, 5);
+      ctx.fillRect(6, 9, 4, 2);
+      // Golden eagle star center
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(7, 5, 2, 4);
+      ctx.fillRect(6, 6, 4, 2);
+      canvas.refresh();
+    }
+  }
+
+  // 3. FIREPOWER (`item_firepower`) - Amber-orange frame with twin high-explosive shells / star
+  if (!scene.textures.exists('item_firepower')) {
+    const canvas = scene.textures.createCanvas('item_firepower', 16, 16);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      drawBadgeFrame(ctx, '#f59e0b', '#451a03');
+      // Blazing star / shell core
+      ctx.fillStyle = '#ea580c';
+      ctx.fillRect(4, 4, 8, 8);
+      ctx.fillStyle = '#fbbf24';
+      ctx.fillRect(7, 3, 2, 10);
+      ctx.fillRect(3, 7, 10, 2);
+      ctx.fillRect(5, 5, 6, 6);
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(6, 6, 4, 4);
+      canvas.refresh();
+    }
+  }
+
+  // 4. SPEED_BOOST (`item_speed_boost`) - Emerald-lime frame with double forward chevrons >>
+  if (!scene.textures.exists('item_speed_boost')) {
+    const canvas = scene.textures.createCanvas('item_speed_boost', 16, 16);
+    if (canvas) {
+      const ctx = canvas.getContext();
+      drawBadgeFrame(ctx, '#10b981', '#064e3b');
+      // Double speed chevron arrows pointing UP/RIGHT
+      ctx.fillStyle = '#34d399';
+      // First chevron
+      ctx.fillRect(4, 5, 2, 2);
+      ctx.fillRect(6, 7, 2, 2);
+      ctx.fillRect(4, 9, 2, 2);
+      // Second bright chevron
+      ctx.fillStyle = '#a7f3d0';
+      ctx.fillRect(8, 5, 2, 2);
+      ctx.fillRect(10, 7, 2, 2);
+      ctx.fillRect(8, 9, 2, 2);
+      canvas.refresh();
+    }
+  }
+}
+
 

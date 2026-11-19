@@ -22,12 +22,13 @@ export interface BulletUpdateResult {
 }
 
 /**
- * Spawns a new bullet from P1 tank.
- * Strictly enforces maximum 1 active bullet for P1.
+ * Spawns a new bullet from P1/P2/Enemy tank.
+ * Strictly enforces maximum 1 active bullet per tank.
  */
 export function spawnBullet(
   tank: TankStructure,
-  activeBullet: BulletStructure | null
+  activeBullet: BulletStructure | null,
+  options?: { hasFirepower?: boolean }
 ): BulletStructure | null {
   if (activeBullet !== null) {
     return null; // Maximum 1 active bullet enforced
@@ -51,6 +52,7 @@ export function spawnBullet(
   }
 
   const isPowerEnemy = (tank as { enemyType?: string }).enemyType === 'POWER';
+  const bulletPower = isPowerEnemy || options?.hasFirepower ? 2 : 1;
 
   return {
     id: `b_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
@@ -59,7 +61,7 @@ export function spawnBullet(
     y: by,
     direction: tank.direction,
     speed: BULLET_CONFIG.SPEED_PX_S,
-    power: isPowerEnemy ? 2 : 1,
+    power: bulletPower,
   };
 }
 
@@ -69,7 +71,8 @@ export function spawnBullet(
  */
 export function updateBullet(
   bullet: BulletStructure,
-  terrain: RuntimeTerrainState
+  terrain: RuntimeTerrainState,
+  options?: { isProtectedEagleShieldTile?: (row: number, col: number) => boolean }
 ): BulletUpdateResult {
   const step = BULLET_CONFIG.SPEED_PX_TICK;
 
@@ -102,8 +105,11 @@ export function updateBullet(
     }
 
     if (type === TILE_TYPES.STEEL) {
-      // Power tank bullets (power >= 2) destroy 50% of a steel wall tile per hit; tier-1 bullets are blocked
-      if ((bullet.power ?? 1) >= 2) {
+      // Power tank bullets & Player FIREPOWER bullets (power >= 2) destroy 50% of a steel wall tile per hit,
+      // EXCEPT Eagle-Shield-protected side walls (12,5) and (12,7) while the 10s shield is active!
+      const isBaseShieldTile = row >= 11 && col >= 5 && col <= 7;
+      const isEagleShieldProtected = options?.isProtectedEagleShieldTile?.(row, col) ?? false;
+      if ((bullet.power ?? 1) >= 2 && !isEagleShieldProtected && !(bullet.ownerId === 'p2' && isBaseShieldTile)) {
         applyPowerSteelImpact(terrain, row, col, bullet.direction);
       }
       return { isAlive: false, hitObstacle: true, hitSteel: true };

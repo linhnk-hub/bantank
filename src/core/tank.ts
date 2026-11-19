@@ -42,13 +42,14 @@ export function createP2Tank(): TankStructure {
 
 /**
  * Updates tank position and orientation based on user input.
- * Fixed movement: exactly 1.0 px per tick at 60Hz.
+ * Fixed movement: 1.0 px per tick at 60Hz (or 2.0 px/tick with SPEED_BOOST).
  */
 export function updateTankMovement(
   tank: TankStructure,
   input: InputState,
   terrain: RuntimeTerrainState,
-  otherTanks?: Array<{ id: string; x: number; y: number; isAlive: boolean }>
+  otherTanks?: Array<{ id: string; x: number; y: number; isAlive: boolean }>,
+  speedMultiplier: number = 1
 ): void {
   if (!tank.isAlive) return;
 
@@ -80,34 +81,45 @@ export function updateTankMovement(
     tank.direction = requestedDir;
   }
 
-  // 2. Calculate movement step (1.0 px/tick)
-  let nextX = tank.x;
-  let nextY = tank.y;
-  const step = TANK_CONFIG.SPEED_PX_TICK;
+  // 2. Calculate movement step (1.0 px/tick normal, 2.0 px/tick with SPEED_BOOST)
+  const effectiveMult = Number.isFinite(speedMultiplier) && speedMultiplier > 0 ? speedMultiplier : 1;
+  const baseStep = TANK_CONFIG.SPEED_PX_TICK;
+  const fullStep = baseStep * effectiveMult;
 
-  if (tank.direction === 'UP') nextY -= step;
-  else if (tank.direction === 'DOWN') nextY += step;
-  else if (tank.direction === 'LEFT') nextX -= step;
-  else if (tank.direction === 'RIGHT') nextX += step;
+  const tryStepMove = (stepDist: number): boolean => {
+    let nextX = tank.x;
+    let nextY = tank.y;
 
-  // 3. Map boundary clamp [0, 192]
-  nextX = Math.max(0, Math.min(TANK_CONFIG.MAX_X, nextX));
-  nextY = Math.max(0, Math.min(TANK_CONFIG.MAX_Y, nextY));
+    if (tank.direction === 'UP') nextY -= stepDist;
+    else if (tank.direction === 'DOWN') nextY += stepDist;
+    else if (tank.direction === 'LEFT') nextX -= stepDist;
+    else if (tank.direction === 'RIGHT') nextX += stepDist;
 
-  // If boundary clamped immediately with no change
-  if (nextX === tank.x && nextY === tank.y) {
-    return;
-  }
+    // 3. Map boundary clamp [0, 192]
+    nextX = Math.max(0, Math.min(TANK_CONFIG.MAX_X, nextX));
+    nextY = Math.max(0, Math.min(TANK_CONFIG.MAX_Y, nextY));
 
-  // 4. Test collision at next position
-  const nextHitbox = getTankHitbox(nextX, nextY);
-  const collision = checkHitboxVsTerrain(nextHitbox, terrain, { forBullet: false });
+    if (nextX === tank.x && nextY === tank.y) {
+      return false;
+    }
 
-  // 5. Test Tank-to-Tank collision if other tanks are provided
-  const tankConflict = otherTanks ? checkTankVsTanks(tank.id, nextHitbox, otherTanks) : false;
+    // 4. Test collision at next position
+    const nextHitbox = getTankHitbox(nextX, nextY);
+    const collision = checkHitboxVsTerrain(nextHitbox, terrain, { forBullet: false });
 
-  if (!collision.collides && !tankConflict) {
-    tank.x = nextX;
-    tank.y = nextY;
+    // 5. Test Tank-to-Tank collision if other tanks are provided
+    const tankConflict = otherTanks ? checkTankVsTanks(tank.id, nextHitbox, otherTanks) : false;
+
+    if (!collision.collides && !tankConflict) {
+      tank.x = nextX;
+      tank.y = nextY;
+      return true;
+    }
+    return false;
+  };
+
+  if (!tryStepMove(fullStep) && effectiveMult > 1) {
+    // Fallback to 1.0px step if 2.0px was blocked by 1px remaining clearance to wall/tank
+    tryStepMove(baseStep);
   }
 }

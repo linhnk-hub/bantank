@@ -1,0 +1,964 @@
+# MASTER IMPLEMENTATION PROMPT – BẮN TANK ONLINE
+## XP – QUÂN HÀM – SAO – PHẦN THƯỞNG – CHẾ ĐỘ CHƠI – VẬT PHẨM HỖ TRỢ
+
+**Mã phiên bản:** BTO-PROGRESSION-MODES-V1.4  
+**Dự án:** Bắn Tank Online  
+**Môi trường phát triển:** Google AI Studio  
+**Quy trình:** AUDIT → IMPLEMENTATION PLAN → IMPLEMENTATION → TESTING → FINAL AUDIT.
+
+---
+
+# I. MỤC TIÊU VÀ PHẠM VI TRIỂN KHAI
+
+Kiểm tra và cập nhật dự án Bắn Tank Online theo các yêu cầu sau:
+
+1. Loại bỏ hoàn toàn Level, thay bằng hệ thống 17 cấp bậc quân hàm.
+2. Sử dụng XP làm nguồn tích lũy tiến trình duy nhất.
+3. Tự động quy đổi XP thành Sao ⭐ theo tỷ lệ 25 XP = 1 Sao.
+4. Loại bỏ hoàn toàn hệ thống Xu.
+5. Bổ sung XP thưởng theo thành tích hoàn thành Stage.
+6. Tổ chức lại menu chế độ chơi thành SOLO, CO-OP và VS.
+7. Triển khai 4 loại vật phẩm hỗ trợ: BOMB, EAGLE SHIELD, FIREPOWER và SPEED BOOST.
+8. Thiết lập 4 đợt xuất hiện vật phẩm, tổng cộng 6 vật phẩm mỗi Stage.
+9. Áp dụng hệ thống vật phẩm cho SOLO, CO-OP A.I và CO-OP ONLINE, bắt đầu ngay từ Stage 1.
+10. Chuẩn hóa thuật ngữ hiển thị A.I.
+11. Bảo toàn gameplay, dữ liệu người chơi, Firebase, bảo mật và các chức năng đã được nghiệm thu.
+12. Đảm bảo cơ chế đồng bộ vật phẩm trong CO-OP ONLINE phù hợp với kiến trúc mạng thực tế, không tự ý mở rộng quyền của Host.
+
+**Nguyên tắc bắt buộc:** Phải kiểm tra mã nguồn thực tế trước khi sửa. Không được chỉ sửa giao diện để tạo cảm giác tính năng đã hoạt động.
+
+# II. HỆ THỐNG XP VÀ CẤP BẬC QUÂN HÀM
+
+## 2.1. Loại bỏ hoàn toàn Level
+
+- Xóa khái niệm Level khỏi giao diện người chơi.
+- Không hiển thị Level 1, Level 2, Lv.1, Lv.2 hoặc các biến thể tương tự.
+- Thay thế bằng cấp bậc quân hàm.
+- Kiểm tra toàn bộ component, biến, hàm, API, Firestore schema và logic có liên quan đến Level.
+- Không xóa dữ liệu XP cũ của người chơi.
+- Nếu dữ liệu hiện tại có `totalXp`, ưu tiên kế thừa sau khi xác minh tính hợp lệ.
+- Không tự đặt người chơi về 0 XP hoặc cấp bậc thấp nhất khi không đọc được dữ liệu.
+- Không ghi đè dữ liệu chưa xác minh.
+- Không thực hiện migration phá hủy dữ liệu.
+
+## 2.2. Danh sách 17 cấp bậc
+
+Thứ tự từ cao xuống thấp:
+
+| STT | Cấp bậc |
+|---:|---|
+| 1 | Đại tướng |
+| 2 | Thượng tướng |
+| 3 | Trung tướng |
+| 4 | Thiếu tướng |
+| 5 | Đại tá |
+| 6 | Thượng tá |
+| 7 | Trung tá |
+| 8 | Thiếu tá |
+| 9 | Đại úy |
+| 10 | Thượng úy |
+| 11 | Trung úy |
+| 12 | Thiếu úy |
+| 13 | Thượng sĩ |
+| 14 | Trung sĩ |
+| 15 | Hạ sĩ |
+| 16 | Binh nhất |
+| 17 | Binh nhì |
+
+Binh nhì là cấp bậc khởi đầu.
+
+## 2.3. Bảng XP thăng cấp
+
+| Cấp bậc | Tổng XP tối thiểu |
+|---|---:|
+| Binh nhì | 0 |
+| Binh nhất | 100 |
+| Hạ sĩ | 250 |
+| Trung sĩ | 450 |
+| Thượng sĩ | 700 |
+| Thiếu úy | 1.000 |
+| Trung úy | 1.400 |
+| Thượng úy | 1.900 |
+| Đại úy | 2.500 |
+| Thiếu tá | 3.300 |
+| Trung tá | 4.300 |
+| Thượng tá | 5.500 |
+| Đại tá | 7.000 |
+| Thiếu tướng | 8.800 |
+| Trung tướng | 11.000 |
+| Thượng tướng | 13.500 |
+| Đại tướng | 16.500 |
+
+Nguyên tắc:
+
+- Cấp bậc được tự động xác định theo tổng XP hợp lệ.
+- XP không bị trừ khi thăng cấp.
+- Không tiêu hao XP để thăng cấp.
+- Không có hệ thống RP độc lập.
+- Không tự tạo mùa giải hoặc reset cấp bậc.
+- Binh nhất và Binh nhì có cơ chế bảo vệ không bị giáng cấp.
+- Không tự ý thay đổi các ngưỡng XP.
+- Nếu người chơi nhận lượng XP đủ vượt qua nhiều cấp bậc, hệ thống phải xác định đúng cấp bậc cuối cùng.
+
+## 2.4. Quy tắc nhận XP từ tiêu diệt Tank địch
+
+Giữ nguyên XP theo loại Tank:
+
+| Loại Tank địch | XP |
+|---|---:|
+| Basic Tank | 1 |
+| Fast Tank | 2 |
+| Power Tank | 3 |
+| Armor Tank | 5 |
+
+Không cộng XP chỉ vì:
+
+- Đăng nhập.
+- Thời gian online.
+- Đứng trong trận đấu.
+- Khởi động hoặc tải Stage.
+- Các sự kiện chưa có quy tắc thưởng được phê duyệt.
+
+XP chỉ được cộng khi sự kiện thưởng hợp lệ đã được xác nhận.
+
+# III. HỆ THỐNG SAO ⭐
+
+## 3.1. Quy tắc quy đổi XP thành Sao
+
+**25 XP = 1 Sao ⭐**
+
+Sao là một loại tài sản riêng, có số dư độc lập với XP.
+
+Cơ chế quy đổi tự động:
+
+- XP hợp lệ được cộng vào `totalXp`.
+- Cứ đủ 25 XP chưa quy đổi thì cộng 1 Sao.
+- XP dư dưới 25 được giữ lại để cộng dồn.
+- Không làm tròn lên.
+- Không làm mất XP dư.
+- Không cộng Sao trùng khi xử lý lại cùng một sự kiện thưởng.
+
+Ví dụ:
+
+| XP nhận được | Sao nhận được | XP dư |
+|---:|---:|---:|
+| 10 | 0 | 10 |
+| 15 tiếp theo | 1 | 0 |
+| 38 | 1 | 13 |
+| 50 | 2 | 0 |
+| 68 | 2 | 18 |
+
+Ví dụ cộng dồn: Người chơi có 18 XP dư, sau đó nhận thêm 10 XP thì được 1 Sao và còn dư 3 XP.
+
+## 3.2. Mục đích sử dụng Sao
+
+Sao được tích lũy để phục vụ tính năng cửa hàng vật phẩm ngoại hình Tank trong tương lai, ví dụ:
+
+- Skin màu sắc Tank.
+- Skin ngụy trang.
+- Hình thức ngoại hình đặc biệt.
+- Hiệu ứng hình ảnh đi kèm Tank.
+
+Các vật phẩm ngoại hình chỉ thay đổi hình thức hiển thị.
+
+Tuyệt đối không tạo lợi thế chiến đấu, không thay đổi:
+
+- Sát thương.
+- Tốc độ di chuyển.
+- Máu hoặc HP.
+- Tốc độ bắn.
+- Tầm bắn.
+- Khả năng phòng thủ.
+- Bất kỳ chỉ số gameplay nào.
+
+Phạm vi triển khai hiện tại:
+
+- Xây dựng nền tảng quản lý số dư Sao.
+- Hiển thị số Sao trong giao diện phù hợp.
+- Chưa triển khai cửa hàng.
+- Chưa tạo giá vật phẩm.
+- Chưa triển khai mua, bán hoặc tiêu Sao.
+
+## 3.3. Cấu trúc dữ liệu định hướng
+
+Kiểm tra cấu trúc hiện tại và thiết kế phù hợp, ưu tiên các trường:
+
+| Trường | Ý nghĩa |
+|---|---|
+| `totalXp` | Tổng XP hợp lệ tích lũy |
+| `rank` | Cấp bậc được xác định từ XP |
+| `starBalance` | Số dư Sao hiện có |
+| `unconvertedXp` | XP dư chưa đủ 25 để đổi Sao |
+
+Không coi `rank` là dữ liệu do client tự quyết định.
+
+Cấp bậc phải được xác định từ tổng XP hợp lệ.
+
+## 3.4. Bảo mật XP và Sao
+
+Đây là hệ thống tài sản người chơi, phải kiểm soát:
+
+- Chống cộng XP trùng lặp.
+- Chống cộng Sao trùng lặp.
+- Chống giả mạo XP từ client.
+- Chống chỉnh sửa `starBalance` bằng DevTools hoặc API client.
+- Chống replay sự kiện thưởng.
+- Chống ghi đè dữ liệu khi nhiều tab hoặc nhiều thiết bị cùng hoạt động.
+- Đảm bảo tính nhất quán giữa tổng XP, XP dư và Sao.
+- Sử dụng mã sự kiện duy nhất và cơ chế idempotency.
+- Ưu tiên giao dịch có kiểm soát tại backend đáng tin cậy.
+
+Nếu kiến trúc hiện tại chỉ có client-side XP ledger hoặc checksum phía trình duyệt, không được tuyên bố hệ thống đã an toàn chống gian lận.
+
+Không tự triển khai Cloud Functions, Cloud Run, dịch vụ trả phí hoặc thay đổi Firebase Production nếu chưa được phê duyệt.
+
+# IV. PHẦN THƯỞNG THÀNH TÍCH SAU KHI HOÀN THÀNH STAGE
+
+## 4.1. Điều kiện thưởng
+
+| Thành tích | XP thưởng |
+|---|---:|
+| Hoàn thành Stage mà không mất mạng | +10 XP |
+| Hoàn thành trong thời gian không quá một nửa thời gian cho phép | +15 XP |
+| Đồng thời không mất mạng và hoàn thành trong thời gian không quá một nửa thời gian cho phép | +25 XP |
+
+## 4.2. Quy tắc tính thưởng
+
+Nếu người chơi đạt cả hai điều kiện thì chỉ nhận +25 XP, không cộng thêm +10 và +15.
+
+- Không mất mạng, nhưng không đạt mốc nửa thời gian: +10 XP.
+- Có mất mạng, nhưng đạt mốc nửa thời gian: +15 XP.
+- Không mất mạng và đạt mốc nửa thời gian: +25 XP.
+- Không đạt điều kiện nào: 0 XP thưởng thành tích.
+
+Không cộng dồn các khoản thưởng thành tích riêng lẻ.
+
+## 4.3. Hiển thị kết quả
+
+Trong bảng thống kê sau trận, hiển thị riêng:
+
+- XP tiêu diệt địch.
+- XP thưởng thành tích.
+- Tổng XP nhận được.
+- Sao nhận được từ XP.
+- Cấp bậc hiện tại.
+- Thông báo thăng cấp bậc nếu có.
+
+Không cộng XP thành tích hai lần khi người chơi tải lại trang, mở lại bảng kết quả hoặc kết nối lại.
+
+Trong phạm vi hiện tại, áp dụng phần thưởng thành tích cho Campaign. Không tự mở rộng sang VS hoặc Co-op khi chưa có quy tắc thưởng riêng được phê duyệt.
+
+# V. BẢO TOÀN HỆ THỐNG GAMEPLAY HIỆN TẠI
+
+Không tự ý thay đổi:
+
+1. Game Core deterministic TypeScript.
+2. Phaser 3 rendering.
+3. Fixed timestep 60 Hz và giới hạn 60 FPS.
+4. Quy tắc di chuyển, bắn, va chạm và sát thương.
+5. AI điều khiển Tank địch.
+6. Cấu trúc Stage và bản đồ hiện có.
+7. Một Base duy nhất tại hàng 12, cột 6; hai ô hai bên là BRICK bảo vệ.
+8. Cơ chế spawn Tank.
+9. Cơ chế bảo vệ spawn và shield.
+10. Các loại Tank địch, HP, tốc độ và XP đã duyệt.
+11. Hệ thống đăng nhập Google.
+12. Quy tắc một tài khoản chỉ có một phiên hoạt động.
+13. Session timeout 15 phút, cảnh báo ở phút thứ 14.
+14. Firebase Authentication và Firestore.
+15. Phân quyền ADMIN, MOD, PLAYER.
+16. Hệ thống kiểm toán và giám sát.
+17. Quy tắc BGM/SFX độc lập.
+18. Các chức năng đã hoàn thành và nghiệm thu.
+
+Thông số Tank địch hiện tại:
+
+| Loại Tank | HP | XP |
+|---|---:|---:|
+| Basic Tank | 1 | 1 |
+| Fast Tank | 1 | 2 |
+| Power Tank | 2 | 3 |
+| Armor Tank | 4 | 5 |
+
+Không tự ý thay đổi các thông số trên.
+
+Không xóa dữ liệu người chơi để đơn giản hóa việc cập nhật.
+
+Không tự ý thay đổi Firestore Rules, Firebase Authentication, Firebase Project, cấu hình bảo mật hoặc quyền truy cập.
+
+# VI. CHẾ ĐỘ CHƠI VÀ THIẾT KẾ VẬT PHẨM
+
+## 6.1. Tổ chức menu thành 3 nhóm
+
+### A. SOLO
+
+- SOLO.
+
+Giữ nguyên gameplay Solo hiện tại.
+
+### B. CO-OP
+
+- CO-OP A.I.
+- CO-OP ONLINE.
+
+Giữ nguyên cơ chế Co-op Online hiện tại.
+
+### C. VS
+
+- P1 vs P2.
+- P1 + A.I vs P2 + A.I.
+
+Trước khi triển khai logic VS:
+
+- Kiểm tra kiến trúc hiện tại có hỗ trợ nhiều người chơi cùng thiết bị hay không.
+- Kiểm tra có sẵn cơ chế VS Online hay không.
+- Không tự tạo matchmaking, phòng đấu, đồng bộ mạng hoặc luật đối kháng mới khi chưa có đặc tả.
+- Không hiển thị chế độ như đã hoạt động nếu Game Core chưa hỗ trợ.
+- Nếu thiếu cơ chế, hoàn thiện cấu trúc menu trong phạm vi an toàn và báo cáo phần cần phát triển tiếp theo.
+
+Không làm hỏng các chế độ Solo, Co-op A.I và Co-op Online hiện tại.
+
+## 6.2. PHẠM VI ÁP DỤNG VẬT PHẨM
+
+Cơ chế vật phẩm hỗ trợ phải được triển khai cho đầy đủ 3 chế độ:
+
+1. **SOLO:** áp dụng từ Stage 1 và tất cả Stage tiếp theo.
+2. **CO-OP A.I:** áp dụng từ Stage 1 và tất cả Stage tiếp theo.
+3. **CO-OP ONLINE:** áp dụng từ Stage 1 và tất cả Stage tiếp theo.
+
+Không có ngoại lệ Stage 1.
+
+Không được sử dụng điều kiện `stage > 1`, `stage >= 2` hoặc bất kỳ điều kiện nào loại trừ Stage 1 khỏi hệ thống vật phẩm.
+
+Không tự động áp dụng vật phẩm cho:
+
+- P1 vs P2.
+- P1 + A.I vs P2 + A.I.
+
+Không tự mở rộng sang VS nếu chưa được phê duyệt.
+
+## 6.2.1. QUYỀN CỦA HOST TRONG CO-OP ONLINE
+
+**Host chỉ chịu trách nhiệm chọn Stage/màn chơi.**
+
+Host được phép:
+
+- Tạo phòng CO-OP ONLINE theo cơ chế hiện tại.
+- Chọn Stage/màn chơi.
+- Xác nhận lựa chọn Stage để bắt đầu trận đấu.
+- Thực hiện các thao tác chọn màn chơi khác theo thiết kế hiện tại.
+
+Host không chịu trách nhiệm:
+
+- Tạo vật phẩm.
+- Chọn loại vật phẩm.
+- Chọn vị trí xuất hiện.
+- Quản lý lịch xuất hiện vật phẩm.
+- Xác nhận người chơi nhặt vật phẩm.
+- Kích hoạt hiệu ứng vật phẩm.
+- Quản lý thời gian hiệu lực vật phẩm.
+- Đồng bộ riêng hệ thống vật phẩm bằng quyền Host tự triển khai.
+
+Không được tự ý mở rộng quyền của Host.
+
+## 6.2.2. KIẾN TRÚC VẬT PHẨM TRONG CO-OP ONLINE
+
+Không mặc định Host là authoritative cho hệ thống vật phẩm.
+
+Trước khi triển khai, phải Audit kiến trúc CO-OP ONLINE hiện tại để xác định thành phần thực sự có quyền xử lý trạng thái gameplay và đồng bộ mạng.
+
+Yêu cầu:
+
+1. Hệ thống vật phẩm phải hoạt động thống nhất cho Host và Guest.
+2. Cả hai người chơi nhìn thấy trạng thái vật phẩm giống nhau.
+3. Vật phẩm xuất hiện theo đúng lịch gameplay.
+4. Người chơi nào tiếp xúc hợp lệ trước sẽ được xác nhận nhặt vật phẩm.
+5. Một vật phẩm chỉ được nhặt và kích hoạt một lần.
+6. Hiệu ứng chỉ áp dụng đúng đối tượng và phạm vi đã quy định.
+7. Trạng thái vật phẩm phải được đồng bộ chính xác giữa hai người chơi.
+8. Pause/Resume phải đồng bộ đồng hồ gameplay và thời gian vật phẩm.
+9. Mất kết nối và kết nối lại không được tạo lại vật phẩm đã hết hạn hoặc đã được nhặt.
+10. Không cho phép client tự ghi đè trạng thái vật phẩm đã được xác nhận.
+
+**Xác định nguồn trạng thái authoritative:**
+
+- Nếu kiến trúc hiện tại đã có một thành phần authoritative khác ngoài Host, ưu tiên tái sử dụng thành phần đó.
+- Nếu Game Core hoặc dịch vụ hiện tại có cơ chế phân xử sự kiện hợp lệ, sử dụng cơ chế hiện hữu sau khi kiểm chứng.
+- Nếu chưa có nguồn authoritative phù hợp, phải báo cáo và đề xuất phương án kiến trúc trước khi triển khai.
+- Không tự chọn Host làm nguồn authoritative thay thế.
+- Không tự biến Guest thành nguồn authoritative.
+- Không tạo hai nguồn sự thật cho cùng một vật phẩm.
+- Không tạo thêm dịch vụ trả phí hoặc thay đổi Firebase Production khi chưa được phê duyệt.
+
+**Xử lý xung đột nhặt vật phẩm:**
+
+- Sử dụng mã định danh duy nhất cho từng vật phẩm trong mỗi Stage.
+- Dùng cơ chế atomic/transaction hoặc giải pháp tương đương phù hợp với backend hiện tại.
+- Người chơi được xác nhận nhặt thành công đầu tiên sẽ nhận hiệu ứng.
+- Người chơi còn lại nhận trạng thái vật phẩm đã được nhặt và không được kích hoạt.
+- Mọi thay đổi trạng thái phải được đồng bộ cho cả hai người chơi.
+- Không phát lại sự kiện đã xử lý khi reconnect.
+- Không để đồng hồ phía hai client tạo ra kết quả xuất hiện hoặc hết hạn khác nhau.
+
+Nếu kiến trúc hiện tại chưa đáp ứng được, đánh dấu BLOCKED và trình bày rõ lý do, không giả lập PASS.
+
+## 6.3. THIẾT KẾ 4 LOẠI VẬT PHẨM
+
+Có đúng 4 loại vật phẩm:
+
+1. BOMB – BOM NỔ.
+2. EAGLE SHIELD – KHIÊN BẢO VỆ ĐẠI BÀNG.
+3. FIREPOWER – TĂNG SỨC CÔNG PHÁ.
+4. SPEED BOOST – TĂNG TỐC.
+
+Không tự tạo thêm loại vật phẩm thứ năm.
+
+### 1. BOMB – BOM NỔ
+
+Khi người chơi nhặt được:
+
+- Bom tự động kích hoạt.
+- Tự động tiêu diệt tối đa 2 Tank địch đang còn sống trong trận.
+- Hệ thống tự chọn tối đa 2 mục tiêu hợp lệ.
+- Không yêu cầu người chơi phải ngắm hoặc bắn.
+- Hiển thị hiệu ứng nổ rõ ràng tại vị trí các mục tiêu bị tiêu diệt.
+- Nếu số Tank địch còn sống ít hơn 2, chỉ tiêu diệt số mục tiêu còn lại.
+- Không gây sát thương hoặc phá hủy Base của người chơi.
+- Không tiêu diệt đồng minh hoặc Tank của người chơi khác.
+- XP chỉ được cộng theo đúng quy tắc tiêu diệt địch hiện tại.
+- Không cộng XP trùng cho cùng một mục tiêu.
+
+Việc tiêu diệt phải được Game Core xác nhận, không chỉ xóa hình ảnh Tank khỏi màn hình.
+
+### 2. EAGLE SHIELD – KHIÊN BẢO VỆ ĐẠI BÀNG
+
+Khi người chơi nhặt được:
+
+- Kích hoạt bảo vệ Base/Eagle trong 10 giây.
+- Hai ô tường gạch BRICK nằm hai bên Base được chuyển tạm thời thành STEEL.
+- Trong 10 giây, hai ô này có đặc tính của STEEL: đạn không thể xuyên qua hoặc phá hủy.
+- Hết 10 giây, hai ô bảo vệ tự động trở về trạng thái BRICK ban đầu nếu không có cơ chế hợp lệ khác tác động.
+- Không thay đổi ô Base trung tâm.
+- Không tạo thêm Base.
+- Không thay đổi vị trí Base hoặc bố cục bản đồ.
+- Có hiệu ứng hình ảnh và bộ đếm thời gian bảo vệ còn lại.
+
+Đây là hiệu ứng tạm thời, không được ghi đè vĩnh viễn dữ liệu bản đồ gốc.
+
+### 3. FIREPOWER – TĂNG SỨC CÔNG PHÁ
+
+Khi người chơi nhặt được FIREPOWER:
+
+- Tank người chơi nhận hiệu ứng tăng gấp 2 sức công phá trong 10 giây.
+- Tăng gấp 2 khả năng công phá BRICK.
+- Có khả năng phá hủy STEEL.
+- Đồng thời tăng gấp 2 sát thương lên Tank địch.
+- Chỉ áp dụng cho Tank người chơi nhặt vật phẩm.
+- Không áp dụng cho Tank địch hoặc đồng minh.
+- Không tăng tốc độ bắn.
+- Không tăng tốc độ đạn.
+- Không thay đổi HP gốc của Tank địch.
+
+**A. Đối với BRICK**
+
+- Khả năng công phá BRICK tăng gấp 2 lần so với bình thường.
+- Không thay đổi các quy tắc va chạm khác.
+
+**B. Đối với STEEL**
+
+- Mỗi phát đạn FIREPOWER gây sát thương tương đương 50% độ bền tối đa của một ô STEEL.
+- Cần 2 phát đạn FIREPOWER hợp lệ để phá hủy một ô STEEL còn nguyên độ bền.
+- Đạn bình thường không được tự nhiên có khả năng phá hủy STEEL.
+- Không làm thay đổi khả năng va chạm hoặc đi xuyên qua STEEL.
+- Nếu hệ thống hiện tại chưa có độ bền STEEL, phải Audit và đề xuất cách bổ sung tương thích với Game Core trước khi triển khai.
+
+**C. Đối với Tank địch**
+
+FIREPOWER tăng gấp 2 sát thương lên Tank địch.
+
+Số phát đạn cần thiết để tiêu diệt Tank địch:
+
+| Loại Tank địch | Số phát đạn bình thường | Số phát đạn khi có FIREPOWER |
+|---|---:|---:|
+| Basic Tank | 1 | 1 |
+| Fast Tank | 1 | 1 |
+| Power Tank | 2 | 1 |
+| Armor Tank | 4 | 2 |
+
+Quy tắc:
+
+- Bảng tính áp dụng khi Tank địch còn đầy HP và mỗi phát đạn trúng hợp lệ.
+- Chỉ các phát đạn được bắn trong thời gian FIREPOWER còn hiệu lực mới được tăng sát thương.
+- Không giảm HP Tank địch ngay khi người chơi nhặt vật phẩm.
+- Không thay đổi HP gốc của Tank địch.
+- Không thay đổi XP nhận được khi tiêu diệt Tank.
+- Không cộng XP nhiều lần cho một Tank bị tiêu diệt.
+
+**D. Thời gian hiệu lực**
+
+- Hiệu lực kéo dài 10 giây kể từ lúc nhặt.
+- Hết 10 giây, sức công phá và sát thương trở về bình thường.
+- Có hiệu ứng hình ảnh và bộ đếm thời gian còn lại.
+- Nếu nhặt thêm FIREPOWER khi đang có hiệu lực, làm mới thời gian lên 10 giây tính từ lần nhặt mới nhất.
+- Không cộng dồn sát thương thành x4, x8 hoặc cao hơn.
+
+### 4. SPEED BOOST – TĂNG TỐC
+
+Khi người chơi nhặt được:
+
+- Tốc độ di chuyển Tank người chơi tăng gấp 2 lần.
+- Thời gian hiệu lực 10 giây.
+- Chỉ áp dụng cho Tank người chơi nhặt vật phẩm.
+- Không tăng tốc độ đạn.
+- Không tăng tốc độ Tank địch.
+- Không thay đổi tốc độ game tick hoặc FPS.
+- Hết 10 giây, tốc độ trở về giá trị ban đầu.
+- Có hiệu ứng hình ảnh và bộ đếm thời gian còn lại.
+- Nếu nhặt thêm SPEED BOOST khi đang có hiệu lực, làm mới thời gian lên 10 giây tính từ lần nhặt mới nhất.
+- Không cộng dồn tốc độ thành x4, x8 hoặc cao hơn.
+- Không làm mất hiệu lực các quy tắc va chạm, địa hình và vật cản.
+
+## 6.4. QUY TẮC XUẤT HIỆN VẬT PHẨM
+
+### A. Thời gian bắt đầu
+
+- Không xuất hiện vật phẩm trước mốc 10 giây gameplay.
+- Đợt đầu tiên xuất hiện tại mốc 10 giây.
+- Áp dụng ngay từ Stage 1 cho SOLO, CO-OP A.I và CO-OP ONLINE.
+- Không tính thời gian ở menu, màn hình chờ hoặc tải Stage.
+- Khi Pause, đồng hồ xuất hiện vật phẩm phải dừng.
+- Khi Resume, đồng hồ tiếp tục từ thời điểm đã tạm dừng.
+- Sử dụng gameplay clock, không dùng thời gian thực của trình duyệt.
+
+### B. Tổng số đợt và vật phẩm
+
+Trong một Stage có tối đa 4 đợt xuất hiện, tổng cộng 6 vật phẩm.
+
+Phân bổ cố định:
+
+| Đợt | Thời điểm xuất hiện | Số vật phẩm |
+|---:|---:|---:|
+| 1 | Sau 10 giây | 1 |
+| 2 | Sau 30 giây | 2 |
+| 3 | Sau 50 giây | 1 |
+| 4 | Sau 70 giây | 2 |
+| **Tổng** | **4 đợt** | **6 vật phẩm** |
+
+Quy tắc:
+
+- Khoảng cách giữa hai đợt liên tiếp là 20 giây gameplay.
+- Mỗi đợt phải tạo đúng số lượng theo bảng.
+- Tổng số vật phẩm tối đa là 6 trong một Stage.
+- Nếu Stage kết thúc trước thời điểm của một đợt, không tạo vật phẩm sau khi trận đấu kết thúc.
+- Không tạo đợt xuất hiện bù khi vật phẩm trước đó đã biến mất hoặc được nhặt.
+- Không tạo 8 vật phẩm theo cấu hình cũ.
+- Không thay đổi phân bổ 1–2–1–2.
+
+### C. Ngẫu nhiên loại vật phẩm
+
+Bốn loại vật phẩm được lựa chọn ngẫu nhiên:
+
+- BOMB.
+- EAGLE SHIELD.
+- FIREPOWER.
+- SPEED BOOST.
+
+Giới hạn:
+
+- Mỗi loại vật phẩm được xuất hiện tối đa 2 lần trong một Stage.
+- Theo dõi số lần xuất hiện riêng của từng loại.
+- Khi một loại đã xuất hiện đủ 2 lần, không được chọn loại đó thêm.
+- Thứ tự xuất hiện phải ngẫu nhiên, không cố định.
+- Thuật toán phải bảo đảm luôn tuân thủ giới hạn tối đa 2 lần cho từng loại.
+- Không tạo thêm loại vật phẩm thứ năm.
+
+Tổng cộng 6 vật phẩm và 4 loại vật phẩm, mỗi loại tối đa 2 lần. Thuật toán phải chọn ngẫu nhiên có điều kiện để bảo đảm phân bổ hợp lệ.
+
+### D. Ngẫu nhiên vị trí
+
+- Vị trí xuất hiện được lựa chọn ngẫu nhiên trong khu vực bản đồ hợp lệ.
+- Không xuất hiện trong STEEL, BRICK, WATER hoặc vật cản không thể đi qua.
+- Không xuất hiện đè lên Tank, Base, vị trí spawn hoặc vật thể quan trọng.
+- Hai vật phẩm trong cùng một đợt phải ở hai vị trí khác nhau, không chồng lấn.
+- Nếu không tìm được vị trí hợp lệ, thực hiện tìm vị trí thay thế theo giới hạn thử đã định.
+- Không tạo vật phẩm tại vị trí không hợp lệ.
+- Không thay đổi bố cục bản đồ.
+
+### E. Thời gian tồn tại
+
+- Mỗi vật phẩm tồn tại tối đa 5 giây kể từ lúc xuất hiện.
+- Hiển thị bộ đếm ngược 5 giây.
+- Nếu không được nhặt trong 5 giây, vật phẩm tự động biến mất.
+- Vật phẩm hết hạn không thể được nhặt hoặc kích hoạt.
+- Không tạo vật phẩm thay thế ngay lập tức khi vật phẩm cũ biến mất.
+- Việc biến mất không làm tăng số lần xuất hiện của loại vật phẩm.
+
+## 6.5. QUY TẮC NHẶT VÀ KÍCH HOẠT
+
+- Người chơi phải tiếp xúc hợp lệ với vật phẩm mới được nhặt.
+- Việc nhặt chỉ được xử lý một lần.
+- Khi nhặt, vật phẩm biến mất ngay khỏi bản đồ.
+- Hiệu ứng phải được kích hoạt đúng loại.
+- Không kích hoạt nếu người chơi đã chết hoặc trận đấu đã kết thúc.
+- Không để nhiều sự kiện va chạm cùng nhặt một vật phẩm.
+- Mỗi hiệu ứng có thời gian bắt đầu, thời gian kết thúc và trạng thái rõ ràng.
+- Nếu nhặt lại cùng loại đang có hiệu lực, làm mới thời gian lên 10 giây; không cộng dồn hệ số.
+- Các loại hiệu ứng khác nhau có thể cùng tồn tại nếu không xung đột.
+- Không để hiệu ứng hết hạn nhưng vẫn còn tác dụng trong Game Core.
+
+Trong CO-OP A.I:
+
+- Xác định Tank người chơi nào nhặt vật phẩm.
+- Chỉ áp dụng SPEED BOOST và FIREPOWER lên Tank người chơi nhặt.
+- BOMB và EAGLE SHIELD áp dụng theo phạm vi toàn trận/Base đã thiết kế.
+
+Trong CO-OP ONLINE:
+
+- Host chỉ chọn Stage, không quản lý vật phẩm.
+- Hệ thống authoritative được xác định sau khi Audit kiến trúc hiện tại.
+- Một vật phẩm chỉ có thể được một người chơi nhặt.
+- Nếu hai người chơi cùng tiếp xúc một vật phẩm gần như đồng thời, chỉ người được xác nhận đầu tiên nhận vật phẩm.
+- Người chơi còn lại không nhận hiệu ứng.
+- Trạng thái vật phẩm và hiệu ứng được đồng bộ cho cả hai người chơi.
+- Không phát sinh XP, sát thương hoặc hiệu ứng trùng do đồng bộ mạng.
+
+## 6.6. KIỂM THỬ VẬT PHẨM
+
+Tối thiểu phải kiểm thử:
+
+1. Không có vật phẩm trước mốc 10 giây.
+2. Đợt 1 xuất hiện tại giây 10, đúng 1 vật phẩm.
+3. Đợt 2 xuất hiện tại giây 30, đúng 2 vật phẩm.
+4. Đợt 3 xuất hiện tại giây 50, đúng 1 vật phẩm.
+5. Đợt 4 xuất hiện tại giây 70, đúng 2 vật phẩm.
+6. Tổng số vật phẩm tối đa 6.
+7. Mỗi loại vật phẩm không xuất hiện quá 2 lần.
+8. SOLO Stage 1 có đầy đủ lịch vật phẩm.
+9. CO-OP A.I Stage 1 có đầy đủ lịch vật phẩm.
+10. CO-OP ONLINE Stage 1 có đầy đủ lịch vật phẩm.
+11. Các Stage tiếp theo vẫn áp dụng đầy đủ.
+12. Không xuất hiện vật phẩm trong VS.
+13. Vị trí xuất hiện hợp lệ.
+14. Không có hai vật phẩm chồng lên nhau.
+15. Vật phẩm biến mất sau 5 giây nếu chưa nhặt.
+16. Pause làm dừng đồng hồ.
+17. Resume tiếp tục đồng hồ chính xác.
+18. BOMB tiêu diệt tối đa 2 Tank địch còn sống.
+19. BOMB không gây hư hại Base người chơi.
+20. EAGLE SHIELD chuyển đúng hai ô BRICK bảo vệ Base thành STEEL trong 10 giây.
+21. EAGLE SHIELD tự hết hạn và khôi phục BRICK.
+22. FIREPOWER tăng gấp 2 khả năng công phá BRICK.
+23. FIREPOWER gây đúng 50% độ bền STEEL mỗi phát.
+24. FIREPOWER tiêu diệt Basic Tank bằng 1 phát.
+25. FIREPOWER tiêu diệt Fast Tank bằng 1 phát.
+26. FIREPOWER tiêu diệt Power Tank bằng 1 phát.
+27. FIREPOWER tiêu diệt Armor Tank bằng 2 phát.
+28. FIREPOWER hết hiệu lực sau 10 giây.
+29. SPEED BOOST tăng đúng 2 lần tốc độ di chuyển.
+30. SPEED BOOST hết hiệu lực sau 10 giây.
+31. Không có hiệu ứng cộng dồn vô hạn.
+32. Không nhặt hoặc kích hoạt cùng một vật phẩm hai lần.
+33. Không tạo vật phẩm khi Stage đã kết thúc.
+34. Không tạo vật phẩm sai số lượng trong từng đợt.
+35. Không tạo vật phẩm sai giới hạn mỗi loại.
+36. CO-OP ONLINE: Host chọn Stage và bắt đầu trận theo cơ chế hiện tại.
+37. CO-OP ONLINE: vật phẩm xuất hiện đúng lịch mà không yêu cầu Host thao tác tạo vật phẩm.
+38. CO-OP ONLINE: Host và Guest nhìn thấy cùng trạng thái vật phẩm.
+39. CO-OP ONLINE: Host nhặt trước thì chỉ Host nhận hiệu ứng.
+40. CO-OP ONLINE: Guest nhặt trước thì chỉ Guest nhận hiệu ứng.
+41. CO-OP ONLINE: hai người cùng tiếp xúc gần như đồng thời thì chỉ một người được xác nhận.
+42. CO-OP ONLINE: Guest không thể tự ghi đè trạng thái vật phẩm authoritative.
+43. CO-OP ONLINE: trạng thái vật phẩm được đồng bộ chính xác.
+44. CO-OP ONLINE: Pause/Resume đồng bộ thời gian vật phẩm.
+45. CO-OP ONLINE: mất kết nối và kết nối lại không làm phát lại vật phẩm đã nhặt hoặc đã hết hạn.
+46. CO-OP ONLINE: hiệu ứng không bị kích hoạt trùng.
+47. CO-OP ONLINE: XP không bị cộng trùng do xử lý sự kiện nhặt hoặc tiêu diệt.
+48. CO-OP ONLINE: kết thúc Stage không còn vật phẩm hoặc hiệu ứng tiếp tục hoạt động ngoài trận.
+49. CO-OP ONLINE: Host không có thêm quyền tạo hoặc quản lý vật phẩm.
+50. CO-OP ONLINE: nguồn authoritative được xác định đúng theo kiến trúc đã Audit.
+
+# VII. CHUẨN HÓA THUẬT NGỮ A.I
+
+Toàn bộ nội dung hiển thị cho người chơi phải thống nhất:
+
+- `AI` → `A.I`
+- `Co-op AI` → `CO-OP A.I`
+- `P1 + AI vs P2 + AI` → `P1 + A.I vs P2 + A.I`
+
+Áp dụng cho:
+
+- Menu.
+- Nút lựa chọn.
+- Mô tả chế độ.
+- Hướng dẫn.
+- Popup.
+- Thông báo.
+- Bảng thống kê.
+- Giao diện tiếng Việt.
+- Giao diện tiếng Anh.
+
+Chỉ chuẩn hóa nội dung hiển thị. Không đổi tên biến, hàm, class, API hoặc identifier trong mã nguồn nếu không cần thiết.
+
+# VIII. GIAO DIỆN VÀ TRẢI NGHIỆM NGƯỜI CHƠI
+
+- Giữ phong cách NEO-RETRO ART SYSTEM đã được duyệt.
+- Neon/Glitch ở mức Controlled.
+- Mobile Portrait First.
+- Tương thích PC, điện thoại và máy tính bảng.
+- Tiếng Việt là mặc định, tiếng Anh là lựa chọn bổ sung.
+- Chuyển ngôn ngữ không reload trang và không khởi động lại game.
+- Không làm thay đổi bố cục điều khiển Tank hiện tại nếu không cần thiết.
+- Menu SOLO, CO-OP, VS phải rõ ràng, dễ thao tác.
+- Không để chữ, nút hoặc bảng thống kê tràn khỏi màn hình.
+- BGM và SFX độc lập: tắt BGM không được làm tắt SFX.
+
+Hiệu ứng vật phẩm cần có nhận diện trực quan riêng:
+
+- BOMB: biểu tượng bom và hiệu ứng nổ.
+- EAGLE SHIELD: hiệu ứng khiên bảo vệ Base.
+- FIREPOWER: hiệu ứng tăng sức công phá.
+- SPEED BOOST: hiệu ứng tăng tốc.
+
+Bộ đếm thời gian hiệu lực của vật phẩm phải dễ nhận biết nhưng không che khuất khu vực chiến đấu.
+
+Trong CO-OP ONLINE, hiệu ứng hiển thị ở Host và Guest phải phản ánh cùng một trạng thái đã được xác nhận.
+
+# IX. LOẠI BỎ HOÀN TOÀN HỆ THỐNG XU
+
+Bắn Tank Online chỉ còn XP và hai cơ chế sử dụng XP:
+
+1. XP → Cấp bậc quân hàm.
+2. XP → Sao ⭐.
+
+Không còn hệ thống Xu.
+
+Kiểm tra và loại bỏ các thành phần Xu khỏi:
+
+- Giao diện người chơi.
+- Hồ sơ người chơi.
+- Bảng thống kê.
+- Phần thưởng.
+- Cửa hàng.
+- Logic cộng/trừ Xu.
+- API và service liên quan.
+- Các biến, hàm, type và constant chỉ phục vụ Xu.
+- Thông báo hoặc hướng dẫn nhắc đến Xu.
+
+Không xóa dữ liệu cũ một cách mù quáng.
+
+Không tự chuyển Xu cũ thành XP hoặc Sao.
+
+Không tự xóa trường dữ liệu trong Firestore Production.
+
+# X. QUY TRÌNH TRIỂN KHAI BẮT BUỘC
+
+## GIAI ĐOẠN 1 – AUDIT
+
+Trước khi sửa mã nguồn, thực hiện:
+
+1. Đọc cấu trúc dự án thực tế.
+2. Tìm toàn bộ tham chiếu Level.
+3. Tìm toàn bộ tham chiếu Xu.
+4. Kiểm tra hệ thống XP hiện tại.
+5. Kiểm tra nơi lưu XP và quyền ghi dữ liệu.
+6. Kiểm tra cơ chế chống cộng thưởng trùng.
+7. Kiểm tra dữ liệu người chơi trong Firestore.
+8. Kiểm tra Game Core và cơ chế vật phẩm hiện có.
+9. Kiểm tra va chạm và độ bền BRICK/STEEL.
+10. Kiểm tra đồng hồ gameplay và Pause/Resume.
+11. Kiểm tra cơ chế đồng bộ Co-op A.I.
+12. Kiểm tra kiến trúc CO-OP ONLINE hiện tại.
+13. Xác định chính xác quyền của Host và Guest.
+14. Xác định thành phần authoritative thực sự trong CO-OP ONLINE.
+15. Kiểm tra cơ chế đồng bộ sự kiện, trạng thái và thời gian.
+16. Kiểm tra xử lý reconnect, duplicate event và race condition.
+17. Kiểm tra các chế độ chơi hiện tại.
+18. Kiểm tra component menu và bảng thống kê.
+19. Xác định phần đã có, phần thiếu và nguy cơ ảnh hưởng hệ thống cũ.
+
+Xuất báo cáo AUDIT trước khi triển khai.
+
+## GIAI ĐOẠN 2 – IMPLEMENTATION PLAN
+
+Sau khi AUDIT:
+
+- Phân loại từng nhóm chức năng.
+- Nêu file dự kiến chỉnh sửa.
+- Nêu tác động dữ liệu.
+- Nêu rủi ro bảo mật.
+- Nêu phụ thuộc backend.
+- Nêu yêu cầu đồng bộ mạng.
+- Nêu rõ Host chỉ chọn Stage.
+- Nêu rõ cơ chế authoritative của vật phẩm được xác định theo kiến trúc hiện tại, không mặc định là Host.
+- Nêu phần nào có thể thực hiện an toàn.
+- Nêu phần nào cần quyết định bổ sung.
+
+Không tự suy đoán khi thiếu thông tin.
+
+## GIAI ĐOẠN 3 – IMPLEMENTATION
+
+Chỉ triển khai sau khi hoàn thành đánh giá phạm vi.
+
+- Không viết lại toàn bộ Game Core.
+- Không thay thế kiến trúc đang hoạt động chỉ để thuận tiện.
+- Không tạo dữ liệu giả.
+- Không dùng dữ liệu client không đáng tin cậy làm căn cứ cộng XP hoặc Sao.
+- Không làm thay đổi dữ liệu người chơi hiện tại.
+- Không triển khai VS Online nếu chưa có đặc tả.
+- Không triển khai cửa hàng Sao.
+- Không mở rộng vật phẩm ngoài 3 chế độ đã được duyệt.
+- Không tự ý thay đổi Firebase Production.
+- Không tự ý mở rộng quyền của Host.
+- Không mặc định Host là nguồn authoritative của vật phẩm.
+- Guest không được tự ghi đè trạng thái authoritative.
+- Không tạo hai nguồn sự thật cho cùng một trạng thái vật phẩm.
+- Không giả lập tính năng mạng nếu chưa có đồng bộ thực tế.
+
+Nếu thiếu backend đáng tin cậy, phải báo cáo rõ phần có thể triển khai an toàn và phần cần backend.
+
+## GIAI ĐOẠN 4 – TESTING
+
+Chạy đầy đủ:
+
+- TypeScript.
+- Build.
+- Unit tests.
+- Integration tests.
+- Regression tests.
+- Kiểm thử Game Core.
+- Kiểm thử giao diện.
+- Kiểm thử responsive.
+- Kiểm thử tiếng Việt và tiếng Anh.
+- Kiểm thử SOLO.
+- Kiểm thử CO-OP A.I.
+- Kiểm thử CO-OP ONLINE với Host và Guest thực tế hoặc môi trường mô phỏng có bằng chứng.
+- Kiểm thử đồng bộ vật phẩm và hiệu ứng giữa Host/Guest.
+- Kiểm thử xử lý kết nối lại và sự kiện trùng.
+
+Không tuyên bố PASS nếu chưa chạy kiểm thử thực tế.
+
+## GIAI ĐOẠN 5 – FINAL AUDIT
+
+Đối chiếu mã nguồn sau khi sửa với đặc tả này.
+
+Kiểm tra:
+
+- Có chức năng nào bị bỏ sót không?
+- Có chức năng cũ nào bị hỏng không?
+- Có dữ liệu nào bị ghi đè hoặc mất không?
+- XP và Sao có bị cộng trùng không?
+- Có còn tham chiếu Xu trong luồng người chơi không?
+- Có còn hiển thị Level không?
+- Lịch vật phẩm có đúng 1–2–1–2 không?
+- Tổng vật phẩm có đúng 6 không?
+- Có loại vật phẩm nào xuất hiện quá 2 lần không?
+- Vật phẩm có hoạt động từ Stage 1 ở cả SOLO, CO-OP A.I và CO-OP ONLINE không?
+- FIREPOWER có tăng sát thương Tank địch đúng yêu cầu không?
+- Các hiệu ứng có hết hạn đúng thời gian không?
+- Guest có nhận đúng trạng thái từ hệ thống authoritative không?
+- Host có bị gán thêm quyền tạo hoặc quản lý vật phẩm không?
+- Có sự kiện nhặt hoặc hiệu ứng bị xử lý trùng không?
+- VS có bị ảnh hưởng ngoài phạm vi không?
+
+# XI. BÁO CÁO KẾT QUẢ
+
+Sau khi hoàn tất, xuất báo cáo:
+
+1. EXECUTIVE SUMMARY.
+2. AUDIT FINDINGS.
+3. FILES MODIFIED.
+4. XP & RANK IMPLEMENTATION.
+5. STAR ECONOMY IMPLEMENTATION.
+6. XU REMOVAL AUDIT.
+7. STAGE ACHIEVEMENT BONUS.
+8. SOLO / CO-OP / VS MENU.
+9. ITEM SYSTEM DESIGN & IMPLEMENTATION.
+10. ITEM SPAWN SCHEDULE & RANDOMIZATION.
+11. ITEM EFFECTS & DURATION.
+12. FIREPOWER DAMAGE VERIFICATION.
+13. A.I TERMINOLOGY AUDIT.
+14. CO-OP ONLINE HOST/GUEST RESPONSIBILITY AUDIT.
+15. AUTHORITATIVE STATE ARCHITECTURE.
+16. FIREBASE & SECURITY IMPACT.
+17. DATA MIGRATION IMPACT.
+18. TEST RESULTS.
+19. BUILD & TYPESCRIPT RESULTS.
+20. REGRESSION TEST RESULTS.
+21. KNOWN LIMITATIONS.
+22. REMAINING BLOCKERS.
+23. PRODUCTION READINESS.
+24. RECOMMENDED NEXT ACTIONS.
+
+Mỗi kết quả PASS phải có bằng chứng:
+
+- Tên test.
+- Kết quả thực tế.
+- File liên quan.
+- Log hoặc output kiểm thử.
+- Mô tả cách xác minh.
+
+Phân biệt rõ:
+
+- PASS – đã kiểm chứng.
+- PARTIAL – mới hoàn thành một phần.
+- BLOCKED – chưa thể thực hiện.
+- NOT TESTED – chưa kiểm thử.
+
+Không dùng số lượng test PASS để thay thế bằng chứng về tính an toàn dữ liệu hoặc đồng bộ mạng.
+
+# XII. CÁC ĐIỀU CẤM
+
+TUYỆT ĐỐI KHÔNG:
+
+1. Xóa XP cũ.
+2. Tự chuyển Xu cũ thành XP hoặc Sao.
+3. Thay đổi ngưỡng XP của 17 cấp bậc.
+4. Tạo thêm tiền tệ mới.
+5. Tạo hệ thống RP.
+6. Khôi phục Level 1–50.
+7. Trừ XP khi thăng cấp.
+8. Cộng Sao nhiều lần cho cùng một XP event.
+9. Cho phép client tự quyết định XP hoặc số dư Sao.
+10. Tạo lợi thế chiến đấu từ Skin ngoại hình.
+11. Tự tạo loại vật phẩm thứ năm.
+12. Thay đổi phân bổ vật phẩm 1–2–1–2.
+13. Tạo 8 vật phẩm hoặc số lượng khác với đặc tả.
+14. Để một loại vật phẩm xuất hiện quá 2 lần trong một Stage.
+15. Loại trừ Stage 1 khỏi hệ thống vật phẩm.
+16. Loại trừ CO-OP ONLINE khỏi hệ thống vật phẩm.
+17. Cho phép Guest tự ghi đè trạng thái vật phẩm authoritative.
+18. Mặc định Host chịu trách nhiệm tạo hoặc quản lý vật phẩm.
+19. Mặc định Host là authoritative của hệ thống vật phẩm.
+20. Để Host và một thành phần khác cùng trở thành nguồn authoritative cho cùng trạng thái.
+21. Để một vật phẩm được nhặt hoặc kích hoạt nhiều lần.
+22. Chỉ tăng sức công phá công trình mà bỏ qua sát thương Tank địch của FIREPOWER.
+23. Để FIREPOWER tăng sát thương thành x4, x8 khi nhặt liên tiếp.
+24. Tự tạo matchmaking hoặc VS Online chưa có đặc tả.
+25. Thay đổi Game Core không cần thiết.
+26. Thay đổi Firebase Production.
+27. Publish Firestore Rules.
+28. Tạo Firebase Project mới.
+29. Chuyển sang dịch vụ trả phí.
+30. Sync GitHub.
+31. Deploy website.
+32. Thay đổi domain bantank.online.
+
+# XIII. YÊU CẦU BẮT ĐẦU
+
+Bắt đầu bằng **GIAI ĐOẠN 1 – AUDIT**.
+
+Đọc mã nguồn thực tế và xuất báo cáo đầy đủ trước khi chỉnh sửa.
+
+Nếu có vấn đề chưa rõ hoặc xung đột với kiến trúc hiện tại:
+
+- Nêu chính xác vấn đề.
+- Chỉ rõ file hoặc chức năng liên quan.
+- Đề xuất phương án.
+- Đánh giá tác động.
+- Không tự suy đoán hoặc tự mở rộng phạm vi.
+
+Sau khi hoàn thành AUDIT, trình bày kế hoạch triển khai theo từng nhóm chức năng, chỉ rõ phần nào có thể thực hiện an toàn và phần nào cần quyết định bổ sung.
+
+Không tự ý Sync GitHub, Deploy website, thay đổi Firebase Production hoặc Publish Firestore Rules.
+
+**ƯU TIÊN CAO NHẤT: BẢO TOÀN DỮ LIỆU NGƯỜI CHƠI – BẢO MẬT XP/SAO – ĐỒNG BỘ CHÍNH XÁC CO-OP ONLINE – GIỮ ĐÚNG QUYỀN HOST – KHÔNG PHÁ VỠ GAMEPLAY ĐÃ NGHIỆM THU.**

@@ -29,12 +29,14 @@ import { getCampaignStageSpec, TOTAL_CAMPAIGN_STAGES } from './campaignStages.ts
 import { StageProgressionManager } from './stageProgression.ts';
 import { SystemAuditLogger } from './systemAuditLogger.ts';
 import { PlayerStatsManager } from './playerStatsManager.ts';
+import { cloneStageItemSystemState } from './supportItemSystem.ts';
 import type {
   BulletStructure,
   EnemyTank,
   GameCoreState,
   InputState,
   PlayerCombatStats,
+  StageItemSystemState,
   TankStructure,
 } from './types.ts';
 
@@ -86,6 +88,8 @@ export interface CoopAuthoritativeSnapshot {
   currentStageMap?: number[][];
   stageElapsedSeconds: number;
   brickSubTiles: Record<string, number>;
+  steelSubTiles?: Record<string, number>;
+  itemSystem?: StageItemSystemState;
   isBaseDestroyed: boolean;
   isGameOver: boolean;
   isStageClear: boolean;
@@ -632,6 +636,14 @@ export function buildAuthoritativeSnapshot(
       damagedBricks[k] = v;
     }
   }
+  const damagedSteel: Record<string, number> = {};
+  if (state.terrain.steelSubTiles) {
+    for (const [k, v] of Object.entries(state.terrain.steelSubTiles)) {
+      if (v !== 15) {
+        damagedSteel[k] = v;
+      }
+    }
+  }
 
   const difficulty: 'DEFAULT' | 'EXTREME' =
     state.difficulty === 'EXTREME' ? 'EXTREME' : 'DEFAULT';
@@ -703,6 +715,8 @@ export function buildAuthoritativeSnapshot(
       (state.tickCount / MATCH_TIMER_CONFIG.TICKS_PER_SECOND).toFixed(2)
     ),
     brickSubTiles: damagedBricks,
+    steelSubTiles: Object.keys(damagedSteel).length > 0 ? damagedSteel : undefined,
+    itemSystem: state.itemSystem ? cloneStageItemSystemState(state.itemSystem) : undefined,
     isBaseDestroyed: state.terrain.isBaseDestroyed,
     isGameOver: state.isGameOver,
     isStageClear: state.isStageClear,

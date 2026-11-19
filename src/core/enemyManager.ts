@@ -527,17 +527,21 @@ export class EnemyManager {
    * Applies damage to an enemy tank.
    * Returns true if the enemy was destroyed.
    */
-  public damageEnemy(enemyId: string, damage: number = 1): { destroyed: boolean; score: number; enemy?: EnemyTank } {
+  public damageEnemy(
+    enemyId: string,
+    damage: number = 1,
+    options?: { ignoreShield?: boolean }
+  ): { destroyed: boolean; score: number; enemy?: EnemyTank } {
     const enemy = this.activeEnemies.find((e) => e.id === enemyId);
     if (!enemy || !enemy.isAlive) {
       return { destroyed: false, score: 0 };
     }
 
-    // Spawn shield blocks all damage
+    // Spawn shield blocks normal bullet damage unless bypassed by BOMB support item
     if (enemy.spawnShieldTimer <= 0) {
       enemy.isShielded = false;
     }
-    if (enemy.spawnShieldTimer > 0 || enemy.isShielded) {
+    if (!options?.ignoreShield && (enemy.spawnShieldTimer > 0 || enemy.isShielded)) {
       return { destroyed: false, score: 0, enemy };
     }
 

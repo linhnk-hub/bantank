@@ -50,6 +50,12 @@ import {
   type StageMatchSessionToken,
   type StageClearProof,
 } from './stageProgression.ts';
+import {
+  createInitialStageItemSystemState,
+  stepSupportItemSystemTick,
+  isTileProtectedByEagleShield,
+  cloneStageItemSystemState,
+} from './supportItemSystem.ts';
 import type { CombatEvent, CombatEventType } from './types.ts';
 
 export const NEUTRAL_INPUT: Readonly<InputState> = Object.freeze({
@@ -532,6 +538,11 @@ export class GameEngine {
       remainingTicks,
       remainingSeconds: matchDurationSeconds,
       terrain: customTerrain ?? createRuntimeTerrainState(currentStage.map),
+      itemSystem: createInitialStageItemSystemState(
+        currentStage.id,
+        this.stageRunSeq,
+        this.gameMode
+      ),
       isGameOver: false,
       isStageClear: false,
       isTimeoutGameOver: false,
@@ -889,6 +900,7 @@ export class GameEngine {
       remainingTicks,
       remainingSeconds: matchDurationSeconds,
       terrain: createRuntimeTerrainState(stage.map),
+      itemSystem: createInitialStageItemSystemState(stage.id, this.stageRunSeq, this.gameMode),
       isGameOver: false,
       isStageClear: false,
       isTimeoutGameOver: false,
@@ -1093,6 +1105,7 @@ export class GameEngine {
       remainingTicks,
       remainingSeconds: matchDurationSeconds,
       terrain: createRuntimeTerrainState(stage.map),
+      itemSystem: createInitialStageItemSystemState(stage.id, this.stageRunSeq, this.gameMode),
       isGameOver: false,
       isStageClear: false,
       isTimeoutGameOver: false,
@@ -1166,6 +1179,11 @@ export class GameEngine {
       remainingTicks,
       remainingSeconds: matchDurationSeconds,
       terrain: customTerrain ?? createRuntimeTerrainState(currentStage.map),
+      itemSystem: createInitialStageItemSystemState(
+        currentStage.id,
+        this.stageRunSeq,
+        this.gameMode
+      ),
       isGameOver: false,
       isStageClear: false,
       isTimeoutGameOver: false,
@@ -1275,7 +1293,7 @@ export class GameEngine {
   /**
    * Executes exactly one deterministic simulation tick (dt = 1/60s).
    */
-  public stepTick(input: InputState): void {
+  public stepTick(input: InputState = this.externalInput): void {
     if (
       this.isPaused ||
       this.state.matchState === MATCH_STATES.PAUSED ||
@@ -1387,6 +1405,14 @@ export class GameEngine {
       }
     }
 
+    if (!this.state.itemSystem) {
+      this.state.itemSystem = createInitialStageItemSystemState(
+        this.state.currentStageId,
+        this.stageRunSeq,
+        this.gameMode
+      );
+    }
+
     // 2. P1 Tank Movement & Continuous Shooting (disabled when dead or in Spectator mode)
     // P1 & P2 tanks can pass through each other in Co-op modes to prevent close-quarters collision lock
     if (
@@ -1396,14 +1422,23 @@ export class GameEngine {
       !this.state.p1State.hasLeftMatch
     ) {
       const obstaclesForP1 = this.state.enemies;
-      updateTankMovement(this.state.p1, input, this.state.terrain, obstaclesForP1);
+      const p1SpeedMultiplier =
+        this.state.itemSystem.p1Effects.speedBoostTicksRemaining > 0 ? 2 : 1;
+      updateTankMovement(
+        this.state.p1,
+        input,
+        this.state.terrain,
+        obstaclesForP1,
+        p1SpeedMultiplier
+      );
 
       // Continuous fire: if shoot button is held down and no P1 bullet is active, immediately fire!
       const p1HasBullet = this.state.bullets.some(
         (b) => b.ownerId === this.state.p1.id || (b.ownerType === 'player' && b.ownerId !== 'p2')
       );
       if (input.shoot && !p1HasBullet) {
-        const newBullet = spawnBullet(this.state.p1, null);
+        const p1HasFirepower = this.state.itemSystem.p1Effects.firepowerTicksRemaining > 0;
+        const newBullet = spawnBullet(this.state.p1, null, { hasFirepower: p1HasFirepower });
         if (newBullet) {
           newBullet.ownerType = 'player';
           this.state.bullets.push(newBullet);
@@ -1416,7 +1451,7 @@ export class GameEngine {
       this.lastShootState = false;
     }
 
-    // 2b. P2 Movement & Shooting (AI in TWO_PLAYERS_AI, Human Remote Input in TWO_PLAYERS_ONLINE)
+    // 2b. P2 Movement & Shooting (A.I in TWO_PLAYERS_AI, Human Remote Input in TWO_PLAYERS_ONLINE)
     if (
       this.gameMode === 'TWO_PLAYERS_AI' &&
       this.state.p2 &&
@@ -1444,7 +1479,15 @@ export class GameEngine {
       };
 
       const obstaclesForP2 = this.state.enemies;
-      updateTankMovement(this.state.p2, p2MoveInput, this.state.terrain, obstaclesForP2);
+      const p2SpeedMultiplier =
+        this.state.itemSystem.p2Effects.speedBoostTicksRemaining > 0 ? 2 : 1;
+      updateTankMovement(
+        this.state.p2,
+        p2MoveInput,
+        this.state.terrain,
+        obstaclesForP2,
+        p2SpeedMultiplier
+      );
 
       if (
         p2Decision.shouldShoot &&
@@ -1457,7 +1500,8 @@ export class GameEngine {
           p2HasBullet
         )
       ) {
-        const p2Bullet = spawnBullet(this.state.p2, null);
+        const p2HasFirepower = this.state.itemSystem.p2Effects.firepowerTicksRemaining > 0;
+        const p2Bullet = spawnBullet(this.state.p2, null, { hasFirepower: p2HasFirepower });
         if (p2Bullet) {
           p2Bullet.ownerType = 'player';
           p2Bullet.ownerId = 'p2';
@@ -1475,11 +1519,20 @@ export class GameEngine {
       !this.state.p2State.hasLeftMatch
     ) {
       const obstaclesForP2 = this.state.enemies;
-      updateTankMovement(this.state.p2, this.externalInputP2, this.state.terrain, obstaclesForP2);
+      const p2SpeedMultiplier =
+        this.state.itemSystem.p2Effects.speedBoostTicksRemaining > 0 ? 2 : 1;
+      updateTankMovement(
+        this.state.p2,
+        this.externalInputP2,
+        this.state.terrain,
+        obstaclesForP2,
+        p2SpeedMultiplier
+      );
 
       const p2HasBullet = this.state.bullets.some((b) => b.ownerId === 'p2');
       if (this.externalInputP2.shoot && !p2HasBullet) {
-        const p2Bullet = spawnBullet(this.state.p2, null);
+        const p2HasFirepower = this.state.itemSystem.p2Effects.firepowerTicksRemaining > 0;
+        const p2Bullet = spawnBullet(this.state.p2, null, { hasFirepower: p2HasFirepower });
         if (p2Bullet) {
           p2Bullet.ownerType = 'player';
           p2Bullet.ownerId = 'p2';
@@ -1513,6 +1566,57 @@ export class GameEngine {
       this.state.enemyQueue = this.enemyManager.getQueue();
     }
 
+    // 3b. Support Item System Tick (Wave Spawning 10s/30s/50s/70s, 5s Ground Lifetime, P1/P2 Pickup & Effects)
+    stepSupportItemSystemTick({
+      itemSystem: this.state.itemSystem,
+      tickCount: this.state.tickCount,
+      stageId: this.state.currentStageId,
+      terrain: this.state.terrain,
+      p1: this.state.p1,
+      p2: this.isCoopMode() ? (this.state.p2 ?? null) : null,
+      enemies: this.state.enemies,
+      callbacks: {
+        onBombDestroyEnemy: (targetEnemy, pickedByPlayerId) => {
+          const hitResult = this.enemyManager.damageEnemy(
+            targetEnemy.id,
+            Math.max(10, targetEnemy.hp + 5),
+            { ignoreShield: true }
+          );
+          if (hitResult.destroyed) {
+            this.state.totalDefeatedEnemies++;
+            this.scoreManager.recordEnemyDefeated(targetEnemy.id, targetEnemy.enemyType);
+            this.state.score = this.scoreManager.getTotalScore();
+            this.state.highScore = this.scoreManager.getHighScore();
+            this.state.defeatedCounts = this.scoreManager.getStageStats();
+            const earnedPts = ENEMY_CONFIG.SPECS[targetEnemy.enemyType]?.score ?? 0;
+            if (pickedByPlayerId === 2) {
+              if (!this.state.p2Stats) {
+                this.state.p2Stats = createEmptyPlayerCombatStats();
+              }
+              this.state.p2Stats.score += earnedPts;
+              this.state.p2Stats.stageScore += earnedPts;
+              this.state.p2Stats.defeatedCounts[targetEnemy.enemyType] += 1;
+            } else {
+              if (!this.state.p1Stats) {
+                this.state.p1Stats = createEmptyPlayerCombatStats();
+              }
+              this.state.p1Stats.score += earnedPts;
+              this.state.p1Stats.stageScore += earnedPts;
+              this.state.p1Stats.defeatedCounts[targetEnemy.enemyType] += 1;
+            }
+            this.emitCombatEvent('TANK_EXPLOSION', targetEnemy.x + 8, targetEnemy.y + 8);
+          }
+        },
+        onEmitCombatEvent: (event) => {
+          this.combatEvents.push(event);
+          this.emit(event.type, { x: event.x, y: event.y, type: event.type });
+        },
+      },
+    });
+    if (this.enableEnemies) {
+      this.state.enemies = this.enemyManager.getActiveEnemies();
+    }
+
     // 4. Sync bullet if injected directly into state.bullet (test fixtures / backward-compatibility)
     if (this.state.bullet && !this.state.bullets.some((b) => b.id === this.state.bullet!.id)) {
       this.state.bullets.push(this.state.bullet);
@@ -1522,7 +1626,10 @@ export class GameEngine {
     let baseHitByBulletThisTick = false;
     const survivingBullets: BulletStructure[] = [];
     for (const b of this.state.bullets) {
-      const bulletResult = updateBullet(b, this.state.terrain);
+      const bulletResult = updateBullet(b, this.state.terrain, {
+        isProtectedEagleShieldTile: (r, c) =>
+          isTileProtectedByEagleShield(this.state.itemSystem, r, c),
+      });
       if (bulletResult.hitBase) {
         baseHitByBulletThisTick = true;
         this.emitCombatEvent('BASE_EXPLOSION', 104, 200);
@@ -1641,6 +1748,14 @@ export class GameEngine {
               this.virtualTouchInput = { ...NEUTRAL_INPUT };
             }
 
+            // Clear P1 active buffs on death
+            if (this.state.itemSystem) {
+              this.state.itemSystem.p1Effects.firepowerTicksRemaining = 0;
+              this.state.itemSystem.p1Effects.firepowerSecondsRemaining = 0;
+              this.state.itemSystem.p1Effects.speedBoostTicksRemaining = 0;
+              this.state.itemSystem.p1Effects.speedBoostSecondsRemaining = 0;
+            }
+
             // Immediately delete player 1 bullets; enemy bullets keep flying! (Point H)
             this.state.bullets = this.state.bullets.filter(
               (b) => b.ownerId !== this.state.p1.id
@@ -1674,6 +1789,12 @@ export class GameEngine {
               this.state.p2State.isSpectator = true;
               this.externalInputP2 = { ...NEUTRAL_INPUT };
               this.virtualTouchInputP2 = { ...NEUTRAL_INPUT };
+            }
+            if (this.state.itemSystem) {
+              this.state.itemSystem.p2Effects.firepowerTicksRemaining = 0;
+              this.state.itemSystem.p2Effects.firepowerSecondsRemaining = 0;
+              this.state.itemSystem.p2Effects.speedBoostTicksRemaining = 0;
+              this.state.itemSystem.p2Effects.speedBoostSecondsRemaining = 0;
             }
             this.state.bullets = this.state.bullets.filter(
               (b) => b.ownerId !== 'p2'
@@ -1955,7 +2076,9 @@ export class GameEngine {
       v.p2RenderDirection = requestedDir;
     }
 
-    const distancePx = TANK_CONFIG.SPEED_PX_S * dtSec; // 60 px/s
+    const p2SpeedBoostMult =
+      (this.state.itemSystem?.p2Effects.speedBoostTicksRemaining ?? 0) > 0 ? 2 : 1;
+    const distancePx = TANK_CONFIG.SPEED_PX_S * p2SpeedBoostMult * dtSec; // 60 px/s (120 px/s with SPEED_BOOST)
     let nextX = v.p2RenderX;
     let nextY = v.p2RenderY;
 
@@ -2128,6 +2251,37 @@ export class GameEngine {
         const c = Number(cStr);
         if (!Number.isNaN(r) && !Number.isNaN(c) && this.state.terrain.currentMap[r]) {
           this.state.terrain.currentMap[r][c] = mask === 0 ? 0 : 1;
+        }
+      }
+    }
+    if (snapshot.steelSubTiles && typeof snapshot.steelSubTiles === 'object') {
+      if (!this.state.terrain.steelSubTiles) {
+        this.state.terrain.steelSubTiles = {};
+      }
+      for (const [key, mask] of Object.entries(snapshot.steelSubTiles as Record<string, number>)) {
+        this.state.terrain.steelSubTiles[key] = mask;
+        const [rStr, cStr] = key.split('_');
+        const r = Number(rStr);
+        const c = Number(cStr);
+        if (!Number.isNaN(r) && !Number.isNaN(c) && this.state.terrain.currentMap[r]) {
+          if (mask === 0) {
+            this.state.terrain.currentMap[r][c] = 0;
+          }
+        }
+      }
+    }
+    if (snapshot.itemSystem && typeof snapshot.itemSystem === 'object') {
+      this.state.itemSystem = cloneStageItemSystemState(snapshot.itemSystem);
+      // Sync Eagle Shield side walls (12,5) and (12,7) on Guest map
+      const shieldActive = (this.state.itemSystem.eagleShieldTicksRemaining ?? 0) > 0;
+      for (const col of [5, 7]) {
+        if (this.state.terrain.currentMap[12]) {
+          if (shieldActive) {
+            this.state.terrain.currentMap[12][col] = 2; // STEEL
+          } else {
+            const brickMask = this.state.terrain.brickSubTiles[`12_${col}`] ?? 0b1111;
+            this.state.terrain.currentMap[12][col] = brickMask === 0 ? 0 : 1; // BRICK or EMPTY
+          }
         }
       }
     }

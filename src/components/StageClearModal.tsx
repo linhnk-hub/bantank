@@ -3,20 +3,22 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
-import { Trophy, Award, Clock, Heart, Users, Loader2, ShieldCheck } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { Award, CheckCircle2, Home, LogOut, RotateCcw, Star, Trophy } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
+import type { CoopPostStageReadyState } from '../core/coopOnlineManager.ts';
+import { SCORE_VALUES } from '../core/scoreManager.ts';
+import { TOTAL_CAMPAIGN_STAGES } from '../core/campaignStages.ts';
 import { getStartingLivesForDifficultyAndMode } from '../core/constants.ts';
+import { AuthManager } from '../core/authManager.ts';
 import {
-  CoopOnlineManager,
-  type CoopPlayerRole,
-  type CoopPostStageReadyState,
-} from '../core/coopOnlineManager.ts';
-import { formatSentenceLineBreaks } from '../core/textFormat.ts';
-import { getCampaignStageSpec, TOTAL_CAMPAIGN_STAGES } from '../core/campaignStages.ts';
+  PlayerLevelManager,
+  calculateStageAchievementBonus,
+  type PlayerLevelProgressInfo,
+} from '../core/playerLevelSystem.ts';
 import { useLanguage } from '../core/i18n.ts';
 
-interface StageClearModalProps {
+export interface StageClearModalProps {
   isOpen: boolean;
   state: GameCoreState | null;
   onNextStageOrReplay: () => void;
@@ -25,7 +27,7 @@ interface StageClearModalProps {
   isReturningToLobby?: boolean;
   returnToLobbyError?: string | null;
   isTrialMode?: boolean;
-  localOnlineRole?: CoopPlayerRole;
+  localOnlineRole?: 'HOST' | 'GUEST' | null;
   postStageReady?: CoopPostStageReadyState | null;
   onTogglePostStageReady?: () => void;
   hasTeammateLeft?: boolean;
@@ -40,367 +42,377 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
   isReturningToLobby = false,
   returnToLobbyError = null,
   isTrialMode = false,
-  localOnlineRole,
+  localOnlineRole = null,
   postStageReady = null,
   onTogglePostStageReady,
   hasTeammateLeft = false,
 }) => {
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
+  const levelMgr = PlayerLevelManager.getInstance();
+  const currentUser = AuthManager.getInstance().getCurrentUser();
+  const uid = currentUser?.uid ?? null;
+
+  const [levelProgress, setLevelProgress] = useState<PlayerLevelProgressInfo>(() =>
+    levelMgr.getLevelProgressForUid(uid)
+  );
+
+  useEffect(() => {
+    const sync = () => {
+      const latestUid = AuthManager.getInstance().getCurrentUser()?.uid ?? null;
+      setLevelProgress(levelMgr.getLevelProgressForUid(latestUid));
+    };
+    sync();
+    return levelMgr.subscribeExternalSync(sync);
+  }, [levelMgr, isOpen, state?.tickCount]);
 
   if (!isOpen || !state) return null;
 
+  const stageId = state.currentStageId ?? 1;
+  const stageName = state.currentStageName || `Stage ${stageId}`;
+  const isFinalStage = stageId >= TOTAL_CAMPAIGN_STAGES;
   const isCoopOnline = state.gameMode === 'TWO_PLAYERS_ONLINE';
-  const isCoop = state.gameMode === 'TWO_PLAYERS_AI' || isCoopOnline;
-  const effectiveOnlineRole =
-    localOnlineRole !== undefined
-      ? localOnlineRole
-      : isCoopOnline
-        ? CoopOnlineManager.getInstance().getRole()
-        : null;
+  const isTwoPlayers =
+    state.gameMode === 'TWO_PLAYERS_AI' || state.gameMode === 'TWO_PLAYERS_ONLINE';
+  const isOnlineGuest = isCoopOnline && localOnlineRole === 'GUEST';
 
+  const p1Counts = state.p1Stats?.defeatedCounts ?? state.defeatedCounts ?? {
+    BASIC: 0,
+    FAST: 0,
+    POWER: 0,
+    ARMOR: 0,
+  };
+  const p2Counts = state.p2Stats?.defeatedCounts ?? {
+    BASIC: 0,
+    FAST: 0,
+    POWER: 0,
+    ARMOR: 0,
+  };
+
+  const p1StageXp =
+    state.p1Stats?.stageScore ??
+    p1Counts.BASIC * SCORE_VALUES.BASIC +
+      p1Counts.FAST * SCORE_VALUES.FAST +
+      p1Counts.POWER * SCORE_VALUES.POWER +
+      p1Counts.ARMOR * SCORE_VALUES.ARMOR;
+  const p2StageXp =
+    state.p2Stats?.stageScore ??
+    p2Counts.BASIC * SCORE_VALUES.BASIC +
+      p2Counts.FAST * SCORE_VALUES.FAST +
+      p2Counts.POWER * SCORE_VALUES.POWER +
+      p2Counts.ARMOR * SCORE_VALUES.ARMOR;
+
+  const localStageXp = isOnlineGuest ? p2StageXp : p1StageXp;
   const startingLives = getStartingLivesForDifficultyAndMode(
     state.difficulty ?? 'DEFAULT',
     state.gameMode ?? 'SOLO'
   );
-  const localPlayerState =
-    isCoopOnline && effectiveOnlineRole === 'GUEST' && state.p2State
-      ? state.p2State
-      : state.p1State;
-  const isLocalEliminated = Boolean(
-    localPlayerState.isSpectator ||
-      localPlayerState.hasLeftMatch ||
-      (localPlayerState.isDead && localPlayerState.lives <= 0)
-  );
-  const livesLeft = isLocalEliminated
-    ? 0
-    : Math.max(0, Math.min(startingLives, Number(localPlayerState.lives ?? 0)));
+  const localRemainingLives = isOnlineGuest
+    ? (state.p2State?.lives ?? startingLives)
+    : (state.p1State?.lives ?? startingLives);
+  const localLivesLost = Math.max(0, startingLives - localRemainingLives);
 
-  const teammateState =
-    isCoop && state.p2State
-      ? isCoopOnline && effectiveOnlineRole === 'GUEST'
-        ? state.p1State
-        : state.p2State
-      : null;
-  const teammateEliminated = teammateState
-    ? Boolean(
-        teammateState.isSpectator ||
-          teammateState.hasLeftMatch ||
-          (teammateState.isDead && teammateState.lives <= 0)
-      )
-    : false;
-  const teammateLivesLeft = teammateState
-    ? teammateEliminated
-      ? 0
-      : Math.max(0, Math.min(startingLives, Number(teammateState.lives ?? 0)))
-    : 0;
-  const teammateLabel =
-    isCoopOnline && effectiveOnlineRole === 'GUEST'
-      ? t('Mạng còn lại của P1:', 'P1 Remaining Lives:')
-      : state.gameMode === 'TWO_PLAYERS_AI'
-        ? t('Mạng còn lại của Đồng đội AI:', 'AI Partner Remaining Lives:')
-        : t('Mạng còn lại của P2:', 'P2 Remaining Lives:');
+  const achievementBonus = calculateStageAchievementBonus({
+    isStageClear: true,
+    livesLost: localLivesLost,
+    stageElapsedSeconds: state.stageElapsedSeconds ?? 0,
+    matchDurationSeconds: state.matchDurationSeconds ?? 120,
+  });
 
-  const isOnlineGuest = isCoopOnline && effectiveOnlineRole === 'GUEST';
-  const localStats = isOnlineGuest
-    ? (state.p2Stats ?? {
-        score: 0,
-        stageScore: 0,
-        defeatedCounts: { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 },
-      })
-    : (state.p1Stats ?? {
-        score: state.score,
-        stageScore: 0,
-        defeatedCounts: state.defeatedCounts || { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 },
-      });
-  const counts = localStats.defeatedCounts;
-  const totalDefeated = counts.BASIC + counts.FAST + counts.POWER + counts.ARMOR;
-  const localTotalScore = localStats.score;
-  const localStageScore =
-    counts.BASIC * 1 + counts.FAST * 2 + counts.POWER * 3 + counts.ARMOR * 5;
-  void localStageScore;
-  const isNewRecord = localTotalScore >= state.highScore && localTotalScore > 0;
-  const elapsedMinutes = Math.floor(state.stageElapsedSeconds / 60);
-  const elapsedSeconds = Math.floor(state.stageElapsedSeconds % 60);
-  const timeFormatted = `${elapsedMinutes}m ${elapsedSeconds.toString().padStart(2, '0')}s`;
+  const rows = [
+    {
+      label: t('Tank Thường (Basic)', 'Basic Tank'),
+      unitXp: SCORE_VALUES.BASIC,
+      p1Count: p1Counts.BASIC,
+      p2Count: p2Counts.BASIC,
+      color: 'text-slate-100',
+    },
+    {
+      label: t('Tank Nhanh (Fast)', 'Fast Tank'),
+      unitXp: SCORE_VALUES.FAST,
+      p1Count: p1Counts.FAST,
+      p2Count: p2Counts.FAST,
+      color: 'text-sky-300',
+    },
+    {
+      label: t('Tank Hỏa Lực (Power)', 'Power Tank'),
+      unitXp: SCORE_VALUES.POWER,
+      p1Count: p1Counts.POWER,
+      p2Count: p2Counts.POWER,
+      color: 'text-emerald-300',
+    },
+    {
+      label: t('Tank Thiết Giáp (Armor)', 'Armor Tank'),
+      unitXp: SCORE_VALUES.ARMOR,
+      p1Count: p1Counts.ARMOR,
+      p2Count: p2Counts.ARMOR,
+      color: 'text-amber-500',
+    },
+  ];
 
-  const currentStageId = state.currentStageId ?? 1;
-  const stageName = state.currentStageName || getCampaignStageSpec(currentStageId).name;
-  const isFinalCampaignStage = currentStageId >= TOTAL_CAMPAIGN_STAGES;
-
-  const showCoopPostStageReady = Boolean(
-    isCoopOnline && !isFinalCampaignStage && onTogglePostStageReady && !hasTeammateLeft
-  );
-  const isMatchingReadyStage = Boolean(
+  const hasMatchingPostStageReady = Boolean(
     postStageReady &&
-      postStageReady.stageId === currentStageId &&
+      postStageReady.stageId === stageId &&
       postStageReady.stageRunSeq === state.stageRunSeq
   );
-  const p1PostReady = isMatchingReadyStage ? Boolean(postStageReady?.hostReady) : false;
-  const p2PostReady = isMatchingReadyStage ? Boolean(postStageReady?.guestReady) : false;
-  const myPostReady = isOnlineGuest ? p2PostReady : p1PostReady;
-  const localPlayerTag = isOnlineGuest ? 'P2' : 'P1';
+  const hostReady = hasMatchingPostStageReady ? Boolean(postStageReady?.hostReady) : false;
+  const guestReady = hasMatchingPostStageReady ? Boolean(postStageReady?.guestReady) : false;
+  const localReady = isOnlineGuest ? guestReady : hostReady;
 
-  const isP2Local = isCoopOnline && effectiveOnlineRole === 'GUEST';
-  const isP2Teammate = isCoop && !isP2Local;
-
-  // Milestone 7.4 Campaign Stage 10 Completion Reference: HOÀN THÀNH TOÀN BỘ CHIẾN DỊCH 10 STAGE!
-  const finalCampaignBannerText = t(
-    'HOÀN THÀNH TOÀN BỘ 10 MÀN!',
-    'ALL 10 CAMPAIGN STAGES COMPLETED!'
-  );
+  const rankLabel =
+    levelProgress.xpVerificationStatus === 'VERIFIED'
+      ? lang === 'en'
+        ? levelProgress.rankNameEn
+        : levelProgress.rankNameVi
+      : t('Chưa xác minh', 'Unverified');
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-between overflow-y-auto bg-[#050510]/88 backdrop-blur-md select-none animate-in fade-in duration-200">
-      <div className="flex-1 w-full flex items-start justify-center pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-4 px-2 sm:px-4">
-        <div className="bg-[#0b0d1e] border-2 border-[#FFB800] rounded-lg max-w-md w-full flex flex-col shadow-[0_0_32px_rgba(255,184,0,0.22)] overflow-hidden">
-          {/* Content Body */}
-          <div className="p-4 sm:p-5 space-y-3 sm:space-y-4">
-            {/* Header */}
-            <div className="text-center space-y-1.5">
-              <div className="inline-flex items-center justify-center w-10 h-10 sm:w-12 sm:h-12 rounded bg-[#FFB800]/15 text-[#FFB800] border border-[#FFB800]/40 mb-0.5">
-                <Trophy className="w-5 h-5 sm:w-6 sm:h-6" />
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#050510]/90 pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 select-none animate-in fade-in duration-150">
+      <div className="w-full max-w-lg bg-[#0b0d1e] border-2 border-[#FFB800]/80 rounded-xl p-5 sm:p-6 shadow-2xl text-[#EAF4FF] my-auto">
+        {/* Header */}
+        <div className="text-center border-b border-neutral-800 pb-4 mb-4">
+          <div className="inline-flex items-center justify-center w-11 h-11 rounded-lg bg-[#FFB800]/15 text-[#FFB800] border border-[#FFB800]/40 mb-2">
+            <Trophy className="w-6 h-6" />
+          </div>
+          <div className="font-hud text-xs font-bold tracking-widest uppercase text-[#FFB800]">
+            {isFinalStage
+              ? t(
+                  'HOÀN THÀNH TOÀN BỘ CHIẾN DỊCH 10 STAGE',
+                  `COMPLETED ALL ${TOTAL_CAMPAIGN_STAGES} CAMPAIGN STAGES`
+                )
+              : t('HOÀN THÀNH NHIỆM VỤ', 'MISSION ACCOMPLISHED')}
+          </div>
+          <h2 className="font-btn text-2xl sm:text-3xl font-black text-[#EAF4FF] mt-1 uppercase tracking-wide">
+            {isFinalStage
+              ? t('CHIẾN THẮNG', 'VICTORY')
+              : `${t('QUA MÀN', 'STAGE CLEAR')} ${stageId}: ${stageName}`}
+          </h2>
+        </div>
+
+        {/* Enemy Breakdown Table */}
+        <div className="bg-[#050510]/90 border border-neutral-800 rounded-xl p-3.5 sm:p-4 mb-4">
+          <div className="grid grid-cols-12 text-xs font-bold uppercase text-neutral-400 border-b border-neutral-800 pb-2 mb-2">
+            <div className="col-span-6">{t('Loại Xe Địch', 'Enemy Type')}</div>
+            <div className="col-span-3 text-right text-red-400">{t('P1 Diệt', 'P1 Kills')}</div>
+            {isTwoPlayers && (
+              <div className="col-span-3 text-right text-[#00F0FF]">
+                {state.gameMode === 'TWO_PLAYERS_AI'
+                  ? t('A.I Diệt', 'A.I Kills')
+                  : t('P2 Diệt', 'P2 Kills')}
               </div>
-              <h2 className="font-btn text-xl sm:text-2xl font-black tracking-wider text-[#FFB800] uppercase">
-                {isFinalCampaignStage
-                  ? t('CHINH PHỤC CHIẾN DỊCH!', 'CAMPAIGN CONQUERED!')
-                  : t('CHIẾN THẮNG', 'VICTORY')}
-              </h2>
-              <p className="font-hud text-sm sm:text-base text-[#00F0FF] font-bold tracking-wide">
-                {t('MÀN', 'STAGE')} {currentStageId} • {stageName}
-              </p>
-              {isFinalCampaignStage && (
-                <div className="font-btn inline-block px-2.5 py-0.5 rounded bg-emerald-950/90 border border-emerald-500/60 text-emerald-300 text-xs font-extrabold">
-                  {finalCampaignBannerText}
-                </div>
-              )}
-            </div>
+            )}
+          </div>
 
-            {/* Score & Record Display */}
-            <div className="bg-[#050510] border border-[#FFB800]/30 rounded-lg p-3 text-center space-y-1">
-              <div className="font-btn text-xs text-neutral-400 font-medium">
-                {isCoop
-                  ? t(`TỔNG XP CỦA BẠN (${localPlayerTag})`, `YOUR TOTAL XP (${localPlayerTag})`)
-                  : t('TỔNG XP TÍCH LŨY', 'TOTAL ACCUMULATED XP')}
-              </div>
-              <div className="font-hud text-3xl sm:text-4xl font-black text-[#FFB800] tracking-tight">
-                {localTotalScore.toLocaleString()} XP
-              </div>
-              {!isTrialMode && (
-                <div className="font-hud flex items-center justify-center gap-1.5 pt-0.5 text-sm">
-                  <Award className="w-3.5 h-3.5 text-[#FFB800]" />
-                  <span className="text-neutral-400">{t('Kỷ lục:', 'High XP:')}</span>
-                  <span className="font-bold text-[#EAF4FF]">{state.highScore.toLocaleString()} XP</span>
-                  {isNewRecord && (
-                    <span className="font-btn px-1.5 py-0.2 rounded bg-[#FFB800] text-[#050510] font-extrabold text-[10px] animate-pulse">
-                      {t('KỶ LỤC MỚI!', 'NEW RECORD!')}
-                    </span>
-                  )}
+          <div className="space-y-2 text-xs sm:text-sm">
+            {rows.map((r) => (
+              <div key={r.label} className="grid grid-cols-12 items-center">
+                <div className={`col-span-6 font-semibold ${r.color}`}>
+                  {r.label}{' '}
+                  <span className="text-[11px] text-neutral-500 font-hud">({r.unitXp} XP)</span>
                 </div>
-              )}
-            </div>
-
-            {/* Unified Statistics Breakdown */}
-            <div className="bg-[#050510]/85 border border-[#00F0FF]/25 rounded-lg p-3 space-y-2.5 font-hud text-xs sm:text-sm">
-              <div className="font-btn font-bold text-[#EAF4FF] pb-1.5 border-b border-neutral-800 flex justify-between items-center gap-2">
-                <span>
-                  {isCoop
-                    ? t(`THÀNH TÍCH CỦA BẠN (${localPlayerTag})`, `YOUR STATS (${localPlayerTag})`)
-                    : t('THỐNG KÊ CHIẾN TÍCH', 'COMBAT STATISTICS')}
-                </span>
-                <div className="font-hud flex items-center gap-1 text-xs sm:text-sm text-[#00F0FF] shrink-0">
-                  <Clock className="w-3.5 h-3.5 text-[#00F0FF]" />
-                  <span>{timeFormatted}</span>
-                </div>
-              </div>
-
-              <div className="space-y-1.5 font-hud text-xs sm:text-sm">
-                <div className="flex items-center justify-between text-neutral-300">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-white border border-neutral-400 shrink-0" />
-                    <span>Basic Tank (1 XP):</span>
-                  </span>
-                  <span className="font-bold">{counts.BASIC} {t('xe', 'tanks')} = {counts.BASIC * 1} XP</span>
-                </div>
-
-                <div className="flex items-center justify-between text-neutral-300">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-blue-500 border border-blue-300 shrink-0" />
-                    <span>Fast Tank (2 XP):</span>
-                  </span>
-                  <span className="font-bold">{counts.FAST} {t('xe', 'tanks')} = {counts.FAST * 2} XP</span>
-                </div>
-
-                <div className="flex items-center justify-between text-neutral-300">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 border border-emerald-300 shrink-0" />
-                    <span>Power Tank (3 XP):</span>
-                  </span>
-                  <span className="font-bold">{counts.POWER} {t('xe', 'tanks')} = {counts.POWER * 3} XP</span>
-                </div>
-
-                <div className="flex items-center justify-between text-neutral-300">
-                  <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-[#7c4a2d] border border-[#b07b56] shrink-0" />
-                    <span>Armor Tank (5 XP):</span>
-                  </span>
-                  <span className="font-bold">{counts.ARMOR} {t('xe', 'tanks')} = {counts.ARMOR * 5} XP</span>
-                </div>
-
-                <div className="pt-1.5 border-t border-neutral-800/80 flex items-center justify-between font-bold text-emerald-400">
-                  <span>
-                    {isCoop
-                      ? t(`Đã tiêu diệt (${localPlayerTag}):`, `Defeated (${localPlayerTag}):`)
-                      : t('Tổng tiêu diệt:', 'Total Defeated:')}
-                  </span>
-                  <span>
-                    {isCoop
-                      ? t(
-                          `${totalDefeated} xe (Đội: ${state.totalDefeatedEnemies}/30)`,
-                          `${totalDefeated} tanks (Team: ${state.totalDefeatedEnemies}/30)`
-                        )
-                      : t(`${totalDefeated} / 30 xe`, `${totalDefeated} / 30 tanks`)}
+                <div className="col-span-3 text-right font-hud">
+                  <span className="text-neutral-200">{r.p1Count}</span>
+                  <span className="text-neutral-500 text-[11px] ml-1">
+                    ({r.p1Count * r.unitXp} XP)
                   </span>
                 </div>
-
-                <div
-                  data-testid="stageclear-lives-stat"
-                  className="flex items-center justify-between pt-0.5 text-neutral-300"
-                >
-                  <span className={`flex items-center gap-1.5 ${isP2Local ? 'text-emerald-400' : 'text-[#FF0055]'}`}>
-                    <Heart className={`w-3.5 h-3.5 shrink-0 ${isP2Local ? 'fill-emerald-400 text-emerald-400' : 'fill-[#FF0055] text-[#FF0055]'}`} />
-                    <span>{t('Số mạng còn lại:', 'Remaining lives:')}</span>
-                  </span>
-                  <span className={`font-bold ${isP2Local ? 'text-emerald-400' : 'text-white'}`}>
-                    {livesLeft} {t('mạng', 'lives')}
-                  </span>
-                </div>
-
-                {teammateState && (
-                  <div className={`flex items-center justify-between pt-0.5 ${isP2Teammate ? 'text-emerald-400' : 'text-neutral-300'}`}>
-                    <span>{teammateLabel}</span>
-                    <span className={`font-bold ${isP2Teammate ? 'text-emerald-400' : 'text-white'}`}>
-                      {teammateLivesLeft} {t('mạng', 'lives')}
+                {isTwoPlayers && (
+                  <div className="col-span-3 text-right font-hud">
+                    <span className="text-neutral-200">{r.p2Count}</span>
+                    <span className="text-neutral-500 text-[11px] ml-1">
+                      ({r.p2Count * r.unitXp} XP)
                     </span>
                   </div>
                 )}
               </div>
+            ))}
+          </div>
+
+          <div className="border-t border-neutral-800 mt-3 pt-3 grid grid-cols-12 items-center text-xs sm:text-sm font-bold">
+            <div className="col-span-6 text-neutral-300">
+              {t('XP Tiêu Diệt Địch', 'Enemy Kill XP')}
             </div>
-          </div>
-
-          {showCoopPostStageReady && (
-            <div
-              data-testid="stageclear-coop-ready-panel"
-              className="mx-3 sm:mx-4 mb-2 p-2.5 rounded-lg bg-[#050510]/90 border border-emerald-500/35 space-y-1.5"
-            >
-              <div className="text-[11px] font-bold text-emerald-300 text-center">
-                {t(
-                  `Sẵn sàng chơi tiếp Màn ${currentStageId + 1} (cả 2 cùng sẵn sàng sẽ tự động vào màn)`,
-                  `Ready for Stage ${currentStageId + 1} (auto-starts when both players are ready)`
-                )}
-              </div>
-            <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
-              <div
-                className={`px-2 py-1 rounded border flex items-center justify-between ${
-                  p1PostReady
-                    ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 font-bold'
-                    : 'bg-neutral-900 border-neutral-800 text-neutral-400'
-                }`}
-              >
-                <span>P1:</span>
-                <span>{p1PostReady ? t('Đã sẵn sàng', 'Ready') : t('Chưa sẵn sàng', 'Not ready')}</span>
-              </div>
-              <div
-                className={`px-2 py-1 rounded border flex items-center justify-between ${
-                  p2PostReady
-                    ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300 font-bold'
-                    : 'bg-neutral-900 border-neutral-800 text-neutral-400'
-                }`}
-              >
-                <span>P2:</span>
-                <span>{p2PostReady ? t('Đã sẵn sàng', 'Ready') : t('Chưa sẵn sàng', 'Not ready')}</span>
-              </div>
+            <div className="col-span-3 text-right font-hud text-[#FFB800]">
+              +{p1StageXp} XP
             </div>
+            {isTwoPlayers && (
+              <div className="col-span-3 text-right font-hud text-[#00F0FF]">
+                +{p2StageXp} XP
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
-        {returnToLobbyError && isCoopOnline && (
-          <div className="mx-4 mb-2 p-2.5 rounded bg-red-950/75 border border-[#FF0055]/40 text-red-200 text-[11px] font-medium text-center whitespace-pre-line">
-            {formatSentenceLineBreaks(returnToLobbyError)}
-          </div>
-        )}
-
-        {/* Sticky Action Footer: ALWAYS accessible */}
-        <div className="p-3 sm:p-4 bg-[#050510]/95 border-t border-neutral-800 flex flex-wrap gap-2 shrink-0 safe-area-inset">
-          {showCoopPostStageReady && (
-            <button
-              type="button"
-              data-testid="stageclear-next-ready-btn"
-              disabled={isReturningToLobby}
-              onClick={onTogglePostStageReady}
-              className={`font-btn flex-1 min-w-[115px] min-h-[48px] flex items-center justify-center gap-1.5 py-2.5 sm:py-3 px-3 rounded font-extrabold text-xs whitespace-nowrap shrink-0 transition-all shadow-lg active:scale-95 disabled:opacity-60 cursor-pointer ${
-                myPostReady
-                  ? 'bg-neutral-800 hover:bg-neutral-700 text-[#FFB800] border border-[#FFB800]/50'
-                  : 'bg-emerald-500 hover:bg-emerald-400 text-black shadow-emerald-500/20'
-              }`}
-            >
-              <ShieldCheck className="w-4 h-4 shrink-0" />
-              <span>{myPostReady ? t('HỦY SẴN SÀNG', 'CANCEL READY') : t('SẴN SÀNG', 'READY')}</span>
-            </button>
-          )}
-
-          {isCoopOnline && onReturnToLobby ? (
-            <button
-              type="button"
-              data-testid="stageclear-return-lobby-btn"
-              disabled={isReturningToLobby}
-              onClick={onReturnToLobby}
-              className="font-btn flex-1 min-w-[115px] min-h-[48px] flex items-center justify-center gap-1.5 py-2.5 sm:py-3 px-3 rounded bg-[#00F0FF] hover:bg-cyan-300 text-[#050510] font-extrabold text-xs whitespace-nowrap shrink-0 transition-all shadow-lg shadow-[#00F0FF]/20 active:scale-95 disabled:opacity-60 cursor-pointer"
-            >
-              {isReturningToLobby ? (
-                <Loader2 className="w-4 h-4 animate-spin shrink-0" />
-              ) : (
-                <Users className="w-4 h-4 shrink-0" />
-              )}
-              <span>{isReturningToLobby ? t('ĐANG VÀO...', 'ENTERING...') : t('VỀ PHÒNG CHỜ', 'TO LOBBY')}</span>
-            </button>
-          ) : !isTrialMode ? (
-            <button
-              type="button"
-              data-testid="stageclear-next-btn"
-              onClick={onNextStageOrReplay}
-              className="font-btn flex-1 min-h-[48px] flex items-center justify-center py-2.5 sm:py-3 px-3 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-extrabold text-xs whitespace-nowrap shrink-0 transition-all shadow-lg shadow-[#FFB800]/20 active:scale-95 cursor-pointer"
-            >
-              <span>
-                {!isFinalCampaignStage
-                  ? t(`TIẾP TỤC MÀN ${currentStageId + 1}`, `NEXT STAGE ${currentStageId + 1}`)
-                  : t('CHƠI LẠI MÀN 10', 'REPLAY STAGE 10')}
+        {/* Achievement Bonus, Stars & Military Rank (Hidden high-score/rank persistence details in Trial Mode) */}
+        {!isTrialMode && (
+          <div className="bg-[#050510]/90 border border-[#FFB800]/30 rounded-xl p-3.5 sm:p-4 mb-4 space-y-2.5 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-neutral-400 font-semibold">
+                {t('XP tiêu diệt địch:', 'Combat Kill XP:')}
               </span>
-            </button>
-          ) : null}
+              <span className="font-hud font-bold text-[#EAF4FF]">+{localStageXp} XP</span>
+            </div>
 
-          <button
-            type="button"
-            data-testid={isTrialMode ? 'trial-return-login-btn' : 'stageclear-quit-menu-btn'}
-            disabled={isReturningToLobby}
-            onClick={onQuitToMenu}
-            className={`font-btn flex-1 min-w-[100px] min-h-[48px] flex items-center justify-center py-2.5 sm:py-3 px-3 rounded font-bold text-xs whitespace-nowrap shrink-0 transition-all active:scale-95 cursor-pointer ${
-              isTrialMode
-                ? 'bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-extrabold shadow-lg shadow-[#FFB800]/20'
-                : 'bg-[#0b0d1e] hover:bg-neutral-800 text-[#EAF4FF] border border-[#687386]/50'
-            }`}
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <div className="text-neutral-400 font-semibold">
+                  {t('XP thưởng thành tích màn:', 'Stage Achievement Bonus XP:')}
+                </div>
+                <div className="text-[11px] text-amber-300/90 mt-0.5">
+                  {lang === 'en' ? achievementBonus.labelEn : achievementBonus.labelVi}
+                </div>
+              </div>
+              <span
+                className={`font-hud font-black shrink-0 ${
+                  achievementBonus.bonusXp > 0 ? 'text-emerald-400' : 'text-neutral-400'
+                }`}
+              >
+                +{achievementBonus.bonusXp} XP
+              </span>
+            </div>
+
+            <div className="border-t border-neutral-800 pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="bg-[#0b0d1e] border border-neutral-800 rounded-lg p-2.5">
+                <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center gap-1">
+                  <Star className="w-3 h-3 text-yellow-300 fill-yellow-300" />
+                  <span>{t('Quy đổi Sao (25 XP = 1 ⭐)', 'Stars (25 XP = 1 ⭐)')}</span>
+                </div>
+                <div className="mt-1 flex items-baseline justify-between">
+                  <span className="text-yellow-300 font-black font-hud text-sm">
+                    {levelProgress.starBalance} ⭐
+                  </span>
+                  <span className="text-[11px] font-hud text-neutral-400">
+                    {levelProgress.unconvertedXp}/25 XP
+                  </span>
+                </div>
+              </div>
+
+              <div className="bg-[#0b0d1e] border border-neutral-800 rounded-lg p-2.5">
+                <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center gap-1">
+                  <Award className="w-3 h-3 text-[#FFB800]" />
+                  <span>{t('Quân hàm hiện tại', 'Military Rank')}</span>
+                </div>
+                <div className="mt-1 flex items-baseline justify-between gap-2">
+                  <span className="text-[#FFB800] font-btn font-black text-sm truncate">
+                    {rankLabel}
+                  </span>
+                  <span className="text-[11px] font-hud text-neutral-400 shrink-0">
+                    {levelProgress.xpVerificationStatus === 'VERIFIED' &&
+                    levelProgress.totalXp !== null
+                      ? `${levelProgress.totalXp} XP`
+                      : '--'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Co-op Online Post-Stage Ready Sync Panel */}
+        {isCoopOnline && !isFinalStage && !hasTeammateLeft && (
+          <div
+            data-testid="stageclear-coop-ready-panel"
+            className="mb-4 p-3.5 rounded-xl bg-[#050510]/90 border border-[#00F0FF]/35 space-y-2.5 text-xs"
           >
-            <span>{t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
-          </button>
-        </div>
-        </div>
-      </div>
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-[#00F0FF] uppercase">
+                {t('Đồng bộ qua màn Co-op Online', 'Co-op Online Stage Sync')}
+              </span>
+              <span className="text-neutral-400">
+                P1: {hostReady ? t('Sẵn sàng', 'Ready') : t('Đang chờ', 'Waiting')} • P2:{' '}
+                {guestReady ? t('Sẵn sàng', 'Ready') : t('Đang chờ', 'Waiting')}
+              </span>
+            </div>
+            {onTogglePostStageReady && (
+              <button
+                type="button"
+                onClick={onTogglePostStageReady}
+                className={`font-btn w-full min-h-[44px] py-2.5 px-4 rounded-lg font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  localReady
+                    ? 'bg-emerald-500 hover:bg-emerald-400 text-[#050510]'
+                    : 'bg-[#00F0FF] hover:bg-cyan-300 text-[#050510]'
+                }`}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                <span>
+                  {localReady
+                    ? t('ĐÃ SẴN SÀNG MÀN TIẾP THEO', 'READY FOR NEXT STAGE')
+                    : t('SẴN SÀNG MÀN TIẾP THEO', 'READY FOR NEXT STAGE')}
+                </span>
+              </button>
+            )}
+          </div>
+        )}
 
-      {/* Persistent Footer on Victory Screen */}
-      <footer className="w-full border-t border-neutral-800 bg-[#050510]/95 px-4 py-2.5 pb-[max(0.625rem,env(safe-area-inset-bottom))] text-center text-xs text-[#687386] shrink-0">
-        <div className="max-w-4xl mx-auto flex items-center justify-center gap-3">
-          <span>© 2026 Bắn Tank Online</span>
-        </div>
-      </footer>
+        {returnToLobbyError && (
+          <div className="mb-3 p-2.5 rounded-lg bg-red-950/60 border border-[#FF0055]/40 text-red-300 text-xs text-center">
+            {returnToLobbyError}
+          </div>
+        )}
+
+        {/* Action Buttons */}
+        {isTrialMode ? (
+          <div className="space-y-2.5">
+            <div className="w-full py-2.5 px-4 rounded-lg bg-emerald-950/50 border border-emerald-500/40 text-emerald-300 text-xs font-semibold text-center leading-relaxed">
+              {t(
+                'Bạn đã hoàn thành Màn 1 Chơi thử! Đăng nhập để chơi toàn bộ chiến dịch và lưu tiến độ Quân hàm.',
+                'You cleared Demo Stage 1! Sign in to play the full campaign and save your Military Rank.'
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={onNextStageOrReplay}
+              className="font-btn w-full min-h-[48px] py-3 px-5 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-sm uppercase tracking-wider transition-all shadow-lg shadow-[#FFB800]/25 active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span>{t('CHƠI THỬ', 'TRY DEMO')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={onQuitToMenu}
+              className="font-btn w-full min-h-[46px] py-2.5 px-5 rounded-lg bg-[#050510] hover:bg-neutral-800 text-[#EAF4FF] border border-neutral-700 font-bold text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+            >
+              <Home className="w-4 h-4" />
+              <span>{t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-2.5">
+            {(!isCoopOnline || isFinalStage || !isOnlineGuest) && (
+              <button
+                type="button"
+                onClick={onNextStageOrReplay}
+                className="font-btn w-full min-h-[48px] py-3 px-5 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-sm uppercase tracking-wider transition-all shadow-lg shadow-[#FFB800]/25 active:scale-95 cursor-pointer"
+              >
+                {isFinalStage
+                  ? t('CHƠI LẠI TỪ MÀN 1', 'PLAY AGAIN FROM STAGE 1')
+                  : t('TIẾP TỤC MÀN TIẾP THEO →', 'NEXT STAGE →')}
+              </button>
+            )}
+
+            {isCoopOnline && onReturnToLobby && (
+              <button
+                type="button"
+                onClick={onReturnToLobby}
+                disabled={isReturningToLobby}
+                className="font-btn w-full min-h-[46px] py-2.5 px-5 rounded-lg bg-[#050510] hover:bg-neutral-800 text-[#00F0FF] border border-[#00F0FF]/40 font-bold text-xs uppercase tracking-wider transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                {isReturningToLobby
+                  ? t('Đang về phòng Co-op...', 'Returning to Lobby...')
+                  : t('VỀ PHÒNG CHỜ CO-OP', 'RETURN TO CO-OP LOBBY')}
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={onQuitToMenu}
+              className="font-btn w-full min-h-[46px] py-2.5 px-5 rounded-lg bg-[#050510] hover:bg-neutral-800 text-neutral-300 border border-neutral-700 font-bold text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>{t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

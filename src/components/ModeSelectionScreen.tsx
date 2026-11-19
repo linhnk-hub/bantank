@@ -484,10 +484,24 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 )}
               </span>
               <span
+                data-testid="top-menu-player-rank"
+                className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded bg-amber-950/70 border border-[#FFB800]/50 text-[#FFB800] text-xs font-bold shrink-0"
+              >
+                {playerStats.rankBadge}
+              </span>
+              <span
+                data-testid="top-menu-player-stars"
+                className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-950/50 border border-amber-400/40 text-amber-300 text-xs font-mono font-bold shrink-0"
+                title={t('25 XP = 1 Sao ⭐', '25 XP = 1 Star ⭐')}
+              >
+                <span>⭐</span>
+                <span>{playerStats.starBalance.toLocaleString('vi-VN')}</span>
+              </span>
+              <span
                 data-testid="top-menu-player-level"
                 className="hidden"
               >
-                {playerStats.levelTopMenuBadge}
+                {playerStats.rankBadge}
               </span>
               {badgeInfo.label && (
                 <span className={`hidden sm:inline-block text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${badgeInfo.badgeStyle}`}>
@@ -556,7 +570,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   }`}
                 >
                   <Bot className="w-4 h-4 shrink-0" />
-                  <span>CO-OP AI</span>
+                  <span>CO-OP A.I</span>
                 </button>
 
                 <button
@@ -587,7 +601,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     {cardMode === 'SOLO'
                       ? t('Xác nhận: SOLO', 'Confirm: SOLO')
                       : cardMode === 'COOP_AI'
-                        ? t('Xác nhận: CO-OP AI', 'Confirm: CO-OP AI')
+                        ? t('Xác nhận: CO-OP A.I', 'Confirm: CO-OP A.I')
                         : t('Xác nhận: CO-OP ONLINE', 'Confirm: CO-OP ONLINE')}
                   </span>
                   <ArrowRight className="w-4 h-4 shrink-0" />
@@ -659,7 +673,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   </div>
                 </div>
 
-                {/* 2. CO-OP AI */}
+                {/* 2. CO-OP A.I */}
                 <div
                   data-testid="mode-card-coop-ai"
                   onClick={(e) => handleConfirmCardMode('COOP_AI', e)}
@@ -673,7 +687,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     <div className="flex items-center justify-between mb-2.5">
                       <span className="font-btn inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded text-xs font-bold bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/40">
                         <Bot className="w-3.5 h-3.5 text-[#00F0FF]" />
-                        <span>{t('P1 + AI', 'P1 + AI')}</span>
+                        <span>{t('P1 + A.I', 'P1 + A.I')}</span>
                       </span>
                       <div
                         className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
@@ -693,15 +707,15 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                       </div>
                       <div>
                         <h2 className="font-btn text-lg sm:text-xl font-black text-[#EAF4FF] tracking-wide">
-                          CO-OP AI
+                          CO-OP A.I
                         </h2>
                       </div>
                     </div>
 
                     <p className="text-sm text-neutral-200 leading-snug">
                       {t(
-                        'Phối hợp cùng xe tăng AI tiêu diệt quân địch.',
-                        'Team up with an AI tank partner to clear enemies.'
+                        'Phối hợp cùng xe tăng A.I tiêu diệt quân địch.',
+                        'Team up with an A.I tank partner to clear enemies.'
                       )}
                     </p>
                   </div>
@@ -787,6 +801,66 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   </div>
                 </div>
               </div>
+
+              {/* 3. NHÓM VS (P1 vs P2 & P1 + A.I vs P2 + A.I — Sắp ra mắt / Khoá an toàn theo BTO-PROGRESSION-MODES-V1.4 Mục 5.2) */}
+              <div
+                data-testid="mode-group-vs"
+                className="w-full mb-6 p-4 rounded-lg border border-[#FF0055]/35 bg-[#12060c]/85 text-left"
+              >
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-3 pb-2 border-b border-[#FF0055]/25">
+                  <div className="font-btn flex items-center gap-2 text-sm sm:text-base font-black text-[#FF0055] uppercase tracking-wider">
+                    <Flame className="w-4 h-4 text-[#FF0055]" />
+                    <span>{t('CHẾ ĐỘ ĐỐI KHÁNG: VS', 'VERSUS MODE: VS')}</span>
+                  </div>
+                  <span className="font-btn px-2 py-0.5 rounded bg-[#FF0055]/20 border border-[#FF0055]/50 text-rose-200 text-[11px] font-bold uppercase">
+                    {t('SẮP RA MẮT', 'COMING SOON')}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div
+                    data-testid="mode-card-vs-p1-p2"
+                    className="p-3.5 rounded-lg border border-[#FF0055]/30 bg-[#050510]/80 flex items-center justify-between gap-3 opacity-85"
+                  >
+                    <div>
+                      <div className="font-btn text-sm sm:text-base font-black text-rose-200">
+                        P1 vs P2
+                      </div>
+                      <p className="text-xs text-neutral-400 mt-0.5">
+                        {t(
+                          'Đối kháng trực tiếp 1v1 giữa hai người chơi.',
+                          'Direct 1v1 PvP battle between two players.'
+                        )}
+                      </p>
+                    </div>
+                    <span className="font-btn inline-flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-900 border border-neutral-700 text-neutral-400 text-xs font-bold shrink-0">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>{t('Chưa mở', 'Locked')}</span>
+                    </span>
+                  </div>
+
+                  <div
+                    data-testid="mode-card-vs-ai"
+                    className="p-3.5 rounded-lg border border-[#FF0055]/30 bg-[#050510]/80 flex items-center justify-between gap-3 opacity-85"
+                  >
+                    <div>
+                      <div className="font-btn text-sm sm:text-base font-black text-rose-200">
+                        P1 + A.I vs P2 + A.I
+                      </div>
+                      <p className="text-xs text-neutral-400 mt-0.5">
+                        {t(
+                          'Đối kháng tổ đội 2v2 kết hợp đồng minh A.I.',
+                          '2v2 team battle with A.I tank partners.'
+                        )}
+                      </p>
+                    </div>
+                    <span className="font-btn inline-flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-900 border border-neutral-700 text-neutral-400 text-xs font-bold shrink-0">
+                      <Lock className="w-3.5 h-3.5" />
+                      <span>{t('Chưa mở', 'Locked')}</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
             </>
           )}
 
@@ -800,7 +874,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   {cardMode === 'SOLO'
                     ? 'SOLO'
                     : cardMode === 'COOP_AI'
-                    ? 'CO-OP AI'
+                    ? 'CO-OP A.I'
                     : 'CO-OP ONLINE'}
                 </h1>
               </div>

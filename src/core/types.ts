@@ -213,6 +213,65 @@ export interface P1PlayerState {
 }
 
 /* ====================================================================
+   BTO-PROGRESSION-MODES-V1.4 SECTION 6.2: SUPPORT ITEMS (4 LOẠI VẬT PHẨM)
+==================================================================== */
+
+export type SupportItemType = 'BOMB' | 'EAGLE_SHIELD' | 'FIREPOWER' | 'SPEED_BOOST';
+
+export interface ActiveSupportItem {
+  id: string;
+  type: SupportItemType;
+  waveIndex: 1 | 2 | 3 | 4;
+  x: number;
+  y: number;
+  row: number;
+  col: number;
+  spawnedAtTick: number;
+  expiresAtTick: number;
+  remainingTicks: number;
+  remainingSeconds: number;
+}
+
+export interface PlayerActiveItemEffects {
+  firepowerTicksRemaining: number;
+  firepowerSecondsRemaining: number;
+  speedBoostTicksRemaining: number;
+  speedBoostSecondsRemaining: number;
+}
+
+export interface EagleShieldWallBackupTile {
+  row: number;
+  col: number;
+  tileType: number;
+  brickMask: number;
+  steelMask: number;
+}
+
+export interface StageItemPickupEvent {
+  itemId: string;
+  type: SupportItemType;
+  pickedBy: 'P1' | 'P2';
+  tickCount: number;
+  destroyedEnemyIds?: string[];
+}
+
+export interface StageItemSystemState {
+  enabled: boolean;
+  seed: number;
+  triggeredWaves: number[];
+  spawnCountsByType: Record<SupportItemType, number>;
+  totalSpawnedCount: number;
+  activeItems: ActiveSupportItem[];
+  consumedItemIds: string[];
+  eagleShieldTicksRemaining: number;
+  eagleShieldSecondsRemaining: number;
+  eagleShieldOriginalTiles: EagleShieldWallBackupTile[];
+  p1Effects: PlayerActiveItemEffects;
+  p2Effects: PlayerActiveItemEffects;
+  lastPickupEvent: StageItemPickupEvent | null;
+}
+
+/* ====================================================================
    MILESTONE 4: MATCH LIFECYCLE & STAGE PROGRESSION TYPES
 ==================================================================== */
 
@@ -293,6 +352,7 @@ export interface GameCoreState {
   remainingTicks: number;
   remainingSeconds: number;
   terrain: RuntimeTerrainState;
+  itemSystem?: StageItemSystemState;
   isGameOver: boolean;
   isStageClear: boolean;
   isTimeoutGameOver: boolean;
@@ -321,23 +381,15 @@ export interface CombatEvent {
 }
 
 /* ====================================================================
-   ECONOMY SEPARATION: XP (PROGRESSION) VS XU (CURRENCY)
-   Strict guarantee: XP and Xu are 100% decoupled in gameplay loops.
-   No automatic conversion or exchange rate exists.
+   STAR ECONOMY: XP (PROGRESSION) -> SAO ⭐ (25 XP = 1 SAO)
+   `Xu` has been completely removed from the player economy.
 ==================================================================== */
 
 export interface PlayerEconomyState {
   totalXp: number;
-  xuBalance: number;
-}
-
-export interface EconomyConversionInterface {
-  /**
-   * Dormant manual conversion interface reserved for future intentional actions.
-   * STRICT GUARANTEE: Never executed automatically during gameplay.
-   */
-  canConvertXpToXu: (xpAmount: number) => boolean;
-  convertXpToXuManual?: (xpAmount: number) => { success: boolean; convertedXu: number; remainingXp: number };
+  starBalance: number;
+  unconvertedXp: number;
+  xpToNextStar: number;
 }
 
 export interface TestCaseResult {
@@ -349,4 +401,3 @@ export interface TestCaseResult {
   expectedBehavior?: string;
   whyItMatters?: string;
 }
-

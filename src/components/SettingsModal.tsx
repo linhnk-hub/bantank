@@ -66,6 +66,7 @@ import {
   formatPvpRankLabel,
   type PlayerFullStatisticsSnapshot,
 } from '../core/playerStatsManager.ts';
+import { calculateMilitaryRankFromTotalXp } from '../core/playerLevelSystem.ts';
 import {
   DifficultyConfigManager,
   type DifficultyModeKey,
@@ -1201,59 +1202,64 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
                 </div>
 
-                {/* 4 trụ cột phân biệt rõ: Level • Quân hàm PvP • Điểm XP • Số dư Xu */}
+                {/* 4 trụ cột: Cấp bậc Quân hàm (17 cấp) • Số dư Sao ⭐ • Tổng điểm XP • Tiến độ XP lẻ */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                   <div
                     data-testid="stat-card-player-level"
-                    className="p-3 rounded-xl bg-neutral-950 border border-sky-500/30 space-y-1"
+                    className="p-3 rounded-xl bg-neutral-950 border border-amber-500/30 space-y-1"
                   >
                     <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
-                      <span>{t('Level (Cấp độ 1–50)', 'Level (1–50)')}</span>
-                      <Award className="w-3.5 h-3.5 text-sky-400" />
+                      <span>{t('Cấp bậc Quân hàm (17 cấp)', 'Military Rank (17 Tiers)')}</span>
+                      <Award className="w-3.5 h-3.5 text-amber-400" />
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-sm font-extrabold font-mono tabular-nums text-sky-300">
-                        {playerStats.level !== null ? `Lv. ${playerStats.level}` : 'Lv. --'}
+                      <span className="text-sm font-extrabold font-mono tabular-nums text-amber-300">
+                        {playerStats.rankNameVi}
                       </span>
-                      {playerStats.isMaxLevel && (
+                      {playerStats.isMaxRank && (
                         <span
                           data-testid="system-max-level-badge"
                           className="px-1.5 py-0.5 rounded bg-amber-500 text-black text-[9px] font-mono font-black uppercase"
                         >
-                          MAX LEVEL
+                          {t('TỐI ĐA', 'MAX RANK')}
                         </span>
                       )}
                     </div>
                     <div className="text-[10px] text-neutral-400 leading-snug">
-                      {playerStats.levelSystemLabel}
+                      {playerStats.rankTier !== null
+                        ? t(
+                            `Bậc ${playerStats.rankTier}/17 • ${playerStats.rankNameEn}`,
+                            `Tier ${playerStats.rankTier}/17 • ${playerStats.rankNameEn}`
+                          )
+                        : t('Chưa xác minh XP', 'Unverified XP')}
                     </div>
                   </div>
 
                   <div
-                    data-testid="stat-card-pvp-rank"
-                    className="p-3 rounded-xl bg-neutral-950 border border-purple-500/30 space-y-1"
+                    data-testid="stat-card-star-balance"
+                    className="p-3 rounded-xl bg-neutral-950 border border-amber-400/30 space-y-1"
                   >
                     <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
-                      <span>{t('Quân hàm PvP', 'PvP Rank')}</span>
-                      <Shield className="w-3.5 h-3.5 text-purple-400" />
+                      <span>{t('Số dư Sao ⭐', 'Star Balance ⭐')}</span>
+                      <Sparkles className="w-3.5 h-3.5 text-amber-400" />
                     </div>
-                    <div className="text-sm font-extrabold text-purple-300 truncate">
-                      {playerStats.pvpRankLabel}
+                    <div className="text-sm font-extrabold font-mono tabular-nums text-amber-300">
+                      {playerStats.starBalance.toLocaleString('vi-VN')} ⭐
                     </div>
                     <div className="text-[10px] text-neutral-400">
-                      {t('Tách biệt hoàn toàn với Level & XP', 'Independent from Level & XP')}
+                      {t('Tự động quy đổi: 25 XP = 1 Sao', 'Auto-converted: 25 XP = 1 Star')}
                     </div>
                   </div>
 
                   <div
                     data-testid="stat-card-total-xp"
-                    className="p-3 rounded-xl bg-neutral-950 border border-amber-500/30 space-y-1"
+                    className="p-3 rounded-xl bg-neutral-950 border border-sky-500/30 space-y-1"
                   >
                     <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
                       <span>{t('Tổng điểm XP tích lũy', 'Total Accumulated XP')}</span>
-                      <Trophy className="w-3.5 h-3.5 text-amber-400" />
+                      <Trophy className="w-3.5 h-3.5 text-sky-400" />
                     </div>
-                    <div className="text-sm font-extrabold font-mono tabular-nums text-amber-300">
+                    <div className="text-sm font-extrabold font-mono tabular-nums text-sky-300">
                       {playerStats.xpVerificationStatus === 'VERIFIED'
                         ? `${playerStats.totalXp.toLocaleString('vi-VN')} XP`
                         : t('Chưa xác minh', 'Unverified')}
@@ -1265,42 +1271,45 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   </div>
 
                   <div
-                    data-testid="stat-card-xu-balance"
+                    data-testid="stat-card-unconverted-xp"
                     className="p-3 rounded-xl bg-neutral-950 border border-emerald-500/30 space-y-1"
                   >
                     <div className="flex items-center justify-between text-[10px] text-neutral-400 font-semibold">
-                      <span>{t('Số dư Xu', 'Xu Balance')}</span>
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>{t('Tiến trình Sao tiếp theo', 'Next Star Progress')}</span>
+                      <Shield className="w-3.5 h-3.5 text-emerald-400" />
                     </div>
                     <div className="text-sm font-extrabold font-mono tabular-nums text-emerald-300">
-                      {playerStats.xuBalance.toLocaleString('vi-VN')} Xu
+                      {playerStats.unconvertedXp} / 25 XP
                     </div>
                     <div className="text-[10px] text-neutral-400">
-                      {t('Độc lập, không tự quy đổi từ XP', 'Independent currency from XP')}
+                      {t(
+                        `Còn ${playerStats.xpToNextStar} XP nhận thêm +1 ⭐`,
+                        `${playerStats.xpToNextStar} XP remaining for +1 ⭐`
+                      )}
                     </div>
                   </div>
                 </div>
 
-                {/* M7.5.2 Mục 6.2: Thanh tiến độ Level 0–100%, XP_NEXT, XP_REMAINING & MAX LEVEL */}
+                {/* Thanh tiến độ Quân hàm 0–100%, XP_NEXT, XP_REMAINING & ĐẠI TƯỚNG */}
                 <div
                   data-testid="player-level-progress-panel"
                   className="py-2 space-y-2"
                 >
                   <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <div className="flex items-center gap-2 text-xs font-extrabold font-mono text-sky-200">
+                    <div className="flex items-center gap-2 text-xs font-extrabold font-mono text-amber-200">
                       <span>
-                        {t('Tiến độ Level:', 'Level Progress:')}{' '}
-                        {playerStats.level !== null ? `Lv. ${playerStats.level}` : 'Lv. --'}
+                        {t('Tiến độ Quân hàm:', 'Military Rank Progress:')}{' '}
+                        {playerStats.rankNameVi}
                       </span>
-                      {playerStats.isMaxLevel && (
+                      {playerStats.isMaxRank && (
                         <span className="px-2 py-0.5 rounded bg-amber-500 text-black text-[10px] font-black uppercase">
-                          MAX LEVEL
+                          {t('CẤP BẬC TỐI ĐA', 'MAX RANK')}
                         </span>
                       )}
                     </div>
                     <span className="text-[11px] font-mono font-bold tabular-nums text-amber-300">
                       {playerStats.xpVerificationStatus === 'VERIFIED'
-                        ? `${playerStats.levelProgressPercent}%`
+                        ? `${playerStats.rankProgressPercent}%`
                         : '--%'}
                     </span>
                   </div>
@@ -1310,7 +1319,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     role="progressbar"
                     aria-valuemin={0}
                     aria-valuemax={100}
-                    aria-valuenow={Math.round(playerStats.levelProgressPercent)}
+                    aria-valuenow={Math.round(playerStats.rankProgressPercent)}
                     className="w-full h-2.5 rounded-lg bg-neutral-800 border border-neutral-700/80 overflow-hidden"
                   >
                     <svg
@@ -1321,9 +1330,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <rect
                         x="0"
                         y="0"
-                        width={playerStats.levelProgressPercent}
+                        width={playerStats.rankProgressPercent}
                         height="10"
-                        className={playerStats.isMaxLevel ? 'fill-amber-400' : 'fill-sky-400'}
+                        className={playerStats.isMaxRank ? 'fill-amber-400' : 'fill-sky-400'}
                       />
                     </svg>
                   </div>
@@ -1331,11 +1340,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {playerStats.xpVerificationStatus !== 'VERIFIED' ? (
                     <div className="text-[11px] font-mono text-neutral-400">
                       {t(
-                        'Trạng thái XP chưa được xác minh — hệ thống không hiển thị Level giả định.',
-                        'XP state unverified — system does not display assumed Level.'
+                        'Trạng thái XP chưa được xác minh — hệ thống không hiển thị Quân hàm giả định.',
+                        'XP state unverified — system does not display assumed Military Rank.'
                       )}
                     </div>
-                  ) : playerStats.isMaxLevel ? (
+                  ) : playerStats.isMaxRank ? (
                     <div className="flex items-center justify-between gap-2 flex-wrap text-[11px] font-mono tabular-nums text-amber-200">
                       <span>
                         {t('Tổng XP tích lũy:', 'Total XP:')}{' '}
@@ -1343,8 +1352,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </span>
                       <span>
                         {t(
-                          'Đã đạt cấp tối đa (MAX LEVEL) • Tiếp tục tích lũy XP',
-                          'MAX LEVEL reached • Continue accumulating XP'
+                          'Đã đạt cấp bậc tối đa (Đại tướng) • Tiếp tục tích lũy XP & Sao ⭐',
+                          'Max Military Rank (General) reached • Continue accumulating XP & Stars ⭐'
                         )}
                       </span>
                     </div>
@@ -1360,10 +1369,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       </div>
                       <div className="text-neutral-300">
                         <span className="text-neutral-500">
-                          {t('Mốc cấp tiếp theo: ', 'Next Level XP: ')}
+                          {t(
+                            `Mốc ${playerStats.nextRankNameVi || 'kế tiếp'}: `,
+                            `Next Rank (${playerStats.nextRankNameEn || 'Next'}): `
+                          )}
                         </span>
                         <strong className="text-sky-300">
-                          {(playerStats.xpNext ?? 0).toLocaleString('vi-VN')} XP
+                          {(playerStats.rankXpNext ?? 0).toLocaleString('vi-VN')} XP
                         </strong>
                       </div>
                       <div className="text-neutral-300 sm:text-right">
@@ -1371,14 +1383,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           {t('Còn thiếu: ', 'Remaining: ')}
                         </span>
                         <strong className="text-emerald-300">
-                          {(playerStats.xpRemaining ?? 0).toLocaleString('vi-VN')} XP
+                          {(playerStats.rankXpRemaining ?? 0).toLocaleString('vi-VN')} XP
                         </strong>
                       </div>
                     </div>
                   )}
                 </div>
 
-                {/* Thành tích Chiến dịch & Hoạt động chiến đấu (Đầy đủ SOLO, CO-OP AI, CO-OP Online & 4 loại xe địch) */}
+                {/* Thành tích Chiến dịch & Hoạt động chiến đấu (Đầy đủ SOLO, CO-OP A.I, CO-OP Online & 4 loại xe địch) */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
                   <div
                     data-testid="stat-card-campaign-progress"
@@ -1398,7 +1410,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-1">
-                        <span className="text-neutral-400">- CO-OP AI:</span>
+                        <span className="text-neutral-400">- CO-OP A.I:</span>
                         <span className="font-bold text-sky-200">
                           {t('Màn', 'Stage')} {playerStats.campaignByMode.COOP_AI.unlockedStage}/{TOTAL_CAMPAIGN_STAGES}
                         </span>
@@ -1446,7 +1458,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </span>
                       </div>
                       <div className="flex items-center justify-between gap-1">
-                        <span className="text-neutral-400">- CO-OP AI:</span>
+                        <span className="text-neutral-400">- CO-OP A.I:</span>
                         <span>
                           <strong className="text-white">{playerStats.matchesByMode.COOP_AI.played}</strong>{' '}
                           (<span className="text-emerald-300">{playerStats.matchesByMode.COOP_AI.won} {t('T', 'W')}</span> •{' '}
@@ -1762,7 +1774,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <span>CHẾ ĐỘ CHƠI &amp; THIẾT LẬP ĐỘ KHÓ CHI TIẾT</span>
                 </div>
                 <span className="text-[10px] text-neutral-400 font-mono">
-                  SOLO • CO-OP AI • CO-OP Online
+                  SOLO • CO-OP A.I • CO-OP Online
                 </span>
               </div>
 
@@ -2733,23 +2745,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                               </div>
                             </div>
                             <div className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-0.5">
-                              <div className="text-[10px] text-neutral-400">Level &amp; Tổng XP</div>
-                              <div className="font-mono text-xs font-extrabold text-sky-300">
-                                {selectedAccountDetail.level !== null
-                                  ? `Lv. ${selectedAccountDetail.level}`
-                                  : 'Lv. 1'}{' '}
+                              <div className="text-[10px] text-neutral-400">Quân hàm &amp; Tổng XP</div>
+                              <div className="font-mono text-xs font-extrabold text-amber-300">
+                                {calculateMilitaryRankFromTotalXp(selectedAccountDetail.totalXp).nameVi}{' '}
                                 •{' '}
-                                <span className="text-amber-300">
+                                <span className="text-sky-300">
                                   {selectedAccountDetail.totalXp.toLocaleString('vi-VN')} XP
                                 </span>
                               </div>
                             </div>
                             <div className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-0.5">
-                              <div className="text-[10px] text-neutral-400">Quân hàm PvP &amp; Số dư Xu</div>
-                              <div className="font-mono text-[11px] text-purple-300 font-bold">
-                                {formatPvpRankLabel(selectedAccountDetail.pvpRankCode)} •{' '}
-                                <span className="text-emerald-300">
-                                  {selectedAccountDetail.xuBalance.toLocaleString('vi-VN')} Xu
+                              <div className="text-[10px] text-neutral-400">Số dư Sao ⭐ (25 XP = 1 Sao)</div>
+                              <div className="font-mono text-[11px] text-amber-300 font-bold">
+                                {Math.floor(Math.max(0, selectedAccountDetail.totalXp) / 25).toLocaleString('vi-VN')} ⭐ •{' '}
+                                <span className="text-neutral-400">
+                                  Dư {Math.max(0, selectedAccountDetail.totalXp) % 25}/25 XP
                                 </span>
                               </div>
                             </div>

@@ -177,18 +177,18 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                     <span>
                       <strong>{t('3 Chế độ chiến đấu:', '3 Battle Modes:')}</strong>{' '}
                       {t(
-                        'SOLO, CO-OP AI (cùng đồng đội máy) và CO-OP ONLINE (2 người chơi trực tuyến).',
-                        'SOLO, CO-OP AI (with AI partner), and CO-OP ONLINE (2 players online).'
+                        'SOLO, CO-OP A.I (cùng đồng đội A.I) và CO-OP ONLINE (2 người chơi trực tuyến).',
+                        'SOLO, CO-OP A.I (with A.I partner), and CO-OP ONLINE (2 players online).'
                       )}
                     </span>
                   </li>
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                     <span>
-                      <strong>{t('Hệ thống 50 Cấp độ (Level):', '50-Level Progression:')}</strong>{' '}
+                      <strong>{t('Hệ thống 17 Cấp bậc Quân hàm & Sao ⭐:', '17 Military Ranks & Star ⭐ Economy:')}</strong>{' '}
                       {t(
-                        'Tích lũy điểm kinh nghiệm (XP) qua từng trận đấu và lưu trữ đồng bộ theo tài khoản Google cá nhân.',
-                        'Earn XP across matches with cloud-synced progression tied to your personal Google account.'
+                        'Tích lũy điểm kinh nghiệm (XP) qua từng trận đấu, thăng tiến từ Binh nhì lên Đại tướng và tự động quy đổi 25 XP = 1 Sao ⭐ theo tài khoản Google cá nhân.',
+                        'Earn XP across matches, advance from Private to General across 17 military ranks, and auto-convert 25 XP = 1 Star ⭐ synced to your Google account.'
                       )}
                     </span>
                   </li>
@@ -440,12 +440,12 @@ export const SupportModal: React.FC<SupportModalProps> = ({
               <div className="p-2.5 rounded bg-[#0b0d1e] border border-neutral-800">
                 <div className="font-btn font-bold text-emerald-300 flex items-center gap-1.5 mb-1">
                   <Bot className="w-3.5 h-3.5" />
-                  <span>CO-OP AI</span>
+                  <span>CO-OP A.I</span>
                 </div>
                 <p className="text-neutral-400">
                   {t(
-                    'Sát cánh cùng đồng đội AI thông minh để bảo vệ căn cứ và vượt qua các màn chơi.',
-                    'Fight alongside an intelligent AI Tank P2 partner to defend the base and clear stages.'
+                    'Sát cánh cùng đồng đội A.I thông minh để bảo vệ căn cứ và vượt qua các màn chơi.',
+                    'Fight alongside an intelligent A.I Tank P2 partner to defend the base and clear stages.'
                   )}
                 </p>
               </div>

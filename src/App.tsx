@@ -65,7 +65,10 @@ import {
   ONLINE_NET_STATS_STORAGE_KEY,
 } from './core/networkStatsPref.ts';
 import { PlayerStatsManager } from './core/playerStatsManager.ts';
-import { buildBattleXpIdentifiers } from './core/playerLevelSystem.ts';
+import {
+  buildBattleXpIdentifiers,
+  calculateStageAchievementBonus,
+} from './core/playerLevelSystem.ts';
 import { SystemAuditLogger } from './core/systemAuditLogger.ts';
 import { DifficultyConfigManager } from './core/difficultyManager.ts';
 import { formatSentenceLineBreaks } from './core/textFormat.ts';
@@ -1108,16 +1111,34 @@ export default function App() {
       (isOnlineGuest
         ? { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 }
         : gameState.defeatedCounts || { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 });
-    const stageEarnedXp =
+    const combatEarnedXp =
       (counts.BASIC || 0) * 1 +
       (counts.FAST || 0) * 2 +
       (counts.POWER || 0) * 3 +
       (counts.ARMOR || 0) * 5;
-    const localTotalXp = localPlayerStats
+    const startingLives = getStartingLivesForDifficultyAndMode(
+      gameState.difficulty,
+      gameState.gameMode
+    );
+    const currentLives = isOnlineGuest
+      ? (gameState.p2State?.lives ?? startingLives)
+      : (gameState.p1State?.lives ?? startingLives);
+    const livesLost = Math.max(0, startingLives - currentLives);
+    const achievementBonus =
+      outcome === 'WIN'
+        ? calculateStageAchievementBonus({
+            isStageClear: true,
+            livesLost,
+            stageElapsedSeconds: gameState.stageElapsedSeconds ?? 0,
+            matchDurationSeconds: gameState.matchDurationSeconds || 120,
+          })
+        : { bonusXp: 0, noLifeLostMet: false, halfTimeMet: false, reasonCode: 'NONE' as const };
+    const stageEarnedXp = combatEarnedXp + achievementBonus.bonusXp;
+    const localTotalXp = (localPlayerStats
       ? localPlayerStats.score
       : isOnlineGuest
         ? 0
-        : gameState.score;
+        : gameState.score) + achievementBonus.bonusXp;
     const matchInstanceId = gameState.matchInstanceId || gameEngine.getMatchInstanceId();
     const { runKey, xpEventId } = buildBattleXpIdentifiers({
       uid: currentUser.uid,
@@ -1136,6 +1157,7 @@ export default function App() {
       stageId,
       gameMode: gameState.gameMode || 'SOLO',
       earnedScoreXp: stageEarnedXp,
+      achievementBonusXp: achievementBonus.bonusXp,
       runTotalScoreXp: localTotalXp,
       defeatedByType: counts,
       roomCode,

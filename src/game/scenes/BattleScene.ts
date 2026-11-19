@@ -34,6 +34,14 @@ export class BattleScene extends Phaser.Scene {
   private enemySprites: Map<string, Phaser.GameObjects.Image> = new Map();
   private enemyShieldSprites: Map<string, Phaser.GameObjects.Image> = new Map();
   private bulletSprites: Map<string, Phaser.GameObjects.Image> = new Map();
+  private supportItemSprites: Map<
+    string,
+    {
+      container: Phaser.GameObjects.Container;
+      icon: Phaser.GameObjects.Image;
+      timerText: Phaser.GameObjects.Text;
+    }
+  > = new Map();
   private visualEffects: ActiveVisualEffect[] = [];
   private terrainSprites: Map<string, Phaser.GameObjects.GameObject> = new Map();
   private baseSprites: Array<{
@@ -217,7 +225,11 @@ export class BattleScene extends Phaser.Scene {
   private reportHudStateIfNeeded(elapsedMs: number, state: GameCoreState): void {
     if (!this.onStateCallback) return;
     this.hudSyncAccumulatorMs += elapsedMs;
-    const sig = `${state.matchState}|${state.stageRunSeq}|${state.remainingSeconds}|${state.score}|${state.p1State.lives}|${state.p1State.isDead}|${Boolean(state.p1State.isSpectator)}|${state.p2State?.lives ?? -1}|${state.p2State?.isDead ?? false}|${Boolean(state.p2State?.isSpectator)}|${state.peerLeaveNotice ?? ''}|${state.totalDefeatedEnemies}|${state.enemyQueue.length}|${state.enemies.length}|${state.isGameOver}|${state.isStageClear}|${state.isTimeoutGameOver}|${state.terrain.isBaseDestroyed}`;
+    const itemSys = state.itemSystem;
+    const itemSig = itemSys
+      ? `${itemSys.activeItems.length}:${itemSys.totalSpawnedCount}:${itemSys.eagleShieldSecondsRemaining}:${itemSys.p1Effects.firepowerSecondsRemaining}:${itemSys.p1Effects.speedBoostSecondsRemaining}:${itemSys.p2Effects.firepowerSecondsRemaining}:${itemSys.p2Effects.speedBoostSecondsRemaining}`
+      : 'no_items';
+    const sig = `${state.matchState}|${state.stageRunSeq}|${state.remainingSeconds}|${state.score}|${state.p1State.lives}|${state.p1State.isDead}|${Boolean(state.p1State.isSpectator)}|${state.p2State?.lives ?? -1}|${state.p2State?.isDead ?? false}|${Boolean(state.p2State?.isSpectator)}|${state.peerLeaveNotice ?? ''}|${state.totalDefeatedEnemies}|${state.enemyQueue.length}|${state.enemies.length}|${state.isGameOver}|${state.isStageClear}|${state.isTimeoutGameOver}|${state.terrain.isBaseDestroyed}|${itemSig}`;
     if (sig !== this.lastHudSignature || this.hudSyncAccumulatorMs >= 100) {
       this.lastHudSignature = sig;
       this.hudSyncAccumulatorMs = 0;
@@ -861,6 +873,9 @@ export class BattleScene extends Phaser.Scene {
       this.bulletVisualPositions.clear();
     }
 
+    // 5b. Render Active Support Items on Battlefield with 5s Countdown Badge
+    this.syncSupportItems(state);
+
     // 6. Spawn Visual Effects from Combat Events & Trigger Audio
     const newEvents = this.engine.popCombatEvents();
     for (const ev of newEvents) {
@@ -993,6 +1008,8 @@ export class BattleScene extends Phaser.Scene {
     // Clean up existing sprites
     this.terrainSprites.forEach((obj) => obj.destroy());
     this.terrainSprites.clear();
+    this.supportItemSprites.forEach((entry) => entry.container.destroy());
+    this.supportItemSprites.clear();
     this.renderedBrickMasks.clear();
     this.renderedSteelMasks.clear();
     this.baseSprites = [];
@@ -1219,6 +1236,52 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
+    // Sync Eagle Shield dynamic tile type swaps at (12,5) and (12,7) between BRICK and STEEL
+    for (const col of [5, 7]) {
+      const r = 12;
+      const tileType = terrain.currentMap[r]?.[col];
+      const brickKey = `brick_${r}_${col}`;
+      const steelKey = `steel_${r}_${col}`;
+      if (tileType === TILE_TYPES.STEEL) {
+        const existingBrick = this.terrainSprites.get(brickKey);
+        if (existingBrick) {
+          existingBrick.destroy();
+          this.terrainSprites.delete(brickKey);
+          this.renderedBrickMasks.delete(`${r}_${col}`);
+        }
+        if (!this.terrainSprites.has(steelKey)) {
+          const mask = terrain.steelSubTiles?.[`${r}_${col}`] ?? SUB_TILE_MASKS.ALL;
+          this.renderSteelTile(r, col, mask);
+          this.renderedSteelMasks.set(`${r}_${col}`, mask);
+        }
+      } else if (tileType === TILE_TYPES.BRICK) {
+        const existingSteel = this.terrainSprites.get(steelKey);
+        if (existingSteel) {
+          existingSteel.destroy();
+          this.terrainSprites.delete(steelKey);
+          this.renderedSteelMasks.delete(`${r}_${col}`);
+        }
+        const mask = terrain.brickSubTiles[`${r}_${col}`] ?? SUB_TILE_MASKS.ALL;
+        if (!this.terrainSprites.has(brickKey) && mask > 0) {
+          this.renderBrickTile(r, col, mask);
+          this.renderedBrickMasks.set(`${r}_${col}`, mask);
+        }
+      } else if (tileType === TILE_TYPES.EMPTY) {
+        const existingSteel = this.terrainSprites.get(steelKey);
+        if (existingSteel) {
+          existingSteel.destroy();
+          this.terrainSprites.delete(steelKey);
+          this.renderedSteelMasks.delete(`${r}_${col}`);
+        }
+        const existingBrick = this.terrainSprites.get(brickKey);
+        if (existingBrick) {
+          existingBrick.destroy();
+          this.terrainSprites.delete(brickKey);
+          this.renderedBrickMasks.delete(`${r}_${col}`);
+        }
+      }
+    }
+
     // Audio match state change handling (pause/resume/gameover/stageclear)
     if (this.lastMatchState !== state.matchState) {
       if (state.matchState === 'PAUSED') {
@@ -1239,6 +1302,79 @@ export class BattleScene extends Phaser.Scene {
         SoundManager.getInstance().playGameOver();
       }
       this.lastMatchState = state.matchState;
+    }
+  }
+
+  private getSupportItemTextureKey(type: string): string {
+    switch (type) {
+      case 'BOMB':
+        return 'item_bomb';
+      case 'EAGLE_SHIELD':
+        return 'item_eagle_shield';
+      case 'FIREPOWER':
+        return 'item_firepower';
+      case 'SPEED_BOOST':
+        return 'item_speed_boost';
+      default:
+        return 'item_firepower';
+    }
+  }
+
+  private syncSupportItems(state: GameCoreState): void {
+    const activeItems = state.itemSystem?.activeItems ?? [];
+    const activeIds = new Set<string>();
+
+    for (const item of activeItems) {
+      activeIds.add(item.id);
+      let entry = this.supportItemSprites.get(item.id);
+      const texKey = this.getSupportItemTextureKey(item.type);
+
+      if (!entry) {
+        const container = this.add.container(item.x, item.y);
+        container.setDepth(18);
+
+        const icon = this.add.image(0, 0, texKey);
+        icon.setOrigin(0, 0);
+        icon.setDisplaySize(16, 16);
+
+        const timerText = this.add.text(15, 15, `${item.remainingSeconds}s`, {
+          fontFamily: 'monospace',
+          fontSize: '7px',
+          color: '#fef08a',
+          backgroundColor: '#090d16d9',
+          padding: { x: 1, y: 0 },
+        });
+        timerText.setOrigin(1, 1);
+
+        container.add([icon, timerText]);
+        entry = { container, icon, timerText };
+        this.supportItemSprites.set(item.id, entry);
+      } else {
+        entry.container.setPosition(item.x, item.y);
+        if (entry.icon.texture.key !== texKey) {
+          entry.icon.setTexture(texKey);
+        }
+        const label = `${item.remainingSeconds}s`;
+        if (entry.timerText.text !== label) {
+          entry.timerText.setText(label);
+        }
+      }
+
+      // Blink rapidly during final 2 seconds (<= 120 ticks) to warn before disappearing
+      if (item.remainingTicks <= 120) {
+        const blinkOn = Math.floor(item.remainingTicks / 6) % 2 === 0;
+        entry.container.setAlpha(blinkOn ? 1.0 : 0.35);
+      } else {
+        const gentlePulse = Math.floor(item.remainingTicks / 15) % 2 === 0;
+        entry.container.setAlpha(gentlePulse ? 1.0 : 0.85);
+      }
+    }
+
+    for (const [id, entry] of this.supportItemSprites) {
+      if (!activeIds.has(id)) {
+        entry.container.destroy();
+        this.supportItemSprites.delete(id);
+      }
     }
   }
 }

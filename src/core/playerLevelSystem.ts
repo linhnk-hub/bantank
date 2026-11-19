@@ -2,33 +2,51 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * M7.5.2 – OFFICIAL PLAYER LEVEL SYSTEM (LEVEL 1–50)
+ * BTO-PROGRESSION-MODES-V1.4 & M7.5.2 – MILITARY RANK HIERARCHY (17 CẤP BẬC QUÂN HÀM),
+ * STAR ECONOMY (25 XP = 1 SAO ⭐), STAGE ACHIEVEMENT BONUS XP, AND VERIFIED XP LEDGER
  * Status: OFFICIALLY APPROVED SPECIFICATION
  *
- * Official Mathematical Specification (Section 2):
- * - MIN_PLAYER_LEVEL = 1, MAX_PLAYER_LEVEL = 50, XP at Level 1 = 0.
- * - Minimum cumulative XP required to reach Level L (1 <= L <= 50):
- *     XP_REQUIRED(L) = 100 * L * (L - 1) / 2
- * - Player Level from valid non-negative integer cumulative XP X:
- *     LEVEL = min(50, floor((1 + sqrt(1 + 8 * X / 100)) / 2))
- *   Cross-verified against the exact integer threshold table so IEEE-754 floating-point
- *   rounding can NEVER misclassify boundary values (e.g. 122,499 -> 49 vs 122,500 -> 50)
- *   even up to Number.MAX_SAFE_INTEGER.
- * - FORBIDDEN: Never use `sqrt(totalXp / 100) + 1` or any unapproved formula.
+ * 1. 17-Rank Military Hierarchy (Section 2 of BTO-PROGRESSION-MODES-V1.4):
+ *    - Replaces the numeric Player Level (1–50) display across the player UI with 17 official
+ *      military ranks determined automatically from validated cumulative `totalXp`:
+ *        1. Đại tướng   (16,500 XP)
+ *        2. Thượng tướng(13,500 XP)
+ *        3. Trung tướng (11,000 XP)
+ *        4. Thiếu tướng (8,800 XP)
+ *        5. Đại tá      (7,000 XP)
+ *        6. Thượng tá   (5,500 XP)
+ *        7. Trung tá    (4,300 XP)
+ *        8. Thiếu tá    (3,300 XP)
+ *        9. Đại úy      (2,500 XP)
+ *       10. Thượng úy   (1,900 XP)
+ *       11. Trung úy    (1,400 XP)
+ *       12. Thiếu úy    (1,000 XP)
+ *       13. Thượng sĩ   (700 XP)
+ *       14. Trung sĩ    (450 XP)
+ *       15. Hạ sĩ       (250 XP)
+ *       16. Binh nhất   (100 XP)
+ *       17. Binh nhì    (0 XP — starting rank)
+ *    - Existing player `totalXp` is 100% preserved and mapped directly to the new 17-rank table.
+ *    - If an XP grant crosses multiple rank thresholds at once, the player is promoted directly
+ *      to the final rank corresponding to their new `totalXp`.
  *
- * Strict Domain Separation (Section 3):
- * - Level (1..50) is 100% independent of PvP Rank (`rank`) and Currency (`xu`).
- * - Level changes never grant Xu, items, gameplay buffs, or Rank promotions.
+ * 2. Star (`Sao ⭐`) Economy (Section 3 of BTO-PROGRESSION-MODES-V1.4):
+ *    - Conversion rate: `25 XP = 1 Sao ⭐` (`XP_PER_STAR = 25`).
+ *    - Every validated XP addition to `totalXp` automatically converts into `starBalance`:
+ *        `starBalance = Math.floor(totalXp / 25)`
+ *        `unconvertedXp = totalXp % 25` (0..24 carried forward for future matches)
+ *        `xpToNextStar = 25 - unconvertedXp` (1..25)
+ *    - `Xu` currency is completely removed from the player economy and UI. Old `Xu` is never
+ *      converted into XP or Stars.
  *
- * Security & Runtime Architecture Honesty (Section 4):
- * - Bắn Tank Online currently operates as a client-side SPA without Cloud Functions or a
- *   trusted backend server, and `/firestore.rules` blocks client writes to `xp`, `totalXp`,
- *   and `level` on `/users/{uid}`.
- * - Therefore, this module enforces deterministic event-ID idempotency, enemy-defeat XP
- *   formula validation (`1*BASIC + 2*FAST + 3*POWER + 5*ARMOR`), concurrency serialization,
- *   and local-storage checksum tamper detection on the client/service layer, while explicitly
- *   marking verification authority as `'CLIENT_LEDGER_OR_FIRESTORE_READ'` rather than claiming
- *   Production server-authoritative XP enforcement.
+ * 3. Stage Completion Achievement Bonus XP (Section 5 of BTO-PROGRESSION-MODES-V1.4):
+ *    - Awarded only when a Campaign Stage is cleared (`outcome === 'WIN'`):
+ *      * Completed Stage without losing any lives (`livesLost === 0`): `+10 XP`
+ *      * Completed Stage in at most 1/2 of the allowed match duration (`stageElapsedSeconds <= matchDurationSeconds / 2`): `+15 XP`
+ *      * Both conditions met simultaneously in the same Stage: `+25 XP` (capped at +25 XP max).
+ *      * Neither condition met (or on Stage loss): `0 XP`.
+ *    - Validated and recorded idempotently under the stage's `eventId` so reloads/reconnects
+ *      never double-grant achievement bonus XP or Stars.
  */
 
 import { SCORE_VALUES } from './scoreManager.ts';
@@ -38,11 +56,241 @@ import {
   computeCanonicalChecksum,
 } from './systemAuditLogger.ts';
 
+// =============================================================================
+// 1. 17-RANK MILITARY HIERARCHY (CẤP BẬC QUÂN HÀM 1–17)
+// =============================================================================
+
+export const TOTAL_MILITARY_RANKS = 17;
+export const XP_PER_STAR = 25;
+
+export type MilitaryRankCode =
+  | 'DAI_TUONG'
+  | 'THUONG_TUONG'
+  | 'TRUNG_TUONG'
+  | 'THIEU_TUONG'
+  | 'DAI_TA'
+  | 'THUONG_TA'
+  | 'TRUNG_TA'
+  | 'THIEU_TA'
+  | 'DAI_UY'
+  | 'THUONG_UY'
+  | 'TRUNG_UY'
+  | 'THIEU_UY'
+  | 'THUONG_SI'
+  | 'TRUNG_SI'
+  | 'HA_SI'
+  | 'BINH_NHAT'
+  | 'BINH_NHI';
+
+export interface MilitaryRankDefinition {
+  /** Official table order 1..17 from Section 2.2 (1 = Đại tướng, 17 = Binh nhì) */
+  orderFromTop: number;
+  /** Ascending tier 1..17 from lowest to highest (1 = Binh nhì, 17 = Đại tướng) */
+  tier: number;
+  code: MilitaryRankCode;
+  nameVi: string;
+  nameEn: string;
+  xpRequired: number;
+  xpDeltaFromPrevious: number;
+}
+
+const RAW_MILITARY_RANKS_ASC: ReadonlyArray<{
+  orderFromTop: number;
+  tier: number;
+  code: MilitaryRankCode;
+  nameVi: string;
+  nameEn: string;
+  xpRequired: number;
+  xpDeltaFromPrevious: number;
+}> = [
+  {
+    orderFromTop: 17,
+    tier: 1,
+    code: 'BINH_NHI',
+    nameVi: 'Binh nhì',
+    nameEn: 'Private Second Class',
+    xpRequired: 0,
+    xpDeltaFromPrevious: 0,
+  },
+  {
+    orderFromTop: 16,
+    tier: 2,
+    code: 'BINH_NHAT',
+    nameVi: 'Binh nhất',
+    nameEn: 'Private First Class',
+    xpRequired: 100,
+    xpDeltaFromPrevious: 100,
+  },
+  {
+    orderFromTop: 15,
+    tier: 3,
+    code: 'HA_SI',
+    nameVi: 'Hạ sĩ',
+    nameEn: 'Corporal',
+    xpRequired: 250,
+    xpDeltaFromPrevious: 150,
+  },
+  {
+    orderFromTop: 14,
+    tier: 4,
+    code: 'TRUNG_SI',
+    nameVi: 'Trung sĩ',
+    nameEn: 'Sergeant',
+    xpRequired: 450,
+    xpDeltaFromPrevious: 200,
+  },
+  {
+    orderFromTop: 13,
+    tier: 5,
+    code: 'THUONG_SI',
+    nameVi: 'Thượng sĩ',
+    nameEn: 'Master Sergeant',
+    xpRequired: 700,
+    xpDeltaFromPrevious: 250,
+  },
+  {
+    orderFromTop: 12,
+    tier: 6,
+    code: 'THIEU_UY',
+    nameVi: 'Thiếu úy',
+    nameEn: 'Second Lieutenant',
+    xpRequired: 1000,
+    xpDeltaFromPrevious: 300,
+  },
+  {
+    orderFromTop: 11,
+    tier: 7,
+    code: 'TRUNG_UY',
+    nameVi: 'Trung úy',
+    nameEn: 'First Lieutenant',
+    xpRequired: 1400,
+    xpDeltaFromPrevious: 400,
+  },
+  {
+    orderFromTop: 10,
+    tier: 8,
+    code: 'THUONG_UY',
+    nameVi: 'Thượng úy',
+    nameEn: 'Senior Lieutenant',
+    xpRequired: 1900,
+    xpDeltaFromPrevious: 500,
+  },
+  {
+    orderFromTop: 9,
+    tier: 9,
+    code: 'DAI_UY',
+    nameVi: 'Đại úy',
+    nameEn: 'Captain',
+    xpRequired: 2500,
+    xpDeltaFromPrevious: 600,
+  },
+  {
+    orderFromTop: 8,
+    tier: 10,
+    code: 'THIEU_TA',
+    nameVi: 'Thiếu tá',
+    nameEn: 'Major',
+    xpRequired: 3300,
+    xpDeltaFromPrevious: 800,
+  },
+  {
+    orderFromTop: 7,
+    tier: 11,
+    code: 'TRUNG_TA',
+    nameVi: 'Trung tá',
+    nameEn: 'Lieutenant Colonel',
+    xpRequired: 4300,
+    xpDeltaFromPrevious: 1000,
+  },
+  {
+    orderFromTop: 6,
+    tier: 12,
+    code: 'THUONG_TA',
+    nameVi: 'Thượng tá',
+    nameEn: 'Senior Colonel',
+    xpRequired: 5500,
+    xpDeltaFromPrevious: 1200,
+  },
+  {
+    orderFromTop: 5,
+    tier: 13,
+    code: 'DAI_TA',
+    nameVi: 'Đại tá',
+    nameEn: 'Colonel',
+    xpRequired: 7000,
+    xpDeltaFromPrevious: 1500,
+  },
+  {
+    orderFromTop: 4,
+    tier: 14,
+    code: 'THIEU_TUONG',
+    nameVi: 'Thiếu tướng',
+    nameEn: 'Major General',
+    xpRequired: 8800,
+    xpDeltaFromPrevious: 1800,
+  },
+  {
+    orderFromTop: 3,
+    tier: 15,
+    code: 'TRUNG_TUONG',
+    nameVi: 'Trung tướng',
+    nameEn: 'Lieutenant General',
+    xpRequired: 11000,
+    xpDeltaFromPrevious: 2200,
+  },
+  {
+    orderFromTop: 2,
+    tier: 16,
+    code: 'THUONG_TUONG',
+    nameVi: 'Thượng tướng',
+    nameEn: ' Colonel General',
+    xpRequired: 13500,
+    xpDeltaFromPrevious: 2500,
+  },
+  {
+    orderFromTop: 1,
+    tier: 17,
+    code: 'DAI_TUONG',
+    nameVi: 'Đại tướng',
+    nameEn: 'General of the Army',
+    xpRequired: 16500,
+    xpDeltaFromPrevious: 3000,
+  },
+];
+
+export const OFFICIAL_MILITARY_RANKS_ASC: ReadonlyArray<MilitaryRankDefinition> = Object.freeze(
+  RAW_MILITARY_RANKS_ASC.map((entry) =>
+    Object.freeze({
+      ...entry,
+      nameEn: entry.nameEn.trim(),
+    })
+  )
+);
+
+export const OFFICIAL_MILITARY_RANKS_DESC: ReadonlyArray<MilitaryRankDefinition> = Object.freeze(
+  [...OFFICIAL_MILITARY_RANKS_ASC].reverse()
+);
+
+export const MAX_MILITARY_RANK_XP_REQUIRED = 16500; // Đại tướng
+
+export function getOfficialMilitaryRankTableAsc(): ReadonlyArray<MilitaryRankDefinition> {
+  return OFFICIAL_MILITARY_RANKS_ASC;
+}
+
+export function getOfficialMilitaryRankTableDesc(): ReadonlyArray<MilitaryRankDefinition> {
+  return OFFICIAL_MILITARY_RANKS_DESC;
+}
+
+// Legacy mathematical constants retained for backwards-compatible internal regression tests
 export const MIN_PLAYER_LEVEL = 1;
 export const MAX_PLAYER_LEVEL = 50;
 export const LEVEL_BASE_STEP_XP = 100;
 export const MAX_STAGE_ENEMY_COUNT = ENEMY_CONFIG.TOTAL_COUNT; // 30 enemies per campaign stage
-export const MAX_SINGLE_STAGE_XP = MAX_STAGE_ENEMY_COUNT * SCORE_VALUES.ARMOR; // 30 * 5 = 150 XP
+export const MAX_STAGE_COMBAT_XP = MAX_STAGE_ENEMY_COUNT * SCORE_VALUES.ARMOR; // 30 * 5 = 150 XP
+export const MAX_STAGE_ACHIEVEMENT_BONUS_XP = 25; // +10 (no life lost) or +15 (<= 1/2 time) or +25 (both)
+export const MAX_SINGLE_STAGE_XP = MAX_STAGE_COMBAT_XP + MAX_STAGE_ACHIEVEMENT_BONUS_XP; // 175 XP
+
+export const ALLOWED_ACHIEVEMENT_BONUS_VALUES: ReadonlySet<number> = new Set([0, 10, 15, 25]);
 
 export interface LevelThresholdEntry {
   level: number;
@@ -50,10 +298,6 @@ export interface LevelThresholdEntry {
   xpDeltaFromPrevious: number;
 }
 
-/**
- * Exact integer cumulative XP required to reach `level` (`1 <= level <= 50`).
- * Formula: `XP_REQUIRED(L) = 100 * L * (L - 1) / 2 = 50 * L * (L - 1)`.
- */
 export function xpRequiredForLevel(level: number): number {
   if (!Number.isInteger(level) || level < MIN_PLAYER_LEVEL || level > MAX_PLAYER_LEVEL) {
     throw new RangeError(
@@ -148,13 +392,174 @@ export function validateTotalXpValue(rawXp: unknown): XpValidationResult {
 }
 
 /**
- * Calculates the official Player Level (`1..50`) from a validated non-negative integer `totalXp`.
+ * Calculates the official Military Rank (1..17) from a validated non-negative integer `totalXp`.
  *
- * Formula:
- *   `LEVEL = min(50, floor((1 + sqrt(1 + 8 * X / 100)) / 2))`
- * Followed by exact integer threshold boundary verification against `XP_REQUIRED(L)` so
- * floating-point representation can never cause off-by-one drift at any boundary.
+ * Rules (Section 2.2 & 2.3):
+ * - Starts at `Binh nhì` (`0 XP`, `tier = 1`, `orderFromTop = 17`).
+ * - Highest rank is `Đại tướng` (`>= 16,500 XP`, `tier = 17`, `orderFromTop = 1`).
+ * - Always resolves to the highest rank whose `xpRequired <= totalXp`, supporting multi-rank jumps.
  */
+export function calculateMilitaryRankFromTotalXp(totalXp: number): MilitaryRankDefinition {
+  const check = validateTotalXpValue(totalXp);
+  if (!check.valid || check.sanitizedXp === null) {
+    throw new TypeError(check.errorMessage || `Invalid totalXp: ${String(totalXp)}`);
+  }
+  const x = check.sanitizedXp;
+  for (let i = OFFICIAL_MILITARY_RANKS_ASC.length - 1; i >= 0; i--) {
+    if (x >= OFFICIAL_MILITARY_RANKS_ASC[i].xpRequired) {
+      return OFFICIAL_MILITARY_RANKS_ASC[i];
+    }
+  }
+  return OFFICIAL_MILITARY_RANKS_ASC[0];
+}
+
+export interface StarEconomySnapshot {
+  /** Cumulative validated XP */
+  totalXp: number;
+  /** Total Stars earned from XP at `25 XP = 1 Sao ⭐` */
+  starBalance: number;
+  /** Remainder XP (`0..24`) carried forward toward the next Star */
+  unconvertedXp: number;
+  /** XP needed (`1..25`) to earn the next Star */
+  xpToNextStar: number;
+}
+
+/**
+ * Computes the official Star (`Sao ⭐`) economy state from a validated non-negative integer `totalXp`.
+ * Conversion rule (Section 3.1): `25 XP = 1 Sao ⭐`.
+ * - `starBalance = Math.floor(totalXp / 25)`
+ * - `unconvertedXp = totalXp % 25` (0..24)
+ * - `xpToNextStar = 25 - unconvertedXp`
+ */
+export function computeStarEconomyFromTotalXp(totalXp: number): StarEconomySnapshot {
+  const check = validateTotalXpValue(totalXp);
+  if (!check.valid || check.sanitizedXp === null) {
+    throw new TypeError(check.errorMessage || `Invalid totalXp: ${String(totalXp)}`);
+  }
+  const x = check.sanitizedXp;
+  const starBalance = Math.floor(x / XP_PER_STAR);
+  const unconvertedXp = x % XP_PER_STAR;
+  const xpToNextStar = XP_PER_STAR - unconvertedXp;
+  return {
+    totalXp: x,
+    starBalance,
+    unconvertedXp,
+    xpToNextStar,
+  };
+}
+
+export interface StageAchievementBonusInput {
+  /** True only when the stage is cleared (all 30 enemies defeated and Base intact) */
+  isStageClear: boolean;
+  /** Number of lives lost by the player during this stage (`startingLives - remainingLives`, >= 0) */
+  livesLost: number;
+  /** Actual elapsed gameplay time in seconds for this stage */
+  stageElapsedSeconds: number;
+  /** Total allowed match duration in seconds for the current difficulty (e.g. 120s DEFAULT, 60s EXTREME) */
+  matchDurationSeconds: number;
+}
+
+export interface StageAchievementBonusBreakdown {
+  isStageClear: boolean;
+  noLivesLostAchieved: boolean;
+  halfTimeAchieved: boolean;
+  bothAchieved: boolean;
+  bonusXp: 0 | 10 | 15 | 25;
+  labelVi: string;
+  labelEn: string;
+}
+
+/**
+ * Calculates the Stage Completion Achievement Bonus XP (Section 5 of BTO-PROGRESSION-MODES-V1.4):
+ * - Only awarded on Stage Clear (`isStageClear === true`).
+ * - Condition 1 (`noLivesLostAchieved`): `livesLost === 0` -> `+10 XP`.
+ * - Condition 2 (`halfTimeAchieved`): `stageElapsedSeconds <= matchDurationSeconds / 2` -> `+15 XP`.
+ * - If BOTH Condition 1 and Condition 2 are met in the same stage -> `+25 XP` (max bonus is +25 XP).
+ * - Otherwise -> `0 XP`.
+ */
+export function calculateStageAchievementBonus(
+  input: StageAchievementBonusInput
+): StageAchievementBonusBreakdown {
+  if (!input.isStageClear) {
+    return {
+      isStageClear: false,
+      noLivesLostAchieved: false,
+      halfTimeAchieved: false,
+      bothAchieved: false,
+      bonusXp: 0,
+      labelVi: 'Không có thưởng thành tích (Chưa qua màn)',
+      labelEn: 'No achievement bonus (Stage not cleared)',
+    };
+  }
+
+  const safeLivesLost =
+    typeof input.livesLost === 'number' && Number.isFinite(input.livesLost) && input.livesLost >= 0
+      ? Math.floor(input.livesLost)
+      : 99;
+  const safeDuration =
+    typeof input.matchDurationSeconds === 'number' &&
+    Number.isFinite(input.matchDurationSeconds) &&
+    input.matchDurationSeconds > 0
+      ? input.matchDurationSeconds
+      : 120;
+  const safeElapsed =
+    typeof input.stageElapsedSeconds === 'number' &&
+    Number.isFinite(input.stageElapsedSeconds) &&
+    input.stageElapsedSeconds >= 0
+      ? input.stageElapsedSeconds
+      : safeDuration;
+
+  const noLivesLostAchieved = safeLivesLost === 0;
+  const halfTimeAchieved = safeElapsed <= safeDuration / 2;
+  const bothAchieved = noLivesLostAchieved && halfTimeAchieved;
+
+  if (bothAchieved) {
+    return {
+      isStageClear: true,
+      noLivesLostAchieved: true,
+      halfTimeAchieved: true,
+      bothAchieved: true,
+      bonusXp: 25,
+      labelVi: 'Hoàn hảo: Không mất mạng & hoàn thành ≤ 1/2 thời gian (+25 XP)',
+      labelEn: 'Perfect: No lives lost & completed in ≤ 1/2 time (+25 XP)',
+    };
+  }
+
+  if (halfTimeAchieved) {
+    return {
+      isStageClear: true,
+      noLivesLostAchieved: false,
+      halfTimeAchieved: true,
+      bothAchieved: false,
+      bonusXp: 15,
+      labelVi: 'Tốc chiến: Hoàn thành trong ≤ 1/2 thời gian (+15 XP)',
+      labelEn: 'Speed Clear: Completed in ≤ 1/2 time (+15 XP)',
+    };
+  }
+
+  if (noLivesLostAchieved) {
+    return {
+      isStageClear: true,
+      noLivesLostAchieved: true,
+      halfTimeAchieved: false,
+      bothAchieved: false,
+      bonusXp: 10,
+      labelVi: 'Bất khả xâm phạm: Hoàn thành không mất mạng (+10 XP)',
+      labelEn: 'Untouchable: Completed without losing a life (+10 XP)',
+    };
+  }
+
+  return {
+    isStageClear: true,
+    noLivesLostAchieved: false,
+    halfTimeAchieved: false,
+    bothAchieved: false,
+    bonusXp: 0,
+    labelVi: 'Hoàn thành màn chơi (+0 XP thưởng thêm)',
+    labelEn: 'Stage cleared (+0 bonus XP)',
+  };
+}
+
 export function calculateLevelFromTotalXp(totalXp: number): number {
   const check = validateTotalXpValue(totalXp);
   if (!check.valid || check.sanitizedXp === null) {
@@ -188,27 +593,49 @@ export type XpVerificationStatus = 'VERIFIED' | 'UNVERIFIED';
 
 export interface PlayerLevelProgressInfo {
   xpVerificationStatus: XpVerificationStatus;
+  /** Military rank tier 1..17 (1 = Binh nhì, 17 = Đại tướng); `null` when unverified */
+  rankTier: number | null;
+  /** Official table index 1..17 from top (1 = Đại tướng, 17 = Binh nhì); `null` when unverified */
+  rankOrderFromTop: number | null;
+  rankCode: MilitaryRankCode | null;
+  rankNameVi: string;
+  rankNameEn: string;
+  nextRankNameVi: string | null;
+  nextRankNameEn: string | null;
+  isMaxRank: boolean;
+  /** Current Military Rank floor XP (`null` when unverified) */
+  rankFloorXp: number | null;
+  /** Next Military Rank XP threshold (`null` when unverified OR when at `Đại tướng` 16,500 XP) */
+  rankXpNext: number | null;
+  /** XP remaining to reach the next Military Rank (`null` when unverified; `0` at `Đại tướng`) */
+  rankXpRemaining: number | null;
+  /** Progress percentage `0..100` toward the next Military Rank (`100` at `Đại tướng`) */
+  rankProgressPercent: number;
+  /** Top menu / profile Military Rank badge (`Binh nhì` .. `Đại tướng` or `Chưa xác minh`) */
+  rankBadge: string;
+  /** Star economy fields (`25 XP = 1 Sao ⭐`) */
+  starBalance: number;
+  unconvertedXp: number;
+  xpToNextStar: number;
+  /** Legacy numeric level fields retained internally for backwards-compatible harnesses */
   level: number | null;
   isMaxLevel: boolean;
   topMenuBadge: string;
   systemLabel: string;
   totalXp: number | null;
   currentLevelFloorXp: number | null;
-  /** `null` when unverified OR when `level === 50` (Section 2.4: do NOT show Level 51 XP requirement). */
   xpNext: number | null;
-  /** `null` when unverified; `0` when `level === 50`. */
   xpRemaining: number | null;
-  /** Clamped `0..100`; `100` at Level 50; `0` when unverified. */
   progressPercent: number;
 }
 
 /**
- * Computes full UI-ready Level & Progress metadata (Sections 2.3, 2.4, 6.1–6.3).
- * - If `xpVerificationStatus !== 'VERIFIED'` or `totalXp` is invalid: returns `Lv. --` without
- *   defaulting to `Lv. 1` (Section 6.3).
- * - If verified with `totalXp === 0`: returns `Lv. 1`, `xpNext = 100`, `xpRemaining = 100`, `progressPercent = 0`.
- * - If verified with `totalXp >= 122_500`: returns `Lv. 50`, `isMaxLevel = true`, `xpNext = null`,
- *   `xpRemaining = 0`, `progressPercent = 100` (`MAX LEVEL`).
+ * Computes full UI-ready Military Rank (1..17) & Star Economy metadata (BTO-PROGRESSION-MODES-V1.4 Sections 2 & 3).
+ * - If `xpVerificationStatus !== 'VERIFIED'` or `totalXp` is invalid: returns `'Chưa xác minh'` without
+ *   resetting or faking `'Binh nhì'` or `0 XP`.
+ * - If verified with `totalXp === 0`: returns `'Binh nhì'`, `rankXpNext = 100` (`Binh nhất`), `rankXpRemaining = 100`, `rankProgressPercent = 0`.
+ * - If verified with `totalXp >= 16_500`: returns `'Đại tướng'`, `isMaxRank = true`, `rankXpNext = null`,
+ *   `rankXpRemaining = 0`, `rankProgressPercent = 100`.
  */
 export function computePlayerLevelProgress(
   rawTotalXp: unknown,
@@ -217,6 +644,22 @@ export function computePlayerLevelProgress(
   if (xpVerificationStatus !== 'VERIFIED') {
     return {
       xpVerificationStatus: 'UNVERIFIED',
+      rankTier: null,
+      rankOrderFromTop: null,
+      rankCode: null,
+      rankNameVi: 'Chưa xác minh',
+      rankNameEn: 'Unverified',
+      nextRankNameVi: null,
+      nextRankNameEn: null,
+      isMaxRank: false,
+      rankFloorXp: null,
+      rankXpNext: null,
+      rankXpRemaining: null,
+      rankProgressPercent: 0,
+      rankBadge: 'Chưa xác minh',
+      starBalance: 0,
+      unconvertedXp: 0,
+      xpToNextStar: XP_PER_STAR,
       level: null,
       isMaxLevel: false,
       topMenuBadge: 'Lv. --',
@@ -233,6 +676,22 @@ export function computePlayerLevelProgress(
   if (!check.valid || check.sanitizedXp === null) {
     return {
       xpVerificationStatus: 'UNVERIFIED',
+      rankTier: null,
+      rankOrderFromTop: null,
+      rankCode: null,
+      rankNameVi: 'Chưa xác minh',
+      rankNameEn: 'Unverified',
+      nextRankNameVi: null,
+      nextRankNameEn: null,
+      isMaxRank: false,
+      rankFloorXp: null,
+      rankXpNext: null,
+      rankXpRemaining: null,
+      rankProgressPercent: 0,
+      rankBadge: 'Chưa xác minh',
+      starBalance: 0,
+      unconvertedXp: 0,
+      xpToNextStar: XP_PER_STAR,
       level: null,
       isMaxLevel: false,
       topMenuBadge: 'Lv. --',
@@ -246,37 +705,62 @@ export function computePlayerLevelProgress(
   }
 
   const totalXp = check.sanitizedXp;
-  const level = calculateLevelFromTotalXp(totalXp);
-  const currentLevelFloorXp = xpRequiredForLevel(level);
-  const isMaxLevel = level === MAX_PLAYER_LEVEL;
+  const rank = calculateMilitaryRankFromTotalXp(totalXp);
+  const starInfo = computeStarEconomyFromTotalXp(totalXp);
+  const rankFloorXp = rank.xpRequired;
+  const isMaxRank = rank.tier === TOTAL_MILITARY_RANKS;
+  const nextRank = isMaxRank ? null : OFFICIAL_MILITARY_RANKS_ASC[rank.tier];
+  const rankXpNext = nextRank ? nextRank.xpRequired : null;
+  const rankXpRemaining = isMaxRank || rankXpNext === null ? 0 : Math.max(0, rankXpNext - totalXp);
+  const rankSpan = rankXpNext !== null ? rankXpNext - rankFloorXp : 0;
+  const rawRankProgress = isMaxRank
+    ? 100
+    : rankSpan > 0
+      ? ((totalXp - rankFloorXp) / rankSpan) * 100
+      : 0;
+  const rankProgressPercent = isMaxRank
+    ? 100
+    : Math.min(100, Math.max(0, Number(rawRankProgress.toFixed(2))));
 
-  if (isMaxLevel) {
-    return {
-      xpVerificationStatus: 'VERIFIED',
-      level: MAX_PLAYER_LEVEL,
-      isMaxLevel: true,
-      topMenuBadge: `Lv. ${MAX_PLAYER_LEVEL}`,
-      systemLabel: `Cấp ${MAX_PLAYER_LEVEL} • MAX LEVEL`,
-      totalXp,
-      currentLevelFloorXp,
-      xpNext: null,
-      xpRemaining: 0,
-      progressPercent: 100,
-    };
-  }
-
-  const xpNext = xpRequiredForLevel(level + 1);
-  const xpRemaining = Math.max(0, xpNext - totalXp);
-  const span = xpNext - currentLevelFloorXp;
-  const rawProgress = span > 0 ? ((totalXp - currentLevelFloorXp) / span) * 100 : 0;
-  const progressPercent = Math.min(100, Math.max(0, Number(rawProgress.toFixed(2))));
+  const legacyLevel = calculateLevelFromTotalXp(totalXp);
+  const isMaxLevel = legacyLevel >= MAX_PLAYER_LEVEL;
+  const currentLevelFloorXp = xpRequiredForLevel(legacyLevel);
+  const xpNext = isMaxLevel ? null : xpRequiredForLevel(legacyLevel + 1);
+  const xpRemaining = isMaxLevel || xpNext === null ? 0 : Math.max(0, xpNext - totalXp);
+  const levelSpan = xpNext !== null ? xpNext - currentLevelFloorXp : 0;
+  const rawLevelProgress = isMaxLevel
+    ? 100
+    : levelSpan > 0
+      ? ((totalXp - currentLevelFloorXp) / levelSpan) * 100
+      : 0;
+  const progressPercent = isMaxLevel
+    ? 100
+    : Math.min(100, Math.max(0, Number(rawLevelProgress.toFixed(2))));
 
   return {
     xpVerificationStatus: 'VERIFIED',
-    level,
-    isMaxLevel: false,
-    topMenuBadge: `Lv. ${level}`,
-    systemLabel: `Cấp ${level}/${MAX_PLAYER_LEVEL}`,
+    rankTier: rank.tier,
+    rankOrderFromTop: rank.orderFromTop,
+    rankCode: rank.code,
+    rankNameVi: rank.nameVi,
+    rankNameEn: rank.nameEn,
+    nextRankNameVi: nextRank ? nextRank.nameVi : null,
+    nextRankNameEn: nextRank ? nextRank.nameEn : null,
+    isMaxRank,
+    rankFloorXp,
+    rankXpNext,
+    rankXpRemaining,
+    rankProgressPercent,
+    rankBadge: rank.nameVi,
+    starBalance: starInfo.starBalance,
+    unconvertedXp: starInfo.unconvertedXp,
+    xpToNextStar: starInfo.xpToNextStar,
+    level: legacyLevel,
+    isMaxLevel,
+    topMenuBadge: `Lv. ${legacyLevel}`,
+    systemLabel: isMaxLevel
+      ? `Lv. ${legacyLevel} (MAX LEVEL)`
+      : `Lv. ${legacyLevel} / ${MAX_PLAYER_LEVEL}`,
     totalXp,
     currentLevelFloorXp,
     xpNext,
@@ -310,6 +794,8 @@ export interface BattleXpGrantInput {
   gameMode: string;
   earnedXp: number;
   defeatedByType: Partial<EnemyDefeatBreakdown>;
+  /** Optional Stage Completion Achievement Bonus XP (`0 | 10 | 15 | 25`, only allowed on Stage Clear) */
+  achievementBonusXp?: number;
   roomCode?: string | null;
   timestampMs?: number;
 }
@@ -322,6 +808,7 @@ export type XpGrantRejectionCode =
   | 'INVALID_XP_VALUE'
   | 'INVALID_ENEMY_BREAKDOWN'
   | 'ENEMY_COUNT_EXCEEDS_STAGE_CAP'
+  | 'INVALID_ACHIEVEMENT_BONUS_XP'
   | 'XP_MISMATCH_ENEMY_FORMULA'
   | 'DIRECT_CLIENT_OVERRIDE_FORBIDDEN'
   | 'MULTI_TAB_CONFLICT_DETECTED';
@@ -333,6 +820,8 @@ export interface ValidatedXpLedgerEvent {
   stageId: number;
   gameMode: string;
   deltaXp: number;
+  combatXp?: number;
+  achievementBonusXp?: number;
   enemyBreakdown: EnemyDefeatBreakdown;
   roomCode: string | null;
   timestampMs: number;
@@ -351,6 +840,15 @@ export interface XpGrantExecutionResult {
   previousLevel: number | null;
   newLevel: number | null;
   levelChanged: boolean;
+  previousRankCode: MilitaryRankCode | null;
+  newRankCode: MilitaryRankCode | null;
+  previousRankNameVi: string | null;
+  newRankNameVi: string | null;
+  rankPromoted: boolean;
+  previousStarBalance: number;
+  newStarBalance: number;
+  starsEarnedThisGrant: number;
+  newUnconvertedXp: number;
 }
 
 export type LevelDiscrepancyCode =
@@ -370,6 +868,9 @@ export interface UserLevelConsistencyAuditEntry {
   resolvedVerifiedTotalXp: number | null;
   storedLevel: unknown;
   expectedLevel: number | null;
+  expectedRankCode: MilitaryRankCode | null;
+  expectedRankNameVi: string | null;
+  expectedStarBalance: number | null;
   isConsistent: boolean;
   discrepancyCodes: LevelDiscrepancyCode[];
   discrepancySummary: string;
@@ -446,6 +947,10 @@ export function buildBattleXpIdentifiers(params: {
 }
 
 function computeEventDigest(ev: Omit<ValidatedXpLedgerEvent, 'eventDigest'>): string {
+  const bonusSuffix =
+    typeof ev.achievementBonusXp === 'number' && ev.achievementBonusXp > 0
+      ? `|BONUS:${ev.achievementBonusXp}`
+      : '';
   return computeCanonicalChecksum(
     [
       'M752_EV',
@@ -457,7 +962,7 @@ function computeEventDigest(ev: Omit<ValidatedXpLedgerEvent, 'eventDigest'>): st
       String(ev.deltaXp),
       `${ev.enemyBreakdown.BASIC},${ev.enemyBreakdown.FAST},${ev.enemyBreakdown.POWER},${ev.enemyBreakdown.ARMOR}`,
       ev.roomCode ?? '',
-    ].join('|')
+    ].join('|') + bonusSuffix
   );
 }
 
@@ -483,11 +988,12 @@ function computeLedgerSignature(
 }
 
 /**
- * Validates a battle XP grant against all M7.5.2 Section 4 rules:
+ * Validates a battle XP grant against all BTO-PROGRESSION-MODES-V1.4 & M7.5.2 rules:
  * - Valid `uid`, `eventId`, `stageId` (`1..10`), and `source`.
  * - Non-negative integer counts for `BASIC`, `FAST`, `POWER`, `ARMOR` with total `<= 30`.
- * - Exact match with official enemy XP values (`1*BASIC + 2*FAST + 3*POWER + 5*ARMOR === earnedXp`),
- *   ensuring zero unapproved bonus XP for stage clear, win, login, playtime, or co-op.
+ * - Optional `achievementBonusXp` must be one of `0, 10, 15, 25`.
+ * - Exact match with official enemy XP values + approved stage achievement bonus:
+ *   `1*BASIC + 2*FAST + 3*POWER + 5*ARMOR + achievementBonusXp === earnedXp`.
  */
 export function validateBattleXpGrantInput(input: BattleXpGrantInput): {
   valid: boolean;
@@ -562,17 +1068,32 @@ export function validateBattleXpGrantInput(input: BattleXpGrantInput): {
     };
   }
 
-  const expectedFormulaXp =
+  const rawBonus = input.achievementBonusXp ?? 0;
+  if (
+    typeof rawBonus !== 'number' ||
+    !Number.isInteger(rawBonus) ||
+    !ALLOWED_ACHIEVEMENT_BONUS_VALUES.has(rawBonus)
+  ) {
+    return {
+      valid: false,
+      rejectionCode: 'INVALID_ACHIEVEMENT_BONUS_XP',
+      rejectionMessage: `XP thưởng thành tích (${String(rawBonus)}) không hợp lệ. Chỉ chấp nhận 0, 10, 15 hoặc 25 XP.`,
+    };
+  }
+
+  const combatXp =
     rawB * SCORE_VALUES.BASIC +
     rawF * SCORE_VALUES.FAST +
     rawP * SCORE_VALUES.POWER +
     rawA * SCORE_VALUES.ARMOR;
 
+  const expectedFormulaXp = combatXp + rawBonus;
+
   if (xpCheck.sanitizedXp !== expectedFormulaXp || xpCheck.sanitizedXp > MAX_SINGLE_STAGE_XP) {
     return {
       valid: false,
       rejectionCode: 'XP_MISMATCH_ENEMY_FORMULA',
-      rejectionMessage: `XP cộng thêm (${xpCheck.sanitizedXp}) không khớp công thức tiêu diệt xe địch hợp lệ (${expectedFormulaXp} XP). Không cộng XP thưởng ngoài xe địch.`,
+      rejectionMessage: `XP cộng thêm (${xpCheck.sanitizedXp}) không khớp công thức hợp lệ (${expectedFormulaXp} XP = ${combatXp} XP diệt địch + ${rawBonus} XP thưởng thành tích).`,
     };
   }
 
@@ -588,6 +1109,8 @@ export function validateBattleXpGrantInput(input: BattleXpGrantInput): {
     stageId: input.stageId,
     gameMode: String(input.gameMode || 'SOLO').slice(0, 40),
     deltaXp: xpCheck.sanitizedXp,
+    combatXp,
+    achievementBonusXp: rawBonus,
     enemyBreakdown: {
       BASIC: rawB,
       FAST: rawF,
@@ -608,8 +1131,8 @@ export function validateBattleXpGrantInput(input: BattleXpGrantInput): {
 }
 
 /**
- * Audits a `/users/{uid}` Firestore document for `totalXp` / `xp` / `level` consistency
- * WITHOUT mutating or overwriting Firestore data (Sections 5 & 8).
+ * Audits a `/users/{uid}` Firestore document for `totalXp` / `xp` / `level` / `rank` consistency
+ * WITHOUT mutating or overwriting Firestore data.
  */
 export function auditUserDocumentLevelConsistency(
   uid: string,
@@ -651,8 +1174,6 @@ export function auditUserDocumentLevelConsistency(
     discrepancyCodes.push('TOTAL_XP_LEGACY_XP_CONFLICT');
   }
 
-  // Canonical resolution: prefer valid `totalXp`; fallback to valid `xp`; if neither exists and
-  // neither was corrupted, new `/users/{uid}` profile created on login has 0 verified XP.
   let resolvedVerifiedTotalXp: number | null = null;
   if (validTotalXp !== null) {
     resolvedVerifiedTotalXp = validTotalXp;
@@ -664,6 +1185,10 @@ export function auditUserDocumentLevelConsistency(
 
   const expectedLevel =
     resolvedVerifiedTotalXp !== null ? calculateLevelFromTotalXp(resolvedVerifiedTotalXp) : null;
+  const expectedRank =
+    resolvedVerifiedTotalXp !== null ? calculateMilitaryRankFromTotalXp(resolvedVerifiedTotalXp) : null;
+  const expectedStar =
+    resolvedVerifiedTotalXp !== null ? computeStarEconomyFromTotalXp(resolvedVerifiedTotalXp) : null;
 
   if (hasStoredLevel && docObj.level !== null) {
     const rawLv = docObj.level;
@@ -678,12 +1203,12 @@ export function auditUserDocumentLevelConsistency(
 
   const isConsistent = discrepancyCodes.length === 0;
   const discrepancySummary = isConsistent
-    ? `Hợp lệ (XP=${resolvedVerifiedTotalXp ?? 0} -> Lv.${expectedLevel ?? 1})`
+    ? `Hợp lệ (XP=${resolvedVerifiedTotalXp ?? 0} -> ${expectedRank?.nameVi ?? 'Binh nhì'} • ${expectedStar?.starBalance ?? 0} Sao)`
     : `Phát hiện bất nhất [${discrepancyCodes.join(', ')}]: storedLevel=${JSON.stringify(
         docObj.level
       )}, totalXp=${JSON.stringify(docObj.totalXp)}, legacyXp=${JSON.stringify(
         docObj.xp
-      )} -> expectedLevel=${expectedLevel !== null ? `Lv.${expectedLevel}` : 'UNVERIFIED'}`;
+      )} -> expectedRank=${expectedRank ? expectedRank.nameVi : 'UNVERIFIED'}`;
 
   return {
     uid: cleanUid,
@@ -694,6 +1219,9 @@ export function auditUserDocumentLevelConsistency(
     resolvedVerifiedTotalXp,
     storedLevel: hasStoredLevel ? docObj.level : undefined,
     expectedLevel,
+    expectedRankCode: expectedRank?.code ?? null,
+    expectedRankNameVi: expectedRank?.nameVi ?? null,
+    expectedStarBalance: expectedStar?.starBalance ?? null,
     isConsistent,
     discrepancyCodes,
     discrepancySummary,
@@ -705,7 +1233,7 @@ export function auditUserDocumentLevelConsistency(
  * Singleton PlayerLevelManager:
  * - Maintains strictly UID-isolated, signature-verified XP ledgers.
  * - Serializes concurrent XP grants per UID (`Promise` queue + synchronous atomic commit)
- *   so concurrent grants never race, lose XP, or double-emit Level-Up audit logs.
+ *   so concurrent grants never race, lose XP, or double-emit Rank-Up audit logs.
  * - Tracks non-destructive `/users/{uid}` consistency audit entries for Admin review.
  */
 export class PlayerLevelManager {
@@ -732,10 +1260,6 @@ export class PlayerLevelManager {
     return PlayerLevelManager.instance;
   }
 
-  /**
-   * Creates an isolated tab instance (with separate RAM cache) sharing browser `localStorage`
-   * for deterministic multi-tab concurrency and `storage` event tests.
-   */
   public static createIsolatedTabInstanceForTesting(): PlayerLevelManager {
     return new PlayerLevelManager();
   }
@@ -831,8 +1355,7 @@ export class PlayerLevelManager {
       return { valid: false, reason: 'LEDGER_NOT_OBJECT' };
     }
     const candidate = rawObj as Record<string, unknown>;
-    // Reject injected `totalXp` or `level` fields inside persisted storage
-    if ('totalXp' in candidate || 'level' in candidate) {
+    if ('totalXp' in candidate || 'level' in candidate || 'rank' in candidate || 'starBalance' in candidate) {
       return { valid: false, reason: 'FORBIDDEN_DIRECT_LEVEL_OR_XP_FIELD_IN_STORAGE' };
     }
     if (candidate.schemaVersion !== 'M7.5.2-LEDGER-V1' || candidate.uid !== expectedUid) {
@@ -886,6 +1409,7 @@ export class PlayerLevelManager {
         gameMode: ev.gameMode,
         earnedXp: ev.deltaXp,
         defeatedByType: ev.enemyBreakdown,
+        achievementBonusXp: ev.achievementBonusXp ?? 0,
         roomCode: ev.roomCode,
         timestampMs: ev.timestampMs,
       });
@@ -933,7 +1457,6 @@ export class PlayerLevelManager {
   ):
     | { ok: true; merged: PersistedUserLevelLedger }
     | { ok: false; conflict: LedgerMultiTabConflictInfo } {
-    // 1. Check same eventId with conflicting digest/payload
     const memEventsById = new Map(mem.events.map((e) => [e.eventId, e]));
     for (const dEv of disk.events) {
       const mEv = memEventsById.get(dEv.eventId);
@@ -952,7 +1475,6 @@ export class PlayerLevelManager {
       }
     }
 
-    // 2. Check conflicting non-null cloudBaselineXp without strict monotonic cloud sync causality
     let mergedCloudBaselineXp: number | null = mem.cloudBaselineXp;
     let mergedCloudSyncAtMs: number | null = mem.lastCloudSyncAtMs;
     if (mem.cloudBaselineXp !== null && disk.cloudBaselineXp !== null) {
@@ -987,7 +1509,6 @@ export class PlayerLevelManager {
       mergedCloudSyncAtMs = disk.lastCloudSyncAtMs;
     }
 
-    // 3. Safe commutative union of verified events & cloudCommittedEventIds
     const unionEventsMap = new Map<string, ValidatedXpLedgerEvent>();
     for (const dEv of disk.events) {
       unionEventsMap.set(dEv.eventId, { ...dEv, enemyBreakdown: { ...dEv.enemyBreakdown } });
@@ -1047,10 +1568,6 @@ export class PlayerLevelManager {
     });
   }
 
-  /**
-   * Re-reads `localStorage` if changed by another tab and safely merges updates into RAM.
-   * Refuses to silently overwrite on unmergeable conflict or external corruption.
-   */
   public reconcileWithPersistedStorage(
     uid: string,
     trigger: 'READ' | 'PRE_WRITE' | 'STORAGE_EVENT' = 'READ'
@@ -1158,7 +1675,6 @@ export class PlayerLevelManager {
     const mergeRes = this.mergeVerifiedLedgers(memLedger, diskLedger);
     if (!mergeRes.ok) {
       this.recordMultiTabConflict(mergeRes.conflict);
-      // Do NOT overwrite remote localStorage; update our view of diskRaw only as last known remote so we don't silently clobber it
       return {
         ok: false,
         changedFromStorage: false,
@@ -1226,7 +1742,7 @@ export class PlayerLevelManager {
       severity: 'WARNING',
       category: 'SECURITY_PERMISSION_DENIED',
       eventType: 'CLIENT_XP_TAMPER_REJECTED',
-      message: `Phát hiện và từ chối dữ liệu XP/Level bất hợp lệ trong bộ nhớ trình duyệt (${reason}).`,
+      message: `Phát hiện và từ chối dữ liệu XP/Quân hàm bất hợp lệ trong bộ nhớ trình duyệt (${reason}).`,
       uid,
       source: 'PlayerLevelManager.verifyPersistedLedgerObject',
       outcome: 'FAILURE',
@@ -1251,8 +1767,6 @@ export class PlayerLevelManager {
     };
     candidateLedger.signature = computeLedgerSignature(candidateLedger);
 
-    // Pre-write multi-tab check: if another tab wrote to localStorage while we held stale RAM,
-    // verify and merge before writing (never overwrite silently!).
     if (typeof window !== 'undefined' && window.localStorage) {
       const storageKey = `${LEDGER_STORAGE_PREFIX}${ledger.uid}`;
       const currentDiskRaw = window.localStorage.getItem(storageKey);
@@ -1316,9 +1830,6 @@ export class PlayerLevelManager {
     return true;
   }
 
-  /**
-   * Forces a fresh re-validation & cross-tab reconciliation of `localStorage` for `uid`.
-   */
   public revalidateLocalStorageIntegrity(uid: string): { intact: boolean; reason?: string } {
     if (!uid) return { intact: true };
     const res = this.reconcileWithPersistedStorage(uid, 'READ');
@@ -1332,14 +1843,11 @@ export class PlayerLevelManager {
     return { intact: true };
   }
 
-  /**
-   * Rejects any direct client attempt to set or mutate `totalXp` or `level` outside of a
-   * verified enemy-defeat event or Firestore `/users/{uid}` snapshot (Section 4.1 & Section 9).
-   */
   public attemptDirectClientOverride(params: {
     uid: string;
     attemptedTotalXp?: unknown;
     attemptedLevel?: unknown;
+    attemptedRank?: unknown;
     callerSource?: string;
   }): {
     allowed: false;
@@ -1351,7 +1859,7 @@ export class PlayerLevelManager {
       severity: 'WARNING',
       category: 'SECURITY_PERMISSION_DENIED',
       eventType: 'CLIENT_XP_TAMPER_REJECTED',
-      message: 'Từ chối yêu cầu ghi đè trực tiếp totalXp hoặc level từ phía client.',
+      message: 'Từ chối yêu cầu ghi đè trực tiếp totalXp hoặc Quân hàm từ phía client.',
       uid: cleanUid,
       source: params.callerSource || 'PlayerLevelManager.attemptDirectClientOverride',
       outcome: 'FAILURE',
@@ -1360,22 +1868,16 @@ export class PlayerLevelManager {
       metadata: {
         attemptedTotalXp: params.attemptedTotalXp ?? null,
         attemptedLevel: params.attemptedLevel ?? null,
+        attemptedRank: params.attemptedRank ?? null,
       },
     });
     return {
       allowed: false,
       errorCode: 'DIRECT_CLIENT_OVERRIDE_FORBIDDEN',
-      errorMessage: 'Client không được phép tự ghi đè trực tiếp totalXp hoặc Level.',
+      errorMessage: 'Client không được phép tự ghi đè trực tiếp totalXp hoặc Quân hàm.',
     };
   }
 
-  /**
-   * Applies a `/users/{uid}` Firestore document snapshot:
-   * - Runs non-destructive consistency check (`auditUserDocumentLevelConsistency`) and records
-   *   any discrepancy without overwriting Firestore (Sections 5 & 8).
-   * - Updates `cloudBaselineXp` and reconciles `appliedXpEventIds` if present so cross-device
-   *   updates never double-count XP.
-   */
   public applyFirestoreUserDocument(
     uid: string,
     rawDoc: Record<string, unknown> | null,
@@ -1411,6 +1913,8 @@ export class PlayerLevelManager {
         metadata: {
           storedLevel: audit.storedLevel ?? null,
           expectedLevel: audit.expectedLevel,
+          expectedRankCode: audit.expectedRankCode,
+          expectedRankNameVi: audit.expectedRankNameVi,
           storedTotalXp: audit.storedTotalXp ?? null,
           legacyXp: audit.legacyXp ?? null,
           resolvedVerifiedTotalXp: audit.resolvedVerifiedTotalXp,
@@ -1445,9 +1949,13 @@ export class PlayerLevelManager {
       const nextProgress = this.getLevelProgressForUid(cleanUid);
       if (
         prevProgress.xpVerificationStatus === 'VERIFIED' &&
-        prevProgress.level !== null &&
-        nextProgress.level !== null &&
-        nextProgress.level !== prevProgress.level
+        nextProgress.xpVerificationStatus === 'VERIFIED' &&
+        ((prevProgress.level !== null &&
+          nextProgress.level !== null &&
+          nextProgress.level !== prevProgress.level) ||
+          (prevProgress.rankCode !== null &&
+            nextProgress.rankCode !== null &&
+            nextProgress.rankCode !== prevProgress.rankCode))
       ) {
         const syncEventId =
           typeof rawDoc.lastXpEventId === 'string' && rawDoc.lastXpEventId.trim()
@@ -1455,8 +1963,10 @@ export class PlayerLevelManager {
             : `cloud_sync_${cleanUid}_${nextProgress.totalXp}`;
         this.emitVerifiedLevelChangeAuditLog({
           uid: cleanUid,
-          previousLevel: prevProgress.level,
-          newLevel: nextProgress.level,
+          previousLevel: prevProgress.level ?? 1,
+          newLevel: nextProgress.level ?? 1,
+          previousRankNameVi: prevProgress.rankNameVi,
+          newRankNameVi: nextProgress.rankNameVi,
           previousTotalXp: prevProgress.totalXp ?? 0,
           newTotalXp: nextProgress.totalXp ?? 0,
           xpEventId: syncEventId,
@@ -1465,7 +1975,6 @@ export class PlayerLevelManager {
         });
       }
     } else {
-      // Corrupted cloud XP field -> mark unverified so UI never fabricates Level 1
       ledger.cloudBaselineXp = null;
       ledger.hasVerifiedZeroBaselineSession = false;
       this.saveLedger(ledger);
@@ -1474,16 +1983,11 @@ export class PlayerLevelManager {
     return audit;
   }
 
-  /**
-   * Marks that Firestore `/users/{uid}` read confirmed a newly created account with `0` baseline XP
-   * (NEVER call before Firestore `/users/{uid}` read finishes).
-   */
   public confirmNewAccountZeroBaselineSession(uid: string): void {
     const cleanUid = String(uid || '').trim();
     if (!cleanUid || this.tamperedUids.has(cleanUid)) return;
     const existingAudit = this.consistencyAuditByUid.get(cleanUid);
     if (existingAudit && existingAudit.resolvedVerifiedTotalXp === null) {
-      // Cloud doc had corrupted XP type; keep unverified until fixed
       return;
     }
     const ledger = this.getOrLoadLedger(cleanUid);
@@ -1493,10 +1997,6 @@ export class PlayerLevelManager {
     }
   }
 
-  /**
-   * Preserves UNVERIFIED (`Lv. --`) when Firestore read fails or is offline without any verified baseline.
-   * Never converts a network/Firestore error into a 0 XP Level 1 new account.
-   */
   public markFirestoreReadFailed(uid: string): void {
     const cleanUid = String(uid || '').trim();
     if (!cleanUid) return;
@@ -1519,9 +2019,6 @@ export class PlayerLevelManager {
     this.saveLedger(ledger);
   }
 
-  /**
-   * Computes the authoritative verified `totalXp` and `PlayerLevelProgressInfo` for `uid`.
-   */
   public getLevelProgressForUid(uid: string | null | undefined): PlayerLevelProgressInfo {
     const cleanUid = typeof uid === 'string' ? uid.trim() : '';
     if (!cleanUid) {
@@ -1553,10 +2050,6 @@ export class PlayerLevelManager {
     return computePlayerLevelProgress(totalXp, 'VERIFIED');
   }
 
-  /**
-   * Synchronously validates and commits a battle XP grant with strict `eventId` idempotency.
-   * Safe for UI effects, multi-device duplicate event delivery, and retry loops.
-   */
   public grantVerifiedBattleXpSync(input: BattleXpGrantInput): XpGrantExecutionResult {
     const cleanUid = typeof input.uid === 'string' ? input.uid.trim() : '';
     const cleanEventId = typeof input.eventId === 'string' ? input.eventId.trim() : '';
@@ -1577,6 +2070,7 @@ export class PlayerLevelManager {
           metadata: {
             eventId: cleanEventId,
             attemptedEarnedXp: input.earnedXp,
+            achievementBonusXp: input.achievementBonusXp ?? 0,
             stageId: input.stageId,
             source: input.source,
           },
@@ -1595,6 +2089,15 @@ export class PlayerLevelManager {
         previousLevel: cur.level,
         newLevel: cur.level,
         levelChanged: false,
+        previousRankCode: cur.rankCode,
+        newRankCode: cur.rankCode,
+        previousRankNameVi: cur.rankNameVi,
+        newRankNameVi: cur.rankNameVi,
+        rankPromoted: false,
+        previousStarBalance: cur.starBalance,
+        newStarBalance: cur.starBalance,
+        starsEarnedThisGrant: 0,
+        newUnconvertedXp: cur.unconvertedXp,
       };
     }
 
@@ -1618,12 +2121,20 @@ export class PlayerLevelManager {
         previousLevel: cur.level,
         newLevel: cur.level,
         levelChanged: false,
+        previousRankCode: cur.rankCode,
+        newRankCode: cur.rankCode,
+        previousRankNameVi: cur.rankNameVi,
+        newRankNameVi: cur.rankNameVi,
+        rankPromoted: false,
+        previousStarBalance: cur.starBalance,
+        newStarBalance: cur.starBalance,
+        starsEarnedThisGrant: 0,
+        newUnconvertedXp: cur.unconvertedXp,
       };
     }
 
     const ledger = this.getOrLoadLedger(ev.uid);
 
-    // Idempotency & digest-conflict check across retries, reconnects, and multi-tab collisions
     const existingEvent = ledger.events.find((existing) => existing.eventId === ev.eventId);
     if (existingEvent && existingEvent.eventDigest !== ev.eventDigest) {
       const conflict: LedgerMultiTabConflictInfo = {
@@ -1648,6 +2159,15 @@ export class PlayerLevelManager {
         previousLevel: cur.level,
         newLevel: cur.level,
         levelChanged: false,
+        previousRankCode: cur.rankCode,
+        newRankCode: cur.rankCode,
+        previousRankNameVi: cur.rankNameVi,
+        newRankNameVi: cur.rankNameVi,
+        rankPromoted: false,
+        previousStarBalance: cur.starBalance,
+        newStarBalance: cur.starBalance,
+        starsEarnedThisGrant: 0,
+        newUnconvertedXp: cur.unconvertedXp,
       };
     }
     const alreadyInCloudCommitted = ledger.cloudCommittedEventIds.includes(ev.eventId);
@@ -1663,6 +2183,15 @@ export class PlayerLevelManager {
         previousLevel: cur.level,
         newLevel: cur.level,
         levelChanged: false,
+        previousRankCode: cur.rankCode,
+        newRankCode: cur.rankCode,
+        previousRankNameVi: cur.rankNameVi,
+        newRankNameVi: cur.rankNameVi,
+        rankPromoted: false,
+        previousStarBalance: cur.starBalance,
+        newStarBalance: cur.starBalance,
+        starsEarnedThisGrant: 0,
+        newUnconvertedXp: cur.unconvertedXp,
       };
     }
 
@@ -1676,6 +2205,8 @@ export class PlayerLevelManager {
 
     const prevTotalXp = prevProgress.totalXp ?? 0;
     const prevLevel = prevProgress.level ?? MIN_PLAYER_LEVEL;
+    const prevRank = calculateMilitaryRankFromTotalXp(prevTotalXp);
+    const prevStars = computeStarEconomyFromTotalXp(prevTotalXp);
 
     const candidateLedger: PersistedUserLevelLedger = {
       ...ledger,
@@ -1699,19 +2230,34 @@ export class PlayerLevelManager {
         previousLevel: cur.level,
         newLevel: cur.level,
         levelChanged: false,
+        previousRankCode: cur.rankCode,
+        newRankCode: cur.rankCode,
+        previousRankNameVi: cur.rankNameVi,
+        newRankNameVi: cur.rankNameVi,
+        rankPromoted: false,
+        previousStarBalance: cur.starBalance,
+        newStarBalance: cur.starBalance,
+        starsEarnedThisGrant: 0,
+        newUnconvertedXp: cur.unconvertedXp,
       };
     }
 
     const nextProgress = this.getLevelProgressForUid(ev.uid);
     const newTotalXp = nextProgress.totalXp ?? prevTotalXp + ev.deltaXp;
     const newLevel = nextProgress.level ?? calculateLevelFromTotalXp(newTotalXp);
-    const levelChanged = newLevel !== prevLevel;
+    const newRank = calculateMilitaryRankFromTotalXp(newTotalXp);
+    const newStars = computeStarEconomyFromTotalXp(newTotalXp);
 
-    if (levelChanged) {
+    const levelChanged = newLevel !== prevLevel;
+    const rankPromoted = newRank.tier > prevRank.tier;
+
+    if (levelChanged || rankPromoted) {
       this.emitVerifiedLevelChangeAuditLog({
         uid: ev.uid,
         previousLevel: prevLevel,
         newLevel,
+        previousRankNameVi: prevRank.nameVi,
+        newRankNameVi: newRank.nameVi,
         previousTotalXp: prevTotalXp,
         newTotalXp,
         xpEventId: ev.eventId,
@@ -1733,12 +2279,18 @@ export class PlayerLevelManager {
       previousLevel: prevLevel,
       newLevel,
       levelChanged,
+      previousRankCode: prevRank.code,
+      newRankCode: newRank.code,
+      previousRankNameVi: prevRank.nameVi,
+      newRankNameVi: newRank.nameVi,
+      rankPromoted,
+      previousStarBalance: prevStars.starBalance,
+      newStarBalance: newStars.starBalance,
+      starsEarnedThisGrant: Math.max(0, newStars.starBalance - prevStars.starBalance),
+      newUnconvertedXp: newStars.unconvertedXp,
     };
   }
 
-  /**
-   * Async serialized wrapper for concurrent XP grants (`Promise.all` safe per UID).
-   */
   public async grantVerifiedBattleXp(
     input: BattleXpGrantInput
   ): Promise<XpGrantExecutionResult> {
@@ -1757,6 +2309,8 @@ export class PlayerLevelManager {
     uid: string;
     previousLevel: number;
     newLevel: number;
+    previousRankNameVi: string;
+    newRankNameVi: string;
     previousTotalXp: number;
     newTotalXp: number;
     xpEventId: string;
@@ -1766,7 +2320,7 @@ export class PlayerLevelManager {
     roomCode?: string | null;
     timestampMs: number;
   }): void {
-    const dedupKey = `${params.uid}|${params.xpEventId}|${params.previousLevel}->${params.newLevel}`;
+    const dedupKey = `${params.uid}|${params.xpEventId}|${params.previousRankNameVi}->${params.newRankNameVi}|${params.previousLevel}->${params.newLevel}`;
     if (this.trackedEmittedLevelAuditKeys.has(dedupKey)) return;
     this.trackedEmittedLevelAuditKeys.add(dedupKey);
 
@@ -1774,7 +2328,7 @@ export class PlayerLevelManager {
       severity: 'INFO',
       category: 'CAMPAIGN_STAGE_EVENT',
       eventType: 'PLAYER_LEVEL_CHANGED',
-      message: `Người chơi tăng cấp: Lv. ${params.previousLevel} → Lv. ${params.newLevel} (Tổng XP: ${params.previousTotalXp} → ${params.newTotalXp}).`,
+      message: `Người chơi thăng cấp bậc: ${params.previousRankNameVi} → ${params.newRankNameVi} (Tổng XP: ${params.previousTotalXp} → ${params.newTotalXp}).`,
       uid: params.uid,
       roomCode: params.roomCode ?? null,
       stageId: params.stageId ?? null,
@@ -1787,11 +2341,14 @@ export class PlayerLevelManager {
         uid: params.uid,
         previousLevel: params.previousLevel,
         newLevel: params.newLevel,
+        previousRankNameVi: params.previousRankNameVi,
+        newRankNameVi: params.newRankNameVi,
         previousTotalXp: params.previousTotalXp,
         newTotalXp: params.newTotalXp,
         xpEventId: params.xpEventId,
         source: params.source,
         verificationStatus: 'CLIENT_LEDGER_OR_FIRESTORE_READ',
+        isMaxRankReached: params.newTotalXp >= MAX_MILITARY_RANK_XP_REQUIRED,
         isMaxLevelReached: params.newLevel === MAX_PLAYER_LEVEL,
       },
     });

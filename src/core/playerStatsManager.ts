@@ -115,7 +115,24 @@ export interface CloudUserStatsFields {
 
 export interface PlayerFullStatisticsSnapshot {
   uid: string | null;
-  // 1. Official 50-Level System (M7.5.2 — strictly separated from Rank & Xu)
+  // 1. Official 17-Rank Military Progression & Star Economy (BTO-PROGRESSION-MODES-V1.4)
+  rankTier: number | null;
+  rankOrderFromTop: number | null;
+  rankCode: string | null;
+  rankNameVi: string;
+  rankNameEn: string;
+  nextRankNameVi: string | null;
+  nextRankNameEn: string | null;
+  isMaxRank: boolean;
+  rankFloorXp: number | null;
+  rankXpNext: number | null;
+  rankXpRemaining: number | null;
+  rankProgressPercent: number;
+  rankBadge: string;
+  starBalance: number;
+  unconvertedXp: number;
+  xpToNextStar: number;
+  // Legacy compatibility fields for existing level audit harnesses
   level: number | null;
   levelStatus: 'CONFIGURED' | 'UNCONFIGURED';
   xpVerificationStatus: XpVerificationStatus;
@@ -130,7 +147,7 @@ export interface PlayerFullStatisticsSnapshot {
   // 2. Quân hàm / Xếp hạng PvP hiện tại
   pvpRankCode: string | null;
   pvpRankLabel: string;
-  // 3. Điểm thành tích (XP, Xu, High Score, Chiến dịch Stage)
+  // 3. Điểm thành tích (XP, Sao, High Score, Chiến dịch Stage)
   totalXp: number;
   highScoreXp: number;
   xuBalance: number;
@@ -1139,6 +1156,7 @@ export class PlayerStatsManager {
     stageId: number;
     gameMode: string;
     earnedScoreXp: number;
+    achievementBonusXp?: number;
     runTotalScoreXp?: number;
     defeatedByType?: Partial<Record<'BASIC' | 'FAST' | 'POWER' | 'ARMOR', number>>;
     roomCode?: string | null;
@@ -1163,6 +1181,7 @@ export class PlayerStatsManager {
       stageId: params.stageId,
       gameMode: params.gameMode,
       earnedXp: params.earnedScoreXp,
+      achievementBonusXp: params.achievementBonusXp ?? 0,
       defeatedByType: params.defeatedByType ?? { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 },
       roomCode: params.roomCode ?? null,
       timestampMs: nowMs,
@@ -1282,6 +1301,22 @@ export class PlayerStatsManager {
     if (!cleanUid) {
       return {
         uid: null,
+        rankTier: null,
+        rankOrderFromTop: null,
+        rankCode: null,
+        rankNameVi: 'Chưa xác minh',
+        rankNameEn: 'Unverified',
+        nextRankNameVi: null,
+        nextRankNameEn: null,
+        isMaxRank: false,
+        rankFloorXp: null,
+        rankXpNext: null,
+        rankXpRemaining: null,
+        rankProgressPercent: 0,
+        rankBadge: 'Chưa xác minh',
+        starBalance: 0,
+        unconvertedXp: 0,
+        xpToNextStar: 25,
         level: null,
         levelStatus: 'UNCONFIGURED',
         xpVerificationStatus: 'UNVERIFIED',
@@ -1409,6 +1444,22 @@ export class PlayerStatsManager {
 
     return {
       uid: cleanUid,
+      rankTier: levelProgress.rankTier,
+      rankOrderFromTop: levelProgress.rankOrderFromTop,
+      rankCode: levelProgress.rankCode,
+      rankNameVi: levelProgress.rankNameVi,
+      rankNameEn: levelProgress.rankNameEn,
+      nextRankNameVi: levelProgress.nextRankNameVi,
+      nextRankNameEn: levelProgress.nextRankNameEn,
+      isMaxRank: levelProgress.isMaxRank,
+      rankFloorXp: levelProgress.rankFloorXp,
+      rankXpNext: levelProgress.rankXpNext,
+      rankXpRemaining: levelProgress.rankXpRemaining,
+      rankProgressPercent: levelProgress.rankProgressPercent,
+      rankBadge: levelProgress.rankBadge,
+      starBalance: levelProgress.starBalance,
+      unconvertedXp: levelProgress.unconvertedXp,
+      xpToNextStar: levelProgress.xpToNextStar,
       level: levelProgress.level,
       levelStatus: levelProgress.level !== null ? 'CONFIGURED' : 'UNCONFIGURED',
       xpVerificationStatus: levelProgress.xpVerificationStatus,
