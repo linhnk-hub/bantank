@@ -72,7 +72,10 @@ export function spawnBullet(
 export function updateBullet(
   bullet: BulletStructure,
   terrain: RuntimeTerrainState,
-  options?: { isProtectedEagleShieldTile?: (row: number, col: number) => boolean }
+  options?: {
+    isProtectedEagleShieldTile?: (row: number, col: number) => boolean;
+    isVsMode?: boolean;
+  }
 ): BulletUpdateResult {
   const step = BULLET_CONFIG.SPEED_PX_TICK;
 
@@ -107,7 +110,7 @@ export function updateBullet(
     if (type === TILE_TYPES.STEEL) {
       // Power tank bullets & Player FIREPOWER bullets (power >= 2) destroy 50% of a steel wall tile per hit,
       // EXCEPT Eagle-Shield-protected side walls (12,5) and (12,7) while the 10s shield is active!
-      const isBaseShieldTile = row >= 11 && col >= 5 && col <= 7;
+      const isBaseShieldTile = !options?.isVsMode && row >= 11 && col >= 5 && col <= 7;
       const isEagleShieldProtected = options?.isProtectedEagleShieldTile?.(row, col) ?? false;
       if ((bullet.power ?? 1) >= 2 && !isEagleShieldProtected && !(bullet.ownerId === 'p2' && isBaseShieldTile)) {
         applyPowerSteelImpact(terrain, row, col, bullet.direction);
@@ -117,7 +120,8 @@ export function updateBullet(
 
     if (type === TILE_TYPES.BRICK) {
       // P2 ally bullets never chip away the immediate brick shield around the Eagle Base (rows 11..12, cols 5..7)
-      const isBaseShieldBrick = row >= 11 && col >= 5 && col <= 7;
+      // In VS mode there is no Eagle Base, so brick destruction is 100% symmetric.
+      const isBaseShieldBrick = !options?.isVsMode && row >= 11 && col >= 5 && col <= 7;
       if (bullet.ownerId === 'p2' && isBaseShieldBrick) {
         return { isAlive: false, hitObstacle: true, hitBrick: false };
       }

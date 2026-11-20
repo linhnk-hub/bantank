@@ -7,6 +7,8 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { PhaserGame } from './game/PhaserGame.tsx';
 import { TerrainLegend } from './components/TerrainLegend.tsx';
 import { M3Hud } from './components/M3Hud.tsx';
+import { VsHud } from './components/VsHud.tsx';
+import { VsResultModal } from './components/VsResultModal.tsx';
 import { PauseModal } from './components/PauseModal.tsx';
 import { GameOverModal } from './components/GameOverModal.tsx';
 import { StageClearModal } from './components/StageClearModal.tsx';
@@ -46,6 +48,7 @@ import {
 import { useOrientation } from './hooks/useOrientation.ts';
 import { useViewportLayout } from './hooks/useViewportLayout.ts';
 import type { GameCoreState, InputState } from './core/types.ts';
+import { isVsGameMode, type VsMode } from './core/vsTypes.ts';
 import { AuthSessionBanner } from './components/AuthSessionBanner.tsx';
 import { SessionManager } from './core/sessionManager.ts';
 import { AuthManager, isSuperAdminUser } from './core/authManager.ts';
@@ -244,6 +247,7 @@ export default function App() {
   // Virtual Controls state for Landscape 3-Column Layout
   const [landscapeDirection, setLandscapeDirection] = useState<ActiveDirection>(null);
   const [landscapeShooting, setLandscapeShooting] = useState<boolean>(false);
+  const [vsTouchPlayer, setVsTouchPlayer] = useState<'P1' | 'P2'>('P1');
   const landscapeDirRef = useRef<ActiveDirection>(null);
 
   // Screen layout metrics (landscape, phone, tablet, desktop scaling)
@@ -502,11 +506,54 @@ export default function App() {
     setIsPaused(false);
     const st = gameEngine.getState();
     MusicManager.getInstance().syncPlaybackWithContext(
-      st.currentStageId,
+      Math.max(1, st.currentStageId),
       getMusicModeFromEngine(gameEngine)
     );
     setGameState({ ...st });
   }, [gameEngine, clearVirtualTouchInputs, getMusicModeFromEngine]);
+
+  const launchVerifiedVsMatch = useCallback(
+    (vsMode: VsMode) => {
+      if (sessionManager.getSnapshot().status !== 'ACTIVE') {
+        return;
+      }
+      setOnlineDisconnectMsg(null);
+      const startRes = gameEngine.startMatch(vsMode, 'DEFAULT', {
+        uid: currentUser?.uid ?? null,
+        isTrialMode: false,
+        enforceProgression: false,
+      });
+      if (!startRes.success) {
+        return;
+      }
+      setIsPaused(false);
+      setVsTouchPlayer('P1');
+      const st = gameEngine.getState();
+      SoundManager.getInstance().stopAllActiveActionSources();
+      MusicManager.getInstance().syncPlaybackWithContext(1, 'SOLO');
+      setGameState({ ...st });
+      setAppScreen('BATTLE');
+    },
+    [sessionManager, currentUser?.uid, gameEngine]
+  );
+
+  const handleStartVsMatch = useCallback(
+    (vsMode: VsMode) => {
+      const liveStatus = sessionManager.getSnapshot().status;
+      if (liveStatus === 'ACTIVE') {
+        launchVerifiedVsMatch(vsMode);
+        return;
+      }
+      if ((liveStatus === 'ACQUIRING' || liveStatus === 'NO_SESSION') && currentUser?.uid) {
+        void sessionManager.ensureActiveSessionForAction(currentUser.uid).then((res) => {
+          if (res.allowed && sessionManager.getSnapshot().status === 'ACTIVE') {
+            launchVerifiedVsMatch(vsMode);
+          }
+        });
+      }
+    },
+    [sessionManager, currentUser?.uid, launchVerifiedVsMatch]
+  );
 
   const launchVerifiedMatch = useCallback(
     (
@@ -846,10 +893,16 @@ export default function App() {
   const handleTouchInput = useCallback(
     (input: Partial<InputState>) => {
       SessionManager.getInstance().recordUserActivity();
-      if (
-        gameEngine.getState().gameMode === 'TWO_PLAYERS_ONLINE' &&
-        coopManager.getLocalRole() === 'GUEST'
-      ) {
+      const gm = gameEngine.getState().gameMode;
+      if (isVsGameMode(gm)) {
+        if (vsTouchPlayer === 'P2') {
+          gameEngine.setVirtualTouchInputP2(input);
+        } else {
+          gameEngine.setVirtualTouchInput(input);
+        }
+        return;
+      }
+      if (gm === 'TWO_PLAYERS_ONLINE' && coopManager.getLocalRole() === 'GUEST') {
         gameEngine.setVirtualTouchInputP2(input);
         const p2In = gameEngine.getVirtualTouchInputP2();
         gameEngine.setExternalInputP2(p2In);
@@ -859,7 +912,7 @@ export default function App() {
         gameEngine.setExternalInput(input);
       }
     },
-    [gameEngine, coopManager]
+    [gameEngine, coopManager, vsTouchPlayer]
   );
 
   // Landscape specific multi-touch handlers with independent release
@@ -874,10 +927,16 @@ export default function App() {
         left: dir === 'LEFT',
         right: dir === 'RIGHT',
       };
-      if (
-        gameEngine.getState().gameMode === 'TWO_PLAYERS_ONLINE' &&
-        coopManager.getLocalRole() === 'GUEST'
-      ) {
+      const gm = gameEngine.getState().gameMode;
+      if (isVsGameMode(gm)) {
+        if (vsTouchPlayer === 'P2') {
+          gameEngine.setVirtualTouchInputP2(dirInput);
+        } else {
+          gameEngine.setVirtualTouchInput(dirInput);
+        }
+        return;
+      }
+      if (gm === 'TWO_PLAYERS_ONLINE' && coopManager.getLocalRole() === 'GUEST') {
         gameEngine.setVirtualTouchInputP2(dirInput);
         const p2In = gameEngine.getVirtualTouchInputP2();
         gameEngine.setExternalInputP2(p2In);
@@ -887,17 +946,23 @@ export default function App() {
         gameEngine.setExternalInput(dirInput);
       }
     },
-    [gameEngine, coopManager]
+    [gameEngine, coopManager, vsTouchPlayer]
   );
 
   const handleLandscapeShootChange = useCallback(
     (shooting: boolean) => {
       SessionManager.getInstance().recordUserActivity();
       setLandscapeShooting(shooting);
-      if (
-        gameEngine.getState().gameMode === 'TWO_PLAYERS_ONLINE' &&
-        coopManager.getLocalRole() === 'GUEST'
-      ) {
+      const gm = gameEngine.getState().gameMode;
+      if (isVsGameMode(gm)) {
+        if (vsTouchPlayer === 'P2') {
+          gameEngine.setVirtualTouchInputP2({ shoot: shooting });
+        } else {
+          gameEngine.setVirtualTouchInput({ shoot: shooting });
+        }
+        return;
+      }
+      if (gm === 'TWO_PLAYERS_ONLINE' && coopManager.getLocalRole() === 'GUEST') {
         gameEngine.setVirtualTouchInputP2({ shoot: shooting });
         const p2In = gameEngine.getVirtualTouchInputP2();
         gameEngine.setExternalInputP2(p2In);
@@ -911,7 +976,7 @@ export default function App() {
         });
       }
     },
-    [gameEngine, coopManager]
+    [gameEngine, coopManager, vsTouchPlayer]
   );
 
   // Auto-collapse menu when match starts/resumes
@@ -970,11 +1035,15 @@ export default function App() {
     }
   }, [isLocalSpectator, clearVirtualTouchInputs]);
 
+  const isVsMatch = isVsGameMode(gameState?.gameMode);
+  const isVsResultModalOpen = Boolean(
+    isVsMatch && gameState?.vsState?.phase === 'FINISHED' && gameState?.vsState?.outcome
+  );
   const isGameOverModalOpen = Boolean(
-    gameState && gameState.matchState === 'GAME_OVER'
+    !isVsMatch && gameState && gameState.matchState === 'GAME_OVER'
   );
   const isStageClearModalOpen = Boolean(
-    gameState && gameState.matchState === 'STAGE_CLEAR'
+    !isVsMatch && gameState && gameState.matchState === 'STAGE_CLEAR'
   );
 
   const recordedGuestOnlineClearKeyRef = useRef<string | null>(null);
@@ -1093,8 +1162,10 @@ export default function App() {
   ]);
 
   // M7.5.1 & M7.5.2: Record per-UID completed match outcome (WIN / LOSS) with exact per-player enemy XP breakdown (zero bonus XP)
+  // BTO-VS-GAMEPLAY-V1.2 Isolation Guard: VS matches grant 0 XP, 0 Stars, 0 Xu and NEVER record Campaign stats.
   useEffect(() => {
     if (isTrialMode || !currentUser?.uid || !gameState) return;
+    if (isVsGameMode(gameState.gameMode)) return;
     if (!isStageClearModalOpen && !isGameOverModalOpen) return;
     const outcome: 'WIN' | 'LOSS' = isStageClearModalOpen ? 'WIN' : 'LOSS';
     const stageId = gameState.currentStageId ?? 1;
@@ -1320,6 +1391,7 @@ export default function App() {
             }
             setAppScreen('MODE_SELECTION');
           }}
+          onStartVsMatch={handleStartVsMatch}
           onPlay={() => {
             setModeSelectionInitialCard(selectedLobbyMode);
             setModeSelectionInitialStep('SELECT_MODE');
@@ -1399,6 +1471,7 @@ export default function App() {
             handleStartMatch(mode, opt, stageId);
           }}
           onStartOnlineMatch={handleStartOnlineMatch}
+          onStartVsMatch={handleStartVsMatch}
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
           onOpenSettings={() => {
@@ -1431,9 +1504,13 @@ export default function App() {
   }
 
   const currentBattleStageSpec = StageManager.getInstance().getLiveCampaignStageView(
-    gameState?.currentStageId ?? 1
+    Math.max(1, gameState?.currentStageId ?? 1)
   );
-  const centeredStageTitle = `${t('MÀN', 'STAGE')} ${currentBattleStageSpec.id}: ${currentBattleStageSpec.shortTitle.toUpperCase()}`;
+  const centeredStageTitle = isVsMatch
+    ? gameState?.gameMode === 'VS_P1_P2'
+      ? t('ĐẤU ĐỐI KHÁNG VS: P1 vs P2', 'VERSUS ARENA: P1 vs P2')
+      : t('ĐẤU ĐỐI KHÁNG VS: P1 + A.I vs P2 + A.I', 'VERSUS ARENA: P1 + A.I vs P2 + A.I')
+    : `${t('MÀN', 'STAGE')} ${currentBattleStageSpec.id}: ${currentBattleStageSpec.shortTitle.toUpperCase()}`;
 
   // View 3: Battle Arena with Canvas (Only mounted when player clicked "Chơi ngay")
   return (
@@ -1628,7 +1705,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Right Column: Battle Center HUD Stats (above Pause) + Virtual Shoot Button */}
+            {/* Right Column: Battle Center HUD Stats / VS Compact HUD (above Pause) + Virtual Shoot Button */}
             <div
               style={{
                 width: `${layout.rightControlWidthPx}px`,
@@ -1638,11 +1715,47 @@ export default function App() {
                 isLocalSpectator ? 'pointer-events-none opacity-40' : ''
               }`}
             >
-              <BattleCenterHudStats
-                gameState={gameState}
-                difficulty={difficulty}
-                localOnlineRole={localOnlineRole}
-              />
+              {isVsMatch ? (
+                <>
+                  <VsHud state={gameState} compact />
+                  <div className="flex items-center gap-1 text-[10px] font-btn">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearVirtualTouchInputs();
+                        setVsTouchPlayer('P1');
+                      }}
+                      className={`px-2 py-0.5 rounded border font-black cursor-pointer ${
+                        vsTouchPlayer === 'P1'
+                          ? 'bg-red-600 border-red-400 text-white'
+                          : 'bg-[#050510] border-neutral-700 text-neutral-400'
+                      }`}
+                    >
+                      P1
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        clearVirtualTouchInputs();
+                        setVsTouchPlayer('P2');
+                      }}
+                      className={`px-2 py-0.5 rounded border font-black cursor-pointer ${
+                        vsTouchPlayer === 'P2'
+                          ? 'bg-[#FFB800] border-amber-300 text-black'
+                          : 'bg-[#050510] border-neutral-700 text-neutral-400'
+                      }`}
+                    >
+                      P2
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <BattleCenterHudStats
+                  gameState={gameState}
+                  difficulty={difficulty}
+                  localOnlineRole={localOnlineRole}
+                />
+              )}
               {!isCoopOnlineMatch && (
                 <button
                   type="button"
@@ -1671,8 +1784,44 @@ export default function App() {
           onDragStart={(e) => e.preventDefault()}
           className="battle-touch-lock notranslate flex-1 flex flex-col justify-start w-full overflow-hidden bg-[#050510]"
         >
-          {/* Main Content Stack: Canvas -> Controls (with Center HUD Stats above Pause) */}
+          {/* Main Content Stack: (VS Compact HUD) -> Canvas -> Controls */}
           <div className="flex-1 flex flex-col items-center justify-start w-full overflow-hidden px-2 pt-1 pb-2">
+            {isVsMatch && (
+              <div className="w-full mb-1.5 flex flex-col items-center gap-1">
+                <VsHud state={gameState} compact />
+                <div className="flex items-center gap-1.5 text-[10px] font-btn">
+                  <span className="text-neutral-400 uppercase">{t('Điều khiển cảm ứng:', 'Touch Control:')}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearVirtualTouchInputs();
+                      setVsTouchPlayer('P1');
+                    }}
+                    className={`px-2 py-0.5 rounded border font-black cursor-pointer ${
+                      vsTouchPlayer === 'P1'
+                        ? 'bg-red-600 border-red-400 text-white'
+                        : 'bg-[#050510] border-neutral-700 text-neutral-400'
+                    }`}
+                  >
+                    P1
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      clearVirtualTouchInputs();
+                      setVsTouchPlayer('P2');
+                    }}
+                    className={`px-2 py-0.5 rounded border font-black cursor-pointer ${
+                      vsTouchPlayer === 'P2'
+                        ? 'bg-[#FFB800] border-amber-300 text-black'
+                        : 'bg-[#050510] border-neutral-700 text-neutral-400'
+                    }`}
+                  >
+                    P2
+                  </button>
+                </div>
+              </div>
+            )}
             <main
               style={{
                 width: `${layout.canvasSizePx}px`,
@@ -1892,17 +2041,25 @@ export default function App() {
 
             {/* Right Column: Live Combat HUD & Quick Stats (4 Cols on PC) */}
             <section className="lg:col-span-4 flex flex-col gap-4">
-              <M3Hud
-                state={gameState}
-                onReset={isCoopOnlineMatch ? undefined : handleResetGame}
-                onSpawnEnemy={handleSpawnNextEnemy}
-                onPause={isCoopOnlineMatch ? undefined : handlePause}
-                isSuperAdmin={isSuperAdmin}
-                localOnlineRole={localOnlineRole}
-                fps={fps}
-                peerPingMs={peerPingMs}
-                showOnlineNetStats={showOnlineNetStats}
-              />
+              {isVsMatch ? (
+                <VsHud
+                  state={gameState}
+                  onPause={handlePause}
+                  onReset={handleResetGame}
+                />
+              ) : (
+                <M3Hud
+                  state={gameState}
+                  onReset={isCoopOnlineMatch ? undefined : handleResetGame}
+                  onSpawnEnemy={handleSpawnNextEnemy}
+                  onPause={isCoopOnlineMatch ? undefined : handlePause}
+                  isSuperAdmin={isSuperAdmin}
+                  localOnlineRole={localOnlineRole}
+                  fps={fps}
+                  peerPingMs={peerPingMs}
+                  showOnlineNetStats={showOnlineNetStats}
+                />
+              )}
 
               {/* Admin Only: Terrain Legend & QA Quick Access Card */}
               {isSuperAdmin && (
@@ -1980,6 +2137,13 @@ export default function App() {
         postStageReady={postStageReady}
         onTogglePostStageReady={isCoopOnlineMatch ? handleTogglePostStageReady : undefined}
         hasTeammateLeft={hasTeammateLeft}
+      />
+
+      <VsResultModal
+        isOpen={isVsResultModalOpen}
+        state={gameState}
+        onReplay={handleRestart}
+        onQuitToMenu={handleQuitToMenu}
       />
 
       {maintenanceModalOverlay}

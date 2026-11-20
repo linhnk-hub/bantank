@@ -33,6 +33,9 @@ export class BattleScene extends Phaser.Scene {
   private p2ShieldSprite?: Phaser.GameObjects.Image;
   private enemySprites: Map<string, Phaser.GameObjects.Image> = new Map();
   private enemyShieldSprites: Map<string, Phaser.GameObjects.Image> = new Map();
+  private vsAiSprites: Map<string, Phaser.GameObjects.Image> = new Map();
+  private vsAiShieldSprites: Map<string, Phaser.GameObjects.Image> = new Map();
+  private vsSafeZoneGraphics?: Phaser.GameObjects.Graphics;
   private bulletSprites: Map<string, Phaser.GameObjects.Image> = new Map();
   private supportItemSprites: Map<
     string,
@@ -81,6 +84,11 @@ export class BattleScene extends Phaser.Scene {
     D: Phaser.Input.Keyboard.Key;
     J: Phaser.Input.Keyboard.Key;
     SPACE: Phaser.Input.Keyboard.Key;
+  };
+  private vsP2Keys?: {
+    ENTER: Phaser.Input.Keyboard.Key;
+    K: Phaser.Input.Keyboard.Key;
+    NUMPAD_ZERO: Phaser.Input.Keyboard.Key;
   };
   private keyP?: Phaser.Input.Keyboard.Key;
   private keyEsc?: Phaser.Input.Keyboard.Key;
@@ -158,10 +166,52 @@ export class BattleScene extends Phaser.Scene {
       this.wasd?.D?.reset();
       this.wasd?.J?.reset();
       this.wasd?.SPACE?.reset();
+      this.vsP2Keys?.ENTER?.reset();
+      this.vsP2Keys?.K?.reset();
+      this.vsP2Keys?.NUMPAD_ZERO?.reset();
       this.input?.keyboard?.resetKeys();
     } catch {
       // Ignore if keyboard plugin is not initialized in headless test environment
     }
+  }
+
+  private readVsLocalInputP1(): InputState {
+    const state = this.engine.getState();
+    const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    if (state.matchState !== 'PLAYING' || isHidden) {
+      this.resetLocalInputState();
+      return { ...NEUTRAL_INPUT };
+    }
+    const touch = this.engine.getVirtualTouchInput();
+    const ext = this.engine.getExternalInput();
+    return {
+      up: Boolean(this.wasd?.W.isDown || touch.up || ext.up),
+      down: Boolean(this.wasd?.S.isDown || touch.down || ext.down),
+      left: Boolean(this.wasd?.A.isDown || touch.left || ext.left),
+      right: Boolean(this.wasd?.D.isDown || touch.right || ext.right),
+      shoot: Boolean(this.wasd?.SPACE.isDown || this.wasd?.J.isDown || touch.shoot || ext.shoot),
+    };
+  }
+
+  private readVsLocalInputP2(): InputState {
+    const state = this.engine.getState();
+    const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
+    if (state.matchState !== 'PLAYING' || isHidden) {
+      return { ...NEUTRAL_INPUT };
+    }
+    const touchP2 = this.engine.getVirtualTouchInputP2();
+    return {
+      up: Boolean(this.cursors?.up.isDown || touchP2.up),
+      down: Boolean(this.cursors?.down.isDown || touchP2.down),
+      left: Boolean(this.cursors?.left.isDown || touchP2.left),
+      right: Boolean(this.cursors?.right.isDown || touchP2.right),
+      shoot: Boolean(
+        this.vsP2Keys?.ENTER.isDown ||
+          this.vsP2Keys?.K.isDown ||
+          this.vsP2Keys?.NUMPAD_ZERO.isDown ||
+          touchP2.shoot
+      ),
+    };
   }
 
   private readCurrentLocalInput(isGuest: boolean = false): InputState {
@@ -229,7 +279,11 @@ export class BattleScene extends Phaser.Scene {
     const itemSig = itemSys
       ? `${itemSys.activeItems.length}:${itemSys.totalSpawnedCount}:${itemSys.eagleShieldSecondsRemaining}:${itemSys.p1Effects.firepowerSecondsRemaining}:${itemSys.p1Effects.speedBoostSecondsRemaining}:${itemSys.p2Effects.firepowerSecondsRemaining}:${itemSys.p2Effects.speedBoostSecondsRemaining}`
       : 'no_items';
-    const sig = `${state.matchState}|${state.stageRunSeq}|${state.remainingSeconds}|${state.score}|${state.p1State.lives}|${state.p1State.isDead}|${Boolean(state.p1State.isSpectator)}|${state.p2State?.lives ?? -1}|${state.p2State?.isDead ?? false}|${Boolean(state.p2State?.isSpectator)}|${state.peerLeaveNotice ?? ''}|${state.totalDefeatedEnemies}|${state.enemyQueue.length}|${state.enemies.length}|${state.isGameOver}|${state.isStageClear}|${state.isTimeoutGameOver}|${state.terrain.isBaseDestroyed}|${itemSig}`;
+    const vs = state.vsState;
+    const vsSig = vs
+      ? `${vs.phase}:${vs.normalRemainingSeconds}:${vs.suddenDeathElapsedSeconds}:${vs.safeZone.shrinkLevel}:${vs.safeZone.secondsUntilNextShrink}:${vs.anyTankInDangerZone}:${vs.team1.totalKills}:${vs.team2.totalKills}:${vs.outcome?.winnerTeam ?? 'none'}:${vs.combatants.map((c) => `${c.lives}/${c.isDead}/${c.respawnSecondsRemaining}/${c.protectionSecondsRemaining}/${c.inDangerZone}`).join(',')}`
+      : 'no_vs';
+    const sig = `${state.matchState}|${state.stageRunSeq}|${state.remainingSeconds}|${state.score}|${state.p1State.lives}|${state.p1State.isDead}|${Boolean(state.p1State.isSpectator)}|${state.p2State?.lives ?? -1}|${state.p2State?.isDead ?? false}|${Boolean(state.p2State?.isSpectator)}|${state.peerLeaveNotice ?? ''}|${state.totalDefeatedEnemies}|${state.enemyQueue.length}|${state.enemies.length}|${state.isGameOver}|${state.isStageClear}|${state.isTimeoutGameOver}|${state.terrain.isBaseDestroyed}|${itemSig}|${vsSig}`;
     if (sig !== this.lastHudSignature || this.hudSyncAccumulatorMs >= 100) {
       this.lastHudSignature = sig;
       this.hudSyncAccumulatorMs = 0;
@@ -266,12 +320,18 @@ export class BattleScene extends Phaser.Scene {
     }
 
     const coopManager = CoopOnlineManager.getInstance();
+    const isVsMode = this.engine.isVsMode();
     const isOnlineMode = this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE';
     const onlineRole = isOnlineMode ? coopManager.getRole() : null;
     const isOnlineGuest = isOnlineMode && onlineRole === 'GUEST';
-    const input = this.readCurrentLocalInput(isOnlineGuest);
 
-    if (isOnlineMode) {
+    if (isVsMode) {
+      const p1In = this.readVsLocalInputP1();
+      const p2In = this.readVsLocalInputP2();
+      this.engine.setExternalInputP2(p2In);
+      this.engine.advanceTime(rawElapsedMs, p1In);
+    } else if (isOnlineMode) {
+      const input = this.readCurrentLocalInput(isOnlineGuest);
       if (onlineRole === 'HOST') {
         if (coopManager.hasPeerActivelyLeft('GUEST')) {
           this.engine.handlePeerPlayerLeft('P2');
@@ -305,6 +365,7 @@ export class BattleScene extends Phaser.Scene {
         this.engine.advanceTime(rawElapsedMs, input);
       }
     } else {
+      const input = this.readCurrentLocalInput(false);
       const isP1Spectator = this.engine.isPlayerSpectator('P1');
       const effectiveInput = isP1Spectator ? { ...NEUTRAL_INPUT } : input;
       this.engine.advanceTime(rawElapsedMs, effectiveInput);
@@ -354,9 +415,18 @@ export class BattleScene extends Phaser.Scene {
         J: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.J),
         SPACE: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
       };
+      this.vsP2Keys = {
+        ENTER: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER),
+        K: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.K),
+        NUMPAD_ZERO: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.NUMPAD_ZERO),
+      };
       this.keyP = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P);
       this.keyEsc = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
     }
+
+    // 6b. Create Sudden Death Safe Zone / Danger Zone Graphics Overlay (VS mode only)
+    this.vsSafeZoneGraphics = this.add.graphics();
+    this.vsSafeZoneGraphics.setDepth(18);
 
     // 7. Subscribe to engine audio events
     this.engine.on('P1_SHOOT', () => {
@@ -876,6 +946,9 @@ export class BattleScene extends Phaser.Scene {
     // 5b. Render Active Support Items on Battlefield with 5s Countdown Badge
     this.syncSupportItems(state);
 
+    // 5c. Render VS Mode A.I Ally Tanks (AI_1 & AI_2) and Sudden Death Safe Zone / Danger Zone Overlay
+    this.syncVsVisuals(state);
+
     // 6. Spawn Visual Effects from Combat Events & Trigger Audio
     const newEvents = this.engine.popCombatEvents();
     for (const ev of newEvents) {
@@ -1010,6 +1083,11 @@ export class BattleScene extends Phaser.Scene {
     this.terrainSprites.clear();
     this.supportItemSprites.forEach((entry) => entry.container.destroy());
     this.supportItemSprites.clear();
+    this.vsAiSprites.forEach((sp) => sp.destroy());
+    this.vsAiSprites.clear();
+    this.vsAiShieldSprites.forEach((sp) => sp.destroy());
+    this.vsAiShieldSprites.clear();
+    this.vsSafeZoneGraphics?.clear();
     this.renderedBrickMasks.clear();
     this.renderedSteelMasks.clear();
     this.baseSprites = [];
@@ -1374,6 +1452,120 @@ export class BattleScene extends Phaser.Scene {
       if (!activeIds.has(id)) {
         entry.container.destroy();
         this.supportItemSprites.delete(id);
+      }
+    }
+  }
+
+  private syncVsVisuals(state: GameCoreState): void {
+    const vs = state.vsState;
+    if (!vs) {
+      if (this.vsAiSprites.size > 0) {
+        this.vsAiSprites.forEach((sp) => sp.destroy());
+        this.vsAiSprites.clear();
+      }
+      if (this.vsAiShieldSprites.size > 0) {
+        this.vsAiShieldSprites.forEach((sp) => sp.destroy());
+        this.vsAiShieldSprites.clear();
+      }
+      this.vsSafeZoneGraphics?.clear();
+      return;
+    }
+
+    // 1. Sync VS A.I ally tank sprites (AI_1 & AI_2)
+    const activeAiIds = new Set<string>();
+    for (const c of vs.combatants) {
+      if (!c.isAI) continue;
+      if (c.isDead || !c.tank.isAlive) continue;
+      activeAiIds.add(c.id);
+
+      const prefix = c.role === 'AI_1' ? 'tank_ai1' : 'tank_ai2';
+      const texKey = `${prefix}_${c.tank.direction.toLowerCase()}`;
+      let sprite = this.vsAiSprites.get(c.id);
+      if (!sprite) {
+        sprite = this.add.image(c.tank.x, c.tank.y, texKey);
+        sprite.setOrigin(0, 0);
+        sprite.setDisplaySize(16, 16);
+        sprite.setDepth(10);
+        this.vsAiSprites.set(c.id, sprite);
+      } else {
+        if (sprite.x !== c.tank.x || sprite.y !== c.tank.y) {
+          sprite.setPosition(c.tank.x, c.tank.y);
+        }
+        if (sprite.texture.key !== texKey) {
+          sprite.setTexture(texKey);
+        }
+      }
+
+      let shield = this.vsAiShieldSprites.get(c.id);
+      if (c.protectionTicksRemaining > 0) {
+        const pulse = Math.floor(c.protectionTicksRemaining / 6) % 2 === 0;
+        sprite.setAlpha(pulse ? 0.72 : 1.0);
+        if (!shield) {
+          shield = this.add.image(c.tank.x - 1, c.tank.y - 1, 'shield_aura');
+          shield.setOrigin(0, 0);
+          shield.setDisplaySize(18, 18);
+          shield.setDepth(12);
+          this.vsAiShieldSprites.set(c.id, shield);
+        } else {
+          shield.setPosition(c.tank.x - 1, c.tank.y - 1);
+          shield.setVisible(true);
+        }
+        shield.setAlpha(pulse ? 0.95 : 0.45);
+      } else {
+        sprite.setAlpha(1.0);
+        if (shield && shield.visible) {
+          shield.setVisible(false);
+        }
+      }
+    }
+
+    for (const [id, sprite] of this.vsAiSprites) {
+      if (!activeAiIds.has(id)) {
+        sprite.destroy();
+        this.vsAiSprites.delete(id);
+        const shield = this.vsAiShieldSprites.get(id);
+        if (shield) {
+          shield.destroy();
+          this.vsAiShieldSprites.delete(id);
+        }
+      }
+    }
+
+    // 2. Render Sudden Death Danger Zone & Safe Zone perimeter overlay
+    if (!this.vsSafeZoneGraphics) return;
+    const g = this.vsSafeZoneGraphics;
+    g.clear();
+
+    if (vs.phase !== 'SUDDEN_DEATH') {
+      return;
+    }
+
+    const W = MAP_DIMENSIONS.TOTAL_WIDTH_PX;
+    const H = MAP_DIMENSIONS.TOTAL_HEIGHT_PX;
+    const b = vs.safeZone.bounds;
+    const pulseAlpha = 0.28 + 0.08 * Math.sin(vs.tickCount * 0.12);
+
+    if (b.isFullyCollapsed) {
+      g.fillStyle(0xff0044, Math.min(0.45, pulseAlpha + 0.1));
+      g.fillRect(0, 0, W, H);
+    } else if (vs.safeZone.shrinkLevel > 0) {
+      g.fillStyle(0xff0044, pulseAlpha);
+      if (b.minY > 0) g.fillRect(0, 0, W, b.minY);
+      if (b.maxY < H) g.fillRect(0, b.maxY, W, H - b.maxY);
+      if (b.minX > 0) g.fillRect(0, b.minY, b.minX, b.maxY - b.minY);
+      if (b.maxX < W) g.fillRect(b.maxX, b.minY, W - b.maxX, b.maxY - b.minY);
+
+      g.lineStyle(1.5, 0xff2a6d, 0.95);
+      g.strokeRect(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
+    }
+
+    // Imminent shrink preview border (<= 5s before next shrink)
+    if (vs.safeZone.isShrinkImminent && !vs.safeZone.nextBounds.isFullyCollapsed) {
+      const nb = vs.safeZone.nextBounds;
+      const blinkOn = Math.floor(vs.tickCount / 10) % 2 === 0;
+      if (blinkOn) {
+        g.lineStyle(1, 0xffb800, 0.9);
+        g.strokeRect(nb.minX, nb.minY, nb.maxX - nb.minX, nb.maxY - nb.minY);
       }
     }
   }

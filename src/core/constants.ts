@@ -176,8 +176,11 @@ export const P1_CONFIG = {
  */
 export function getStartingLivesForDifficultyAndMode(
   difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT',
-  gameMode: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' = 'SOLO'
+  gameMode: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' | 'VS_P1_P2' | 'VS_P1_AI_P2_AI' = 'SOLO'
 ): number {
+  if (gameMode === 'VS_P1_P2' || gameMode === 'VS_P1_AI_P2_AI') {
+    return 3;
+  }
   const profile = DifficultyConfigManager.getInstance().getProfile(difficulty);
   if (profile) {
     return gameMode === 'SOLO' ? profile.soloLives : profile.coopLives;

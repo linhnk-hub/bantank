@@ -33,6 +33,7 @@ import { useLanguage } from '../core/i18n.ts';
 import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
 import { TopMenuActionDrawer } from './TopMenuActionDrawer.tsx';
 import { GameLogo } from './GameLogo.tsx';
+import type { VsMode } from '../core/vsTypes.ts';
 
 export type LobbyCardMode = 'SOLO' | 'COOP_AI' | 'COOP_ONLINE';
 
@@ -50,6 +51,7 @@ export interface MainMenuScreenProps {
   selectedLobbyMode: LobbyCardMode;
   onSelectLobbyMode: (mode: LobbyCardMode) => void;
   onConfirmMode: (mode: LobbyCardMode) => void;
+  onStartVsMatch?: (mode: VsMode) => void;
   onPlay: () => void;
   onSignOut: () => void;
   onRetryAcquire?: () => void;
@@ -69,6 +71,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   selectedLobbyMode,
   onSelectLobbyMode,
   onConfirmMode,
+  onStartVsMatch,
   onPlay,
   onSignOut,
   onRetryAcquire,
@@ -450,29 +453,49 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
           </button>
         </div>
 
-        {/* VS Mode Teaser Banner (Roadmap Locked Preview) & Quick Mode Entry */}
+        {/* VS Arena Unlocked Quick Launch Banner (BTO-VS-GAMEPLAY-V1.2) & Mode Entry */}
         <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 items-stretch">
-          <div className="lg:col-span-8 neo-bevel-card rounded-xl px-4 py-3 border border-[#687386]/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+          <div className="lg:col-span-8 neo-bevel-card rounded-xl px-4 py-3 border border-[#FF0055]/50 bg-[#12060c]/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-9 h-9 rounded-lg bg-[#FF0055]/15 border border-[#FF0055]/40 flex items-center justify-center shrink-0 text-[#FF0055]">
+              <div className="w-9 h-9 rounded-lg bg-[#FF0055]/20 border border-[#FF0055]/55 flex items-center justify-center shrink-0 text-[#FF0055]">
                 <Swords className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-btn text-xs font-black uppercase text-[#EAF4FF] tracking-wide">
-                    {t('ĐẤU TRƯỜNG VS (P1 vs P2 • P1 + A.I vs P2 + A.I)', 'VS ARENA (P1 vs P2 • P1 + A.I vs P2 + A.I)')}
+                    {t('ĐẤU TRƯỜNG VS', 'VS ARENA')}
                   </span>
-                  <span className="px-1.5 py-0.5 rounded bg-[#FFB800]/15 border border-[#FFB800]/35 text-[10px] font-bold text-[#FFB800] shrink-0">
-                    {t('SẮP RA MẮT', 'COMING SOON')}
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/50 text-[10px] font-bold text-emerald-300 shrink-0 uppercase">
+                    {t('ĐÃ MỞ KHÓA', 'UNLOCKED')}
                   </span>
                 </div>
-                <p className="text-[11px] text-neutral-400 truncate">
+                <p className="text-[11px] text-neutral-300">
                   {t(
-                    'Chế độ đối kháng trực tiếp đang trong giai đoạn hoàn thiện cân bằng chiến trường.',
-                    'Direct versus combat mode is currently undergoing battlefield balance tuning.'
+                    '3 phút • 3 mạng • Sudden Death • Thu hẹp 20s • Không hòa.',
+                    '3 min • 3 lives • Sudden Death • 20s shrink • No draw.'
                   )}
                 </p>
               </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
+              <button
+                type="button"
+                data-testid="lobby-vs-p1-p2-btn"
+                disabled={isActionDisabled || !onStartVsMatch}
+                onClick={() => onStartVsMatch?.('VS_P1_P2')}
+                className="flex-1 sm:flex-none font-btn px-3 py-2 rounded-lg bg-[#FF0055] hover:bg-rose-500 text-white text-xs font-black uppercase tracking-wide shadow cursor-pointer disabled:opacity-50 transition-transform active:scale-95"
+              >
+                P1 vs P2
+              </button>
+              <button
+                type="button"
+                data-testid="lobby-vs-ai-btn"
+                disabled={isActionDisabled || !onStartVsMatch}
+                onClick={() => onStartVsMatch?.('VS_P1_AI_P2_AI')}
+                className="flex-1 sm:flex-none font-btn px-3 py-2 rounded-lg bg-[#050510] hover:bg-rose-950/70 border border-[#FF0055]/60 text-rose-200 text-xs font-black uppercase tracking-wide shadow cursor-pointer disabled:opacity-50 transition-transform active:scale-95"
+              >
+                P1 + A.I vs P2 + A.I
+              </button>
             </div>
           </div>
 

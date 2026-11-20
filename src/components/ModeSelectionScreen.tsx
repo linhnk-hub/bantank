@@ -24,6 +24,7 @@ import { StageProgressionManager } from '../core/stageProgression.ts';
 import { StageManager } from '../core/stageManager.ts';
 import { DifficultyConfigManager } from '../core/difficultyManager.ts';
 import { StageMapMiniPreview } from './StageMapMiniPreview.tsx';
+import type { VsMode } from '../core/vsTypes.ts';
 import {
   ArrowLeft,
   ArrowRight,
@@ -61,6 +62,7 @@ export interface ModeSelectionScreenProps {
   onBack: () => void;
   onStartMatch: (mode: GameModeType, twoPlayerOption?: TwoPlayerOption, stageId?: number) => void;
   onStartOnlineMatch?: (room: CoopRoomDocument, role: 'HOST' | 'GUEST') => void;
+  onStartVsMatch?: (mode: VsMode) => void;
   difficulty: 'DEFAULT' | 'EXTREME';
   onDifficultyChange: (d: 'DEFAULT' | 'EXTREME') => void;
   onOpenSettings: () => void;
@@ -141,6 +143,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   onBack,
   onStartMatch,
   onStartOnlineMatch,
+  onStartVsMatch,
   difficulty,
   onDifficultyChange,
   onOpenSettings,
@@ -802,63 +805,69 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 </div>
               </div>
 
-              {/* 3. NHÓM VS (P1 vs P2 & P1 + A.I vs P2 + A.I — Sắp ra mắt / Khoá an toàn theo BTO-PROGRESSION-MODES-V1.4 Mục 5.2) */}
+              {/* 3. NHÓM VS (P1 vs P2 & P1 + A.I vs P2 + A.I — ĐÃ MỞ KHÓA theo BTO-VS-GAMEPLAY-V1.2) */}
               <div
                 data-testid="mode-group-vs"
-                className="w-full mb-6 p-4 rounded-lg border border-[#FF0055]/35 bg-[#12060c]/85 text-left"
+                className="w-full mb-6 p-4 rounded-lg border-2 border-[#FF0055]/55 bg-[#12060c]/90 text-left shadow-lg"
               >
-                <div className="flex items-center justify-between flex-wrap gap-2 mb-3 pb-2 border-b border-[#FF0055]/25">
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-3 pb-2 border-b border-[#FF0055]/30">
                   <div className="font-btn flex items-center gap-2 text-sm sm:text-base font-black text-[#FF0055] uppercase tracking-wider">
                     <Flame className="w-4 h-4 text-[#FF0055]" />
                     <span>{t('CHẾ ĐỘ ĐỐI KHÁNG: VS', 'VERSUS MODE: VS')}</span>
                   </div>
-                  <span className="font-btn px-2 py-0.5 rounded bg-[#FF0055]/20 border border-[#FF0055]/50 text-rose-200 text-[11px] font-bold uppercase">
-                    {t('SẮP RA MẮT', 'COMING SOON')}
+                  <span className="font-btn px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/55 text-emerald-300 text-[11px] font-bold uppercase">
+                    {t('3 PHÚT • 3 MẠNG • SUDDEN DEATH', '3 MIN • 3 LIVES • SUDDEN DEATH')}
                   </span>
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div
+                  <button
+                    type="button"
                     data-testid="mode-card-vs-p1-p2"
-                    className="p-3.5 rounded-lg border border-[#FF0055]/30 bg-[#050510]/80 flex items-center justify-between gap-3 opacity-85"
+                    disabled={isProcessing || session.status !== 'ACTIVE' || !onStartVsMatch}
+                    onClick={() => onStartVsMatch?.('VS_P1_P2')}
+                    className="p-3.5 rounded-lg border border-[#FF0055]/55 bg-[#050510]/90 hover:bg-rose-950/45 hover:border-[#FF0055] flex items-center justify-between gap-3 text-left transition-all cursor-pointer disabled:opacity-50 active:scale-[0.98]"
                   >
                     <div>
-                      <div className="font-btn text-sm sm:text-base font-black text-rose-200">
+                      <div className="font-btn text-sm sm:text-base font-black text-white">
                         P1 vs P2
                       </div>
-                      <p className="text-xs text-neutral-400 mt-0.5">
+                      <p className="text-xs text-neutral-300 mt-0.5">
                         {t(
-                          'Đối kháng trực tiếp 1v1 giữa hai người chơi.',
-                          'Direct 1v1 PvP battle between two players.'
+                          'Đối kháng 1v1 trực tiếp: Phe 1 (WASD + Space/J) vs Phe 2 (Mũi tên + Enter/K).',
+                          'Direct 1v1 PvP: Team 1 (WASD + Space/J) vs Team 2 (Arrows + Enter/K).'
                         )}
                       </p>
                     </div>
-                    <span className="font-btn inline-flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-900 border border-neutral-700 text-neutral-400 text-xs font-bold shrink-0">
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>{t('Chưa mở', 'Locked')}</span>
+                    <span className="font-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#FF0055] text-white text-xs font-black uppercase shrink-0">
+                      <ArrowRight className="w-3.5 h-3.5" />
+                      <span>{t('Vào đấu', 'Fight')}</span>
                     </span>
-                  </div>
+                  </button>
 
-                  <div
+                  <button
+                    type="button"
                     data-testid="mode-card-vs-ai"
-                    className="p-3.5 rounded-lg border border-[#FF0055]/30 bg-[#050510]/80 flex items-center justify-between gap-3 opacity-85"
+                    disabled={isProcessing || session.status !== 'ACTIVE' || !onStartVsMatch}
+                    onClick={() => onStartVsMatch?.('VS_P1_AI_P2_AI')}
+                    className="p-3.5 rounded-lg border border-[#FF0055]/55 bg-[#050510]/90 hover:bg-rose-950/45 hover:border-[#FF0055] flex items-center justify-between gap-3 text-left transition-all cursor-pointer disabled:opacity-50 active:scale-[0.98]"
                   >
                     <div>
-                      <div className="font-btn text-sm sm:text-base font-black text-rose-200">
+                      <div className="font-btn text-sm sm:text-base font-black text-white">
                         P1 + A.I vs P2 + A.I
                       </div>
-                      <p className="text-xs text-neutral-400 mt-0.5">
+                      <p className="text-xs text-neutral-300 mt-0.5">
                         {t(
-                          'Đối kháng tổ đội 2v2 kết hợp đồng minh A.I.',
-                          '2v2 team battle with A.I tank partners.'
+                          'Đối kháng 2v2: Phe 1 (P1 + A.I 1) vs Phe 2 (P2 + A.I 2), không Friendly Fire.',
+                          '2v2 team battle: Team 1 (P1 + A.I 1) vs Team 2 (P2 + A.I 2), Friendly Fire OFF.'
                         )}
                       </p>
                     </div>
-                    <span className="font-btn inline-flex items-center gap-1 px-2.5 py-1 rounded bg-neutral-900 border border-neutral-700 text-neutral-400 text-xs font-bold shrink-0">
-                      <Lock className="w-3.5 h-3.5" />
-                      <span>{t('Chưa mở', 'Locked')}</span>
+                    <span className="font-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#FF0055] text-white text-xs font-black uppercase shrink-0">
+                      <ArrowRight className="w-3.5 h-3.5" />
+                      <span>{t('Vào đấu', 'Fight')}</span>
                     </span>
-                  </div>
+                  </button>
                 </div>
               </div>
             </>

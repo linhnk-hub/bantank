@@ -360,7 +360,8 @@ export interface GameCoreState {
   diagnosticLog?: string | null;
   peerLeaveNotice?: string | null;
   difficulty?: 'DEFAULT' | 'EXTREME';
-  gameMode?: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE';
+  gameMode?: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' | 'VS_P1_P2' | 'VS_P1_AI_P2_AI';
+  vsState?: import('./vsTypes.ts').VsMatchState | null;
   p2?: TankStructure | null;
   p2State?: P1PlayerState | null;
   matchState: 'MENU' | 'STAGE_START' | 'PLAYING' | 'PAUSED' | 'STAGE_CLEAR' | 'GAME_OVER' | 'SUMMARY_STATS';

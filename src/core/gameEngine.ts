@@ -57,6 +57,15 @@ import {
   cloneStageItemSystemState,
 } from './supportItemSystem.ts';
 import type { CombatEvent, CombatEventType } from './types.ts';
+import { VsEngine } from './vsEngine.ts';
+import { isVsGameMode, VS_RULES_CONFIG, type VsMode } from './vsTypes.ts';
+
+export type GameEngineMode =
+  | 'SOLO'
+  | 'TWO_PLAYERS_AI'
+  | 'TWO_PLAYERS_ONLINE'
+  | 'VS_P1_P2'
+  | 'VS_P1_AI_P2_AI';
 
 export const NEUTRAL_INPUT: Readonly<InputState> = Object.freeze({
   up: false,
@@ -296,7 +305,8 @@ export class GameEngine {
   private combatEvents: CombatEvent[] = [];
   private eventListeners: Map<string, Set<(payload: any) => void>> = new Map();
   private difficulty: 'DEFAULT' | 'EXTREME' = 'DEFAULT';
-  private gameMode: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' = 'SOLO';
+  private gameMode: GameEngineMode = 'SOLO';
+  private vsEngine: VsEngine | null = null;
   private allyAI = new AllyAIController();
   private externalInput: InputState = {
     up: false,
@@ -582,11 +592,19 @@ export class GameEngine {
     }
   }
 
-  public getGameMode(): 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' {
+  public getGameMode(): GameEngineMode {
     return this.gameMode;
   }
 
-  public setGameMode(mode: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE'): void {
+  public isVsMode(): boolean {
+    return isVsGameMode(this.gameMode);
+  }
+
+  public getVsEngine(): VsEngine | null {
+    return this.vsEngine;
+  }
+
+  public setGameMode(mode: GameEngineMode): void {
     this.gameMode = mode;
     this.state.gameMode = mode;
     if (this.state.tickCount === 0 || this.state.matchState === MATCH_STATES.MENU) {
@@ -763,6 +781,10 @@ export class GameEngine {
   }
 
   private issueSessionTokenForCurrentStage(): void {
+    if (isVsGameMode(this.gameMode)) {
+      this.activeMatchToken = null;
+      return;
+    }
     const currentStageId = this.stageManager.getCurrentStage().id;
     if (this.activeUid && !this.isTrialMode) {
       this.activeMatchToken = StageProgressionManager.getInstance().issueMatchSessionToken(
@@ -773,6 +795,57 @@ export class GameEngine {
     } else {
       this.activeMatchToken = null;
     }
+  }
+
+  private syncStateFromVsEngine(): void {
+    if (!this.vsEngine) return;
+    const vs = this.vsEngine.getState();
+    const p1c = this.vsEngine.getCombatantByRole('P1');
+    const p2c = this.vsEngine.getCombatantByRole('P2');
+
+    if (p1c) {
+      this.state.p1 = { ...p1c.tank };
+      this.state.p1State = {
+        lives: p1c.lives,
+        isDead: p1c.isDead,
+        respawnTimer: p1c.respawnSecondsRemaining,
+        shieldTimer: p1c.protectionSecondsRemaining,
+        waitingForClearSpawn: false,
+        spawnCheckTimer: 0,
+        isSpectator: p1c.eliminatedPermanently,
+        hasLeftMatch: false,
+      };
+    }
+
+    if (p2c) {
+      this.state.p2 = { ...p2c.tank };
+      this.state.p2State = {
+        lives: p2c.lives,
+        isDead: p2c.isDead,
+        respawnTimer: p2c.respawnSecondsRemaining,
+        shieldTimer: p2c.protectionSecondsRemaining,
+        waitingForClearSpawn: false,
+        spawnCheckTimer: 0,
+        isSpectator: p2c.eliminatedPermanently,
+        hasLeftMatch: false,
+      };
+    }
+
+    this.state.tickCount = vs.tickCount;
+    this.state.bullets = this.vsEngine.getBullets().map((b) => ({ ...b }));
+    this.state.bullet =
+      this.state.bullets.find((b) => b.ownerId === 'vs_p1') ?? null;
+    this.state.enemies = [];
+    this.state.enemyQueue = [];
+    this.state.totalDefeatedEnemies = 0;
+    this.state.terrain = this.vsEngine.getTerrain();
+    this.state.matchDurationSeconds = vs.normalDurationSeconds;
+    this.state.remainingTicks = vs.normalRemainingTicks;
+    this.state.remainingSeconds = vs.normalRemainingSeconds;
+    this.state.stageElapsedSeconds = Number(
+      ((vs.tickCount) / VS_RULES_CONFIG.TICKS_PER_SECOND).toFixed(2)
+    );
+    this.state.vsState = vs;
   }
 
   public getLastStageClearProof(): StageClearProof | null {
@@ -826,6 +899,96 @@ export class GameEngine {
   }
 
   public restartStage(): void {
+    if (isVsGameMode(this.gameMode)) {
+      this.stageRunSeq += 1;
+      this.accumulatorMs = 0;
+      this.lastDroppedBacklogMs = 0;
+      this.lastDroppedInputMs = 0;
+      this.lastDroppedBacklogComponentMs = 0;
+      this.catchUpTicksRemaining = 0;
+      this.justResumed = false;
+      this.totalRealElapsedMs = 0;
+      this.totalDroppedMs = 0;
+      this.tpsAccumulatorMs = 0;
+      this.tpsTicksThisWindow = 0;
+      this.recentTps = 60;
+      this.isPaused = false;
+      this.isForcedSafetyPaused = false;
+      this.processedPeerLeavePlayers.clear();
+      this.lastStageClearProof = null;
+      this.lastUnlockedStageFromClear = null;
+      this.clearAllInputs();
+      this.combatEvents = [];
+      if (!this.vsEngine) {
+        this.vsEngine = new VsEngine(this.gameMode);
+      } else {
+        this.vsEngine.reset(this.gameMode);
+      }
+      const vs = this.vsEngine.getState();
+      const p1c = this.vsEngine.getCombatantByRole('P1')!;
+      const p2c = this.vsEngine.getCombatantByRole('P2')!;
+      const modeTitle =
+        this.gameMode === 'VS_P1_P2' ? 'VS: P1 vs P2' : 'VS: P1 + A.I vs P2 + A.I';
+      this.state = {
+        tickCount: 0,
+        stageRunSeq: this.stageRunSeq,
+        matchInstanceId: this.matchInstanceId,
+        p1: { ...p1c.tank },
+        p1State: {
+          lives: p1c.lives,
+          isDead: false,
+          respawnTimer: 0,
+          shieldTimer: 0,
+          waitingForClearSpawn: false,
+          spawnCheckTimer: 0,
+          isSpectator: false,
+          hasLeftMatch: false,
+        },
+        p2: { ...p2c.tank },
+        p2State: {
+          lives: p2c.lives,
+          isDead: false,
+          respawnTimer: 0,
+          shieldTimer: 0,
+          waitingForClearSpawn: false,
+          spawnCheckTimer: 0,
+          isSpectator: false,
+          hasLeftMatch: false,
+        },
+        gameMode: this.gameMode,
+        vsState: vs,
+        bullet: null,
+        bullets: [],
+        enemies: [],
+        enemyQueue: [],
+        totalDefeatedEnemies: 0,
+        score: 0,
+        highScore: this.scoreManager.getHighScore(),
+        defeatedCounts: { BASIC: 0, FAST: 0, POWER: 0, ARMOR: 0 },
+        p1Stats: createEmptyPlayerCombatStats(),
+        p2Stats: createEmptyPlayerCombatStats(),
+        currentStageId: 0,
+        currentStageName: modeTitle,
+        currentStageVersion: 1,
+        stageElapsedSeconds: 0,
+        matchDurationSeconds: VS_RULES_CONFIG.NORMAL_DURATION_SECONDS,
+        remainingTicks: VS_RULES_CONFIG.NORMAL_DURATION_TICKS,
+        remainingSeconds: VS_RULES_CONFIG.NORMAL_DURATION_SECONDS,
+        terrain: this.vsEngine.getTerrain(),
+        itemSystem: createInitialStageItemSystemState(0, this.stageRunSeq, this.gameMode),
+        isGameOver: false,
+        isStageClear: false,
+        isTimeoutGameOver: false,
+        gameOverReason: null,
+        diagnosticLog: null,
+        peerLeaveNotice: null,
+        difficulty: this.difficulty,
+        matchState: MATCH_STATES.PLAYING,
+      };
+      this.matchStateMachine.transitionTo(MATCH_STATES.PLAYING, true);
+      return;
+    }
+
     const stage = this.stageManager.getCurrentStage();
     this.stageRunSeq += 1;
     this.accumulatorMs = 0;
@@ -924,6 +1087,9 @@ export class GameEngine {
     this.resetGuestSnapshotTracking();
     this.clearAllInputs();
     this.combatEvents = [];
+    if (this.vsEngine) {
+      this.vsEngine.clearCombatEvents();
+    }
     this.state.isGameOver = false;
     this.state.isStageClear = false;
     this.state.isTimeoutGameOver = false;
@@ -936,15 +1102,34 @@ export class GameEngine {
   }
 
   public startMatch(
-    mode: 'SOLO' | 'TWO_PLAYERS_AI' | 'TWO_PLAYERS_ONLINE' = this.gameMode,
+    mode: GameEngineMode = this.gameMode,
     difficulty: 'DEFAULT' | 'EXTREME' = this.difficulty,
     options?: {
       stageId?: number;
       uid?: string | null;
       isTrialMode?: boolean;
       enforceProgression?: boolean;
+      vsRandomFn?: () => number;
     }
   ): { success: boolean; errorCode?: string; errorMessage?: string } {
+    if (isVsGameMode(mode)) {
+      this.activeUid = options?.uid !== undefined ? (options.uid ?? null) : null;
+      this.isTrialMode = Boolean(options?.isTrialMode);
+      this.enforceProgression = false;
+      this.gameMode = mode;
+      this.difficulty = difficulty;
+      this.matchInstanceId = createMatchInstanceId();
+      this.stageRunSeq = 0;
+      this.resetGuestSnapshotTracking();
+      this.vsEngine = new VsEngine(
+        mode as VsMode,
+        options?.vsRandomFn ? { randomFn: options.vsRandomFn } : undefined
+      );
+      this.restartStage();
+      return { success: true };
+    }
+
+    this.vsEngine = null;
     this.stageManager.syncFromGlobalActiveStages();
 
     const hasContextOptions = Boolean(options);
@@ -996,6 +1181,9 @@ export class GameEngine {
   }
 
   public advanceToNextStage(): boolean {
+    if (isVsGameMode(this.gameMode)) {
+      return false;
+    }
     if (this.isTrialMode) {
       return false;
     }
@@ -1293,14 +1481,36 @@ export class GameEngine {
   /**
    * Executes exactly one deterministic simulation tick (dt = 1/60s).
    */
-  public stepTick(input: InputState = this.externalInput): void {
+  public stepTick(input: InputState = this.externalInput, p2InputOverride?: InputState): void {
     if (
       this.isPaused ||
       this.state.matchState === MATCH_STATES.PAUSED ||
       this.state.matchState === MATCH_STATES.MENU ||
+      this.state.matchState === MATCH_STATES.SUMMARY_STATS ||
       this.state.isGameOver ||
       this.state.isStageClear
     ) {
+      return;
+    }
+
+    if (isVsGameMode(this.gameMode) && this.vsEngine) {
+      if (this.vsEngine.getState().phase === 'FINISHED') {
+        this.state.matchState = MATCH_STATES.SUMMARY_STATS;
+        this.matchStateMachine.transitionTo(MATCH_STATES.SUMMARY_STATS, true);
+        return;
+      }
+      const p2In = p2InputOverride ?? this.externalInputP2;
+      this.vsEngine.stepTick(input, p2In);
+      const vsEvents = this.vsEngine.popCombatEvents();
+      if (vsEvents.length > 0) {
+        this.combatEvents.push(...vsEvents);
+      }
+      this.syncStateFromVsEngine();
+      if (this.vsEngine.getState().phase === 'FINISHED') {
+        this.state.matchState = MATCH_STATES.SUMMARY_STATS;
+        this.matchStateMachine.transitionTo(MATCH_STATES.SUMMARY_STATS, true);
+        this.clearAllInputs();
+      }
       return;
     }
 
@@ -2368,9 +2578,11 @@ export class GameEngine {
     const droppedInputMs = rawElapsedMs - acceptedDeltaMs;
     const rawTotalBacklogMs = this.accumulatorMs + rawElapsedMs;
 
-    // 3. Forced Safety Pause for SOLO and TWO_PLAYERS_AI when total backlog exceeds 3000ms
+    // 3. Forced Safety Pause for SOLO, TWO_PLAYERS_AI, and VS modes when total backlog exceeds 3000ms
     if (
-      (this.gameMode === 'SOLO' || this.gameMode === 'TWO_PLAYERS_AI') &&
+      (this.gameMode === 'SOLO' ||
+        this.gameMode === 'TWO_PLAYERS_AI' ||
+        isVsGameMode(this.gameMode)) &&
       rawTotalBacklogMs > SIMULATION_CONFIG.MAX_ACCUMULATOR_BACKLOG_MS
     ) {
       const droppedBacklogMs = this.accumulatorMs + acceptedDeltaMs;
@@ -2467,7 +2679,12 @@ export class GameEngine {
       }
       ticksRun++;
 
-      if (this.state.isGameOver || this.state.isStageClear || this.isPaused) {
+      if (
+        this.state.isGameOver ||
+        this.state.isStageClear ||
+        this.state.matchState === MATCH_STATES.SUMMARY_STATS ||
+        this.isPaused
+      ) {
         this.accumulatorMs = 0;
         this.catchUpTicksRemaining = 0;
         break;

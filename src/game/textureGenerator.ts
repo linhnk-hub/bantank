@@ -441,9 +441,10 @@ export function generateTileTextures(scene: Phaser.Scene): void {
     }
   }
 
-  // 12. P1 YELLOW TANK SPRITES (16x16 pixel in 4 directions)
+  // 12. P1, P2 & VS A.I TANK SPRITES (16x16 pixel in 4 directions)
   generateTankTextures(scene);
   generateP2TankTextures(scene);
+  generateVsAiTankTextures(scene);
 
   // 13. ENEMY TANK SPRITES (4 types x 4 directions)
   generateEnemyTextures(scene);
@@ -833,6 +834,160 @@ function generateP2TankTextures(scene: Phaser.Scene): void {
     }
 
     canvas.refresh();
+  }
+}
+
+function generateVsAiTankTextures(scene: Phaser.Scene): void {
+  const directions: Array<'up' | 'down' | 'left' | 'right'> = ['up', 'down', 'left', 'right'];
+  const aiConfigs = [
+    {
+      prefix: 'tank_ai1',
+      // TEAM_1 A.I Ally: Crimson-Coral with white tactical stripe (clearly TEAM_1 Red family, distinct from P1)
+      main: '#f43f5e',
+      light: '#ffe4e6',
+      dark: '#9f1239',
+      track: '#4c0519',
+      trackLight: '#fb7185',
+      stripe: '#ffffff',
+    },
+    {
+      prefix: 'tank_ai2',
+      // TEAM_2 A.I Ally: Amber-Cyan Gold with sky tactical stripe (clearly TEAM_2 Gold family, distinct from P2)
+      main: '#f59e0b',
+      light: '#fef3c7',
+      dark: '#92400e',
+      track: '#451a03',
+      trackLight: '#38bdf8',
+      stripe: '#00f0ff',
+    },
+  ] as const;
+
+  for (const cfg of aiConfigs) {
+    for (const dir of directions) {
+      const key = `${cfg.prefix}_${dir}`;
+      if (scene.textures.exists(key)) continue;
+      const canvas = scene.textures.createCanvas(key, 16, 16);
+      if (!canvas) continue;
+      const ctx = canvas.getContext();
+      ctx.clearRect(0, 0, 16, 16);
+
+      if (dir === 'up') {
+        ctx.fillStyle = cfg.track;
+        ctx.fillRect(1, 2, 3, 13);
+        ctx.fillRect(12, 2, 3, 13);
+        ctx.fillStyle = cfg.trackLight;
+        ctx.fillRect(1, 3, 3, 2);
+        ctx.fillRect(1, 7, 3, 2);
+        ctx.fillRect(1, 11, 3, 2);
+        ctx.fillRect(12, 3, 3, 2);
+        ctx.fillRect(12, 7, 3, 2);
+        ctx.fillRect(12, 11, 3, 2);
+
+        ctx.fillStyle = cfg.main;
+        ctx.fillRect(4, 4, 8, 11);
+        ctx.fillStyle = cfg.light;
+        ctx.fillRect(4, 4, 8, 1);
+        ctx.fillStyle = cfg.dark;
+        ctx.fillRect(4, 14, 8, 1);
+        // Tactical A.I stripe on rear hull
+        ctx.fillStyle = cfg.stripe;
+        ctx.fillRect(5, 12, 6, 1);
+
+        ctx.fillStyle = cfg.dark;
+        ctx.fillRect(5, 6, 6, 6);
+        ctx.fillStyle = cfg.stripe;
+        ctx.fillRect(7, 8, 2, 2);
+
+        ctx.fillStyle = cfg.light;
+        ctx.fillRect(7, 0, 2, 7);
+      } else if (dir === 'down') {
+        ctx.fillStyle = cfg.track;
+        ctx.fillRect(1, 1, 3, 13);
+        ctx.fillRect(12, 1, 3, 13);
+        ctx.fillStyle = cfg.trackLight;
+        ctx.fillRect(1, 2, 3, 2);
+        ctx.fillRect(1, 6, 3, 2);
+        ctx.fillRect(1, 10, 3, 2);
+        ctx.fillRect(12, 2, 3, 2);
+        ctx.fillRect(12, 6, 3, 2);
+        ctx.fillRect(12, 10, 3, 2);
+
+        ctx.fillStyle = cfg.main;
+        ctx.fillRect(4, 1, 8, 11);
+        ctx.fillStyle = cfg.light;
+        ctx.fillRect(4, 1, 8, 1);
+        ctx.fillStyle = cfg.dark;
+        ctx.fillRect(4, 11, 8, 1);
+        ctx.fillStyle = cfg.stripe;
+        ctx.fillRect(5, 3, 6, 1);
+
+        ctx.fillStyle = cfg.dark;
+        ctx.fillRect(5, 4, 6, 6);
+        ctx.fillStyle = cfg.stripe;
+        ctx.fillRect(7, 6, 2, 2);
+
+        ctx.fillStyle = cfg.light;
+        ctx.fillRect(7, 9, 2, 7);
+      } else if (dir === 'left') {
+        ctx.fillStyle = cfg.track;
+        ctx.fillRect(2, 1, 13, 3);
+        ctx.fillRect(2, 12, 13, 3);
+        ctx.fillStyle = cfg.trackLight;
+        ctx.fillRect(3, 1, 2, 3);
+        ctx.fillRect(7, 1, 2, 3);
+        ctx.fillRect(11, 1, 2, 3);
+        ctx.fillRect(3, 12, 2, 3);
+        ctx.fillRect(7, 12, 2, 3);
+        ctx.fillRect(11, 12, 2, 3);
+
+        ctx.fillStyle = cfg.main;
+        ctx.fillRect(4, 4, 11, 8);
+        ctx.fillStyle = cfg.light;
+        ctx.fillRect(4, 4, 11, 1);
+        ctx.fillStyle = cfg.dark;
+        ctx.fillRect(4, 11, 11, 1);
+        ctx.fillStyle = cfg.stripe;
+        ctx.fillRect(12, 5, 1, 6);
+
+        ctx.fillStyle = cfg.dark;
+        ctx.fillRect(6, 5, 6, 6);
+        ctx.fillStyle = cfg.stripe;
+        ctx.fillRect(8, 7, 2, 2);
+
+        ctx.fillStyle = cfg.light;
+        ctx.fillRect(0, 7, 7, 2);
+      } else {
+        ctx.fillStyle = cfg.track;
+        ctx.fillRect(1, 1, 13, 3);
+        ctx.fillRect(1, 12, 13, 3);
+        ctx.fillStyle = cfg.trackLight;
+        ctx.fillRect(2, 1, 2, 3);
+        ctx.fillRect(6, 1, 2, 3);
+        ctx.fillRect(10, 1, 2, 3);
+        ctx.fillRect(2, 12, 2, 3);
+        ctx.fillRect(6, 12, 2, 3);
+        ctx.fillRect(10, 12, 2, 3);
+
+        ctx.fillStyle = cfg.main;
+        ctx.fillRect(1, 4, 11, 8);
+        ctx.fillStyle = cfg.light;
+        ctx.fillRect(1, 4, 11, 1);
+        ctx.fillStyle = cfg.dark;
+        ctx.fillRect(1, 11, 11, 1);
+        ctx.fillStyle = cfg.stripe;
+        ctx.fillRect(3, 5, 1, 6);
+
+        ctx.fillStyle = cfg.dark;
+        ctx.fillRect(4, 5, 6, 6);
+        ctx.fillStyle = cfg.stripe;
+        ctx.fillRect(6, 7, 2, 2);
+
+        ctx.fillStyle = cfg.light;
+        ctx.fillRect(9, 7, 7, 2);
+      }
+
+      canvas.refresh();
+    }
   }
 }
 
