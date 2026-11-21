@@ -1918,6 +1918,670 @@ service cloud.firestore {
         && isValidContactMessageAdminUpdate(messageId);
       allow delete: if isValidId(messageId) && isAdmin();
     }
+
+    // =========================================================================
+    // 12. M7.8 SOCIAL SYSTEM RULES (PRESENCE, PUBLIC PROFILES, GLOBAL CHAT,
+    //     PRIVATE CHAT 1-1, FRIEND REQUESTS, FRIENDSHIPS, DELETED FRIENDS,
+    //     USER BLOCKS, ROOM INVITES)
+    //     - Tái sử dụng trực tiếp hệ thống xác thực Gmail cá nhân (isVerifiedPersonalGmail),
+    //       ADMIN duy nhất (isAdmin - linhnk2013@gmail.com) và MOD (isStaffModOrAdmin).
+    //     - Tuyệt đối không chứa PII nhạy cảm (email, phone) trong presence/profile/chat.
+    //     - Chống giả mạo roleBadge, chống shadow fields (hasAll + hasOnly),
+    //       tách bạch hoàn toàn Unfriend và Block, không xóa lịch sử chat.
+    //     - Phân quyền Quản lý bạn bè 3 cấp: ADMIN (xem + xóa), MOD (chỉ xem), PLAYER (chỉ của mình).
+    // =========================================================================
+    function isValidCompoundPairId(id) {
+      return id is string
+        && id.size() >= 4
+        && id.size() <= 260
+        && id.matches('^[a-zA-Z0-9_\\-]+__[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isUidInCompoundPairId(pairId, uid) {
+      return isValidCompoundPairId(pairId)
+        && isValidId(uid)
+        && (
+          pairId.matches('^' + uid + '__[a-zA-Z0-9_\\-]+$')
+          || pairId.matches('^[a-zA-Z0-9_\\-]+__' + uid + '$')
+        );
+    }
+
+    function isValidOptionalSocialAvatarUrl(val) {
+      return val == null
+        || (val is string && val.size() <= 1024);
+    }
+
+    function isValidSocialEpochMillis(ts) {
+      return ts is int
+        && ts >= 1700000000000
+        && ts <= request.time.toMillis() + 120000;
+    }
+
+    function isValidSocialNowMillis(ts) {
+      return ts is int
+        && ts >= request.time.toMillis() - 120000
+        && ts <= request.time.toMillis() + 120000;
+    }
+
+    function isValidSocialRoleBadgeForCaller(badge) {
+      return badge == 'PLAYER'
+        || (badge == 'ADMIN' && isAdmin())
+        || (badge == 'MOD' && isStaffModOrAdmin());
+    }
+
+    function isSocialPairBlocked(uidA, uidB) {
+      return exists(/databases/$(database)/documents/user_blocks/$(uidA + '__' + uidB))
+        || exists(/databases/$(database)/documents/user_blocks/$(uidB + '__' + uidA));
+    }
+
+    function isValidUserPresenceDoc(data, uid) {
+      return isValidId(uid)
+        && data.keys().hasAll([
+          'uid',
+          'handleTag',
+          'displayName',
+          'avatarUrl',
+          'roleBadge',
+          'rankTitle',
+          'stars',
+          'online',
+          'lastHeartbeatMs',
+          'sessionId',
+          'updatedAtMs'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'handleTag',
+          'displayName',
+          'avatarUrl',
+          'roleBadge',
+          'rankTitle',
+          'stars',
+          'online',
+          'lastHeartbeatMs',
+          'sessionId',
+          'updatedAtMs'
+        ])
+        && data.uid == uid
+        && data.handleTag is string
+        && data.handleTag.size() >= 3
+        && data.handleTag.size() <= 20
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 60
+        && isValidOptionalSocialAvatarUrl(data.avatarUrl)
+        && isValidSocialRoleBadgeForCaller(data.roleBadge)
+        && data.rankTitle is string
+        && data.rankTitle.size() >= 1
+        && data.rankTitle.size() <= 60
+        && data.stars is int
+        && data.stars >= 0
+        && data.stars <= 10000000
+        && data.online is bool
+        && isValidSocialEpochMillis(data.lastHeartbeatMs)
+        && (data.sessionId == null || (data.sessionId is string && data.sessionId.size() >= 1 && data.sessionId.size() <= 128))
+        && isValidSocialNowMillis(data.updatedAtMs);
+    }
+
+    // 12.1 Online Presence (/user_presence/{uid}) - Split collection công khai, ZERO PII/email
+    match /user_presence/{uid} {
+      allow get: if isValidId(uid) && isVerifiedPersonalGmail();
+      allow list: if isVerifiedPersonalGmail();
+      allow create: if isOwner(uid)
+        && isValidUserPresenceDoc(incoming(), uid);
+      allow update: if isOwner(uid)
+        && isValidUserPresenceDoc(incoming(), uid)
+        && incoming().uid == existing().uid
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'handleTag',
+          'displayName',
+          'avatarUrl',
+          'roleBadge',
+          'rankTitle',
+          'stars',
+          'online',
+          'lastHeartbeatMs',
+          'sessionId',
+          'updatedAtMs'
+        ]);
+      allow delete: if isValidId(uid) && (isOwner(uid) || isAdmin());
+    }
+
+    function isValidPublicProfileDoc(data, uid) {
+      return isValidId(uid)
+        && data.keys().hasAll([
+          'uid',
+          'handleTag',
+          'displayName',
+          'displayNameLower',
+          'avatarUrl',
+          'roleBadge',
+          'rankTitle',
+          'stars',
+          'online',
+          'lastHeartbeatMs',
+          'updatedAtMs'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'handleTag',
+          'displayName',
+          'displayNameLower',
+          'avatarUrl',
+          'roleBadge',
+          'rankTitle',
+          'stars',
+          'online',
+          'lastHeartbeatMs',
+          'updatedAtMs'
+        ])
+        && data.uid == uid
+        && data.handleTag is string
+        && data.handleTag.size() >= 3
+        && data.handleTag.size() <= 20
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 60
+        && data.displayNameLower is string
+        && data.displayNameLower.size() >= 1
+        && data.displayNameLower.size() <= 60
+        && isValidOptionalSocialAvatarUrl(data.avatarUrl)
+        && isValidSocialRoleBadgeForCaller(data.roleBadge)
+        && data.rankTitle is string
+        && data.rankTitle.size() >= 1
+        && data.rankTitle.size() <= 60
+        && data.stars is int
+        && data.stars >= 0
+        && data.stars <= 10000000
+        && data.online is bool
+        && isValidSocialEpochMillis(data.lastHeartbeatMs)
+        && isValidSocialNowMillis(data.updatedAtMs);
+    }
+
+    // 12.2 Hồ sơ công khai phục vụ tìm kiếm Online + Offline (/public_profiles/{uid}) - ZERO PII/email
+    match /public_profiles/{uid} {
+      allow get: if isValidId(uid) && isVerifiedPersonalGmail();
+      allow list: if isVerifiedPersonalGmail();
+      allow create: if (isOwner(uid) || isAdmin())
+        && isValidPublicProfileDoc(incoming(), uid);
+      allow update: if (isOwner(uid) || isAdmin())
+        && isValidPublicProfileDoc(incoming(), uid)
+        && incoming().uid == existing().uid
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'handleTag',
+          'displayName',
+          'displayNameLower',
+          'avatarUrl',
+          'roleBadge',
+          'rankTitle',
+          'stars',
+          'online',
+          'lastHeartbeatMs',
+          'updatedAtMs'
+        ]);
+      allow delete: if false;
+    }
+
+    function isValidGlobalChatMessageDoc(data, msgId) {
+      return isValidId(msgId)
+        && data.keys().hasAll([
+          'id',
+          'clientMsgId',
+          'senderUid',
+          'senderHandleTag',
+          'senderDisplayName',
+          'senderAvatarUrl',
+          'senderRoleBadge',
+          'content',
+          'createdAtMs',
+          'status'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'clientMsgId',
+          'senderUid',
+          'senderHandleTag',
+          'senderDisplayName',
+          'senderAvatarUrl',
+          'senderRoleBadge',
+          'content',
+          'createdAtMs',
+          'status'
+        ])
+        && data.id == msgId
+        && data.clientMsgId is string
+        && data.clientMsgId.size() >= 1
+        && data.clientMsgId.size() <= 128
+        && data.senderUid == request.auth.uid
+        && data.senderHandleTag is string
+        && data.senderHandleTag.size() >= 3
+        && data.senderHandleTag.size() <= 20
+        && data.senderDisplayName is string
+        && data.senderDisplayName.size() >= 1
+        && data.senderDisplayName.size() <= 60
+        && isValidOptionalSocialAvatarUrl(data.senderAvatarUrl)
+        && isValidSocialRoleBadgeForCaller(data.senderRoleBadge)
+        && data.content is string
+        && data.content.size() >= 1
+        && data.content.size() <= 300
+        && isValidSocialNowMillis(data.createdAtMs)
+        && data.status in ['SENT', 'MODERATED'];
+    }
+
+    // 12.3 Chat chung toàn hệ thống (/global_chat_messages/{msgId})
+    match /global_chat_messages/{msgId} {
+      allow get: if isValidId(msgId) && isVerifiedPersonalGmail();
+      allow list: if isVerifiedPersonalGmail();
+      allow create: if isVerifiedPersonalGmail()
+        && isValidGlobalChatMessageDoc(incoming(), msgId);
+      allow update: if false;
+      allow delete: if isValidId(msgId) && isAdmin();
+    }
+
+    function isValidPrivateChatMessageDoc(data, chatId, msgId) {
+      return isValidCompoundPairId(chatId)
+        && isValidId(msgId)
+        && data.keys().hasAll([
+          'id',
+          'chatId',
+          'clientMsgId',
+          'senderUid',
+          'senderDisplayName',
+          'senderAvatarUrl',
+          'recipientUid',
+          'content',
+          'createdAtMs'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'chatId',
+          'clientMsgId',
+          'senderUid',
+          'senderDisplayName',
+          'senderAvatarUrl',
+          'recipientUid',
+          'content',
+          'createdAtMs'
+        ])
+        && data.id == msgId
+        && data.chatId == chatId
+        && data.clientMsgId is string
+        && data.clientMsgId.size() >= 1
+        && data.clientMsgId.size() <= 128
+        && data.senderUid == request.auth.uid
+        && isValidId(data.recipientUid)
+        && data.recipientUid != request.auth.uid
+        && chatId == (
+          data.senderUid < data.recipientUid
+            ? data.senderUid + '__' + data.recipientUid
+            : data.recipientUid + '__' + data.senderUid
+        )
+        && data.senderDisplayName is string
+        && data.senderDisplayName.size() >= 1
+        && data.senderDisplayName.size() <= 60
+        && isValidOptionalSocialAvatarUrl(data.senderAvatarUrl)
+        && data.content is string
+        && data.content.size() >= 1
+        && data.content.size() <= 500
+        && isValidSocialNowMillis(data.createdAtMs);
+    }
+
+    // 12.4 Chat riêng 1-1 (/private_chats/{chatId}/messages/{msgId})
+    //      - Chỉ 2 người tham gia chatId được đọc/gửi.
+    //      - Chặn gửi nếu tồn tại Block giữa 2 bên trong /user_blocks.
+    //      - Không bao giờ cho sửa/xóa lịch sử chat.
+    match /private_chats/{chatId}/messages/{msgId} {
+      allow get: if isValidId(msgId)
+        && isVerifiedPersonalGmail()
+        && isUidInCompoundPairId(chatId, request.auth.uid);
+      allow list: if isVerifiedPersonalGmail()
+        && isUidInCompoundPairId(chatId, request.auth.uid);
+      allow create: if isVerifiedPersonalGmail()
+        && isValidPrivateChatMessageDoc(incoming(), chatId, msgId)
+        && !isSocialPairBlocked(request.auth.uid, incoming().recipientUid);
+      allow update, delete: if false;
+    }
+
+    function isValidFriendRequestDoc(data, reqId) {
+      return isValidCompoundPairId(reqId)
+        && data.keys().hasAll([
+          'id',
+          'fromUid',
+          'fromDisplayName',
+          'fromHandleTag',
+          'fromAvatarUrl',
+          'toUid',
+          'toDisplayName',
+          'toHandleTag',
+          'toAvatarUrl',
+          'status',
+          'createdAtMs',
+          'updatedAtMs'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'fromUid',
+          'fromDisplayName',
+          'fromHandleTag',
+          'fromAvatarUrl',
+          'toUid',
+          'toDisplayName',
+          'toHandleTag',
+          'toAvatarUrl',
+          'status',
+          'createdAtMs',
+          'updatedAtMs'
+        ])
+        && data.id == reqId
+        && isValidId(data.fromUid)
+        && isValidId(data.toUid)
+        && data.fromUid != data.toUid
+        && reqId == data.fromUid + '__' + data.toUid
+        && data.fromDisplayName is string
+        && data.fromDisplayName.size() >= 1
+        && data.fromDisplayName.size() <= 60
+        && data.toDisplayName is string
+        && data.toDisplayName.size() >= 1
+        && data.toDisplayName.size() <= 60
+        && data.fromHandleTag is string
+        && data.fromHandleTag.size() >= 3
+        && data.fromHandleTag.size() <= 20
+        && data.toHandleTag is string
+        && data.toHandleTag.size() >= 3
+        && data.toHandleTag.size() <= 20
+        && isValidOptionalSocialAvatarUrl(data.fromAvatarUrl)
+        && isValidOptionalSocialAvatarUrl(data.toAvatarUrl)
+        && data.status in ['PENDING', 'ACCEPTED', 'REJECTED', 'CANCELLED']
+        && isValidSocialEpochMillis(data.createdAtMs)
+        && isValidSocialNowMillis(data.updatedAtMs);
+    }
+
+    // 12.5 Lời mời kết bạn (/friend_requests/{reqId})
+    match /friend_requests/{reqId} {
+      allow get: if isValidCompoundPairId(reqId)
+        && isVerifiedPersonalGmail()
+        && (isUidInCompoundPairId(reqId, request.auth.uid) || isStaffModOrAdmin());
+      allow list: if isVerifiedPersonalGmail()
+        && (
+          isStaffModOrAdmin()
+          || existing().fromUid == request.auth.uid
+          || existing().toUid == request.auth.uid
+        );
+      allow create: if isVerifiedPersonalGmail()
+        && isValidFriendRequestDoc(incoming(), reqId)
+        && incoming().fromUid == request.auth.uid
+        && incoming().status == 'PENDING'
+        && isValidSocialNowMillis(incoming().createdAtMs);
+      allow update: if isVerifiedPersonalGmail()
+        && isValidFriendRequestDoc(incoming(), reqId)
+        && existing().status == 'PENDING'
+        && incoming().fromUid == existing().fromUid
+        && incoming().toUid == existing().toUid
+        && incoming().createdAtMs == existing().createdAtMs
+        && (
+          (
+            existing().toUid == request.auth.uid
+            && incoming().status in ['ACCEPTED', 'REJECTED']
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAtMs'])
+          )
+          || (
+            existing().fromUid == request.auth.uid
+            && incoming().status == 'CANCELLED'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAtMs'])
+          )
+        );
+      allow delete: if isValidCompoundPairId(reqId)
+        && isVerifiedPersonalGmail()
+        && (isUidInCompoundPairId(reqId, request.auth.uid) || isAdmin());
+    }
+
+    function isValidFriendshipDoc(data, pairId) {
+      return isValidCompoundPairId(pairId)
+        && data.keys().hasAll([
+          'pairId',
+          'userA',
+          'userB',
+          'userADisplayName',
+          'userBDisplayName',
+          'userAHandleTag',
+          'userBHandleTag',
+          'userAAvatarUrl',
+          'userBAvatarUrl',
+          'createdAtMs'
+        ])
+        && data.keys().hasOnly([
+          'pairId',
+          'userA',
+          'userB',
+          'userADisplayName',
+          'userBDisplayName',
+          'userAHandleTag',
+          'userBHandleTag',
+          'userAAvatarUrl',
+          'userBAvatarUrl',
+          'createdAtMs'
+        ])
+        && data.pairId == pairId
+        && isValidId(data.userA)
+        && isValidId(data.userB)
+        && data.userA < data.userB
+        && pairId == data.userA + '__' + data.userB
+        && data.userADisplayName is string
+        && data.userADisplayName.size() >= 1
+        && data.userADisplayName.size() <= 60
+        && data.userBDisplayName is string
+        && data.userBDisplayName.size() >= 1
+        && data.userBDisplayName.size() <= 60
+        && data.userAHandleTag is string
+        && data.userAHandleTag.size() >= 3
+        && data.userAHandleTag.size() <= 20
+        && data.userBHandleTag is string
+        && data.userBHandleTag.size() >= 3
+        && data.userBHandleTag.size() <= 20
+        && isValidOptionalSocialAvatarUrl(data.userAAvatarUrl)
+        && isValidOptionalSocialAvatarUrl(data.userBAvatarUrl)
+        && isValidSocialNowMillis(data.createdAtMs);
+    }
+
+    // 12.6 Quan hệ bạn bè xác nhận (/friendships/{pairId})
+    //      - Tạo mới yêu cầu tồn tại lời mời kết bạn tương ứng (chống tạo bạn bè giả mạo).
+    //      - ADMIN (linhnk2013@gmail.com): xem + tìm + xóa quan hệ bạn bè.
+    //      - MOD: CHỈ XEM (read-only), tuyệt đối không được xóa.
+    //      - PLAYER: chỉ xem và hủy kết bạn (Unfriend) với cặp của chính mình.
+    match /friendships/{pairId} {
+      allow get: if isValidCompoundPairId(pairId)
+        && isVerifiedPersonalGmail()
+        && (isUidInCompoundPairId(pairId, request.auth.uid) || isStaffModOrAdmin());
+      allow list: if isVerifiedPersonalGmail()
+        && (
+          isStaffModOrAdmin()
+          || existing().userA == request.auth.uid
+          || existing().userB == request.auth.uid
+        );
+      allow create: if isVerifiedPersonalGmail()
+        && isValidFriendshipDoc(incoming(), pairId)
+        && (incoming().userA == request.auth.uid || incoming().userB == request.auth.uid)
+        && (
+          exists(/databases/$(database)/documents/friend_requests/$(incoming().userA + '__' + incoming().userB))
+          || exists(/databases/$(database)/documents/friend_requests/$(incoming().userB + '__' + incoming().userA))
+        );
+      allow update: if false;
+      allow delete: if isValidCompoundPairId(pairId)
+        && isVerifiedPersonalGmail()
+        && (
+          isAdmin()
+          || existing().userA == request.auth.uid
+          || existing().userB == request.auth.uid
+        );
+    }
+
+    function isValidDeletedFriendDoc(data, uid, targetUid) {
+      return isValidId(uid)
+        && isValidId(targetUid)
+        && uid != targetUid
+        && data.keys().hasAll([
+          'targetUid',
+          'targetDisplayName',
+          'targetHandleTag',
+          'targetAvatarUrl',
+          'deletedAtMs'
+        ])
+        && data.keys().hasOnly([
+          'targetUid',
+          'targetDisplayName',
+          'targetHandleTag',
+          'targetAvatarUrl',
+          'deletedAtMs'
+        ])
+        && data.targetUid == targetUid
+        && data.targetDisplayName is string
+        && data.targetDisplayName.size() >= 1
+        && data.targetDisplayName.size() <= 60
+        && data.targetHandleTag is string
+        && data.targetHandleTag.size() >= 3
+        && data.targetHandleTag.size() <= 20
+        && isValidOptionalSocialAvatarUrl(data.targetAvatarUrl)
+        && isValidSocialNowMillis(data.deletedAtMs);
+    }
+
+    // 12.7 Danh sách đã xóa bạn riêng tư (/users/{uid}/deleted_friends/{targetUid}) - CHỈ CHÍNH CHỦ
+    match /users/{uid}/deleted_friends/{targetUid} {
+      allow get: if isValidId(uid) && isValidId(targetUid) && isOwner(uid);
+      allow list: if isValidId(uid) && isOwner(uid);
+      allow create: if isOwner(uid)
+        && isValidDeletedFriendDoc(incoming(), uid, targetUid);
+      allow update: if isOwner(uid)
+        && isValidDeletedFriendDoc(incoming(), uid, targetUid)
+        && incoming().targetUid == existing().targetUid
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'targetDisplayName',
+          'targetHandleTag',
+          'targetAvatarUrl',
+          'deletedAtMs'
+        ]);
+      allow delete: if isValidId(uid) && isValidId(targetUid) && isOwner(uid);
+    }
+
+    function isValidUserBlockDoc(data, blockId) {
+      return isValidCompoundPairId(blockId)
+        && data.keys().hasAll([
+          'id',
+          'blockerUid',
+          'blockedUid',
+          'createdAtMs'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'blockerUid',
+          'blockedUid',
+          'createdAtMs'
+        ])
+        && data.id == blockId
+        && data.blockerUid == request.auth.uid
+        && isValidId(data.blockedUid)
+        && data.blockedUid != request.auth.uid
+        && blockId == data.blockerUid + '__' + data.blockedUid
+        && isValidSocialNowMillis(data.createdAtMs);
+    }
+
+    // 12.8 Chặn người dùng 1-1 (/user_blocks/{blockId}) - Độc lập hoàn toàn với Unfriend
+    match /user_blocks/{blockId} {
+      allow get: if isValidCompoundPairId(blockId)
+        && isVerifiedPersonalGmail()
+        && (isUidInCompoundPairId(blockId, request.auth.uid) || isAdmin());
+      allow list: if isVerifiedPersonalGmail()
+        && (
+          isAdmin()
+          || existing().blockerUid == request.auth.uid
+          || existing().blockedUid == request.auth.uid
+        );
+      allow create: if isVerifiedPersonalGmail()
+        && isValidUserBlockDoc(incoming(), blockId);
+      allow update: if isVerifiedPersonalGmail()
+        && isValidUserBlockDoc(incoming(), blockId)
+        && existing().blockerUid == request.auth.uid
+        && incoming().blockerUid == existing().blockerUid
+        && incoming().blockedUid == existing().blockedUid
+        && incoming().diff(existing()).affectedKeys().hasOnly(['createdAtMs']);
+      allow delete: if isValidCompoundPairId(blockId)
+        && isVerifiedPersonalGmail()
+        && existing().blockerUid == request.auth.uid;
+    }
+
+    function isValidRoomInviteDoc(data, inviteId) {
+      return isValidId(inviteId)
+        && data.keys().hasAll([
+          'id',
+          'fromUid',
+          'fromDisplayName',
+          'toUid',
+          'roomCode',
+          'roomMode',
+          'hasPassword',
+          'createdAtMs',
+          'expiresAtMs'
+        ])
+        && data.keys().hasOnly([
+          'id',
+          'fromUid',
+          'fromDisplayName',
+          'toUid',
+          'roomCode',
+          'roomMode',
+          'hasPassword',
+          'createdAtMs',
+          'expiresAtMs'
+        ])
+        && data.id == inviteId
+        && data.fromUid == request.auth.uid
+        && data.fromDisplayName is string
+        && data.fromDisplayName.size() >= 1
+        && data.fromDisplayName.size() <= 60
+        && isValidId(data.toUid)
+        && data.toUid != request.auth.uid
+        && data.roomCode is string
+        && data.roomCode.size() == 6
+        && data.roomCode.matches('^BT[0-9]{4}$')
+        && data.roomMode in ['COOP_ONLINE', 'VS_P1_P2', 'VS_P1_AI_P2_AI']
+        && data.hasPassword is bool
+        && isValidSocialNowMillis(data.createdAtMs)
+        && data.expiresAtMs is int
+        && data.expiresAtMs > data.createdAtMs
+        && data.expiresAtMs <= data.createdAtMs + 3600000;
+    }
+
+    // 12.9 Lời mời vào phòng CO-OP ONLINE / VS ONLINE từ danh sách bạn bè (/room_invites/{inviteId})
+    match /room_invites/{inviteId} {
+      allow get: if isValidId(inviteId)
+        && isVerifiedPersonalGmail()
+        && (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+      allow list: if isVerifiedPersonalGmail()
+        && (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+      allow create: if isVerifiedPersonalGmail()
+        && isValidRoomInviteDoc(incoming(), inviteId)
+        && exists(/databases/$(database)/documents/friendships/$(
+          incoming().fromUid < incoming().toUid
+            ? incoming().fromUid + '__' + incoming().toUid
+            : incoming().toUid + '__' + incoming().fromUid
+        ));
+      allow update: if isVerifiedPersonalGmail()
+        && isValidRoomInviteDoc(incoming(), inviteId)
+        && existing().fromUid == request.auth.uid
+        && incoming().fromUid == existing().fromUid
+        && incoming().toUid == existing().toUid
+        && incoming().roomCode == existing().roomCode
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'fromDisplayName',
+          'roomMode',
+          'hasPassword',
+          'createdAtMs',
+          'expiresAtMs'
+        ]);
+      allow delete: if isValidId(inviteId)
+        && isVerifiedPersonalGmail()
+        && (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
+    }
   }
 }
+
 

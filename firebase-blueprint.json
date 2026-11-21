@@ -402,6 +402,244 @@
         "createdAt",
         "updatedAt"
       ]
+    },
+    "UserPresence": {
+      "title": "UserPresence",
+      "description": "Trạng thái trực tuyến M7.8 gắn với SessionManager (heartbeat 30s, timeout stale 90s, không chứa email).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "handleTag": { "type": "string", "minLength": 3, "maxLength": 20 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "avatarUrl": { "type": ["string", "null"], "maxLength": 1024 },
+        "roleBadge": { "type": "string", "enum": ["ADMIN", "MOD", "PLAYER"] },
+        "rankTitle": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "stars": { "type": "number" },
+        "online": { "type": "boolean" },
+        "lastHeartbeatMs": { "type": "number" },
+        "sessionId": { "type": ["string", "null"], "maxLength": 128 },
+        "updatedAtMs": { "type": "number" }
+      },
+      "required": [
+        "uid",
+        "handleTag",
+        "displayName",
+        "avatarUrl",
+        "roleBadge",
+        "rankTitle",
+        "stars",
+        "online",
+        "lastHeartbeatMs",
+        "sessionId",
+        "updatedAtMs"
+      ]
+    },
+    "PublicPlayerProfile": {
+      "title": "PublicPlayerProfile",
+      "description": "Hồ sơ công khai phục vụ tìm kiếm tài khoản Online + Offline (không chứa email/PII).",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "handleTag": { "type": "string", "minLength": 3, "maxLength": 20 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "displayNameLower": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "avatarUrl": { "type": ["string", "null"], "maxLength": 1024 },
+        "roleBadge": { "type": "string", "enum": ["ADMIN", "MOD", "PLAYER"] },
+        "rankTitle": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "stars": { "type": "number" },
+        "online": { "type": "boolean" },
+        "lastHeartbeatMs": { "type": "number" },
+        "updatedAtMs": { "type": "number" }
+      },
+      "required": [
+        "uid",
+        "handleTag",
+        "displayName",
+        "displayNameLower",
+        "avatarUrl",
+        "roleBadge",
+        "rankTitle",
+        "stars",
+        "online",
+        "lastHeartbeatMs",
+        "updatedAtMs"
+      ]
+    },
+    "GlobalChatMessage": {
+      "title": "GlobalChatMessage",
+      "description": "Tin nhắn Chat chung toàn hệ thống (tối đa 300 ký tự, có clientMsgId chống trùng lặp).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "clientMsgId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderHandleTag": { "type": "string", "minLength": 3, "maxLength": 20 },
+        "senderDisplayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "senderAvatarUrl": { "type": ["string", "null"], "maxLength": 1024 },
+        "senderRoleBadge": { "type": "string", "enum": ["ADMIN", "MOD", "PLAYER"] },
+        "content": { "type": "string", "minLength": 1, "maxLength": 300 },
+        "createdAtMs": { "type": "number" },
+        "status": { "type": "string", "enum": ["SENT", "MODERATED"] }
+      },
+      "required": [
+        "id",
+        "clientMsgId",
+        "senderUid",
+        "senderHandleTag",
+        "senderDisplayName",
+        "senderAvatarUrl",
+        "senderRoleBadge",
+        "content",
+        "createdAtMs",
+        "status"
+      ]
+    },
+    "PrivateChatMessage": {
+      "title": "PrivateChatMessage",
+      "description": "Tin nhắn riêng 1-1 giữa hai người chơi (tôn trọng Block, không bao giờ xóa lịch sử).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "chatId": { "type": "string", "minLength": 4, "maxLength": 260, "pattern": "^[a-zA-Z0-9_\\-]+__[a-zA-Z0-9_\\-]+$" },
+        "clientMsgId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "senderDisplayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "senderAvatarUrl": { "type": ["string", "null"], "maxLength": 1024 },
+        "recipientUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "content": { "type": "string", "minLength": 1, "maxLength": 500 },
+        "createdAtMs": { "type": "number" }
+      },
+      "required": [
+        "id",
+        "chatId",
+        "clientMsgId",
+        "senderUid",
+        "senderDisplayName",
+        "senderAvatarUrl",
+        "recipientUid",
+        "content",
+        "createdAtMs"
+      ]
+    },
+    "FriendRequest": {
+      "title": "FriendRequest",
+      "description": "Lời mời kết bạn giữa hai người chơi (reqId = fromUid__toUid).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 4, "maxLength": 260 },
+        "fromUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fromDisplayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "fromHandleTag": { "type": "string", "minLength": 3, "maxLength": 20 },
+        "fromAvatarUrl": { "type": ["string", "null"], "maxLength": 1024 },
+        "toUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "toDisplayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "toHandleTag": { "type": "string", "minLength": 3, "maxLength": 20 },
+        "toAvatarUrl": { "type": ["string", "null"], "maxLength": 1024 },
+        "status": { "type": "string", "enum": ["PENDING", "ACCEPTED", "REJECTED", "CANCELLED"] },
+        "createdAtMs": { "type": "number" },
+        "updatedAtMs": { "type": "number" }
+      },
+      "required": [
+        "id",
+        "fromUid",
+        "fromDisplayName",
+        "fromHandleTag",
+        "fromAvatarUrl",
+        "toUid",
+        "toDisplayName",
+        "toHandleTag",
+        "toAvatarUrl",
+        "status",
+        "createdAtMs",
+        "updatedAtMs"
+      ]
+    },
+    "Friendship": {
+      "title": "Friendship",
+      "description": "Quan hệ bạn bè chuẩn hóa duy nhất 1 bản ghi cho mỗi cặp (pairId = userA__userB với userA < userB).",
+      "type": "object",
+      "properties": {
+        "pairId": { "type": "string", "minLength": 4, "maxLength": 260 },
+        "userA": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userB": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userADisplayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "userBDisplayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "userAHandleTag": { "type": "string", "minLength": 3, "maxLength": 20 },
+        "userBHandleTag": { "type": "string", "minLength": 3, "maxLength": 20 },
+        "userAAvatarUrl": { "type": ["string", "null"], "maxLength": 1024 },
+        "userBAvatarUrl": { "type": ["string", "null"], "maxLength": 1024 },
+        "createdAtMs": { "type": "number" }
+      },
+      "required": [
+        "pairId",
+        "userA",
+        "userB",
+        "userADisplayName",
+        "userBDisplayName",
+        "userAHandleTag",
+        "userBHandleTag",
+        "userAAvatarUrl",
+        "userBAvatarUrl",
+        "createdAtMs"
+      ]
+    },
+    "DeletedFriend": {
+      "title": "DeletedFriend",
+      "description": "Lịch sử danh sách đã xóa bạn riêng tư của từng tài khoản (/users/{uid}/deleted_friends/{targetUid}).",
+      "type": "object",
+      "properties": {
+        "targetUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "targetDisplayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "targetHandleTag": { "type": "string", "minLength": 3, "maxLength": 20 },
+        "targetAvatarUrl": { "type": ["string", "null"], "maxLength": 1024 },
+        "deletedAtMs": { "type": "number" }
+      },
+      "required": [
+        "targetUid",
+        "targetDisplayName",
+        "targetHandleTag",
+        "targetAvatarUrl",
+        "deletedAtMs"
+      ]
+    },
+    "UserBlock": {
+      "title": "UserBlock",
+      "description": "Bản ghi chặn 1 chiều (/user_blocks/{blockerUid__blockedUid}), độc lập hoàn toàn với Unfriend.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 4, "maxLength": 260 },
+        "blockerUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "blockedUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAtMs": { "type": "number" }
+      },
+      "required": ["id", "blockerUid", "blockedUid", "createdAtMs"]
+    },
+    "RoomInvite": {
+      "title": "RoomInvite",
+      "description": "Lời mời bạn bè vào phòng CO-OP ONLINE hoặc VS ONLINE (/room_invites/{inviteId}).",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fromUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "fromDisplayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "toUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6, "pattern": "^BT[0-9]{4}$" },
+        "roomMode": { "type": "string", "enum": ["COOP_ONLINE", "VS_P1_P2", "VS_P1_AI_P2_AI"] },
+        "hasPassword": { "type": "boolean" },
+        "createdAtMs": { "type": "number" },
+        "expiresAtMs": { "type": "number" }
+      },
+      "required": [
+        "id",
+        "fromUid",
+        "fromDisplayName",
+        "toUid",
+        "roomCode",
+        "roomMode",
+        "hasPassword",
+        "createdAtMs",
+        "expiresAtMs"
+      ]
     }
   },
   "firestore": {
@@ -412,6 +650,10 @@
     "/users/{uid}": {
       "schema": { "$ref": "#/entities/UserProfile" },
       "description": "Metadata lựa chọn avatar và tên hiển thị người chơi (M7.3.5)."
+    },
+    "/users/{uid}/deleted_friends/{targetUid}": {
+      "schema": { "$ref": "#/entities/DeletedFriend" },
+      "description": "Danh sách đã xóa bạn riêng tư của từng tài khoản (M7.8)."
     },
     "/avatar_catalog/{avatarId}": {
       "schema": { "$ref": "#/entities/AvatarCatalogItem" },
@@ -427,7 +669,7 @@
     },
     "/coop_rooms/{roomCode}": {
       "schema": { "$ref": "#/entities/CoopRoomLobby" },
-      "description": "Metadata phòng chờ Co-op Online tối thiểu."
+      "description": "Metadata phòng chờ Co-op Online & VS Online tối thiểu."
     },
     "/coop_rooms/{roomCode}/private/{docId}": {
       "schema": { "$ref": "#/entities/CoopRoomPrivateSignaling" },
@@ -440,6 +682,38 @@
     "/contact_messages/{messageId}": {
       "schema": { "$ref": "#/entities/ContactMessage" },
       "description": "Hộp thư góp ý và báo lỗi từ người chơi đã xác thực Gmail cá nhân gửi tới Admin."
+    },
+    "/user_presence/{uid}": {
+      "schema": { "$ref": "#/entities/UserPresence" },
+      "description": "Trạng thái trực tuyến M7.8 (heartbeat 30s, stale 90s, không PII)."
+    },
+    "/public_profiles/{uid}": {
+      "schema": { "$ref": "#/entities/PublicPlayerProfile" },
+      "description": "Hồ sơ công khai tìm kiếm Online + Offline M7.8 (không PII)."
+    },
+    "/global_chat_messages/{msgId}": {
+      "schema": { "$ref": "#/entities/GlobalChatMessage" },
+      "description": "Chat chung toàn hệ thống M7.8 (tối đa 300 ký tự)."
+    },
+    "/private_chats/{chatId}/messages/{msgId}": {
+      "schema": { "$ref": "#/entities/PrivateChatMessage" },
+      "description": "Chat riêng 1-1 M7.8 tôn trọng Block và giữ nguyên lịch sử."
+    },
+    "/friend_requests/{reqId}": {
+      "schema": { "$ref": "#/entities/FriendRequest" },
+      "description": "Lời mời kết bạn M7.8."
+    },
+    "/friendships/{pairId}": {
+      "schema": { "$ref": "#/entities/Friendship" },
+      "description": "Quan hệ bạn bè xác nhận chuẩn hóa M7.8 (ADMIN xóa kèm Audit Log, MOD chỉ xem)."
+    },
+    "/user_blocks/{blockId}": {
+      "schema": { "$ref": "#/entities/UserBlock" },
+      "description": "Quan hệ chặn 1 chiều M7.8 độc lập với Unfriend."
+    },
+    "/room_invites/{inviteId}": {
+      "schema": { "$ref": "#/entities/RoomInvite" },
+      "description": "Lời mời bạn bè vào phòng CO-OP ONLINE / VS ONLINE M7.8."
     }
   }
 }
