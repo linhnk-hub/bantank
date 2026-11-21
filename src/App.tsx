@@ -79,21 +79,18 @@ import {
   MaintenanceManager,
   buildMaintenanceNoticeMessage,
 } from './core/maintenanceManager.ts';
+import { SocialManager } from './core/socialManager.ts';
+import { SocialOverlayHub } from './components/SocialOverlayHub.tsx';
 import { useLanguage } from './core/i18n.ts';
 import {
   RotateCcw,
   Pause,
   Smartphone,
   Wrench,
-  Menu,
-  X,
   Play,
-  Heart,
-  Trophy,
-  Settings,
   AlertTriangle,
-  Clock,
   Eye,
+  LogOut,
 } from 'lucide-react';
 
 export default function App() {
@@ -114,6 +111,14 @@ export default function App() {
   const [logoutSuccessNotice, setLogoutSuccessNotice] = useState<string | null>(null);
   const [isSupportOpen, setIsSupportOpen] = useState<boolean>(false);
   const [isContactOpen, setIsContactOpen] = useState<boolean>(false);
+  const [isFriendsModalOpen, setIsFriendsModalOpen] = useState<boolean>(false);
+  const [pendingFriendRequestsCount, setPendingFriendRequestsCount] = useState<number>(0);
+  const [activeLobbyRoom, setActiveLobbyRoom] = useState<CoopRoomDocument | null>(() =>
+    coopManager.getCurrentRoom()
+  );
+  const [showOnlineExitConfirm, setShowOnlineExitConfirm] = useState<boolean>(false);
+  const [isTopMenuOpenInBattle, setIsTopMenuOpenInBattle] = useState<boolean>(false);
+  const topMenuTriggeredPauseRef = useRef<boolean>(false);
   const [onlineDisconnectMsg, setOnlineDisconnectMsg] = useState<string | null>(null);
   const [isReturningToLobby, setIsReturningToLobby] = useState<boolean>(false);
   const [returnToLobbyError, setReturnToLobbyError] = useState<string | null>(null);
@@ -137,7 +142,7 @@ export default function App() {
     useState<SelectionFlowStep>('SELECT_MODE');
   const [modeSelectionInitialCard, setModeSelectionInitialCard] =
     useState<SelectionCardMode>('SOLO');
-  const [profileRevision, setProfileRevision] = useState<number>(0);
+  const [, setProfileRevision] = useState<number>(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState<boolean>(false);
   const [settingsInitialTab, setSettingsInitialTab] = useState<SettingsTabId>('ACCOUNT');
   const [isMatchAllowed, setIsMatchAllowed] = useState<boolean>(false);
@@ -147,10 +152,11 @@ export default function App() {
   );
   const [maintenanceInterruptAlert, setMaintenanceInterruptAlert] = useState<string | null>(null);
 
-  // Sync live peer Ping, post-stage ready status & online network telemetry toggle preference
+  // Sync live peer Ping, active lobby room, post-stage ready status & online network telemetry toggle preference
   useEffect(() => {
-    const unsubPing = coopManager.subscribe(() => {
+    const unsubPing = coopManager.subscribe((room) => {
       setPeerPingMs(coopManager.getPeerPingMs());
+      setActiveLobbyRoom(room);
     });
     const unsubPostStageReady = coopManager.subscribePostStageReady((nextReady) => {
       setPostStageReady(nextReady);
@@ -241,13 +247,12 @@ export default function App() {
   useOrientation();
 
   // Collapsible Menu & Developer Tools state
-  const [isMenuExpanded, setIsMenuExpanded] = useState<boolean>(false);
+  const [, setIsMenuExpanded] = useState<boolean>(false);
   const [isDevDrawerOpen, setIsDevDrawerOpen] = useState<boolean>(false);
 
   // Virtual Controls state for Landscape 3-Column Layout
   const [landscapeDirection, setLandscapeDirection] = useState<ActiveDirection>(null);
   const [landscapeShooting, setLandscapeShooting] = useState<boolean>(false);
-  const [vsTouchPlayer, setVsTouchPlayer] = useState<'P1' | 'P2'>('P1');
   const landscapeDirRef = useRef<ActiveDirection>(null);
 
   // Screen layout metrics (landscape, phone, tablet, desktop scaling)
@@ -264,7 +269,8 @@ export default function App() {
   }, [gameEngine]);
 
   const handlePause = useCallback(() => {
-    if (gameEngine.getState().gameMode === 'TWO_PLAYERS_ONLINE') {
+    const gm = gameEngine.getState().gameMode;
+    if (gm === 'TWO_PLAYERS_ONLINE' || isVsGameMode(gm)) {
       return;
     }
     clearVirtualTouchInputs();
@@ -273,6 +279,31 @@ export default function App() {
     MusicManager.getInstance().pause();
     setGameState({ ...gameEngine.getState() });
   }, [gameEngine, clearVirtualTouchInputs]);
+
+  // M7.8 Section III: Tie Online Presence strictly to existing AuthManager + SessionManager (NO independent Session system)
+  useEffect(() => {
+    const socialMgr = SocialManager.getInstance();
+    if (currentUser && !isTrialMode && sessionSnapshot.status === 'ACTIVE') {
+      socialMgr.startPresenceForSession(
+        currentUser,
+        sessionSnapshot.status,
+        sessionSnapshot.sessionId
+      );
+    } else {
+      void socialMgr.stopPresence();
+    }
+  }, [currentUser, isTrialMode, sessionSnapshot.status, sessionSnapshot.sessionId]);
+
+  useEffect(() => {
+    const onBeforeUnload = () => {
+      void SocialManager.getInstance().stopPresence();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      void SocialManager.getInstance().stopPresence();
+    };
+  }, []);
 
   // Synchronize React isPaused state when GameEngine enters PAUSED internally (e.g. Forced Safety Pause)
   useEffect(() => {
@@ -410,15 +441,49 @@ export default function App() {
     appScreen,
   ]);
 
-  // Monitor Co-op Online Room for peer disconnection / leave / FINISHED fail-safe during BATTLE
+  // Monitor Co-op Online & VS Online Room for peer disconnection / leave / FINISHED fail-safe during BATTLE
   useEffect(() => {
     if (appScreen !== 'BATTLE') return;
+
+    const triggerVsOpponentForfeit = (leavingRole: 'P1' | 'P2') => {
+      const engState = gameEngine.getState();
+      if (!isVsGameMode(engState.gameMode)) return;
+      if (engState.vsState?.phase === 'FINISHED') return;
+      gameEngine.forfeitVsMatch(leavingRole);
+      clearVirtualTouchInputs();
+      const updated = gameEngine.getState();
+      if (coopManager.getLocalRole() === 'HOST') {
+        void coopManager.onHostSimulationFrame(0, updated, Date.now());
+      }
+      setShowOnlineExitConfirm(false);
+      setGameState({ ...updated });
+    };
+
     const unsubCoop = coopManager.subscribe((room) => {
       const engState = gameEngine.getState();
-      if (engState.gameMode !== 'TWO_PLAYERS_ONLINE') return;
-      if (engState.isGameOver || engState.isStageClear || engState.matchState === 'MENU') return;
+      const isVsOnline = isVsGameMode(engState.gameMode);
+      const isCoopOnline = engState.gameMode === 'TWO_PLAYERS_ONLINE';
+      if (!isCoopOnline && !isVsOnline) return;
+      if (engState.matchState === 'MENU') return;
 
       const localRole = coopManager.getLocalRole();
+
+      if (isVsOnline) {
+        if (engState.vsState?.phase === 'FINISHED') return;
+        const opponentVsRole: 'P1' | 'P2' = localRole === 'GUEST' ? 'P1' : 'P2';
+        if (!room || room.status === 'ABANDONED') {
+          triggerVsOpponentForfeit(opponentVsRole);
+          return;
+        }
+        const status = coopManager.evaluatePeerConnectionStatus(Date.now());
+        if (status.isTimedOut) {
+          triggerVsOpponentForfeit(opponentVsRole);
+        }
+        return;
+      }
+
+      if (engState.isGameOver || engState.isStageClear) return;
+
       if (room && room.status === 'FINISHED') {
         if (localRole === 'GUEST') {
           const outcome = room.matchOutcome === 'VICTORY' ? 'VICTORY' : 'GAME_OVER';
@@ -458,6 +523,11 @@ export default function App() {
 
     const unsubPeerLeave = coopManager.subscribePeerLeave((event) => {
       const engState = gameEngine.getState();
+      if (isVsGameMode(engState.gameMode)) {
+        const leavingRole: 'P1' | 'P2' = event.role === 'HOST' ? 'P1' : 'P2';
+        triggerVsOpponentForfeit(leavingRole);
+        return;
+      }
       if (engState.gameMode !== 'TWO_PLAYERS_ONLINE') return;
       if (engState.isGameOver || engState.matchState === 'MENU') return;
       const leftPlayer = event.role === 'HOST' ? 'P1' : 'P2';
@@ -470,8 +540,22 @@ export default function App() {
 
     const heartbeatTimerId = setInterval(() => {
       const engState = gameEngine.getState();
-      if (engState.gameMode !== 'TWO_PLAYERS_ONLINE') return;
-      if (engState.isGameOver || engState.isStageClear || engState.matchState === 'MENU') return;
+      const isVsOnline = isVsGameMode(engState.gameMode);
+      const isCoopOnline = engState.gameMode === 'TWO_PLAYERS_ONLINE';
+      if (!isCoopOnline && !isVsOnline) return;
+      if (engState.matchState === 'MENU') return;
+
+      if (isVsOnline) {
+        if (engState.vsState?.phase === 'FINISHED') return;
+        const status = coopManager.evaluatePeerConnectionStatus(Date.now());
+        if (status.isTimedOut) {
+          const opponentVsRole: 'P1' | 'P2' = coopManager.getLocalRole() === 'GUEST' ? 'P1' : 'P2';
+          triggerVsOpponentForfeit(opponentVsRole);
+        }
+        return;
+      }
+
+      if (engState.isGameOver || engState.isStageClear) return;
       const status = coopManager.evaluatePeerConnectionStatus(Date.now());
       if (status.isTimedOut) {
         setOnlineDisconnectMsg(status.warningMessage || 'Đồng đội đã ngắt kết nối.');
@@ -487,6 +571,8 @@ export default function App() {
 
   const handleResume = useCallback(() => {
     clearVirtualTouchInputs();
+    topMenuTriggeredPauseRef.current = false;
+    setIsTopMenuOpenInBattle(false);
     gameEngine.resume();
     setIsPaused(false);
     MusicManager.getInstance().resume();
@@ -512,48 +598,12 @@ export default function App() {
     setGameState({ ...st });
   }, [gameEngine, clearVirtualTouchInputs, getMusicModeFromEngine]);
 
-  const launchVerifiedVsMatch = useCallback(
-    (vsMode: VsMode) => {
-      if (sessionManager.getSnapshot().status !== 'ACTIVE') {
-        return;
-      }
-      setOnlineDisconnectMsg(null);
-      const startRes = gameEngine.startMatch(vsMode, 'DEFAULT', {
-        uid: currentUser?.uid ?? null,
-        isTrialMode: false,
-        enforceProgression: false,
-      });
-      if (!startRes.success) {
-        return;
-      }
-      setIsPaused(false);
-      setVsTouchPlayer('P1');
-      const st = gameEngine.getState();
-      SoundManager.getInstance().stopAllActiveActionSources();
-      MusicManager.getInstance().syncPlaybackWithContext(1, 'SOLO');
-      setGameState({ ...st });
-      setAppScreen('BATTLE');
-    },
-    [sessionManager, currentUser?.uid, gameEngine]
-  );
-
-  const handleStartVsMatch = useCallback(
-    (vsMode: VsMode) => {
-      const liveStatus = sessionManager.getSnapshot().status;
-      if (liveStatus === 'ACTIVE') {
-        launchVerifiedVsMatch(vsMode);
-        return;
-      }
-      if ((liveStatus === 'ACQUIRING' || liveStatus === 'NO_SESSION') && currentUser?.uid) {
-        void sessionManager.ensureActiveSessionForAction(currentUser.uid).then((res) => {
-          if (res.allowed && sessionManager.getSnapshot().status === 'ACTIVE') {
-            launchVerifiedVsMatch(vsMode);
-          }
-        });
-      }
-    },
-    [sessionManager, currentUser?.uid, launchVerifiedVsMatch]
-  );
+  // M7.8 Section II: VS runs exclusively on 2 separate devices via VS Online Lobby (NO local same-device VS)
+  const handleOpenVsOnlineLobby = useCallback((vsMode: VsMode) => {
+    setModeSelectionInitialCard(vsMode);
+    setModeSelectionInitialStep('COOP_ONLINE_LOBBY');
+    setAppScreen('MODE_SELECTION');
+  }, []);
 
   const launchVerifiedMatch = useCallback(
     (
@@ -623,13 +673,60 @@ export default function App() {
     [currentUser?.uid, launchVerifiedMatch]
   );
 
+  // M7.8 Section X: Home Menu SOLO direct battle entry (skips intermediate mode/difficulty screen)
+  const handleStartSoloDirect = useCallback(() => {
+    const uid = currentUser?.uid ?? '';
+    const unlockedStage = uid
+      ? Math.min(
+          10,
+          Math.max(1, StageProgressionManager.getInstance().getUnlockedStageForUser(uid, false))
+        )
+      : 1;
+    setSelectedMode('SOLO');
+    setSelectedLobbyMode('SOLO');
+    handleStartMatch('SOLO', undefined, unlockedStage);
+  }, [currentUser?.uid, handleStartMatch]);
+
   const handleStartOnlineMatch = useCallback(
     (room: CoopRoomDocument, role: CoopPlayerRole) => {
       if (sessionManager.getSnapshot().status !== 'ACTIVE') return;
       setOnlineDisconnectMsg(null);
+      setShowOnlineExitConfirm(false);
       setIsReturningToLobby(false);
       setReturnToLobbyError(null);
       coopManager.clearPostStageReadyState();
+
+      const roomMode = room.roomMode || 'COOP_ONLINE';
+      if (roomMode === 'VS_P1_P2' || roomMode === 'VS_P1_AI_P2_AI') {
+        const startRes = gameEngine.startMatch(roomMode, 'DEFAULT', {
+          uid: currentUser?.uid ?? null,
+          isTrialMode: false,
+          enforceProgression: false,
+        });
+        if (!startRes.success) {
+          return;
+        }
+        setIsPaused(false);
+        const st = gameEngine.getState();
+        SoundManager.getInstance().stopAllActiveActionSources();
+        MusicManager.getInstance().syncPlaybackWithContext(1, 'SOLO');
+        SystemAuditLogger.getInstance().recordEvent({
+          severity: 'INFO',
+          category: 'CAMPAIGN_STAGE_EVENT',
+          eventType: 'MATCH_START',
+          message: `Bắt đầu trận VS Online (${roomMode}) phòng ${room.roomCode} (${role}).`,
+          uid: currentUser?.uid ?? null,
+          roomCode: room.roomCode,
+          stageId: 1,
+          gameMode: roomMode,
+          source: 'App.handleStartOnlineMatch',
+          outcome: 'SUCCESS',
+        });
+        setGameState({ ...st });
+        setAppScreen('BATTLE');
+        return;
+      }
+
       setDifficulty(room.difficulty);
       const stageId = room.selectedStageId ?? 1;
       const startRes = gameEngine.startMatch('TWO_PLAYERS_ONLINE', room.difficulty, {
@@ -660,7 +757,7 @@ export default function App() {
       setGameState({ ...st });
       setAppScreen('BATTLE');
     },
-    [sessionManager, currentUser?.uid, gameEngine]
+    [sessionManager, currentUser?.uid, gameEngine, coopManager]
   );
 
   const handleStartTrialMode = useCallback(() => {
@@ -706,6 +803,9 @@ export default function App() {
 
   const handleQuitToMenu = useCallback(() => {
     const wasTrial = authManager.isTrialMode() || isTrialMode;
+    setShowOnlineExitConfirm(false);
+    setIsTopMenuOpenInBattle(false);
+    topMenuTriggeredPauseRef.current = false;
     if (wasTrial) {
       authManager.exitTrialMode();
       setIsTrialMode(false);
@@ -724,6 +824,74 @@ export default function App() {
     setGameState({ ...gameEngine.getState() });
     setAppScreen(targetScreen);
   }, [authManager, isTrialMode, gameEngine, coopManager]);
+
+  // M7.8 Section XIV: Confirm Exit from Online Battle (CO-OP ONLINE or VS ONLINE)
+  const handleConfirmOnlineBattleExit = useCallback(() => {
+    const engState = gameEngine.getState();
+    setShowOnlineExitConfirm(false);
+    if (isVsGameMode(engState.gameMode)) {
+      const localRole = coopManager.getLocalRole();
+      const leavingVsRole: 'P1' | 'P2' = localRole === 'GUEST' ? 'P2' : 'P1';
+      if (engState.vsState?.phase !== 'FINISHED') {
+        gameEngine.forfeitVsMatch(leavingVsRole);
+        const updated = gameEngine.getState();
+        if (localRole === 'HOST') {
+          void coopManager.onHostSimulationFrame(0, updated, Date.now());
+        }
+      }
+      void coopManager.leaveRoom('Đối thủ đã rời trận');
+      setOnlineDisconnectMsg(null);
+      setIsReturningToLobby(false);
+      setReturnToLobbyError(null);
+      gameEngine.quitToMenu();
+      setIsPaused(false);
+      SoundManager.getInstance().stopAllActiveActionSources();
+      MusicManager.getInstance().syncMenuPlayback();
+      setGameState({ ...gameEngine.getState() });
+      setAppScreen('MAIN_MENU');
+      return;
+    }
+    handleQuitToMenu();
+  }, [gameEngine, coopManager, handleQuitToMenu]);
+
+  // M7.8 Section XIII: Opening 3-line Top Menu in SOLO / CO-OP A.I pauses gameplay completely & shows dark Pause overlay
+  const handleBattleTopMenuOpenChange = useCallback(
+    (isOpen: boolean) => {
+      const gm = gameEngine.getState().gameMode;
+      const isOnlineMode = gm === 'TWO_PLAYERS_ONLINE' || isVsGameMode(gm);
+      if (isOnlineMode) return;
+      setIsTopMenuOpenInBattle(isOpen);
+      if (isOpen) {
+        const st = gameEngine.getState();
+        if (st.matchState === 'PLAYING') {
+          topMenuTriggeredPauseRef.current = true;
+          handlePause();
+        }
+      } else if (
+        topMenuTriggeredPauseRef.current &&
+        !isSettingsOpen &&
+        !isSupportOpen &&
+        !isContactOpen &&
+        !isFriendsModalOpen &&
+        !isDevDrawerOpen
+      ) {
+        topMenuTriggeredPauseRef.current = false;
+        if (gameEngine.getState().matchState === 'PAUSED') {
+          handleResume();
+        }
+      }
+    },
+    [
+      gameEngine,
+      handlePause,
+      handleResume,
+      isSettingsOpen,
+      isSupportOpen,
+      isContactOpen,
+      isFriendsModalOpen,
+      isDevDrawerOpen,
+    ]
+  );
 
   const handleReturnToLobby = useCallback(async () => {
     if (!currentUser) {
@@ -890,19 +1058,13 @@ export default function App() {
   );
 
   // Handle touch inputs from either Portrait or Landscape virtual controls
+  // M7.8 Section II: VS Online routes touch inputs strictly by online role (HOST = P1, GUEST = P2), no same-device switcher
   const handleTouchInput = useCallback(
     (input: Partial<InputState>) => {
       SessionManager.getInstance().recordUserActivity();
       const gm = gameEngine.getState().gameMode;
-      if (isVsGameMode(gm)) {
-        if (vsTouchPlayer === 'P2') {
-          gameEngine.setVirtualTouchInputP2(input);
-        } else {
-          gameEngine.setVirtualTouchInput(input);
-        }
-        return;
-      }
-      if (gm === 'TWO_PLAYERS_ONLINE' && coopManager.getLocalRole() === 'GUEST') {
+      const isOnlinePeerMode = gm === 'TWO_PLAYERS_ONLINE' || isVsGameMode(gm);
+      if (isOnlinePeerMode && coopManager.getLocalRole() === 'GUEST') {
         gameEngine.setVirtualTouchInputP2(input);
         const p2In = gameEngine.getVirtualTouchInputP2();
         gameEngine.setExternalInputP2(p2In);
@@ -912,7 +1074,7 @@ export default function App() {
         gameEngine.setExternalInput(input);
       }
     },
-    [gameEngine, coopManager, vsTouchPlayer]
+    [gameEngine, coopManager]
   );
 
   // Landscape specific multi-touch handlers with independent release
@@ -928,15 +1090,8 @@ export default function App() {
         right: dir === 'RIGHT',
       };
       const gm = gameEngine.getState().gameMode;
-      if (isVsGameMode(gm)) {
-        if (vsTouchPlayer === 'P2') {
-          gameEngine.setVirtualTouchInputP2(dirInput);
-        } else {
-          gameEngine.setVirtualTouchInput(dirInput);
-        }
-        return;
-      }
-      if (gm === 'TWO_PLAYERS_ONLINE' && coopManager.getLocalRole() === 'GUEST') {
+      const isOnlinePeerMode = gm === 'TWO_PLAYERS_ONLINE' || isVsGameMode(gm);
+      if (isOnlinePeerMode && coopManager.getLocalRole() === 'GUEST') {
         gameEngine.setVirtualTouchInputP2(dirInput);
         const p2In = gameEngine.getVirtualTouchInputP2();
         gameEngine.setExternalInputP2(p2In);
@@ -946,7 +1101,7 @@ export default function App() {
         gameEngine.setExternalInput(dirInput);
       }
     },
-    [gameEngine, coopManager, vsTouchPlayer]
+    [gameEngine, coopManager]
   );
 
   const handleLandscapeShootChange = useCallback(
@@ -954,15 +1109,8 @@ export default function App() {
       SessionManager.getInstance().recordUserActivity();
       setLandscapeShooting(shooting);
       const gm = gameEngine.getState().gameMode;
-      if (isVsGameMode(gm)) {
-        if (vsTouchPlayer === 'P2') {
-          gameEngine.setVirtualTouchInputP2({ shoot: shooting });
-        } else {
-          gameEngine.setVirtualTouchInput({ shoot: shooting });
-        }
-        return;
-      }
-      if (gm === 'TWO_PLAYERS_ONLINE' && coopManager.getLocalRole() === 'GUEST') {
+      const isOnlinePeerMode = gm === 'TWO_PLAYERS_ONLINE' || isVsGameMode(gm);
+      if (isOnlinePeerMode && coopManager.getLocalRole() === 'GUEST') {
         gameEngine.setVirtualTouchInputP2({ shoot: shooting });
         const p2In = gameEngine.getVirtualTouchInputP2();
         gameEngine.setExternalInputP2(p2In);
@@ -976,7 +1124,7 @@ export default function App() {
         });
       }
     },
-    [gameEngine, coopManager, vsTouchPlayer]
+    [gameEngine, coopManager]
   );
 
   // Auto-collapse menu when match starts/resumes
@@ -1010,7 +1158,9 @@ export default function App() {
   }, [appScreen, gameState?.matchState, handleRestart]);
 
   const isCoopOnlineMatch = gameState?.gameMode === 'TWO_PLAYERS_ONLINE';
-  const localOnlineRole = isCoopOnlineMatch ? coopManager.getLocalRole() : null;
+  const isVsMatch = isVsGameMode(gameState?.gameMode);
+  const isOnlineBattleMode = isCoopOnlineMatch || isVsMatch;
+  const localOnlineRole = isOnlineBattleMode ? coopManager.getLocalRole() : null;
   const isLocalSpectator = Boolean(
     gameState &&
       !gameState.isGameOver &&
@@ -1035,7 +1185,6 @@ export default function App() {
     }
   }, [isLocalSpectator, clearVirtualTouchInputs]);
 
-  const isVsMatch = isVsGameMode(gameState?.gameMode);
   const isVsResultModalOpen = Boolean(
     isVsMatch && gameState?.vsState?.phase === 'FINISHED' && gameState?.vsState?.outcome
   );
@@ -1266,7 +1415,7 @@ export default function App() {
       data-testid="active-maintenance-interrupt-modal"
       className="fixed inset-0 z-[130] flex items-center justify-center bg-[#050510]/92 p-4 select-none"
     >
-      <div className="w-full max-w-md rounded-lg border-2 border-[#FFB800] bg-[#0b0d1e] shadow-2xl overflow-hidden animate-fade-in">
+      <div className="w-full max-w-md rounded-lg border-2 border-[#FFB800] bg-[#0b0d1e] shadow-2xl overflow-hidden animate-neo-fade-in">
         <div className="px-5 py-3.5 border-b border-neutral-800 bg-amber-950/50 flex items-center gap-2.5">
           <AlertTriangle className="w-5 h-5 text-[#FFB800] shrink-0" />
           <h3 className="font-btn text-sm font-black uppercase tracking-wider text-[#FFB800]">
@@ -1290,6 +1439,18 @@ export default function App() {
         </div>
       </div>
     </div>
+  ) : null;
+
+  const socialOverlayHubElement = currentUser && !isTrialMode ? (
+    <SocialOverlayHub
+      currentUser={currentUser}
+      sessionStatus={sessionSnapshot.status}
+      isBattleScreen={appScreen === 'BATTLE'}
+      isFriendsModalOpen={isFriendsModalOpen}
+      onCloseFriendsModal={() => setIsFriendsModalOpen(false)}
+      activeLobbyRoom={activeLobbyRoom}
+      onPendingFriendRequestsChange={setPendingFriendRequestsCount}
+    />
   ) : null;
 
   // View 1: Welcome Screen (Unauthenticated user or initial landing - V.1: Clean screen without Top Menu)
@@ -1391,7 +1552,8 @@ export default function App() {
             }
             setAppScreen('MODE_SELECTION');
           }}
-          onStartVsMatch={handleStartVsMatch}
+          onStartSoloDirect={handleStartSoloDirect}
+          onStartVsMatch={handleOpenVsOnlineLobby}
           onPlay={() => {
             setModeSelectionInitialCard(selectedLobbyMode);
             setModeSelectionInitialStep('SELECT_MODE');
@@ -1405,11 +1567,15 @@ export default function App() {
             setSettingsInitialTab('ACCOUNT');
             setIsSettingsOpen(true);
           }}
+          onOpenFriends={() => setIsFriendsModalOpen(true)}
+          pendingFriendRequestsCount={pendingFriendRequestsCount}
           onOpenSupport={() => setIsSupportOpen(true)}
           onOpenContact={() => setIsContactOpen(true)}
           onOpenDevTools={() => setIsDevDrawerOpen(true)}
           isSuperAdmin={isSuperAdmin}
         />
+
+        {socialOverlayHubElement}
 
         {/* Protective Interruption Modal if displaced while on menu */}
         <SessionAlertModal
@@ -1471,13 +1637,15 @@ export default function App() {
             handleStartMatch(mode, opt, stageId);
           }}
           onStartOnlineMatch={handleStartOnlineMatch}
-          onStartVsMatch={handleStartVsMatch}
+          onStartVsMatch={handleOpenVsOnlineLobby}
           difficulty={difficulty}
           onDifficultyChange={handleDifficultyChange}
           onOpenSettings={() => {
             setSettingsInitialTab('ACCOUNT');
             setIsSettingsOpen(true);
           }}
+          onOpenFriends={() => setIsFriendsModalOpen(true)}
+          pendingFriendRequestsCount={pendingFriendRequestsCount}
           onOpenSupport={() => setIsSupportOpen(true)}
           onOpenContact={() => setIsContactOpen(true)}
           onOpenDevTools={() => setIsDevDrawerOpen(true)}
@@ -1489,6 +1657,8 @@ export default function App() {
           initialCardMode={modeSelectionInitialCard}
           isSuperAdmin={isSuperAdmin}
         />
+
+        {socialOverlayHubElement}
 
         {/* Protective Interruption Modal if displaced while on mode selection */}
         <SessionAlertModal
@@ -1549,15 +1719,20 @@ export default function App() {
         isAuthenticated={Boolean(currentUser && !isTrialMode)}
       />
 
-      {/* Top Battle Header: Player Name + Horizontal Slide-Out Menu */}
+      {/* Top Battle Header: Player Name + Horizontal Slide-Out Menu (SOLO/CO-OP AI) OR Single Exit Button (CO-OP ONLINE/VS ONLINE) */}
       <AuthSessionBanner
         onStartMatchAllowedChange={setIsMatchAllowed}
         isBattleScreen={true}
+        onlineBattleExitMode={isOnlineBattleMode}
+        onRequestExitOnlineMatch={() => setShowOnlineExitConfirm(true)}
+        onTopMenuOpenChange={handleBattleTopMenuOpenChange}
         isSuperAdmin={isSuperAdmin}
         onOpenSettings={() => {
           setSettingsInitialTab('ACCOUNT');
           setIsSettingsOpen(true);
         }}
+        onOpenFriends={currentUser && !isTrialMode ? () => setIsFriendsModalOpen(true) : undefined}
+        pendingFriendRequestsCount={pendingFriendRequestsCount}
         onOpenSupport={() => setIsSupportOpen(true)}
         onOpenContact={() => setIsContactOpen(true)}
         onOpenDevTools={() => setIsDevDrawerOpen(true)}
@@ -1716,39 +1891,7 @@ export default function App() {
               }`}
             >
               {isVsMatch ? (
-                <>
-                  <VsHud state={gameState} compact />
-                  <div className="flex items-center gap-1 text-[10px] font-btn">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        clearVirtualTouchInputs();
-                        setVsTouchPlayer('P1');
-                      }}
-                      className={`px-2 py-0.5 rounded border font-black cursor-pointer ${
-                        vsTouchPlayer === 'P1'
-                          ? 'bg-red-600 border-red-400 text-white'
-                          : 'bg-[#050510] border-neutral-700 text-neutral-400'
-                      }`}
-                    >
-                      P1
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        clearVirtualTouchInputs();
-                        setVsTouchPlayer('P2');
-                      }}
-                      className={`px-2 py-0.5 rounded border font-black cursor-pointer ${
-                        vsTouchPlayer === 'P2'
-                          ? 'bg-[#FFB800] border-amber-300 text-black'
-                          : 'bg-[#050510] border-neutral-700 text-neutral-400'
-                      }`}
-                    >
-                      P2
-                    </button>
-                  </div>
-                </>
+                <VsHud state={gameState} compact localOnlineRole={localOnlineRole} />
               ) : (
                 <BattleCenterHudStats
                   gameState={gameState}
@@ -1756,7 +1899,7 @@ export default function App() {
                   localOnlineRole={localOnlineRole}
                 />
               )}
-              {!isCoopOnlineMatch && (
+              {!isOnlineBattleMode && (
                 <button
                   type="button"
                   onClick={isPaused ? handleResume : handlePause}
@@ -1788,38 +1931,7 @@ export default function App() {
           <div className="flex-1 flex flex-col items-center justify-start w-full overflow-hidden px-2 pt-1 pb-2">
             {isVsMatch && (
               <div className="w-full mb-1.5 flex flex-col items-center gap-1">
-                <VsHud state={gameState} compact />
-                <div className="flex items-center gap-1.5 text-[10px] font-btn">
-                  <span className="text-neutral-400 uppercase">{t('Điều khiển cảm ứng:', 'Touch Control:')}</span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      clearVirtualTouchInputs();
-                      setVsTouchPlayer('P1');
-                    }}
-                    className={`px-2 py-0.5 rounded border font-black cursor-pointer ${
-                      vsTouchPlayer === 'P1'
-                        ? 'bg-red-600 border-red-400 text-white'
-                        : 'bg-[#050510] border-neutral-700 text-neutral-400'
-                    }`}
-                  >
-                    P1
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      clearVirtualTouchInputs();
-                      setVsTouchPlayer('P2');
-                    }}
-                    className={`px-2 py-0.5 rounded border font-black cursor-pointer ${
-                      vsTouchPlayer === 'P2'
-                        ? 'bg-[#FFB800] border-amber-300 text-black'
-                        : 'bg-[#050510] border-neutral-700 text-neutral-400'
-                    }`}
-                  >
-                    P2
-                  </button>
-                </div>
+                <VsHud state={gameState} compact localOnlineRole={localOnlineRole} />
               </div>
             )}
             <main
@@ -1894,7 +2006,7 @@ export default function App() {
                 onPauseClick={isPaused ? handleResume : handlePause}
                 isPaused={isPaused || isLocalSpectator}
                 controlType="joystick"
-                disablePause={isCoopOnlineMatch}
+                disablePause={isOnlineBattleMode}
                 gameState={gameState}
                 difficulty={difficulty}
                 localOnlineRole={localOnlineRole}
@@ -1944,7 +2056,7 @@ export default function App() {
                       <span>Joystick: {showTouchControls ? t('Bật', 'On') : t('Tắt', 'Off')}</span>
                     </button>
 
-                    {!isCoopOnlineMatch && (
+                    {!isOnlineBattleMode && (
                       <>
                         <button
                           onClick={isPaused ? handleResume : handlePause}
@@ -2029,7 +2141,7 @@ export default function App() {
                     onPauseClick={isPaused ? handleResume : handlePause}
                     isPaused={isPaused || isLocalSpectator}
                     controlType="joystick"
-                    disablePause={isCoopOnlineMatch}
+                    disablePause={isOnlineBattleMode}
                     gameState={gameState}
                     difficulty={difficulty}
                     localOnlineRole={localOnlineRole}
@@ -2044,8 +2156,7 @@ export default function App() {
               {isVsMatch ? (
                 <VsHud
                   state={gameState}
-                  onPause={handlePause}
-                  onReset={handleResetGame}
+                  localOnlineRole={localOnlineRole}
                 />
               ) : (
                 <M3Hud
@@ -2102,15 +2213,67 @@ export default function App() {
       </footer>
 
       {/* =========================================================================
-          MATCH MODALS (Pause, GameOver, StageClear)
+          MATCH MODALS (Pause, Online Exit Confirm, GameOver, StageClear, VsResult)
          ========================================================================= */}
       <PauseModal
-        isOpen={isPaused && !isCoopOnlineMatch}
+        isOpen={isPaused && !isOnlineBattleMode}
         onResume={handleResume}
         onRestart={handleRestart}
         onQuitToMenu={handleQuitToMenu}
         isTrialMode={isTrialMode}
+        belowHeader={isTopMenuOpenInBattle}
       />
+
+      {/* M7.8 Section XIV: Online Battle Exit Confirmation Modal (CO-OP ONLINE & VS ONLINE) */}
+      {showOnlineExitConfirm && isOnlineBattleMode && (
+        <div
+          data-testid="online-battle-exit-confirm-modal"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-[#050510]/90 backdrop-blur-xs p-4 select-none animate-neo-fade-in"
+        >
+          <div className="w-full max-w-md rounded-xl border-2 border-[#FF0055] bg-[#0b0d1e] shadow-2xl overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-neutral-800 bg-rose-950/40 flex items-center gap-2.5">
+              <LogOut className="w-5 h-5 text-[#FF0055] shrink-0" />
+              <h3 className="font-btn text-sm sm:text-base font-black text-white uppercase tracking-wide">
+                {t('Bạn có chắc chắn muốn rời trận đấu?', 'Are you sure you want to leave the match?')}
+              </h3>
+            </div>
+            <div className="p-5 space-y-3">
+              <p className="text-xs sm:text-sm text-neutral-200 leading-relaxed">
+                {t(
+                  'Rời trận sẽ được xử lý theo quy tắc của chế độ đang chơi.',
+                  'Leaving the match will be handled according to the rules of the active game mode.'
+                )}
+              </p>
+              {isVsMatch && (
+                <p className="text-xs text-rose-300 bg-rose-950/40 border border-rose-500/40 rounded-lg p-2.5">
+                  {t(
+                    'Trong VS Online, xác nhận rời trận sẽ xử thắng cho đối thủ với lý do "Đối thủ đã rời trận".',
+                    'In VS Online, confirming exit forfeits the match and awards victory to your opponent ("Opponent left the match").'
+                  )}
+                </p>
+              )}
+            </div>
+            <div className="px-5 py-3.5 border-t border-neutral-800 bg-[#050510]/90 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <button
+                type="button"
+                data-testid="online-exit-stay-btn"
+                onClick={() => setShowOnlineExitConfirm(false)}
+                className="font-btn min-h-[46px] py-2.5 px-4 rounded-lg bg-[#0b0d1e] hover:bg-neutral-800 border border-[#00F0FF]/50 text-[#00F0FF] font-black text-xs uppercase tracking-wider cursor-pointer active:scale-95 transition-transform"
+              >
+                {t('Ở lại trận đấu', 'Stay in Match')}
+              </button>
+              <button
+                type="button"
+                data-testid="online-exit-confirm-btn"
+                onClick={handleConfirmOnlineBattleExit}
+                className="font-btn min-h-[46px] py-2.5 px-4 rounded-lg bg-[#FF0055] hover:bg-rose-500 text-white font-black text-xs uppercase tracking-wider cursor-pointer shadow-lg shadow-[#FF0055]/30 active:scale-95 transition-transform"
+              >
+                {t('Xác nhận rời trận', 'Confirm Leave Match')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <GameOverModal
         isOpen={isGameOverModalOpen}
@@ -2142,10 +2305,21 @@ export default function App() {
       <VsResultModal
         isOpen={isVsResultModalOpen}
         state={gameState}
-        onReplay={handleRestart}
+        onReplay={() => {
+          const vsMode =
+            gameState?.gameMode === 'VS_P1_AI_P2_AI' ? 'VS_P1_AI_P2_AI' : 'VS_P1_P2';
+          void coopManager.leaveRoom();
+          gameEngine.quitToMenu();
+          setIsPaused(false);
+          SoundManager.getInstance().stopAllActiveActionSources();
+          MusicManager.getInstance().syncMenuPlayback();
+          setGameState({ ...gameEngine.getState() });
+          handleOpenVsOnlineLobby(vsMode);
+        }}
         onQuitToMenu={handleQuitToMenu}
       />
 
+      {socialOverlayHubElement}
       {maintenanceModalOverlay}
     </div>
   );

@@ -39,7 +39,9 @@ import type {
   StageItemSystemState,
   TankStructure,
 } from './types.ts';
+import { isVsGameMode, type VsMatchState } from './vsTypes.ts';
 
+export type CoopRoomMode = 'COOP_ONLINE' | 'VS_P1_P2' | 'VS_P1_AI_P2_AI';
 export type CoopRoomStatus = 'WAITING' | 'PLAYING' | 'FINISHED' | 'ABANDONED' | 'EXPIRED';
 export type CoopPlayerRole = 'HOST' | 'GUEST' | null;
 export type CoopRtcConnectionState =
@@ -97,6 +99,8 @@ export interface CoopAuthoritativeSnapshot {
   gameOverReason: string | null;
   peerLeaveNotice?: string | null;
   matchState: GameCoreState['matchState'];
+  gameMode?: GameCoreState['gameMode'];
+  vsState?: VsMatchState | null;
 }
 
 export interface CoopPostStageReadyState {
@@ -208,6 +212,7 @@ export interface CoopRoomSignalingDocument {
  * Trạng thái phòng hợp nhất trong bộ nhớ của Host / Guest sau khi đã vào phòng.
  */
 export interface CoopRoomDocument extends CoopRoomLobbyDocument {
+  roomMode?: CoopRoomMode;
   hasPassword?: boolean;
   rtcOffer?: string | null;
   rtcAnswer?: string | null;
@@ -220,12 +225,14 @@ export interface CoopRoomDocument extends CoopRoomLobbyDocument {
 }
 
 export interface CoopCreateRoomOptions {
+  roomMode?: CoopRoomMode;
   hasPassword?: boolean;
   password?: string;
   stageId?: number;
 }
 
 export interface CoopJoinRoomOptions {
+  expectedRoomMode?: CoopRoomMode;
   password?: string;
   stageId?: number;
 }
@@ -255,6 +262,7 @@ export interface CoopActionResult {
     | 'INVALID_PASSWORD'
     | 'PASSWORD_REQUIRED'
     | 'WRONG_PASSWORD'
+    | 'WRONG_ROOM_MODE'
     | 'NO_AVAILABLE_PUBLIC_ROOM'
     | 'INVALID_ROOM_STATE'
     | 'ROOM_NOT_FOUND'
@@ -472,50 +480,71 @@ export function computeRoomPasswordDigest(roomCode: string, rawPassword: string)
   return `${hex1}${hex2}`.toLowerCase();
 }
 
-const ROOM_LOCK_TAG_REGEX = /^(.*?)\s*\[LOCK:([0-9a-f]{16})\]$/i;
+const ROOM_LOCK_TAG_REGEX = /\s*\[LOCK:([0-9a-f]{16})\]/i;
+const ROOM_MODE_TAG_REGEX = /\s*\[(VS1|VS2)\]/i;
+
+export function getRoomModeLabelVi(mode: CoopRoomMode): string {
+  if (mode === 'VS_P1_P2') return 'VS Online (P1 VS P2)';
+  if (mode === 'VS_P1_AI_P2_AI') return 'VS Online (P1 + A.I VS P2 + A.I)';
+  return 'CO-OP ONLINE';
+}
 
 /**
- * Mã hóa dấu khóa mật khẩu vào `hostDisplayName` (giữ đúng 15 trường của `/coop_rooms/{roomCode}`
- * trên Firestore Production mà không cần thêm trường mới hay công bố lại `firestore.rules`).
+ * Mã hóa dấu khóa mật khẩu & chế độ phòng (`COOP_ONLINE` / `VS_P1_P2` / `VS_P1_AI_P2_AI`)
+ * vào `hostDisplayName` (giữ đúng 15 trường của `/coop_rooms/{roomCode}` trên Firestore Production
+ * và tổng độ dài <= 80 ký tự mà không cần sửa `firestore.rules`).
  */
 export function encodeHostDisplayNameWithLock(
   cleanDisplayName: string,
   roomCode: string,
   hasPassword: boolean,
-  rawPassword?: string
+  rawPassword?: string,
+  roomMode: CoopRoomMode = 'COOP_ONLINE'
 ): string {
   const baseName = (cleanDisplayName || 'Commander')
-    .replace(ROOM_LOCK_TAG_REGEX, '$1')
+    .replace(ROOM_LOCK_TAG_REGEX, '')
+    .replace(ROOM_MODE_TAG_REGEX, '')
     .trim();
+  const modeTag =
+    roomMode === 'VS_P1_P2' ? ' [VS1]' : roomMode === 'VS_P1_AI_P2_AI' ? ' [VS2]' : '';
   if (!hasPassword || !rawPassword) {
-    return (baseName || 'Commander').slice(0, 80);
+    const maxBase = Math.max(1, 80 - modeTag.length);
+    return `${(baseName || 'Commander').slice(0, maxBase)}${modeTag}`;
   }
   const digest = computeRoomPasswordDigest(roomCode, rawPassword);
-  const clippedName = (baseName || 'Commander').slice(0, 55);
-  return `${clippedName} [LOCK:${digest}]`;
+  const lockTag = ` [LOCK:${digest}]`;
+  const maxBase = Math.max(1, 80 - modeTag.length - lockTag.length);
+  const clippedName = (baseName || 'Commander').slice(0, maxBase);
+  return `${clippedName}${modeTag}${lockTag}`;
 }
 
 /**
- * Giải mã `hostDisplayName` để lấy tên hiển thị sạch và thông tin khóa mật khẩu.
+ * Giải mã `hostDisplayName` để lấy tên hiển thị sạch, chế độ phòng và thông tin khóa mật khẩu.
  */
 export function decodeHostDisplayNameAndLock(rawHostDisplayName: string): {
   cleanDisplayName: string;
+  roomMode: CoopRoomMode;
   hasPassword: boolean;
   passwordDigest: string | null;
 } {
   const raw = typeof rawHostDisplayName === 'string' ? rawHostDisplayName : 'Commander';
-  const match = raw.match(ROOM_LOCK_TAG_REGEX);
-  if (!match) {
-    return {
-      cleanDisplayName: raw,
-      hasPassword: false,
-      passwordDigest: null,
-    };
-  }
+  const lockMatch = raw.match(ROOM_LOCK_TAG_REGEX);
+  const modeMatch = raw.match(ROOM_MODE_TAG_REGEX);
+  const roomMode: CoopRoomMode =
+    modeMatch && modeMatch[1].toUpperCase() === 'VS1'
+      ? 'VS_P1_P2'
+      : modeMatch && modeMatch[1].toUpperCase() === 'VS2'
+        ? 'VS_P1_AI_P2_AI'
+        : 'COOP_ONLINE';
+  const cleanName = raw
+    .replace(ROOM_LOCK_TAG_REGEX, '')
+    .replace(ROOM_MODE_TAG_REGEX, '')
+    .trim();
   return {
-    cleanDisplayName: (match[1] || 'Commander').trim() || 'Commander',
-    hasPassword: true,
-    passwordDigest: match[2].toLowerCase(),
+    cleanDisplayName: cleanName || 'Commander',
+    roomMode,
+    hasPassword: Boolean(lockMatch),
+    passwordDigest: lockMatch ? lockMatch[1].toLowerCase() : null,
   };
 }
 
@@ -564,6 +593,7 @@ export function mergeLobbyAndSignaling(
   const decodedHost = decodeHostDisplayNameAndLock(lobby.hostDisplayName);
   return {
     ...lobby,
+    roomMode: decodedHost.roomMode,
     hostDisplayName: decodedHost.cleanDisplayName,
     hasPassword: decodedHost.hasPassword,
     rtcOffer: sig ? sig.rtcOffer : null,
@@ -724,6 +754,24 @@ export function buildAuthoritativeSnapshot(
     gameOverReason: state.gameOverReason,
     peerLeaveNotice: state.peerLeaveNotice ?? null,
     matchState: state.matchState,
+    gameMode: state.gameMode,
+    vsState: state.vsState
+      ? {
+          ...state.vsState,
+          combatants: state.vsState.combatants.map((c) => ({
+            ...c,
+            tank: { ...c.tank },
+          })),
+          team1: { ...state.vsState.team1 },
+          team2: { ...state.vsState.team2 },
+          safeZone: {
+            ...state.vsState.safeZone,
+            bounds: { ...state.vsState.safeZone.bounds },
+            nextBounds: { ...state.vsState.safeZone.nextBounds },
+          },
+          outcome: state.vsState.outcome ? { ...state.vsState.outcome } : null,
+        }
+      : null,
   };
 }
 
@@ -809,6 +857,15 @@ export function evaluateJoinRoomCandidate(
   }
 
   const decodedLock = decodeHostDisplayNameAndLock(room.hostDisplayName);
+  const actualRoomMode: CoopRoomMode = room.roomMode ?? decodedLock.roomMode;
+  if (options?.expectedRoomMode && actualRoomMode !== options.expectedRoomMode) {
+    return {
+      success: false,
+      errorCode: 'WRONG_ROOM_MODE',
+      message: `Mã phòng "${normalized}" thuộc chế độ ${getRoomModeLabelVi(actualRoomMode)}, không khớp với chế độ ${getRoomModeLabelVi(options.expectedRoomMode)} bạn đang chọn.`,
+    };
+  }
+
   const requiresPassword = Boolean(room.hasPassword || decodedLock.hasPassword);
   if (requiresPassword && decodedLock.passwordDigest) {
     const providedPass = options?.password?.trim() || '';
@@ -2727,12 +2784,14 @@ export class CoopOnlineManager {
 
       const safeTtlMs =
         COOP_ONLINE_CONFIG.ROOM_TTL_MS - COOP_ONLINE_CONFIG.CLOCK_SKEW_BUFFER_MS;
+      const roomMode: CoopRoomMode = options?.roomMode ?? 'COOP_ONLINE';
       const cleanHostName = (getUserDisplayLabel(user) || 'Commander').trim().slice(0, 80);
       const encodedHostDisplayName = encodeHostDisplayNameWithLock(
         cleanHostName,
         roomCode,
         usePassword,
-        normalizedPassword
+        normalizedPassword,
+        roomMode
       );
 
       const newLobby: CoopRoomLobbyDocument = {
@@ -4104,12 +4163,14 @@ export class CoopOnlineManager {
 
     const safeTtlMs =
       COOP_ONLINE_CONFIG.ROOM_TTL_MS - COOP_ONLINE_CONFIG.CLOCK_SKEW_BUFFER_MS;
+    const roomMode: CoopRoomMode = options?.roomMode ?? 'COOP_ONLINE';
     const cleanHostName = (getUserDisplayLabel(user) || 'Commander').trim().slice(0, 80);
     const encodedHostDisplayName = encodeHostDisplayNameWithLock(
       cleanHostName,
       roomCode,
       usePassword,
-      normalizedPassword
+      normalizedPassword,
+      roomMode
     );
 
     const newLobby: CoopRoomLobbyDocument = {
@@ -4989,9 +5050,14 @@ export class CoopOnlineManager {
     state: Readonly<GameCoreState>,
     nowMs: number = Date.now()
   ): Promise<boolean> {
-    const isTerminalState = Boolean(state.isGameOver || state.isStageClear);
+    const isVsTerminal = Boolean(
+      isVsGameMode(state.gameMode) && state.vsState?.phase === 'FINISHED'
+    );
+    const isTerminalState = Boolean(state.isGameOver || state.isStageClear || isVsTerminal);
     const isFinalCampaignOutcome = Boolean(
-      state.isGameOver || (state.isStageClear && state.currentStageId >= TOTAL_CAMPAIGN_STAGES)
+      state.isGameOver ||
+        isVsTerminal ||
+        (state.isStageClear && state.currentStageId >= TOTAL_CAMPAIGN_STAGES)
     );
     const needsTerminalBroadcast =
       isTerminalState &&
@@ -5469,12 +5535,14 @@ export class CoopOnlineManager {
 
       const safeTtlMs =
         COOP_ONLINE_CONFIG.ROOM_TTL_MS - COOP_ONLINE_CONFIG.CLOCK_SKEW_BUFFER_MS;
+      const roomMode: CoopRoomMode = this.currentRoom?.roomMode ?? 'COOP_ONLINE';
       const cleanHostName = (getUserDisplayLabel(user) || 'Commander').trim().slice(0, 80);
       const encodedHostDisplayName = encodeHostDisplayNameWithLock(
         cleanHostName,
         nextRoomCode,
         usePassword,
-        rawPassword
+        rawPassword,
+        roomMode
       );
 
       const newLobby: CoopRoomLobbyDocument = {
@@ -5688,12 +5756,14 @@ export class CoopOnlineManager {
       const nextRoomCode = explicitNextRoomCode || generateRoomCode();
       const safeTtlMs =
         COOP_ONLINE_CONFIG.ROOM_TTL_MS - COOP_ONLINE_CONFIG.CLOCK_SKEW_BUFFER_MS;
+      const roomMode: CoopRoomMode = this.currentRoom?.roomMode ?? 'COOP_ONLINE';
       const cleanHostName = (getUserDisplayLabel(user) || 'Commander').trim().slice(0, 80);
       const encodedHostDisplayName = encodeHostDisplayNameWithLock(
         cleanHostName,
         nextRoomCode,
         usePassword,
-        rawPassword
+        rawPassword,
+        roomMode
       );
       const newLobby: CoopRoomLobbyDocument = {
         roomCode: nextRoomCode,

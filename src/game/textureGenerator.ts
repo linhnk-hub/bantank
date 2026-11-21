@@ -842,23 +842,23 @@ function generateVsAiTankTextures(scene: Phaser.Scene): void {
   const aiConfigs = [
     {
       prefix: 'tank_ai1',
-      // TEAM_1 A.I Ally: Crimson-Coral with white tactical stripe (clearly TEAM_1 Red family, distinct from P1)
-      main: '#f43f5e',
-      light: '#ffe4e6',
-      dark: '#9f1239',
-      track: '#4c0519',
-      trackLight: '#fb7185',
+      // M7.8 Mục XII: Tank A.I đồng minh P1 (AI_1) = Xanh biển nhạt (Light Sky Blue)
+      main: '#38bdf8',
+      light: '#e0f2fe',
+      dark: '#0284c7',
+      track: '#0c4a6e',
+      trackLight: '#7dd3fc',
       stripe: '#ffffff',
     },
     {
       prefix: 'tank_ai2',
-      // TEAM_2 A.I Ally: Amber-Cyan Gold with sky tactical stripe (clearly TEAM_2 Gold family, distinct from P2)
-      main: '#f59e0b',
-      light: '#fef3c7',
-      dark: '#92400e',
-      track: '#451a03',
-      trackLight: '#38bdf8',
-      stripe: '#00f0ff',
+      // M7.8 Mục XII: Tank A.I đồng minh P2 (AI_2) = Xám (Gray)
+      main: '#94a3b8',
+      light: '#f1f5f9',
+      dark: '#475569',
+      track: '#1e293b',
+      trackLight: '#cbd5e1',
+      stripe: '#e2e8f0',
     },
   ] as const;
 

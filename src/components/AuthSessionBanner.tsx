@@ -15,6 +15,7 @@ import { SessionManager, type SessionStateSnapshot, type SessionStateStatus } fr
 import { AvatarManager } from '../core/avatarManager.ts';
 import {
   LogIn,
+  LogOut,
   RefreshCw,
   AlertTriangle,
   UserCheck,
@@ -151,8 +152,13 @@ export function getSessionBadgeInfo(
 interface AuthSessionBannerProps {
   onStartMatchAllowedChange?: (allowed: boolean) => void;
   isBattleScreen?: boolean;
+  onlineBattleExitMode?: boolean;
+  onRequestExitOnlineMatch?: () => void;
+  onTopMenuOpenChange?: (isOpen: boolean) => void;
   isSuperAdmin?: boolean;
   onOpenSettings?: () => void;
+  onOpenFriends?: () => void;
+  pendingFriendRequestsCount?: number;
   onOpenSupport?: () => void;
   onOpenContact?: () => void;
   onOpenDevTools?: () => void;
@@ -162,8 +168,13 @@ interface AuthSessionBannerProps {
 export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
   onStartMatchAllowedChange,
   isBattleScreen = false,
+  onlineBattleExitMode = false,
+  onRequestExitOnlineMatch,
+  onTopMenuOpenChange,
   isSuperAdmin = false,
   onOpenSettings,
+  onOpenFriends,
+  pendingFriendRequestsCount = 0,
   onOpenSupport,
   onOpenContact,
   onOpenDevTools,
@@ -384,9 +395,23 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
             </button>
           )}
 
-          {isBattleScreen ? (
+          {isBattleScreen && onlineBattleExitMode ? (
+            <button
+              type="button"
+              data-testid="online-battle-exit-btn"
+              onClick={() => onRequestExitOnlineMatch?.()}
+              className="flex items-center gap-1.5 min-h-[34px] px-3 py-1 rounded bg-[#FF0055]/15 hover:bg-[#FF0055] border border-[#FF0055]/75 text-rose-200 hover:text-white font-btn font-black text-xs uppercase tracking-wider transition-all cursor-pointer active:scale-95 shrink-0 touch-manipulation"
+              aria-label={t('Thoát', 'Exit')}
+              title={t('Thoát trận đấu', 'Exit Match')}
+            >
+              <LogOut className="w-3.5 h-3.5 shrink-0" />
+              <span>{t('Thoát', 'Exit')}</span>
+            </button>
+          ) : isBattleScreen ? (
             <TopMenuActionDrawer
               onOpenSettings={onOpenSettings}
+              onOpenFriends={onOpenFriends}
+              pendingFriendRequestsCount={pendingFriendRequestsCount}
               onOpenSupport={onOpenSupport}
               onOpenContact={onOpenContact}
               onOpenDevTools={onOpenDevTools}
@@ -395,10 +420,13 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
               isSuperAdmin={isSuperAdmin}
               isExitDisabled={isProcessing}
               hideSettings={isTrialMode}
+              onOpenChange={onTopMenuOpenChange}
             />
           ) : user ? (
             <TopMenuActionDrawer
               onOpenSettings={onOpenSettings}
+              onOpenFriends={onOpenFriends}
+              pendingFriendRequestsCount={pendingFriendRequestsCount}
               onOpenSupport={onOpenSupport}
               onOpenContact={onOpenContact}
               onOpenDevTools={onOpenDevTools}
@@ -406,6 +434,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
               exitLabel={t('Thoát', 'Exit')}
               isSuperAdmin={isSuperAdmin}
               isExitDisabled={isProcessing}
+              onOpenChange={onTopMenuOpenChange}
             />
           ) : (
             <button

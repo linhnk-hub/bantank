@@ -89,6 +89,7 @@ import {
 } from '../core/networkStatsPref.ts';
 import { useLanguage, tx } from '../core/i18n.ts';
 import { LanguageSelector } from './LanguageSelector.tsx';
+import { FriendsAdminPanel } from './FriendsAdminPanel.tsx';
 
 export type SettingsTabId =
   | 'ACCOUNT'
@@ -97,6 +98,7 @@ export type SettingsTabId =
   | 'GAME_MODE_SETTINGS'
   | 'ADMIN_OTHER'
   | 'USER_ACCOUNTS'
+  | 'FRIENDS_ADMIN'
   | 'SYSTEM_LOGS'
   | 'MAINTENANCE'
   | 'CONTACT_MESSAGES';
@@ -180,6 +182,15 @@ export function getAvailableSettingsTabsForRole(
     tabs.push({
       id: 'USER_ACCOUNTS',
       label: 'Tài khoản',
+      adminOnly: true,
+    });
+  }
+
+  // M7.8 Mục IX: Quản lý bạn bè — hiển thị cho ADMIN (đầy đủ) và MOD (chỉ xem), ẩn với PLAYER
+  if (effectiveRole === 'ADMIN' || effectiveRole === 'MOD') {
+    tabs.push({
+      id: 'FRIENDS_ADMIN',
+      label: 'Quản lý bạn bè',
       adminOnly: true,
     });
   }
@@ -816,6 +827,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         return <Shield className="w-3.5 h-3.5" />;
       case 'USER_ACCOUNTS':
         return <Users className="w-3.5 h-3.5" />;
+      case 'FRIENDS_ADMIN':
+        return <Users className="w-3.5 h-3.5" />;
       case 'SYSTEM_LOGS':
         return <Terminal className="w-3.5 h-3.5" />;
       case 'MAINTENANCE':
@@ -909,7 +922,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                   ? t('Bảo trì', 'Maintenance')
                                   : tab.id === 'CONTACT_MESSAGES'
                                     ? t('Tin nhắn', 'Messages')
-                                    : tab.label}
+                                    : tab.id === 'FRIENDS_ADMIN'
+                                      ? t('Quản lý bạn bè', 'Friends Admin')
+                                      : tab.label}
                 </span>
               </button>
             );
@@ -2971,6 +2986,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
              ========================================================================= */}
           {activeTab === 'CONTACT_MESSAGES' && isVerifiedSuperAdmin && (
             <ContactAdminPanel />
+          )}
+
+          {/* =========================================================================
+              TAB 10: QUẢN LÝ BẠN BÈ TOÀN HỆ THỐNG (M7.8 MỤC IX — ADMIN ĐẦY ĐỦ, MOD CHỈ XEM)
+             ========================================================================= */}
+          {activeTab === 'FRIENDS_ADMIN' && (isVerifiedSuperAdmin || userRole === 'MOD') && (
+            <FriendsAdminPanel currentUser={currentUser as any} />
           )}
         </div>
 

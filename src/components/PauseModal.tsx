@@ -14,6 +14,7 @@ interface PauseModalProps {
   onRestart: () => void;
   onQuitToMenu: () => void;
   isTrialMode?: boolean;
+  belowHeader?: boolean;
 }
 
 export const PauseModal: React.FC<PauseModalProps> = ({
@@ -22,6 +23,7 @@ export const PauseModal: React.FC<PauseModalProps> = ({
   onRestart,
   onQuitToMenu,
   isTrialMode = false,
+  belowHeader = false,
 }) => {
   const { t } = useLanguage();
   const [showQuitConfirm, setShowQuitConfirm] = useState(false);
@@ -29,8 +31,13 @@ export const PauseModal: React.FC<PauseModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-[#050510]/90 pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 select-none animate-in fade-in duration-150">
-      <div className="bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-lg max-w-sm w-full max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl text-center space-y-4 sm:space-y-5 scrollbar-thin">
+    <div
+      data-testid="pause-modal-overlay"
+      className={`fixed inset-0 ${
+        belowHeader ? 'z-[35] pt-14 sm:pt-16' : 'z-50 pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6'
+      } flex items-start justify-center overflow-y-auto bg-[#050510]/90 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 select-none animate-neo-fade-in`}
+    >
+      <div className="bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-lg max-w-sm w-full max-h-[calc(100dvh-4rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl text-center space-y-4 sm:space-y-5 scrollbar-thin">
         {!showQuitConfirm ? (
           <>
             <div>

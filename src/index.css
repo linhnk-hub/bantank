@@ -233,6 +233,37 @@
   will-change: background-position;
 }
 
+/* M7.8 Lightweight Compositor-Only NEO-RETRO Transitions */
+@keyframes neoFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes neoExpandPop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-neo-fade-in {
+  animation: neoFadeIn 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.animate-neo-expand {
+  animation: neoExpandPop 190ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tank-idle-bob,
   .neo-glitch-text,
@@ -240,6 +271,8 @@
   .lobby-ava-fade-single,
   .lobby-ava-fade-pair-a,
   .lobby-ava-fade-pair-b,
+  .animate-neo-fade-in,
+  .animate-neo-expand,
   .animate-pulse,
   .animate-spin {
     animation: none !important;

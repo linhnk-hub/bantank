@@ -4,11 +4,13 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Info, LogOut, Menu, MessageSquare, Settings, Wrench, X } from 'lucide-react';
+import { Info, LogOut, Menu, MessageSquare, Settings, Users, Wrench, X } from 'lucide-react';
 import { useLanguage } from '../core/i18n.ts';
 
 export interface TopMenuActionDrawerProps {
   onOpenSettings?: () => void;
+  onOpenFriends?: () => void;
+  pendingFriendRequestsCount?: number;
   onOpenSupport?: () => void;
   onOpenContact?: () => void;
   onOpenDevTools?: () => void;
@@ -23,11 +25,13 @@ export interface TopMenuActionDrawerProps {
 /**
  * Unified Top Menu Horizontal Slide-Out Action Drawer:
  * - Hamburger 3-line button on the right
- * - Clicking toggles a smooth horizontal slide from right to left revealing Settings, Info, Contact, (QA), Exit
+ * - Clicking toggles a smooth horizontal slide from right to left revealing Friends, Settings, Info, Contact, (QA), Exit
  * - Excludes audio toggle on authenticated/battle screens per design spec
  */
 export const TopMenuActionDrawer: React.FC<TopMenuActionDrawerProps> = ({
   onOpenSettings,
+  onOpenFriends,
+  pendingFriendRequestsCount = 0,
   onOpenSupport,
   onOpenContact,
   onOpenDevTools,
@@ -71,10 +75,35 @@ export const TopMenuActionDrawer: React.FC<TopMenuActionDrawerProps> = ({
         aria-hidden={!isOpen}
         className={`flex items-center justify-end gap-1 overflow-hidden transition-all duration-250 ease-out ${
           isOpen
-            ? 'max-w-[280px] opacity-100 translate-x-0 pointer-events-auto mr-0.5'
+            ? 'max-w-[330px] opacity-100 translate-x-0 pointer-events-auto mr-0.5'
             : 'max-w-0 opacity-0 translate-x-4 pointer-events-none'
         }`}
       >
+        {onOpenFriends && (
+          <button
+            type="button"
+            tabIndex={isOpen ? 0 : -1}
+            data-testid="top-menu-drawer-friends-btn"
+            onClick={() => {
+              setIsOpen(false);
+              onOpenFriends();
+            }}
+            aria-label={t('Bạn bè', 'Friends')}
+            title={t('Bạn bè', 'Friends')}
+            className="relative flex items-center justify-center min-w-[36px] min-h-[36px] p-1.5 bg-transparent border-0 shadow-none text-[#00F0FF] hover:text-[#FFB800] transition-colors cursor-pointer active:scale-95 shrink-0 touch-manipulation"
+          >
+            <Users className="w-4 h-4" />
+            {pendingFriendRequestsCount > 0 && (
+              <span
+                data-testid="top-menu-friends-badge"
+                className="absolute top-0.5 right-0.5 min-w-[14px] h-[14px] px-0.5 rounded-full bg-[#FF0055] text-white text-[9px] font-black leading-[14px] text-center"
+              >
+                {pendingFriendRequestsCount > 9 ? '9+' : pendingFriendRequestsCount}
+              </span>
+            )}
+          </button>
+        )}
+
         {!hideSettings && onOpenSettings && (
           <button
             type="button"

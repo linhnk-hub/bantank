@@ -26,7 +26,87 @@ export type VsTeamResult = 'WIN' | 'LOSS';
 export type VsMatchFinishReason =
   | 'TEAM_ELIMINATED'
   | 'SUDDEN_DEATH_ELIMINATION'
-  | 'SIMULTANEOUS_ELIMINATION_RANDOM_50_50';
+  | 'SIMULTANEOUS_ELIMINATION_RANDOM_50_50'
+  | 'OPPONENT_LEFT';
+
+/**
+ * Chuẩn hóa màu xe tăng thống nhất trên toàn hệ thống (M7.8 Mục XII):
+ * - P1: Đỏ (Red)
+ * - A.I 1 (đồng minh P1): Xanh biển nhạt (Light Sky Blue)
+ * - P2: Vàng (Yellow)
+ * - A.I 2 (đồng minh P2): Xám (Gray)
+ */
+export const VS_TANK_COLOR_SPEC: Readonly<
+  Record<
+    VsTankRole,
+    {
+      role: VsTankRole;
+      label: string;
+      colorNameVi: string;
+      colorNameEn: string;
+      hex: string;
+      lightHex: string;
+      darkHex: string;
+      badgeBgClass: string;
+      badgeBorderClass: string;
+      badgeTextClass: string;
+      dotClass: string;
+    }
+  >
+> = Object.freeze({
+  P1: {
+    role: 'P1',
+    label: 'P1',
+    colorNameVi: 'Đỏ',
+    colorNameEn: 'Red',
+    hex: '#dc2626',
+    lightHex: '#f87171',
+    darkHex: '#991b1b',
+    badgeBgClass: 'bg-red-950/60',
+    badgeBorderClass: 'border-red-500/60',
+    badgeTextClass: 'text-red-300',
+    dotClass: 'bg-red-500',
+  },
+  AI_1: {
+    role: 'AI_1',
+    label: 'A.I 1',
+    colorNameVi: 'Xanh biển nhạt',
+    colorNameEn: 'Light Sky Blue',
+    hex: '#38bdf8',
+    lightHex: '#7dd3fc',
+    darkHex: '#0284c7',
+    badgeBgClass: 'bg-sky-950/60',
+    badgeBorderClass: 'border-sky-400/60',
+    badgeTextClass: 'text-sky-300',
+    dotClass: 'bg-sky-400',
+  },
+  P2: {
+    role: 'P2',
+    label: 'P2',
+    colorNameVi: 'Vàng',
+    colorNameEn: 'Yellow',
+    hex: '#eab308',
+    lightHex: '#fde047',
+    darkHex: '#a16207',
+    badgeBgClass: 'bg-amber-950/60',
+    badgeBorderClass: 'border-amber-400/60',
+    badgeTextClass: 'text-amber-300',
+    dotClass: 'bg-yellow-400',
+  },
+  AI_2: {
+    role: 'AI_2',
+    label: 'A.I 2',
+    colorNameVi: 'Xám',
+    colorNameEn: 'Gray',
+    hex: '#94a3b8',
+    lightHex: '#cbd5e1',
+    darkHex: '#475569',
+    badgeBgClass: 'bg-slate-800/75',
+    badgeBorderClass: 'border-slate-400/60',
+    badgeTextClass: 'text-slate-200',
+    dotClass: 'bg-slate-400',
+  },
+});
 
 export const VS_RULES_CONFIG = {
   TICKS_PER_SECOND: 60,
@@ -111,6 +191,9 @@ export interface VsMatchOutcome {
   decidedByRandom5050: boolean;
   randomRollValue: number | null;
   reason: VsMatchFinishReason;
+  forfeitedBy?: 'P1' | 'P2' | null;
+  reasonTextVi?: string;
+  reasonTextEn?: string;
   finishedAtTick: number;
 }
 

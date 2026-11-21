@@ -175,45 +175,8 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private readVsLocalInputP1(): InputState {
-    const state = this.engine.getState();
-    const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
-    if (state.matchState !== 'PLAYING' || isHidden) {
-      this.resetLocalInputState();
-      return { ...NEUTRAL_INPUT };
-    }
-    const touch = this.engine.getVirtualTouchInput();
-    const ext = this.engine.getExternalInput();
-    return {
-      up: Boolean(this.wasd?.W.isDown || touch.up || ext.up),
-      down: Boolean(this.wasd?.S.isDown || touch.down || ext.down),
-      left: Boolean(this.wasd?.A.isDown || touch.left || ext.left),
-      right: Boolean(this.wasd?.D.isDown || touch.right || ext.right),
-      shoot: Boolean(this.wasd?.SPACE.isDown || this.wasd?.J.isDown || touch.shoot || ext.shoot),
-    };
-  }
-
-  private readVsLocalInputP2(): InputState {
-    const state = this.engine.getState();
-    const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
-    if (state.matchState !== 'PLAYING' || isHidden) {
-      return { ...NEUTRAL_INPUT };
-    }
-    const touchP2 = this.engine.getVirtualTouchInputP2();
-    return {
-      up: Boolean(this.cursors?.up.isDown || touchP2.up),
-      down: Boolean(this.cursors?.down.isDown || touchP2.down),
-      left: Boolean(this.cursors?.left.isDown || touchP2.left),
-      right: Boolean(this.cursors?.right.isDown || touchP2.right),
-      shoot: Boolean(
-        this.vsP2Keys?.ENTER.isDown ||
-          this.vsP2Keys?.K.isDown ||
-          this.vsP2Keys?.NUMPAD_ZERO.isDown ||
-          touchP2.shoot
-      ),
-    };
-  }
-
+  // M7.8 Mục II: Chế độ VS chỉ chạy trực tuyến trên 2 thiết bị riêng biệt (Host=P1, Guest=P2).
+  // Đã loại bỏ hoàn toàn cơ chế điều khiển 2 người trên cùng 1 thiết bị.
   private readCurrentLocalInput(isGuest: boolean = false): InputState {
     const state = this.engine.getState();
     const isHidden = typeof document !== 'undefined' && document.visibilityState === 'hidden';
@@ -321,24 +284,23 @@ export class BattleScene extends Phaser.Scene {
 
     const coopManager = CoopOnlineManager.getInstance();
     const isVsMode = this.engine.isVsMode();
-    const isOnlineMode = this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE';
+    const isOnlineMode = this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE' || isVsMode;
     const onlineRole = isOnlineMode ? coopManager.getRole() : null;
     const isOnlineGuest = isOnlineMode && onlineRole === 'GUEST';
 
-    if (isVsMode) {
-      const p1In = this.readVsLocalInputP1();
-      const p2In = this.readVsLocalInputP2();
-      this.engine.setExternalInputP2(p2In);
-      this.engine.advanceTime(rawElapsedMs, p1In);
-    } else if (isOnlineMode) {
+    if (isOnlineMode) {
       const input = this.readCurrentLocalInput(isOnlineGuest);
       if (onlineRole === 'HOST') {
         if (coopManager.hasPeerActivelyLeft('GUEST')) {
-          this.engine.handlePeerPlayerLeft('P2');
+          if (isVsMode) {
+            this.engine.forfeitVsMatch('P2');
+          } else {
+            this.engine.handlePeerPlayerLeft('P2');
+          }
         }
         const isHostHidden =
           typeof document !== 'undefined' && document.visibilityState === 'hidden';
-        const isHostSpectator = this.engine.isPlayerSpectator('P1');
+        const isHostSpectator = !isVsMode && this.engine.isPlayerSpectator('P1');
         const effectiveHostInput =
           isHostHidden || isHostSpectator ? { ...NEUTRAL_INPUT } : input;
         if (isHostHidden || isHostSpectator) {
@@ -349,10 +311,14 @@ export class BattleScene extends Phaser.Scene {
         void coopManager.onHostSimulationFrame(rawElapsedMs, this.engine.getState());
       } else if (onlineRole === 'GUEST') {
         if (coopManager.hasPeerActivelyLeft('HOST')) {
-          this.engine.handlePeerPlayerLeft('P1');
+          if (isVsMode) {
+            this.engine.forfeitVsMatch('P1');
+          } else {
+            this.engine.handlePeerPlayerLeft('P1');
+          }
         }
-        // Guest tuyệt đối không gọi advanceTime hay stepTick
-        const isGuestSpectator = this.engine.isPlayerSpectator('P2');
+        // Guest tuyệt đối không gọi advanceTime hay stepTick (cả CO-OP ONLINE lẫn VS ONLINE)
+        const isGuestSpectator = !isVsMode && this.engine.isPlayerSpectator('P2');
         coopManager.setLocalGuestSpectator(isGuestSpectator);
         if (isGuestSpectator) {
           this.engine.setExternalInputP2({ ...NEUTRAL_INPUT });
@@ -361,7 +327,7 @@ export class BattleScene extends Phaser.Scene {
           this.engine.setExternalInputP2(input);
         }
         this.engine.advanceGuestVisualInterpolation(rawElapsedMs);
-      } else {
+      } else if (!isVsMode) {
         this.engine.advanceTime(rawElapsedMs, input);
       }
     } else {
@@ -448,10 +414,9 @@ export class BattleScene extends Phaser.Scene {
       this.unsubOnlineSnapshots();
     }
     this.unsubOnlineSnapshots = CoopOnlineManager.getInstance().subscribeSnapshots((snapshot) => {
-      if (
-        this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE' &&
-        CoopOnlineManager.getInstance().getRole() === 'GUEST'
-      ) {
+      const isOnline =
+        this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE' || this.engine.isVsMode();
+      if (isOnline && CoopOnlineManager.getInstance().getRole() === 'GUEST') {
         const prevState = this.engine.getState();
         const prevStageId = prevState.currentStageId;
         const prevStageRunSeq = prevState.stageRunSeq;
@@ -478,18 +443,28 @@ export class BattleScene extends Phaser.Scene {
       this.unsubPeerLeave();
     }
     this.unsubPeerLeave = CoopOnlineManager.getInstance().subscribePeerLeave((event) => {
-      if (this.engine.getGameMode() !== 'TWO_PLAYERS_ONLINE') return;
+      const isVs = this.engine.isVsMode();
+      if (this.engine.getGameMode() !== 'TWO_PLAYERS_ONLINE' && !isVs) return;
       const myRole = CoopOnlineManager.getInstance().getRole();
       if (myRole === 'HOST' && event.role === 'GUEST') {
-        this.engine.handlePeerPlayerLeft('P2', event.message);
+        if (isVs) {
+          this.engine.forfeitVsMatch('P2');
+          void CoopOnlineManager.getInstance().onHostSimulationFrame(0, this.engine.getState());
+        } else {
+          this.engine.handlePeerPlayerLeft('P2', event.message);
+        }
         this.reportHudStateIfNeeded(0, this.engine.getState());
       } else if (myRole === 'GUEST' && event.role === 'HOST') {
-        this.engine.handlePeerPlayerLeft('P1', event.message);
+        if (isVs) {
+          this.engine.forfeitVsMatch('P1');
+        } else {
+          this.engine.handlePeerPlayerLeft('P1', event.message);
+        }
         this.reportHudStateIfNeeded(0, this.engine.getState());
       }
     });
 
-    // 9. Setup visibilitychange and window blur/focus listeners for input neutralization, SOLO/AI safety pause, and TWO_PLAYERS_ONLINE Host BG_TIMER
+    // 9. Setup visibilitychange and window blur/focus listeners for input neutralization, SOLO/AI safety pause, and Online Host BG_TIMER
     if (typeof document !== 'undefined') {
       if (this.visibilityChangeHandler) {
         document.removeEventListener('visibilitychange', this.visibilityChangeHandler);
@@ -499,7 +474,7 @@ export class BattleScene extends Phaser.Scene {
         if (document.visibilityState === 'hidden') {
           const mode = this.engine.getGameMode();
           const role = CoopOnlineManager.getInstance().getRole();
-          if (mode === 'TWO_PLAYERS_ONLINE' && role === 'HOST') {
+          if ((mode === 'TWO_PLAYERS_ONLINE' || this.engine.isVsMode()) && role === 'HOST') {
             this.engine.handleVisibilityChange(false);
             this.startBackgroundHostTimer();
           } else if (
@@ -566,9 +541,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   update(_time: number, delta: number): void {
-    // Check Pause hotkeys (P or ESC) — disabled in TWO_PLAYERS_ONLINE
+    // Check Pause hotkeys (P or ESC) — disabled in TWO_PLAYERS_ONLINE & VS ONLINE (M7.8 Mục XIV)
     if (
       this.engine.getGameMode() !== 'TWO_PLAYERS_ONLINE' &&
+      !this.engine.isVsMode() &&
       ((this.keyP && Phaser.Input.Keyboard.JustDown(this.keyP)) ||
         (this.keyEsc && Phaser.Input.Keyboard.JustDown(this.keyEsc)))
     ) {
@@ -622,7 +598,7 @@ export class BattleScene extends Phaser.Scene {
     }
 
     const isOnlineGuest =
-      this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE' &&
+      (this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE' || this.engine.isVsMode()) &&
       CoopOnlineManager.getInstance().getRole() === 'GUEST';
     const guestVisual = isOnlineGuest ? this.engine.getGuestVisualState() : null;
 

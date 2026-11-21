@@ -1,0 +1,1003 @@
+# BẮN TANK ONLINE – M7.8
+# SOCIAL SYSTEM – VS ONLINE – HOME MENU – GAMEPLAY UX – UI/UX REFINEMENT
+## FINAL CONSOLIDATED IMPLEMENTATION PROMPT
+### GOOGLE AI STUDIO
+
+**Mục tiêu:** Mở rộng và hoàn thiện hệ thống Bắn Tank Online hiện tại, bao gồm VS Online trên hai thiết bị riêng biệt, hệ thống người chơi Online, chat, bạn bè, quản lý bạn bè trong ADMIN, thiết kế lại menu trang chủ, điều chỉnh giao diện, màu sắc tank, cơ chế Pause/Exit và cập nhật nội dung hướng dẫn.
+
+Đây là yêu cầu mở rộng dự án hiện hữu. Không xây dựng lại ứng dụng, không thay thế kiến trúc đang hoạt động nếu không có lý do kỹ thuật được kiểm chứng.
+
+---
+
+# PHẦN I. NGUYÊN TẮC VÀ PHẠM VI TRIỂN KHAI
+
+## 1. Nguyên tắc bắt buộc
+
+1. Đọc và kiểm tra mã nguồn thực tế trước khi chỉnh sửa.
+2. Tái sử dụng các component, dịch vụ, cấu trúc dữ liệu và kiến trúc Firebase hiện tại.
+3. Ưu tiên tái sử dụng hệ thống CO-OP ONLINE cho các chức năng mạng của VS ONLINE.
+4. Không tạo thêm hệ thống Presence, Session, Room, Chat hoặc Friend độc lập nếu đã có thành phần phù hợp.
+5. Không làm hỏng các chế độ SOLO, CO-OP A.I, CO-OP ONLINE và các chức năng VS hiện có.
+6. Không thay đổi các thông số gameplay đã được người dùng phê duyệt.
+7. Không thay đổi quyền ADMIN/MOD/PLAYER hoặc tài khoản ADMIN hiện tại.
+8. Không xóa dữ liệu tài khoản, lịch sử chat, dữ liệu bạn bè hoặc dữ liệu Firestore hiện có.
+9. Không tự ý tạo Firebase Project mới hoặc sử dụng dịch vụ trả phí.
+10. Không tự ý thay đổi Firebase Production, Publish Firestore Rules, Sync GitHub hoặc Deploy.
+
+## 2. Thông tin dự án cần giữ nguyên
+
+- Tên sản phẩm: Bắn Tank Online.
+- Dự án Firebase hiện tại: `bantank-bd525`.
+- Firestore Database: `(default)`.
+- Môi trường phát triển: Google AI Studio.
+- Mã nguồn đồng bộ về GitHub theo quy trình hiện tại.
+- Website chính: `https://bantank.online`.
+- Repository: `https://github.com/linhnk-hub/bantank`.
+- Ngôn ngữ mặc định: Tiếng Việt.
+- Tiếng Anh là ngôn ngữ tùy chọn.
+- Chuyển ngôn ngữ không reload trang và không khởi động lại game.
+- Game giữ cấu hình 60 FPS hiện tại.
+
+## 3. Tài khoản và Session
+
+Giữ nguyên các quy định hiện tại:
+
+- Google/Gmail login.
+- Một tài khoản chỉ có một thiết bị đăng nhập hoạt động tại một thời điểm.
+- Phiên đăng nhập có thời hạn 15 phút không hoạt động theo quy định hiện tại.
+- Có cảnh báo trước khi hết phiên theo cấu hình đã duyệt.
+- Sử dụng cơ chế Firebase Auth và Session hiện tại.
+- Không tạo Session độc lập cho VS, chat hoặc hệ thống bạn bè.
+- Việc chuyển tab hoặc mở cửa sổ chat không được tự ý làm mất phiên đăng nhập.
+
+## 4. Quy trình triển khai
+
+### Giai đoạn A – Audit trước triển khai
+
+Kiểm tra:
+
+- Kiến trúc CO-OP ONLINE.
+- Cơ chế tạo phòng, tham gia phòng và xác định Host/Guest.
+- Cơ chế đồng bộ gameplay.
+- Firebase Authentication.
+- Firestore và Security Rules hiện hành.
+- Session và quy tắc một tài khoản/một thiết bị.
+- Cấu trúc dữ liệu tài khoản.
+- Cấu trúc dữ liệu chat, bạn bè nếu đã có.
+- Các component UI trang chủ, Top Menu và màn chơi.
+- Hệ thống đa ngôn ngữ.
+- Các chức năng VS đã triển khai ở M7.7/V1.2.
+- Các test hiện có và lỗi hồi quy đã ghi nhận.
+
+Báo cáo:
+
+1. Kiến trúc hiện tại.
+2. Các chức năng có thể tái sử dụng.
+3. Các chức năng còn thiếu.
+4. Các file dự kiến tạo mới.
+5. Các file dự kiến chỉnh sửa.
+6. Các thay đổi cấu trúc dữ liệu.
+7. Các thay đổi Security Rules nếu cần.
+8. Rủi ro và phương án xử lý.
+
+### Giai đoạn B – Triển khai
+
+Chỉ triển khai khi xác định được phương án kỹ thuật an toàn.
+
+Nếu cần thay đổi kiến trúc nền tảng, thay đổi quyền truy cập quan trọng hoặc có rủi ro mất dữ liệu, hãy báo cáo và chờ phê duyệt trước.
+
+Không tự ý chọn Host làm nguồn thẩm quyền cho hệ thống vật phẩm Campaign trong CO-OP ONLINE. Quy tắc đã thống nhất: Host chỉ có trách nhiệm tạo phòng và lựa chọn Stage; không tự ý giao thêm quyền quản lý vật phẩm cho Host.
+
+---
+
+# PHẦN II. VS ONLINE – HAI NGƯỜI CHƠI TRÊN HAI THIẾT BỊ RIÊNG BIỆT
+
+## 1. Mô hình VS Online bắt buộc
+
+Đây là yêu cầu quan trọng nhất của phần VS:
+
+**P1 và P2 phải chơi trực tuyến trên hai thiết bị riêng biệt, tương tự mô hình CO-OP ONLINE. Tuyệt đối không thiết kế VS theo kiểu hai người cùng chơi trên một thiết bị.**
+
+Mô hình:
+
+- Người tạo phòng sử dụng thiết bị riêng và đảm nhận vị trí P1.
+- Người tham gia phòng sử dụng thiết bị riêng và đảm nhận vị trí P2.
+- Mỗi tài khoản điều khiển tank của chính mình trên thiết bị đang đăng nhập.
+- Hai thiết bị kết nối qua hệ thống phòng và đồng bộ trận đấu Online.
+- Không hiển thị đồng thời hai bộ điều khiển P1 và P2 trên một thiết bị.
+- Không có chức năng điều khiển P1/P2 chung một thiết bị.
+- Không hiển thị các dòng hướng dẫn kiểu điều khiển cảm ứng P1 và điều khiển cảm ứng P2 trên cùng một màn hình.
+
+## 2. Hai chế độ VS
+
+### 2.1. P1 VS P2
+
+- Người tạo phòng là P1.
+- Người tham gia phòng là P2.
+- P1 và P2 sử dụng hai thiết bị riêng.
+- Mỗi người điều khiển một tank.
+- Hai người đối đầu trực tuyến.
+
+### 2.2. P1 + A.I VS P2 + A.I
+
+- Người tạo phòng là P1.
+- Người tham gia phòng là P2.
+- P1 điều khiển tank P1, A.I đồng minh P1 do hệ thống điều khiển.
+- P2 điều khiển tank P2, A.I đồng minh P2 do hệ thống điều khiển.
+- Hai đội đối đầu trực tuyến.
+- A.I của mỗi đội phải hoạt động độc lập, không điều khiển nhầm đội.
+- A.I không thay thế người chơi đã rời trận.
+
+## 3. Cơ chế tạo phòng VS
+
+Tái sử dụng quy trình tạo phòng CO-OP ONLINE hiện tại nếu phù hợp.
+
+Khi người chơi chọn một chế độ VS:
+
+- Mở giao diện tạo phòng hoặc tham gia phòng.
+- Người tạo phòng được gán vị trí P1.
+- Người tham gia phòng được gán vị trí P2.
+- Phân biệt rõ loại phòng P1 VS P2 và P1 + A.I VS P2 + A.I.
+- Hiển thị mã phòng hoặc phương thức mời tham gia theo cơ chế hiện tại.
+- Hiển thị trạng thái người chơi.
+- Hiển thị trạng thái chờ người chơi và sẵn sàng.
+- Chỉ cho phép bắt đầu khi đủ hai tài khoản hợp lệ.
+- Không cho phép một tài khoản chiếm cả hai vị trí.
+- Không cho phép người thứ ba tham gia điều khiển trận đấu.
+- Không cho phép tham gia nhầm phòng CO-OP hoặc phòng VS khác chế độ.
+
+## 4. Điều khiển từng thiết bị
+
+Tái sử dụng hệ thống điều khiển tương ứng của CO-OP ONLINE:
+
+**Trên điện thoại và máy tính bảng:**
+- Thiết bị P1 hiển thị joystick và nút bắn của P1.
+- Thiết bị P2 hiển thị joystick và nút bắn của P2.
+- Mỗi thiết bị chỉ có một bộ điều khiển dành cho tài khoản đang đăng nhập.
+- Không hiển thị bộ điều khiển của người chơi đối phương.
+
+**Trên PC:**
+- Sử dụng phương thức điều khiển PC hiện có.
+- Mỗi tài khoản chỉ điều khiển tank được phân quyền.
+
+Không loại bỏ hệ thống điều khiển cảm ứng của VS theo nghĩa bỏ điều khiển trên điện thoại. Yêu cầu đúng là bỏ mô hình điều khiển hai người trên cùng một thiết bị; vẫn phải có điều khiển cảm ứng riêng cho từng người trên thiết bị riêng.
+
+## 5. Đồng bộ trận đấu
+
+- Tái sử dụng kiến trúc mạng CO-OP ONLINE nếu phù hợp.
+- Xác định rõ nguồn dữ liệu có thẩm quyền của trận đấu.
+- Mỗi client chỉ gửi lệnh điều khiển cho tank được phân quyền.
+- Không cho P1 điều khiển tank P2 và ngược lại.
+- Không cho client tự ý ghi đè trạng thái gameplay hoặc kết quả trận.
+- Đồng bộ vị trí, hướng, di chuyển, bắn, sát thương, HP, mạng sống, respawn, bảo vệ sau respawn, thời gian và Sudden Death.
+- Chống xử lý lặp khi mất kết nối hoặc reconnect.
+- Xử lý đồng bộ nhất quán khi hai người chơi thao tác gần như đồng thời.
+
+## 6. Quy tắc gameplay VS đã duyệt
+
+Giữ nguyên toàn bộ:
+
+- Mỗi tank có 3 mạng.
+- Thời gian trận đấu chính thức: 180 giây.
+- Respawn sau 3 giây.
+- Bảo vệ 2 giây sau respawn.
+- Tắt friendly fire.
+- Kết quả chỉ có WIN hoặc LOSS.
+- Không có DRAW, TIE hoặc HÒA.
+- Nếu một đội mất toàn bộ khả năng chiến đấu trước khi hết thời gian, đội còn lại thắng.
+- Nếu hết 180 giây mà cả hai đội vẫn còn khả năng chiến đấu, chuyển sang SUDDEN DEATH.
+- Sudden Death không giới hạn thời gian.
+- Không có respawn mới sau khi Sudden Death bắt đầu.
+- Tank đã có yêu cầu respawn hợp lệ trước thời điểm chuyển Sudden Death được phép hoàn tất lần respawn đó.
+- Vùng an toàn bắt đầu thu hẹp sau khi Sudden Death thực sự bắt đầu.
+- Mỗi 20 giây thu hẹp một cấp.
+- Sát thương ngoài vùng an toàn tăng theo cấp thu hẹp.
+- Áp dụng như nhau cho người và A.I.
+- A.I phải tìm đường di chuyển vào vùng an toàn.
+- Không thu hẹp bất đối xứng hoặc tạo khu vực không thể chơi.
+- Nếu cả hai đội bị loại trong cùng tick/sự kiện, chọn ngẫu nhiên 50/50 đội thắng.
+- Kết quả ngẫu nhiên chỉ được quyết định một lần và lưu lại, không được reroll.
+- Không có XP, Sao hoặc vật phẩm Campaign trong VS.
+- Không áp dụng BOMB, EAGLE SHIELD, FIREPOWER, SPEED BOOST trong VS.
+- VS sử dụng bản đồ đấu trường riêng, không có Eagle Base.
+- Spawns hai đội phải cân bằng, không xuất hiện trong vật cản.
+
+## 7. HUD VS
+
+Hiển thị:
+
+- Thời gian trận đấu.
+- Đội P1 và Đội P2.
+- Tank và số mạng còn lại.
+- Kill count.
+- Trạng thái respawn.
+- Thời gian bảo vệ sau respawn.
+- Trạng thái Sudden Death.
+- Cấp thu hẹp vùng an toàn.
+- Thời gian đến lần thu hẹp tiếp theo.
+- Cảnh báo nguy hiểm ngoài vùng an toàn.
+
+## 8. Kết quả trận VS
+
+Hiển thị:
+
+- WIN hoặc LOSS.
+- Đội thắng.
+- Lý do thắng/thua.
+- Thống kê hai đội.
+- Số mạng đã sử dụng/còn lại.
+- Số lần hạ đối thủ.
+- Nút chơi lại theo quy trình tạo phòng hiện tại.
+- Nút trở về menu.
+
+Không hiển thị phần thưởng XP/Sao của Campaign.
+
+---
+
+# PHẦN III. HỆ THỐNG ONLINE PRESENCE
+
+## 1. Icon nổi Online
+
+Bổ sung icon nổi để mở danh sách người chơi đang Online.
+
+Yêu cầu:
+
+- Hiển thị dễ nhận biết trên giao diện chính.
+- Không che nội dung hoặc nút điều khiển.
+- Có chỉ báo số lượng tài khoản Online.
+- Khi bấm vào, mở danh sách tài khoản Online.
+- Danh sách cập nhật theo trạng thái thực tế.
+- Hiển thị avatar, tên và trạng thái Online.
+- Không hiển thị email đăng nhập, UID hoặc dữ liệu riêng tư.
+- Có chức năng tìm kiếm tài khoản.
+
+## 2. Trạng thái Online/Offline
+
+- Dùng Presence/heartbeat hoặc cơ chế tương đương phù hợp với kiến trúc hiện tại.
+- Không chỉ dựa vào thời điểm đăng nhập gần nhất.
+- Phân biệt đăng xuất chủ động, hết phiên, mất kết nối và reconnect nếu hệ thống hỗ trợ.
+- Có xử lý timeout để không giữ Online giả.
+- Không cho client tự sửa trạng thái Online của tài khoản khác.
+- Không tạo listener hoặc polling quá dày.
+- Không để trạng thái Online bị giữ mãi khi tài khoản đã hết phiên.
+
+---
+
+# PHẦN IV. CHAT CHUNG TOÀN HỆ THỐNG
+
+## 1. Khu vực chat chung
+
+Bổ sung khu vực chat chung để người chơi Online trao đổi, rủ nhau kết bạn và mời nhau tham gia phòng.
+
+Yêu cầu:
+
+- Tin nhắn được hiển thị cho tất cả người chơi có quyền truy cập khu vực chat chung.
+- Hiển thị avatar, tên hiển thị và thời gian gửi.
+- Tin nhắn mới cập nhật theo thời gian thực.
+- Có ô nhập nội dung và nút gửi.
+- Không cho gửi tin nhắn rỗng.
+- Có giới hạn độ dài.
+- Chống spam và gửi liên tục.
+- Có xử lý lỗi mạng và gửi lại an toàn.
+- Chống tin nhắn trùng.
+- Không tải toàn bộ lịch sử vô hạn.
+- Dùng phân trang hoặc giới hạn lịch sử tải ban đầu.
+- Có cơ chế kiểm soát nội dung và xử lý tài khoản vi phạm.
+
+## 2. Các icon cạnh tên tài khoản Online
+
+Bên cạnh tên mỗi tài khoản hiển thị:
+
+- Icon Chat: mở hộp thoại chat riêng.
+- Icon Kết bạn: gửi lời mời kết bạn.
+- Icon Thông tin: xem thông tin công khai được phép.
+
+Không hiển thị nút Kết bạn nếu đã là bạn bè hoặc đang có lời mời chờ xử lý.
+
+---
+
+# PHẦN V. TÌM KIẾM TÀI KHOẢN
+
+Bổ sung chức năng tìm kiếm tài khoản toàn hệ thống.
+
+- Tìm theo tên hiển thị hoặc định danh công khai được phép.
+- Có thể tìm tài khoản Online và Offline.
+- Hiển thị avatar, tên và trạng thái.
+- Có thể mở chat hoặc gửi lời mời kết bạn.
+- Không cho tìm kiếm để lấy email, UID hoặc dữ liệu riêng tư.
+- Có giới hạn truy vấn để tránh lạm dụng.
+
+---
+
+# PHẦN VI. HỆ THỐNG BẠN BÈ
+
+## 1. Icon Bạn bè trên Top Menu
+
+Bổ sung icon Bạn bè trên thanh Top Menu.
+
+Khi bấm vào, mở giao diện quản lý gồm:
+
+- Danh sách bạn bè.
+- Danh sách lời mời đã nhận.
+- Danh sách lời mời đã gửi.
+- Danh sách đã xóa bạn.
+
+## 2. Danh sách bạn bè
+
+Hiển thị:
+
+- Avatar.
+- Tên hiển thị.
+- Trạng thái Online/Offline.
+- Nút chat riêng.
+- Nút xem thông tin công khai.
+- Nút xóa bạn.
+- Nút mời tham gia phòng nếu đủ điều kiện.
+
+## 3. Danh sách đã xóa bạn
+
+- Hiển thị các tài khoản mà người chơi đã xóa khỏi danh sách bạn bè.
+- Đây là danh sách lịch sử quan hệ đã xóa, không phải danh sách bạn bè hiện tại.
+- Có thể gửi lại lời mời kết bạn.
+- Không tự động khôi phục quan hệ khi chưa có chấp thuận phù hợp.
+- Không công khai danh sách này cho người khác.
+
+## 4. Lời mời kết bạn
+
+Có các chức năng:
+
+- Xem lời mời đã nhận.
+- Chấp nhận.
+- Từ chối.
+- Xem lời mời đã gửi.
+- Hủy lời mời đã gửi.
+
+Xử lý trường hợp hai tài khoản gửi lời mời đồng thời, tránh tạo quan hệ trùng lặp.
+
+## 5. Xóa bạn
+
+- Cho phép người chơi xóa bạn.
+- Cập nhật quan hệ nhất quán ở cả hai phía.
+- Không xóa tài khoản.
+- Không xóa lịch sử chat.
+- Không tự động Block.
+- Ghi nhận danh sách đã xóa bạn theo quyền riêng tư phù hợp.
+
+---
+
+# PHẦN VII. CHAT RIÊNG VÀ BLOCK
+
+Khi mở chat riêng:
+
+- Hiển thị tên, avatar và trạng thái Online/Offline.
+- Hiển thị lịch sử chat phù hợp.
+- Có ô nhập và nút gửi.
+- Có icon Thêm bạn.
+- Có icon Block.
+- Nếu đã là bạn bè thì không hiển thị nút Thêm bạn.
+- Nếu đã Block thì hiển thị trạng thái và chức năng bỏ Block phù hợp.
+
+Quy tắc:
+
+- Block ngăn tài khoản bị chặn gửi tin nhắn riêng đến người chặn.
+- Không cho phép lách Block qua giao diện chat.
+- Không tự động xóa lịch sử chat.
+- Không đồng nghĩa với xóa bạn.
+- Xóa bạn không tự động Block.
+- Có thể bỏ Block theo quy định hiện tại.
+
+Bảo đảm dữ liệu chat riêng chỉ được truy cập bởi các tài khoản liên quan và các quyền quản trị hợp lệ theo chính sách bảo mật.
+
+---
+
+# PHẦN VIII. THÔNG BÁO BẠN BÈ ONLINE/OFFLINE
+
+Khi bạn bè:
+
+- Chuyển Online: thông báo bạn vừa Online.
+- Chuyển Offline: thông báo bạn vừa Offline.
+
+Yêu cầu:
+
+- Chỉ thông báo cho người đã kết bạn.
+- Không gửi thông báo trùng lặp.
+- Không báo Offline ngay khi mất mạng ngắn hạn nếu hệ thống có thời gian chờ reconnect.
+- Có cơ chế chống thông báo sai khi kết nối chập chờn.
+- Không gửi thông báo cho tài khoản không có quyền nhận.
+
+---
+
+# PHẦN IX. QUẢN LÝ BẠN BÈ TRONG ADMIN
+
+Bổ sung mục Quản lý bạn bè trong menu ADMIN.
+
+## 1. Chức năng
+
+ADMIN có thể:
+
+- Xem danh sách quan hệ bạn bè toàn hệ thống.
+- Tìm kiếm tài khoản.
+- Xem tài khoản A đang kết bạn với ai.
+- Xem tài khoản B đang kết bạn với ai.
+- Tra cứu quan hệ giữa hai tài khoản.
+- Xem thời điểm kết bạn nếu dữ liệu hiện tại có lưu.
+- Xóa một quan hệ bạn bè khi cần xử lý vi phạm hoặc hỗ trợ người dùng.
+
+## 2. Quy tắc xóa
+
+Khi ADMIN xóa quan hệ:
+
+- Phải xác định chính xác hai tài khoản.
+- Cập nhật quan hệ nhất quán ở cả hai phía.
+- Có hộp thoại xác nhận.
+- Ghi nhật ký thao tác quản trị.
+- Không xóa tài khoản.
+- Không xóa lịch sử chat.
+- Không tự động Block hai tài khoản.
+
+## 3. Phân quyền
+
+- ADMIN: được xem và quản lý/xóa quan hệ bạn bè toàn hệ thống.
+- MOD: chỉ xem theo quyền hiện có; không tự động có quyền xóa.
+- PLAYER: chỉ quản lý quan hệ của chính mình.
+
+Không tạo vai trò mới và không thay đổi quyền ADMIN/MOD/PLAYER.
+
+---
+
+# PHẦN X. THIẾT KẾ LẠI MENU TRANG CHỦ
+
+## 1. Bỏ ảnh nền các nút
+
+- Loại bỏ ảnh nền hiện tại bên trong các nút lựa chọn chế độ chơi.
+- Thiết kế lại theo phong cách NEO-RETRO đã được duyệt.
+- Sử dụng màu sắc, icon, viền và hiệu ứng phù hợp.
+- Chữ phải rõ ràng, dễ đọc.
+- Nút dễ thao tác trên điện thoại.
+- Không sử dụng ảnh nền lớn làm giảm độ rõ của chữ.
+
+## 2. Luồng chọn chế độ mới
+
+### SOLO
+
+- Bấm SOLO là vào thẳng chế độ SOLO.
+- Không mở thêm màn hình lựa chọn phụ.
+
+### CO-OP
+
+Khi bấm CO-OP, hiển thị hai nút:
+
+- CO-OP A.I.
+- CO-OP ONLINE.
+
+Chỉ khi bấm từng nút mới chuyển vào luồng tương ứng.
+
+### VS
+
+Khi bấm VS, hiển thị hai nút:
+
+- P1 VS P2.
+- P1 + A.I VS P2 + A.I.
+
+Chỉ khi bấm từng mục mới mở quy trình tạo phòng/tham gia phòng VS ONLINE.
+
+- Bỏ hoàn toàn dòng Unlocked.
+- Không hiển thị Coming Soon nếu tính năng đã triển khai và kiểm thử đạt yêu cầu.
+- Không cho vào trận khi chưa đủ điều kiện.
+
+## 3. Hiệu ứng UI/UX
+
+Thiết kế hiệu ứng xuất hiện và biến mất hiện đại, ấn tượng, phù hợp NEO-RETRO:
+
+- Fade in/Fade out.
+- Slide nhẹ.
+- Scale nhẹ.
+- Viền Neon có kiểm soát.
+- Hiệu ứng phản hồi khi hover/click.
+- Chuyển menu chính/menu con mượt.
+
+Giới hạn:
+
+- Ưu tiên CSS transform và opacity.
+- Không animation liên tục không cần thiết.
+- Không dùng blur/filter/glow quá nặng.
+- Không tạo nhiều vòng lặp animation.
+- Tôn trọng `prefers-reduced-motion`.
+- Không ảnh hưởng FPS, tốc độ tải trang hoặc điều khiển gameplay.
+- Dừng animation khi menu không hiển thị.
+
+---
+
+# PHẦN XI. ĐIỀU CHỈNH KHU VỰC QUÂN HÀM, KINH NGHIỆM VÀ SAO
+
+1. Bỏ icon trước chữ Quân hàm.
+2. Bỏ icon trước chữ XP.
+3. Bỏ icon trước chữ Sao.
+4. Đổi nhãn Tổng XP thành Kinh nghiệm.
+5. Trong thống kê Sao, bỏ phần `(xx/xx XP)`.
+6. Không thay đổi dữ liệu XP.
+7. Không thay đổi ngưỡng quân hàm.
+8. Không thay đổi quy tắc quy đổi XP sang Sao.
+9. Không thay đổi số dư Sao hoặc logic giao dịch.
+10. Chỉ điều chỉnh cách hiển thị.
+
+## Tiêu đề trên điện thoại
+
+- Giảm kích thước chữ CHIẾN TRƯỜNG HUYỀN THOẠI khoảng 10% trên điện thoại.
+- Tránh chữ “thoại” bị xuống dòng riêng.
+- Giữ tiêu đề cân đối, dễ đọc.
+- Không thay đổi kích thước PC nếu không cần thiết.
+
+## Tab Thông tin
+
+Khi bấm icon Thông tin:
+
+- Mặc định mở tab Giới thiệu.
+- Không mở tab Hướng dẫn trước.
+- Vẫn giữ tab Hướng dẫn để người chơi chủ động chuyển sang.
+
+---
+
+# PHẦN XII. QUY CHUẨN MÀU SẮC TANK
+
+Định nghĩa màu nhận diện thống nhất trên toàn hệ thống:
+
+| Đối tượng | Màu |
+|---|---|
+| Tank P1 | Đỏ |
+| Tank A.I đồng minh P1 | Xanh biển nhạt |
+| Tank P2 | Vàng |
+| Tank A.I đồng minh P2 | Xám |
+
+Áp dụng trong:
+
+- Gameplay.
+- HUD.
+- Phòng VS.
+- Bảng điểm.
+- Màn hình kết quả.
+- Biểu tượng và thông tin tank.
+
+Yêu cầu:
+
+- Màu sắc phân biệt rõ.
+- Có thể kết hợp ký hiệu P1/P2/AI hoặc viền để tăng khả năng nhận diện.
+- Không chỉ dựa vào màu sắc.
+- Không thay đổi HP, tốc độ, sát thương hoặc AI.
+- Không thay đổi màu địa hình, vật phẩm và hiệu ứng môi trường nếu không có yêu cầu.
+
+---
+
+# PHẦN XIII. PAUSE VÀ TOP MENU TRONG SOLO/CO-OP A.I
+
+## 1. SOLO và CO-OP A.I
+
+Trong khi đang chơi:
+
+- Hiển thị nút ba gạch để mở Top Menu.
+- Khi bấm nút ba gạch, tạm dừng gameplay.
+- Hiển thị lớp phủ tối trên màn hình game để người chơi nhận biết trạng thái Pause.
+- Hiển thị Top Menu.
+
+Khi Pause:
+
+- Dừng simulation.
+- Dừng di chuyển tank.
+- Dừng đạn.
+- Dừng AI.
+- Dừng xử lý va chạm và cập nhật gameplay.
+- Dừng bộ đếm thời gian gameplay.
+- Dừng thời hạn hiệu ứng vật phẩm theo quy tắc Pause đã thống nhất.
+- Không để game chạy ngầm.
+
+Khi tiếp tục:
+
+- Gỡ lớp phủ tối.
+- Tiếp tục từ trạng thái trước Pause.
+- Không reset hoặc mất tiến độ.
+- Không làm sai lệch thời gian trận.
+
+---
+
+# PHẦN XIV. THOÁT TRẬN TRONG CO-OP ONLINE VÀ VS ONLINE
+
+## 1. Không có nút Pause
+
+Trong CO-OP ONLINE và VS ONLINE:
+
+- Không hiển thị nút ba gạch.
+- Không cho mở Top Menu để Pause.
+- Không cho một người chơi tự ý Pause trận đấu của tất cả người chơi.
+- Chỉ hiển thị nút Thoát tại vị trí nút ba gạch trước đây.
+
+## 2. Xác nhận thoát
+
+Khi bấm Thoát, hiển thị:
+
+**Bạn có chắc chắn muốn rời trận đấu?**
+
+Rời trận sẽ được xử lý theo quy tắc của chế độ đang chơi.
+
+Hai nút:
+
+- Ở lại trận đấu.
+- Xác nhận rời trận.
+
+## 3. Xử lý rời trận VS ONLINE
+
+Khi một người chơi xác nhận rời trận:
+
+- Gửi sự kiện rời trận đến nguồn dữ liệu có thẩm quyền.
+- Không chỉ ẩn giao diện phía client.
+- Không cho người rời trận tiếp tục điều khiển tank.
+- Cập nhật trạng thái trận cho cả hai phía.
+- Kết quả chỉ được xác lập một lần.
+
+Nếu P1 rời trận:
+
+- P2 nhận WIN.
+- Lý do: Đối thủ đã rời trận.
+
+Nếu P2 rời trận:
+
+- P1 nhận WIN.
+- Lý do: Đối thủ đã rời trận.
+
+Trong chế độ P1 + A.I VS P2 + A.I:
+
+- Đội còn lại được xử thắng.
+- A.I không tự động thay thế người chơi đã rời trận.
+- A.I không tiếp tục duy trì trận như thể người chơi vẫn còn.
+
+## 4. Xử lý rời trận CO-OP ONLINE
+
+- Giữ nguyên quy tắc CO-OP ONLINE hiện tại.
+- Không tự ý áp dụng luật WIN/LOSS của VS cho CO-OP.
+- Không làm hỏng trạng thái phòng và Session.
+
+## 5. Phân biệt rời trận và mất kết nối
+
+- Bấm xác nhận Thoát: chủ động rời trận.
+- Mất kết nối bất ngờ: xử lý theo timeout/reconnect hiện có.
+- Không lập tức kết luận rời trận chỉ vì mất mạng ngắn hạn.
+- Chống xử lý kết quả hai lần.
+- Không tạo hai kết quả WIN khác nhau.
+- Nếu sự kiện đồng thời xảy ra, phải có quy tắc xử lý nhất quán.
+
+---
+
+# PHẦN XV. CẬP NHẬT GIỚI THIỆU, HƯỚNG DẪN VÀ LANDING.HTML
+
+Cập nhật đồng bộ ba khu vực:
+
+1. Tab Giới thiệu.
+2. Tab Hướng dẫn.
+3. Landing.html.
+
+## 1. Tab Giới thiệu
+
+Bổ sung:
+
+- Tổng quan SOLO.
+- CO-OP A.I.
+- CO-OP ONLINE.
+- VS ONLINE.
+- P1 VS P2.
+- P1 + A.I VS P2 + A.I.
+- Cơ chế tạo phòng và tham gia phòng VS.
+- Hệ thống người chơi Online.
+- Chat chung và chat riêng.
+- Kết bạn, xóa bạn và Block.
+- Thông báo bạn bè Online/Offline.
+- Quy tắc rời trận và kết quả WIN/LOSS.
+
+## 2. Tab Hướng dẫn
+
+### SOLO
+- Cách bắt đầu.
+- Điều khiển.
+- Pause bằng nút ba gạch.
+- Tiếp tục trận.
+- Thoát trận.
+
+### CO-OP A.I
+- Cách bắt đầu.
+- Cách phối hợp với A.I.
+- Pause và tiếp tục.
+
+### CO-OP ONLINE
+- Cách tạo phòng.
+- Cách tham gia phòng.
+- Cách chơi cùng người khác.
+- Quy tắc không Pause.
+- Quy tắc thoát trận.
+
+### VS ONLINE
+- Cách tạo phòng P1 VS P2.
+- Cách tạo phòng P1 + A.I VS P2 + A.I.
+- Cách mời và tham gia phòng.
+- Mỗi người chơi dùng một thiết bị riêng.
+- Điều khiển tank P1 và P2.
+- Luật 3 mạng, 180 giây, respawn và Sudden Death.
+- Vùng an toàn.
+- WIN/LOSS.
+- Đối thủ rời trận.
+
+### Bạn bè và chat
+- Xem người chơi Online.
+- Tìm kiếm tài khoản.
+- Gửi và nhận lời mời kết bạn.
+- Chat chung.
+- Chat riêng.
+- Xóa bạn.
+- Block và bỏ Block.
+- Nhận thông báo bạn bè Online/Offline.
+
+## 3. Landing.html
+
+- Giới thiệu các chế độ chơi.
+- Giới thiệu VS ONLINE và hệ thống tạo phòng.
+- Nêu rõ P1 và P2 chơi trên hai thiết bị riêng biệt.
+- Giới thiệu hệ thống bạn bè, Online và chat.
+- Giới thiệu quy tắc gameplay quan trọng.
+- Áp dụng NEO-RETRO ART SYSTEM đã duyệt.
+- Đồng bộ tiếng Việt và tiếng Anh.
+- Tiếng Việt là mặc định.
+- Đổi ngôn ngữ không reload.
+- Không quảng bá chức năng chưa thực sự hoạt động.
+- Không tự ý thay đổi nội dung pháp lý hoặc Privacy Policy nếu chưa được yêu cầu.
+
+---
+
+# PHẦN XVI. BẢO MẬT VÀ HIỆU NĂNG
+
+## 1. Hiệu năng
+
+- Giữ 60 FPS.
+- Không polling quá dày.
+- Không đăng ký listener Firestore trùng lặp.
+- Hủy listener khi đóng chat, danh sách Online hoặc rời trang.
+- Không tải toàn bộ lịch sử chat vô hạn.
+- Không tải toàn bộ tài khoản không cần thiết.
+- Dùng phân trang và giới hạn truy vấn.
+- Không để chat hoặc Presence làm giảm FPS gameplay.
+- Không để animation chạy nền khi menu đóng.
+- Không giữ trạng thái Online giả.
+- Không để component hoặc listener bị rò rỉ bộ nhớ.
+
+## 2. Firebase Security
+
+Kiểm tra quyền truy cập cho:
+
+- Online Presence.
+- Chat chung.
+- Chat riêng.
+- Lời mời kết bạn.
+- Quan hệ bạn bè.
+- Danh sách Block.
+- Phòng VS.
+- Trạng thái trận VS.
+- Kết quả trận đấu.
+- Nhật ký quản trị.
+
+Yêu cầu:
+
+- Kiểm tra quyền theo UID và vai trò.
+- Không tin dữ liệu client gửi nếu ảnh hưởng quyền truy cập hoặc kết quả trận.
+- Không cho người chơi tự sửa trạng thái Online của tài khoản khác.
+- Không cho tự ý thêm quan hệ bạn bè nếu chưa có chấp thuận hợp lệ.
+- Không cho tài khoản bị Block gửi tin nhắn riêng.
+- Không cho client tự ghi đè kết quả trận.
+- Các thao tác nhạy cảm phải được kiểm tra quyền và tính nhất quán.
+- Không đưa thông tin bí mật vào client bundle.
+- Không tạo quyền ADMIN giả lập phía client.
+
+Nếu cần cập nhật Firestore Rules:
+
+- Chỉ lập bản đề xuất.
+- Nêu rõ từng thay đổi và lý do.
+- Không Publish Production.
+- Không tự ý thay đổi Rules đang hoạt động.
+
+---
+
+# PHẦN XVII. KIỂM THỬ BẮT BUỘC
+
+## 1. VS Online
+
+- P1 tạo phòng trên thiết bị A.
+- P2 tham gia bằng thiết bị B.
+- Kiểm tra P1 VS P2.
+- Kiểm tra P1 + A.I VS P2 + A.I.
+- Kiểm tra PC với PC.
+- Kiểm tra PC với điện thoại.
+- Kiểm tra điện thoại với điện thoại.
+- Mỗi thiết bị chỉ điều khiển tank được phân quyền.
+- Không có mô hình hai người chơi cùng thiết bị.
+- Không hiển thị bộ điều khiển của đối phương.
+- Kiểm tra joystick và nút bắn riêng.
+- Kiểm tra đồng bộ chuyển động, bắn, sát thương và respawn.
+- Kiểm tra mất kết nối và reconnect.
+- Kiểm tra thoát trận.
+- Kiểm tra không tạo nhiều trận cho một phòng.
+
+Không dùng kiểm thử hai người cùng một thiết bị để thay thế kiểm thử VS ONLINE thực tế.
+
+## 2. Online Presence
+
+- Đăng nhập và xuất hiện Online.
+- Đăng xuất và chuyển Offline.
+- Mất kết nối và kết nối lại.
+- Hết phiên.
+- Không giữ trạng thái Online giả.
+- Không lộ email/UID.
+
+## 3. Chat
+
+- Chat chung nhiều tài khoản.
+- Chat riêng hai chiều.
+- Tin nhắn cập nhật theo thời gian thực.
+- Không gửi trùng.
+- Giới hạn độ dài.
+- Chống spam.
+- Block hoạt động đúng.
+- Không làm giảm hiệu năng game.
+
+## 4. Bạn bè
+
+- Gửi lời mời.
+- Chấp nhận.
+- Từ chối.
+- Hủy lời mời.
+- Hai bên gửi lời mời đồng thời.
+- Xóa bạn.
+- Danh sách đã xóa bạn.
+- Gửi lại lời mời.
+- Block và bỏ Block.
+- Thông báo Online/Offline.
+- Không tạo quan hệ trùng.
+
+## 5. ADMIN
+
+- ADMIN xem được quan hệ bạn bè.
+- Tìm kiếm được tài khoản.
+- Xem được danh sách bạn bè.
+- Xóa đúng quan hệ.
+- Hai phía cập nhật nhất quán.
+- Có xác nhận và nhật ký.
+- MOD không có quyền xóa.
+- PLAYER không truy cập chức năng ADMIN.
+
+## 6. Menu và UI
+
+- SOLO vào thẳng SOLO.
+- CO-OP mở hai lựa chọn.
+- VS mở hai lựa chọn.
+- Không còn chữ Unlocked.
+- Không còn ảnh nền cũ ở các nút.
+- Hiệu ứng mượt.
+- Không giật lag.
+- Icon Online hoạt động.
+- Icon Bạn bè hoạt động.
+- Tab Thông tin mở Giới thiệu trước.
+- Nhãn Kinh nghiệm/Quân hàm/Sao đúng.
+- Tiêu đề điện thoại không xuống dòng chữ “thoại”.
+- Màu tank đúng quy chuẩn.
+
+## 7. Pause và Exit
+
+- SOLO Pause dừng hoàn toàn gameplay.
+- CO-OP A.I Pause dừng hoàn toàn gameplay.
+- Có lớp phủ tối.
+- Tiếp tục không mất tiến độ.
+- CO-OP ONLINE không có Pause.
+- VS ONLINE không có Pause.
+- Nút Thoát đúng vị trí.
+- Có xác nhận.
+- P1 rời VS thì P2 nhận WIN.
+- P2 rời VS thì P1 nhận WIN.
+- Lý do hiển thị: Đối thủ đã rời trận.
+- Không xử lý kết quả hai lần.
+- Phân biệt rời trận và mất kết nối.
+
+## 8. Regression
+
+Chạy lại toàn bộ kiểm thử:
+
+- SOLO.
+- CO-OP A.I.
+- CO-OP ONLINE.
+- VS.
+- Google Login.
+- Session.
+- Quản lý tài khoản.
+- XP.
+- Quân hàm.
+- Sao.
+- Firebase Auth.
+- Firestore.
+- Landing.html.
+- Tab Giới thiệu.
+- Tab Hướng dẫn.
+- Responsive PC.
+- Responsive điện thoại.
+- Responsive máy tính bảng.
+
+Không xóa hoặc sửa test cũ chỉ để làm kết quả PASS.
+
+---
+
+# PHẦN XVIII. BÁO CÁO VÀ ĐIỀU KIỆN NGHIỆM THU
+
+Sau khi triển khai, xuất báo cáo:
+
+1. Tổng quan kiến trúc trước triển khai.
+2. Các chức năng đã triển khai.
+3. Danh sách file tạo mới.
+4. Danh sách file chỉnh sửa.
+5. Cấu trúc dữ liệu Firebase mới hoặc đã thay đổi.
+6. Các thay đổi Security Rules đề xuất.
+7. Cơ chế Online Presence.
+8. Cơ chế Chat chung.
+9. Cơ chế Chat riêng và Block.
+10. Cơ chế kết bạn.
+11. Cơ chế quản lý bạn bè trong ADMIN.
+12. Cơ chế tạo phòng VS ONLINE.
+13. Cơ chế chơi VS trên hai thiết bị riêng biệt.
+14. Cơ chế đồng bộ gameplay.
+15. Cơ chế Pause và Exit.
+16. Kết quả kiểm thử từng nhóm.
+17. TypeScript.
+18. Lint.
+19. Production Build.
+20. Regression.
+21. Các lỗi còn tồn tại.
+22. Các vấn đề chưa kiểm tra trên thiết bị thật.
+
+Mỗi hạng mục phân loại:
+
+- VERIFIED PASS.
+- VERIFIED FAIL.
+- PARTIAL.
+- NOT TESTED.
+- BLOCKED.
+
+Không được tuyên bố chức năng hoàn thành nếu mới tạo giao diện mà chưa kết nối chức năng thực tế.
+
+Không được lấy kết quả Build thành công để kết luận toàn bộ chức năng hoạt động đúng.
+
+## Điều kiện nghiệm thu
+
+Chỉ kết luận hoàn thành khi:
+
+- Chức năng thực tế hoạt động.
+- Không có lỗi nghiêm trọng về bảo mật và quyền truy cập.
+- Không có lỗi đồng bộ trận đấu.
+- Không có lỗi hồi quy nghiêm trọng.
+- Các bài kiểm thử bắt buộc đạt yêu cầu.
+- VS đã được kiểm tra bằng hai thiết bị riêng biệt.
+- Những nội dung chưa thử trên thiết bị thật phải được ghi rõ.
+
+---
+
+# PHẦN XIX. CÁC HÀNH ĐỘNG TUYỆT ĐỐI KHÔNG ĐƯỢC TỰ Ý THỰC HIỆN
+
+1. Không Sync GitHub.
+2. Không Deploy GitHub Pages.
+3. Không Publish Firestore Rules.
+4. Không thay đổi Firebase Production.
+5. Không tạo Firebase Project mới.
+6. Không xóa dữ liệu tài khoản.
+7. Không xóa dữ liệu bạn bè hoặc lịch sử chat.
+8. Không thay đổi tài khoản ADMIN.
+9. Không thay đổi quyền ADMIN/MOD/PLAYER.
+10. Không thay đổi các quy tắc gameplay đã duyệt.
+11. Không thay đổi cơ chế XP, quân hàm và Sao.
+12. Không biến VS thành chế độ hai người chơi chung một thiết bị.
+13. Không tự ý giao quyền quản lý vật phẩm Campaign cho Host.
+14. Không tạo hệ thống Session độc lập.
+15. Không tự ý triển khai thay đổi kiến trúc có rủi ro cao mà chưa báo cáo.
+
+**Chỉ triển khai trong phạm vi môi trường phát triển Google AI Studio. Hoàn thành báo cáo để người dùng kiểm tra, phê duyệt trước khi thực hiện bất kỳ thao tác đồng bộ hoặc triển khai Production nào.**
+
+# KẾT THÚC PROMPT M7.8

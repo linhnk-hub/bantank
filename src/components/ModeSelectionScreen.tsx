@@ -18,7 +18,7 @@ import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
 import { CoopOnlineLobbyPanel, type CoopLobbySubView } from './CoopOnlineLobbyModal.tsx';
 import { TopMenuActionDrawer } from './TopMenuActionDrawer.tsx';
 import { useLanguage } from '../core/i18n.ts';
-import { CoopOnlineManager, type CoopRoomDocument } from '../core/coopOnlineManager.ts';
+import { CoopOnlineManager, type CoopRoomDocument, type CoopRoomMode } from '../core/coopOnlineManager.ts';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { StageProgressionManager } from '../core/stageProgression.ts';
 import { StageManager } from '../core/stageManager.ts';
@@ -42,7 +42,12 @@ import {
 
 export type GameModeType = 'SOLO' | 'TWO_PLAYERS';
 export type TwoPlayerOption = 'P2_AI' | 'P2_REAL';
-export type SelectionCardMode = 'SOLO' | 'COOP_AI' | 'COOP_ONLINE';
+export type SelectionCardMode =
+  | 'SOLO'
+  | 'COOP_AI'
+  | 'COOP_ONLINE'
+  | 'VS_P1_P2'
+  | 'VS_P1_AI_P2_AI';
 export type SelectionFlowStep = 'SELECT_MODE' | 'SELECT_DIFFICULTY' | 'COOP_ONLINE_LOBBY';
 
 let lastSelectedCampaignStageId = 1;
@@ -66,6 +71,8 @@ export interface ModeSelectionScreenProps {
   difficulty: 'DEFAULT' | 'EXTREME';
   onDifficultyChange: (d: 'DEFAULT' | 'EXTREME') => void;
   onOpenSettings: () => void;
+  onOpenFriends?: () => void;
+  pendingFriendRequestsCount?: number;
   onOpenSupport?: () => void;
   onOpenContact?: () => void;
   onOpenDevTools: () => void;
@@ -147,6 +154,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   difficulty,
   onDifficultyChange,
   onOpenSettings,
+  onOpenFriends,
+  pendingFriendRequestsCount = 0,
   onOpenSupport,
   onOpenContact,
   onOpenDevTools,
@@ -168,7 +177,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
       activeRoom.status !== 'ABANDONED' &&
       activeRoom.status !== 'EXPIRED'
     ) {
-      return 'COOP_ONLINE';
+      return activeRoom.roomMode || 'COOP_ONLINE';
     }
     if (initialCardMode) {
       return initialCardMode;
@@ -283,7 +292,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
         room.status === 'WAITING' &&
         flowStep !== 'COOP_ONLINE_LOBBY'
       ) {
-        setCardMode('COOP_ONLINE');
+        setCardMode(room.roomMode || 'COOP_ONLINE');
         setFlowStep('COOP_ONLINE_LOBBY');
       }
     });
@@ -352,8 +361,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   const handleConfirmCardMode = (next: SelectionCardMode, e?: React.MouseEvent) => {
     e?.stopPropagation();
     handleSelectCardMode(next);
-    if (next === 'COOP_ONLINE') {
-      // M7.3.7 Mục VI.5.1: Khi chọn 3. CO-OP ONLINE, mở trực tiếp màn hình Tạo phòng / Tham gia phòng
+    if (next === 'COOP_ONLINE' || next === 'VS_P1_P2' || next === 'VS_P1_AI_P2_AI') {
       setFlowStep('COOP_ONLINE_LOBBY');
     } else {
       setFlowStep('SELECT_DIFFICULTY');
@@ -515,6 +523,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
             <TopMenuActionDrawer
               onOpenSettings={onOpenSettings}
+              onOpenFriends={onOpenFriends}
+              pendingFriendRequestsCount={pendingFriendRequestsCount}
               onOpenSupport={onOpenSupport}
               onOpenContact={onOpenContact}
               onOpenDevTools={onOpenDevTools}
@@ -824,48 +834,60 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                   <button
                     type="button"
                     data-testid="mode-card-vs-p1-p2"
-                    disabled={isProcessing || session.status !== 'ACTIVE' || !onStartVsMatch}
-                    onClick={() => onStartVsMatch?.('VS_P1_P2')}
+                    disabled={isProcessing || session.status !== 'ACTIVE'}
+                    onClick={() => {
+                      if (onStartVsMatch) {
+                        onStartVsMatch('VS_P1_P2');
+                      } else {
+                        handleConfirmCardMode('VS_P1_P2');
+                      }
+                    }}
                     className="p-3.5 rounded-lg border border-[#FF0055]/55 bg-[#050510]/90 hover:bg-rose-950/45 hover:border-[#FF0055] flex items-center justify-between gap-3 text-left transition-all cursor-pointer disabled:opacity-50 active:scale-[0.98]"
                   >
                     <div>
                       <div className="font-btn text-sm sm:text-base font-black text-white">
-                        P1 vs P2
+                        P1 vs P2 (Online)
                       </div>
                       <p className="text-xs text-neutral-300 mt-0.5">
                         {t(
-                          'Đối kháng 1v1 trực tiếp: Phe 1 (WASD + Space/J) vs Phe 2 (Mũi tên + Enter/K).',
-                          'Direct 1v1 PvP: Team 1 (WASD + Space/J) vs Team 2 (Arrows + Enter/K).'
+                          'Đối kháng 1v1 trực tuyến trên 2 thiết bị riêng biệt (Host = P1 Đỏ, Guest = P2 Vàng).',
+                          'Online 1v1 PvP on 2 separate devices (Host = Red P1, Guest = Yellow P2).'
                         )}
                       </p>
                     </div>
                     <span className="font-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#FF0055] text-white text-xs font-black uppercase shrink-0">
                       <ArrowRight className="w-3.5 h-3.5" />
-                      <span>{t('Vào đấu', 'Fight')}</span>
+                      <span>{t('Tạo / Vào phòng', 'Lobby')}</span>
                     </span>
                   </button>
 
                   <button
                     type="button"
                     data-testid="mode-card-vs-ai"
-                    disabled={isProcessing || session.status !== 'ACTIVE' || !onStartVsMatch}
-                    onClick={() => onStartVsMatch?.('VS_P1_AI_P2_AI')}
+                    disabled={isProcessing || session.status !== 'ACTIVE'}
+                    onClick={() => {
+                      if (onStartVsMatch) {
+                        onStartVsMatch('VS_P1_AI_P2_AI');
+                      } else {
+                        handleConfirmCardMode('VS_P1_AI_P2_AI');
+                      }
+                    }}
                     className="p-3.5 rounded-lg border border-[#FF0055]/55 bg-[#050510]/90 hover:bg-rose-950/45 hover:border-[#FF0055] flex items-center justify-between gap-3 text-left transition-all cursor-pointer disabled:opacity-50 active:scale-[0.98]"
                   >
                     <div>
                       <div className="font-btn text-sm sm:text-base font-black text-white">
-                        P1 + A.I vs P2 + A.I
+                        P1 + A.I vs P2 + A.I (Online)
                       </div>
                       <p className="text-xs text-neutral-300 mt-0.5">
                         {t(
-                          'Đối kháng 2v2: Phe 1 (P1 + A.I 1) vs Phe 2 (P2 + A.I 2), không Friendly Fire.',
-                          '2v2 team battle: Team 1 (P1 + A.I 1) vs Team 2 (P2 + A.I 2), Friendly Fire OFF.'
+                          'Đối kháng 2v2 trực tuyến trên 2 thiết bị: P1 Đỏ + A.I 1 Xanh nhạt vs P2 Vàng + A.I 2 Xám.',
+                          'Online 2v2 PvP on 2 devices: Red P1 + Sky AI_1 vs Yellow P2 + Gray AI_2.'
                         )}
                       </p>
                     </div>
                     <span className="font-btn inline-flex items-center gap-1 px-2.5 py-1.5 rounded bg-[#FF0055] text-white text-xs font-black uppercase shrink-0">
                       <ArrowRight className="w-3.5 h-3.5" />
-                      <span>{t('Vào đấu', 'Fight')}</span>
+                      <span>{t('Tạo / Vào phòng', 'Lobby')}</span>
                     </span>
                   </button>
                 </div>
@@ -1106,27 +1128,45 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
           )}
 
           {/* ===================================================================
-              STEP 3 (CO-OP ONLINE): TẠO PHÒNG / THAM GIA PHÒNG
+              STEP 3 (CO-OP ONLINE & VS ONLINE): TẠO PHÒNG / THAM GIA PHÒNG
              =================================================================== */}
-          {flowStep === 'COOP_ONLINE_LOBBY' && (
-            <div className="w-full text-left">
-              <div className="mb-5 text-center">
-                <h1 className="font-btn text-[clamp(1.5rem,5.5vw,2.4rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-cyan-200 via-[#00F0FF] to-sky-500 tracking-wide sm:tracking-wider drop-shadow-lg uppercase">
-                  CO-OP ONLINE
-                </h1>
-              </div>
+          {flowStep === 'COOP_ONLINE_LOBBY' && (() => {
+            const activeRoomMode: CoopRoomMode =
+              cardMode === 'VS_P1_P2' || cardMode === 'VS_P1_AI_P2_AI'
+                ? cardMode
+                : activeOnlineRoom?.roomMode || 'COOP_ONLINE';
+            const isVsRoomMode = activeRoomMode !== 'COOP_ONLINE';
+            return (
+              <div className="w-full text-left animate-neo-fade-in">
+                <div className="mb-5 text-center">
+                  <h1
+                    className={`font-btn text-[clamp(1.35rem,4.8vw,2.25rem)] whitespace-nowrap font-black text-transparent bg-clip-text tracking-wide sm:tracking-wider drop-shadow-lg uppercase ${
+                      isVsRoomMode
+                        ? 'bg-gradient-to-b from-rose-200 via-[#FF0055] to-rose-600'
+                        : 'bg-gradient-to-b from-cyan-200 via-[#00F0FF] to-sky-500'
+                    }`}
+                  >
+                    {activeRoomMode === 'VS_P1_P2'
+                      ? 'VS ONLINE • P1 vs P2'
+                      : activeRoomMode === 'VS_P1_AI_P2_AI'
+                        ? 'VS ONLINE • P1+AI vs P2+AI'
+                        : 'CO-OP ONLINE'}
+                  </h1>
+                </div>
 
-              <CoopOnlineLobbyPanel
-                user={firebaseUser ?? (user as any)}
-                difficulty={difficulty}
-                onDifficultyChange={onDifficultyChange}
-                subView={onlineLobbySubView}
-                onSubViewChange={setOnlineLobbySubView}
-                onBackToDifficulty={onBack}
-                onOnlineMatchStarted={handleOnlineMatchStartedProp}
-              />
-            </div>
-          )}
+                <CoopOnlineLobbyPanel
+                  user={firebaseUser ?? (user as any)}
+                  roomMode={activeRoomMode}
+                  difficulty={difficulty}
+                  onDifficultyChange={onDifficultyChange}
+                  subView={onlineLobbySubView}
+                  onSubViewChange={setOnlineLobbySubView}
+                  onBackToDifficulty={onBack}
+                  onOnlineMatchStarted={handleOnlineMatchStartedProp}
+                />
+              </div>
+            );
+          })()}
         </div>
       </main>
 

@@ -27,7 +27,9 @@ import {
 import type { User } from 'firebase/auth';
 import {
   CoopOnlineManager,
+  getRoomModeLabelVi,
   type CoopRoomDocument,
+  type CoopRoomMode,
   type CoopPlayerRole,
 } from '../core/coopOnlineManager.ts';
 import {
@@ -40,12 +42,14 @@ import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { StageProgressionManager } from '../core/stageProgression.ts';
 import { StageManager } from '../core/stageManager.ts';
 import { StageMapMiniPreview } from './StageMapMiniPreview.tsx';
+import { VS_TANK_COLOR_SPEC } from '../core/vsTypes.ts';
 import { useLanguage } from '../core/i18n.ts';
 
 export type CoopLobbySubView = 'MAIN' | 'CREATE' | 'JOIN';
 
 interface CoopOnlineLobbyPanelProps {
   user: User | null;
+  roomMode?: CoopRoomMode;
   difficulty: 'DEFAULT' | 'EXTREME';
   onDifficultyChange?: (diff: 'DEFAULT' | 'EXTREME') => void;
   onBackToDifficulty: () => void;
@@ -56,6 +60,7 @@ interface CoopOnlineLobbyPanelProps {
 
 export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   user,
+  roomMode = 'COOP_ONLINE',
   difficulty,
   onDifficultyChange,
   onBackToDifficulty: _onBackToDifficulty,
@@ -64,6 +69,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
   onSubViewChange,
 }) => {
   const { t } = useLanguage();
+  const isVsOnlineMode = roomMode === 'VS_P1_P2' || roomMode === 'VS_P1_AI_P2_AI';
   const coopManager = CoopOnlineManager.getInstance();
   const avatarManager = AvatarManager.getInstance();
   const [room, setRoom] = useState<CoopRoomDocument | null>(() => coopManager.getCurrentRoom());
@@ -215,11 +221,13 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
     setKickedNotice(null);
     setIsBusy(true);
     try {
-      onDifficultyChange?.(createDifficulty);
-      const res = await coopManager.createRoom(user, createDifficulty, undefined, {
+      const effectiveDifficulty = isVsOnlineMode ? 'DEFAULT' : createDifficulty;
+      onDifficultyChange?.(effectiveDifficulty);
+      const res = await coopManager.createRoom(user, effectiveDifficulty, undefined, {
+        roomMode,
         hasPassword: createHasPassword,
         password: createHasPassword ? createPasswordInput : undefined,
-        stageId: createStageId,
+        stageId: isVsOnlineMode ? 1 : createStageId,
       });
       if (!res.success) {
         setErrorMsg(res.message || 'Không thể tạo phòng.');
@@ -237,6 +245,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
     setIsBusy(true);
     try {
       const res = await coopManager.joinRoom(joinCodeInput, user, Date.now(), {
+        expectedRoomMode: roomMode,
         password: joinPasswordInput.trim() ? joinPasswordInput : undefined,
       });
       if (!res.success) {
@@ -476,7 +485,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
               </div>
             </div>
 
-            {/* 1. Chọn độ khó */}
+            {/* 1. Chọn độ khó (chỉ hiển thị cho CO-OP ONLINE; VS ONLINE dùng luật chuẩn 3 mạng • 180s • Sudden Death) */}
+            {!isVsOnlineMode && (
             <div className="space-y-2">
               <label className="block text-xs font-extrabold uppercase tracking-wider text-amber-300">
                 {t('1. Chọn độ khó', '1. Select Difficulty')}
@@ -527,6 +537,43 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                 </button>
               </div>
             </div>
+            )}
+
+            {isVsOnlineMode && (
+              <div className="p-3.5 rounded-xl bg-[#050510] border border-[#FF0055]/45 space-y-2 text-xs">
+                <div className="font-btn font-black text-[#FF0055] uppercase tracking-wider">
+                  {roomMode === 'VS_P1_P2' ? 'VS ONLINE • P1 VS P2' : 'VS ONLINE • P1 + A.I VS P2 + A.I'}
+                </div>
+                <p className="text-[11px] text-neutral-300 leading-relaxed">
+                  {t(
+                    'Đấu đối kháng trực tuyến trên 2 thiết bị riêng biệt (Host = P1, Guest = P2). 3 mạng • 180 giây • Hồi sinh 3s • Khiên 2s • Sudden Death thu hẹp 20s • Không có Hòa.',
+                    'Online PvP on 2 separate devices (Host = P1, Guest = P2). 3 lives • 180s • 3s respawn • 2s shield • Sudden Death 20s shrink • No Draw.'
+                  )}
+                </p>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.P1.badgeBgClass} ${VS_TANK_COLOR_SPEC.P1.badgeBorderClass} ${VS_TANK_COLOR_SPEC.P1.badgeTextClass}`}>
+                    <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.P1.dotClass}`} />
+                    P1 ({t('Đỏ', 'Red')})
+                  </span>
+                  {roomMode === 'VS_P1_AI_P2_AI' && (
+                    <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.AI_1.badgeBgClass} ${VS_TANK_COLOR_SPEC.AI_1.badgeBorderClass} ${VS_TANK_COLOR_SPEC.AI_1.badgeTextClass}`}>
+                      <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.AI_1.dotClass}`} />
+                      A.I 1 ({t('Xanh biển nhạt', 'Light Sky Blue')})
+                    </span>
+                  )}
+                  <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.P2.badgeBgClass} ${VS_TANK_COLOR_SPEC.P2.badgeBorderClass} ${VS_TANK_COLOR_SPEC.P2.badgeTextClass}`}>
+                    <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.P2.dotClass}`} />
+                    P2 ({t('Vàng', 'Yellow')})
+                  </span>
+                  {roomMode === 'VS_P1_AI_P2_AI' && (
+                    <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.AI_2.badgeBgClass} ${VS_TANK_COLOR_SPEC.AI_2.badgeBorderClass} ${VS_TANK_COLOR_SPEC.AI_2.badgeTextClass}`}>
+                      <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.AI_2.dotClass}`} />
+                      A.I 2 ({t('Xám', 'Gray')})
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* 2. Cấu hình mật khẩu phòng */}
             <div className="space-y-2.5">
@@ -603,8 +650,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
               )}
             </div>
 
-            {/* 3. Chọn Màn chiến dịch */}
-            {(() => {
+            {/* 3. Chọn Màn chiến dịch (chỉ hiển thị cho CO-OP ONLINE) */}
+            {!isVsOnlineMode && (() => {
               const liveStageSpecs = stageManager.getLiveCampaignStageViews();
               const chosenSpec = stageManager.getLiveCampaignStageView(createStageId);
               return (
@@ -838,31 +885,38 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
           </div>
           <div>
             <div className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
-              {t('PHÒNG CHỜ CO-OP ONLINE', 'CO-OP ONLINE WAITING ROOM')}
+              {room.roomMode && room.roomMode !== 'COOP_ONLINE'
+                ? `${t('PHÒNG CHỜ', 'WAITING ROOM')} ${getRoomModeLabelVi(room.roomMode)}`
+                : t('PHÒNG CHỜ CO-OP ONLINE', 'CO-OP ONLINE WAITING ROOM')}
             </div>
             <div className="flex items-center flex-wrap gap-1.5 mt-1">
-              {/* Độ khó do P1 chọn — nằm ngay dưới tiêu đề PHÒNG CHỜ CO-OP ONLINE */}
-              <span
-                className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border flex items-center gap-1 ${
-                  room.difficulty === 'EXTREME'
-                    ? 'bg-rose-950/80 text-rose-300 border-rose-500/40'
-                    : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
-                }`}
-                title={t(
-                  'Độ khó phòng do Chủ phòng (P1) thiết lập',
-                  'Room difficulty configured by Host (P1)'
-                )}
-              >
-                {room.difficulty === 'EXTREME' ? (
-                  <>
-                    <Flame className="w-3 h-3" /> {t('Độ khó: Thử thách', 'Difficulty: Challenge')}
-                  </>
-                ) : (
-                  <>
-                    <Shield className="w-3 h-3" /> {t('Độ khó: Giải trí', 'Difficulty: Casual')}
-                  </>
-                )}
-              </span>
+              {room.roomMode && room.roomMode !== 'COOP_ONLINE' ? (
+                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded border bg-rose-950/80 text-rose-300 border-rose-500/45 flex items-center gap-1">
+                  {room.roomMode === 'VS_P1_P2' ? 'P1 VS P2 • 2 THIẾT BỊ' : 'P1 + A.I VS P2 + A.I • 2 THIẾT BỊ'}
+                </span>
+              ) : (
+                <span
+                  className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border flex items-center gap-1 ${
+                    room.difficulty === 'EXTREME'
+                      ? 'bg-rose-950/80 text-rose-300 border-rose-500/40'
+                      : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
+                  }`}
+                  title={t(
+                    'Độ khó phòng do Chủ phòng (P1) thiết lập',
+                    'Room difficulty configured by Host (P1)'
+                  )}
+                >
+                  {room.difficulty === 'EXTREME' ? (
+                    <>
+                      <Flame className="w-3 h-3" /> {t('Độ khó: Thử thách', 'Difficulty: Challenge')}
+                    </>
+                  ) : (
+                    <>
+                      <Shield className="w-3 h-3" /> {t('Độ khó: Giải trí', 'Difficulty: Casual')}
+                    </>
+                  )}
+                </span>
+              )}
 
               <span
                 className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border flex items-center gap-1 ${
@@ -958,8 +1012,45 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
         </div>
       )}
 
-      {/* Selected Stage Banner + Host Stage Switcher */}
-      {(() => {
+      {/* Selected Stage Banner + Host Stage Switcher (only for CO-OP ONLINE; VS ONLINE displays standardized VS Arena & Tank Colors) */}
+      {room.roomMode && room.roomMode !== 'COOP_ONLINE' ? (
+        <div
+          data-testid="vs-lobby-rules-panel"
+          className="p-3.5 rounded-xl bg-neutral-950/85 border border-rose-500/40 space-y-2"
+        >
+          <div className="text-xs font-btn font-black text-rose-300 uppercase">
+            {t('Đấu trường VS Online (2 thiết bị riêng biệt)', 'VS Online Arena (2 Separate Devices)')}
+          </div>
+          <p className="text-[11px] text-neutral-300 leading-snug">
+            {t(
+              'Host điều khiển Tank P1 • Guest điều khiển Tank P2. 3 mạng • 180s • Sudden Death thu hẹp 20s • Rời trận bị xử thua ngay.',
+              'Host controls Tank P1 • Guest controls Tank P2. 3 lives • 180s • Sudden Death 20s shrink • Leaving forfeits immediately.'
+            )}
+          </p>
+          <div className="flex flex-wrap gap-1.5 pt-0.5">
+            <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.P1.badgeBgClass} ${VS_TANK_COLOR_SPEC.P1.badgeBorderClass} ${VS_TANK_COLOR_SPEC.P1.badgeTextClass}`}>
+              <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.P1.dotClass}`} />
+              P1 ({t('Đỏ', 'Red')})
+            </span>
+            {room.roomMode === 'VS_P1_AI_P2_AI' && (
+              <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.AI_1.badgeBgClass} ${VS_TANK_COLOR_SPEC.AI_1.badgeBorderClass} ${VS_TANK_COLOR_SPEC.AI_1.badgeTextClass}`}>
+                <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.AI_1.dotClass}`} />
+                A.I 1 ({t('Xanh biển nhạt', 'Light Sky Blue')})
+              </span>
+            )}
+            <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.P2.badgeBgClass} ${VS_TANK_COLOR_SPEC.P2.badgeBorderClass} ${VS_TANK_COLOR_SPEC.P2.badgeTextClass}`}>
+              <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.P2.dotClass}`} />
+              P2 ({t('Vàng', 'Yellow')})
+            </span>
+            {room.roomMode === 'VS_P1_AI_P2_AI' && (
+              <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.AI_2.badgeBgClass} ${VS_TANK_COLOR_SPEC.AI_2.badgeBorderClass} ${VS_TANK_COLOR_SPEC.AI_2.badgeTextClass}`}>
+                <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.AI_2.dotClass}`} />
+                A.I 2 ({t('Xám', 'Gray')})
+              </span>
+            )}
+          </div>
+        </div>
+      ) : (() => {
         const lobbyStageId = room.selectedStageId ?? 1;
         const liveStageSpecs = stageManager.getLiveCampaignStageViews();
         const lobbyStageSpec = stageManager.getLiveCampaignStageView(lobbyStageId);

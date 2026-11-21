@@ -5,16 +5,15 @@
 
 import React, { useEffect, useState } from 'react';
 import {
-  Award,
+  ArrowRight,
   Bot,
+  ChevronDown,
   Globe,
   RefreshCw,
-  Shield,
-  Star,
   Swords,
   User,
   UserCheck,
-  Zap,
+  Users,
 } from 'lucide-react';
 import type { SessionStateSnapshot } from '../core/sessionManager.ts';
 import {
@@ -33,9 +32,10 @@ import { useLanguage } from '../core/i18n.ts';
 import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
 import { TopMenuActionDrawer } from './TopMenuActionDrawer.tsx';
 import { GameLogo } from './GameLogo.tsx';
-import type { VsMode } from '../core/vsTypes.ts';
+import { VS_TANK_COLOR_SPEC, type VsMode } from '../core/vsTypes.ts';
 
 export type LobbyCardMode = 'SOLO' | 'COOP_AI' | 'COOP_ONLINE';
+type ExpandedMenuGroup = 'COOP' | 'VS' | null;
 
 export interface MainMenuScreenProps {
   user: {
@@ -51,13 +51,16 @@ export interface MainMenuScreenProps {
   selectedLobbyMode: LobbyCardMode;
   onSelectLobbyMode: (mode: LobbyCardMode) => void;
   onConfirmMode: (mode: LobbyCardMode) => void;
+  onStartSoloDirect?: () => void;
   onStartVsMatch?: (mode: VsMode) => void;
-  onPlay: () => void;
+  onPlay?: () => void;
   onSignOut: () => void;
   onRetryAcquire?: () => void;
   difficulty: 'DEFAULT' | 'EXTREME';
   onDifficultyChange: (d: 'DEFAULT' | 'EXTREME') => void;
   onOpenSettings: () => void;
+  onOpenFriends?: () => void;
+  pendingFriendRequestsCount?: number;
   onOpenSupport?: () => void;
   onOpenContact?: () => void;
   onOpenDevTools: () => void;
@@ -68,14 +71,15 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   user,
   session,
   isProcessing,
-  selectedLobbyMode,
   onSelectLobbyMode,
   onConfirmMode,
+  onStartSoloDirect,
   onStartVsMatch,
-  onPlay,
   onSignOut,
   onRetryAcquire,
   onOpenSettings,
+  onOpenFriends,
+  pendingFriendRequestsCount = 0,
   onOpenSupport,
   onOpenContact,
   onOpenDevTools,
@@ -89,6 +93,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
 
   const [avatarError, setAvatarError] = useState(false);
   const [isTopMenuOpen, setIsTopMenuOpen] = useState(false);
+  const [expandedGroup, setExpandedGroup] = useState<ExpandedMenuGroup>(null);
   const [, setAvatarTick] = useState(0);
   const [playerStats, setPlayerStats] = useState(() =>
     playerStatsMgr.getPlayerStatisticsSnapshot(effectiveUid)
@@ -169,11 +174,25 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
         : levelProgress.rankNameVi
       : t('Chưa xác minh', 'Unverified');
 
-  const handleCardSelectAndEnter = (mode: LobbyCardMode) => {
-    onSelectLobbyMode(mode);
-    if (!isActionDisabled) {
-      onConfirmMode(mode);
+  const handleSoloDirectClick = () => {
+    if (isActionDisabled) return;
+    onSelectLobbyMode('SOLO');
+    if (onStartSoloDirect) {
+      onStartSoloDirect();
+    } else {
+      onConfirmMode('SOLO');
     }
+  };
+
+  const handleCoopSubSelect = (mode: 'COOP_AI' | 'COOP_ONLINE') => {
+    if (isActionDisabled) return;
+    onSelectLobbyMode(mode);
+    onConfirmMode(mode);
+  };
+
+  const handleVsSubSelect = (mode: VsMode) => {
+    if (isActionDisabled) return;
+    onStartVsMatch?.(mode);
   };
 
   return (
@@ -185,7 +204,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       {/* Top Header Bar */}
       <header className="sticky top-0 z-40 w-full border-b border-[#00F0FF]/25 bg-[#050510]/96 px-2.5 sm:px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2 shrink-0 shadow-[0_4px_20px_rgba(0,0,0,0.75)]">
         <div className="max-w-6xl mx-auto flex items-center justify-between gap-2 min-w-0">
-          {/* Left: Player Avatar, Display Name, Military Rank Badge */}
+          {/* Left: Player Avatar, Display Name, Military Rank */}
           <div className="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
             <div
               className={`${
@@ -220,11 +239,10 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
 
               <span
                 data-testid="top-menu-player-level"
-                className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-[#0b0d1e] border border-[#FFB800]/35 text-[11px] font-bold text-[#FFB800] shrink-0"
+                className="inline-flex items-center px-2 py-0.5 rounded bg-[#0b0d1e] border border-[#FFB800]/35 text-[11px] font-bold text-[#FFB800] shrink-0"
                 title={playerStats.levelSystemLabel}
               >
-                <Award className="w-3 h-3 text-[#FFB800] shrink-0" />
-                <span>{rankDisplayLabel}</span>
+                {rankDisplayLabel}
               </span>
 
               {badgeInfo.label && (
@@ -252,6 +270,8 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
           {/* Right: Unified Horizontal Slide-Out Action Drawer */}
           <TopMenuActionDrawer
             onOpenSettings={onOpenSettings}
+            onOpenFriends={onOpenFriends}
+            pendingFriendRequestsCount={pendingFriendRequestsCount}
             onOpenSupport={onOpenSupport}
             onOpenContact={onOpenContact}
             onOpenDevTools={onOpenDevTools}
@@ -265,32 +285,37 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
       </header>
 
       {/* Main Content Area */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-3 sm:px-6 py-4 sm:py-6 max-w-6xl mx-auto w-full">
-        {/* Hero Brand & Rank/Star Summary */}
-        <div className="w-full flex flex-col items-center text-center mb-5 sm:mb-7">
-          <div className="flex items-center justify-center gap-3 sm:gap-4 mb-2">
+      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-3 sm:px-6 py-4 sm:py-6 max-w-5xl mx-auto w-full animate-neo-fade-in">
+        {/* Hero Brand & Clean Header Progression Stats (Section XI) */}
+        <div className="w-full flex flex-col items-center text-center mb-6 sm:mb-8">
+          <div className="flex items-center justify-center gap-2.5 sm:gap-4 mb-2.5 max-w-full">
             <GameLogo className="unified-game-logo logo-inline-row" />
-            <div className="text-left">
-              <div className="text-[11px] font-hud font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
+            <div className="text-left min-w-0">
+              <div className="text-[10px] sm:text-[11px] font-hud font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
                 BẮN TANK ONLINE
               </div>
-              <h1 className="font-btn text-[clamp(1.3rem,4.5vw,2.25rem)] font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-[#FFB800] to-amber-600 tracking-wide uppercase leading-tight neo-glitch-text">
+              {/* Section XI: Mobile title ~10% smaller & nowrap so "thoại" never orphan-wraps; PC unchanged */}
+              <h1
+                data-testid="home-hero-title"
+                className="font-btn text-[clamp(1.02rem,3.85vw,1.65rem)] sm:text-[clamp(1.3rem,4.5vw,2.25rem)] whitespace-nowrap font-black text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-[#FFB800] to-amber-600 tracking-tight sm:tracking-wide uppercase leading-tight neo-glitch-text"
+              >
                 {t('CHIẾN TRƯỜNG HUYỀN THOẠI', 'LEGENDARY BATTLEFIELD')}
               </h1>
             </div>
           </div>
 
-          {/* Progression Bar: Military Rank + Total XP + Star Balance */}
-          <div className="mt-2 inline-flex flex-wrap items-center justify-center gap-2.5 sm:gap-3.5 px-4 py-2 rounded-lg neo-bevel-card border border-[#00F0FF]/30 text-xs">
+          {/* Section XI: Clean Progression Bar — NO icons before Quân hàm, Kinh nghiệm, Sao; NO (xx/25 XP) suffix */}
+          <div
+            data-testid="home-header-stats-bar"
+            className="mt-2 inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 sm:gap-x-4 px-4 py-2 rounded-lg neo-bevel-card border border-[#00F0FF]/30 text-xs sm:text-sm"
+          >
             <div className="flex items-center gap-1.5">
-              <Award className="w-3.5 h-3.5 text-[#FFB800]" />
               <span className="text-neutral-400 font-semibold">{t('Quân hàm:', 'Rank:')}</span>
               <span className="font-btn font-black text-[#FFB800]">{rankDisplayLabel}</span>
             </div>
             <span className="text-neutral-700">|</span>
             <div className="flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-[#00F0FF]" />
-              <span className="text-neutral-400 font-semibold">{t('Tổng XP:', 'Total XP:')}</span>
+              <span className="text-neutral-400 font-semibold">{t('Kinh nghiệm:', 'Experience:')}</span>
               <span className="font-hud font-bold text-[#00F0FF]">
                 {levelProgress.xpVerificationStatus === 'VERIFIED' && levelProgress.totalXp !== null
                   ? `${levelProgress.totalXp} XP`
@@ -299,215 +324,282 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             </div>
             <span className="text-neutral-700">|</span>
             <div className="flex items-center gap-1.5">
-              <Star className="w-3.5 h-3.5 text-yellow-300 fill-yellow-300" />
               <span className="text-neutral-400 font-semibold">{t('Sao:', 'Stars:')}</span>
               <span className="font-hud font-black text-yellow-300">
-                {levelProgress.starBalance} ⭐
-              </span>
-              <span className="text-[11px] text-neutral-400 font-hud">
-                ({levelProgress.unconvertedXp}/25 XP)
+                {levelProgress.starBalance}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Mode Selection Cards: SOLO | CO-OP AI | CO-OP ONLINE (direct click entry, no Chọn/Đang chọn button) */}
+        {/* Section X: NEO-RETRO 3-Card Home Mode Flow (SOLO | CO-OP | VS) — NO avatar backgrounds, NO UNLOCKED badges */}
         <div
           data-testid="home-mode-cards-grid"
-          className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 mb-5"
+          className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 items-start"
         >
-          {/* 1. SOLO */}
-          <button
-            type="button"
+          {/* 1. SOLO — Direct Match Entry */}
+          <div
             data-testid="home-mode-card-solo"
-            disabled={isActionDisabled}
-            onClick={() => handleCardSelectAndEnter('SOLO')}
-            className={`group relative overflow-hidden text-left flex flex-col justify-between min-h-[210px] sm:min-h-[240px] p-5 rounded-xl neo-bevel-card transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] ${
-              selectedLobbyMode === 'SOLO'
-                ? 'border-2 border-[#FFB800] neo-bevel-amber'
-                : 'border border-[#687386]/50 hover:border-[#FFB800]/80'
-            }`}
+            className="neo-bevel-card rounded-xl border border-[#FFB800]/55 hover:border-[#FFB800] transition-transform duration-150 hover:-translate-y-0.5 overflow-hidden flex flex-col"
           >
-            {/* Background Avatar with Looping Fade */}
-            <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              <img
-                src="./avatar/ava01.png"
-                alt=""
-                className="w-full h-full object-cover object-center lobby-ava-fade-single"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/80 to-[#050510]/45" />
-            </div>
-
-            <div className="relative z-10 flex items-center justify-between mb-3">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#FFB800]/15 border border-[#FFB800]/45 text-[#FFB800] font-btn font-black text-xs uppercase tracking-wider">
-                <User className="w-3.5 h-3.5" />
-                <span>SOLO</span>
-              </span>
-            </div>
-
-            <div className="relative z-10 space-y-1.5 mt-auto">
-              <h2 className="font-btn text-xl sm:text-2xl font-black text-[#EAF4FF] group-hover:text-[#FFB800] transition-colors uppercase tracking-wide">
-                SOLO
-              </h2>
-              <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
-                {t(
-                  'Độc lập chỉ huy chiến xa vượt qua 10 màn chiến dịch, bảo vệ căn cứ Đại Bàng và thu thập 4 vật phẩm hỗ trợ.',
-                  'Command a lone battle tank across 10 campaign stages, defend the Eagle Base, and collect 4 support items.'
-                )}
-              </p>
-            </div>
-          </button>
-
-          {/* 2. CO-OP A.I */}
-          <button
-            type="button"
-            data-testid="home-mode-card-coop-ai"
-            disabled={isActionDisabled}
-            onClick={() => handleCardSelectAndEnter('COOP_AI')}
-            className={`group relative overflow-hidden text-left flex flex-col justify-between min-h-[210px] sm:min-h-[240px] p-5 rounded-xl neo-bevel-card transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] ${
-              selectedLobbyMode === 'COOP_AI'
-                ? 'border-2 border-[#00F0FF] neo-bevel-cyan'
-                : 'border border-[#687386]/50 hover:border-[#00F0FF]/80'
-            }`}
-          >
-            {/* Background Dual Avatars with Alternating Looping Fade */}
-            <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              <img
-                src="./avatar/ava01.png"
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover object-center lobby-ava-fade-pair-a"
-              />
-              <img
-                src="./avatar/ava07.png"
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover object-center lobby-ava-fade-pair-b"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/80 to-[#050510]/45" />
-            </div>
-
-            <div className="relative z-10 flex items-center justify-between mb-3">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#00F0FF]/15 border border-[#00F0FF]/45 text-[#00F0FF] font-btn font-black text-xs uppercase tracking-wider">
-                <Bot className="w-3.5 h-3.5" />
-                <span>CO-OP A.I</span>
-              </span>
-            </div>
-
-            <div className="relative z-10 space-y-1.5 mt-auto">
-              <h2 className="font-btn text-xl sm:text-2xl font-black text-[#EAF4FF] group-hover:text-[#00F0FF] transition-colors uppercase tracking-wide">
-                CO-OP A.I
-              </h2>
-              <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
-                {t(
-                  'Phối hợp tác chiến cùng đồng đội chiến xa A.I thông minh bảo vệ căn cứ trước làn sóng xe tăng địch.',
-                  'Team up with an intelligent Ally A.I battle tank to defend the base against enemy tank waves.'
-                )}
-              </p>
-            </div>
-          </button>
-
-          {/* 3. CO-OP ONLINE */}
-          <button
-            type="button"
-            data-testid="home-mode-card-coop-online"
-            disabled={isActionDisabled}
-            onClick={() => handleCardSelectAndEnter('COOP_ONLINE')}
-            className={`group relative overflow-hidden text-left flex flex-col justify-between min-h-[210px] sm:min-h-[240px] p-5 rounded-xl neo-bevel-card transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] ${
-              selectedLobbyMode === 'COOP_ONLINE'
-                ? 'border-2 border-emerald-400 shadow-[0_0_16px_rgba(16,185,129,0.28)]'
-                : 'border border-[#687386]/50 hover:border-emerald-400/80'
-            }`}
-          >
-            {/* Background Dual Avatars with Alternating Looping Fade */}
-            <div className="pointer-events-none absolute inset-0 overflow-hidden">
-              <img
-                src="./avatar/ava01.png"
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover object-center lobby-ava-fade-pair-a"
-              />
-              <img
-                src="./avatar/ava03.png"
-                alt=""
-                className="absolute inset-0 w-full h-full object-cover object-center lobby-ava-fade-pair-b"
-              />
-              <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/80 to-[#050510]/45" />
-            </div>
-
-            <div className="relative z-10 flex items-center justify-between mb-3">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-emerald-500/15 border border-emerald-400/45 text-emerald-300 font-btn font-black text-xs uppercase tracking-wider">
-                <Globe className="w-3.5 h-3.5" />
-                <span>CO-OP ONLINE</span>
-              </span>
-            </div>
-
-            <div className="relative z-10 space-y-1.5 mt-auto">
-              <h2 className="font-btn text-xl sm:text-2xl font-black text-[#EAF4FF] group-hover:text-emerald-300 transition-colors uppercase tracking-wide">
-                CO-OP ONLINE
-              </h2>
-              <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
-                {t(
-                  'Lập phòng hoặc tham gia phòng 2 người chơi trực tuyến thời gian thực qua kết nối P2P.',
-                  'Create or join a 2-player real-time online co-op room over low-latency P2P sync.'
-                )}
-              </p>
-            </div>
-          </button>
-        </div>
-
-        {/* VS Arena Unlocked Quick Launch Banner (BTO-VS-GAMEPLAY-V1.2) & Mode Entry */}
-        <div className="w-full grid grid-cols-1 lg:grid-cols-12 gap-3 sm:gap-4 items-stretch">
-          <div className="lg:col-span-8 neo-bevel-card rounded-xl px-4 py-3 border border-[#FF0055]/50 bg-[#12060c]/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5 min-w-0">
-              <div className="w-9 h-9 rounded-lg bg-[#FF0055]/20 border border-[#FF0055]/55 flex items-center justify-center shrink-0 text-[#FF0055]">
-                <Swords className="w-4 h-4" />
+            <button
+              type="button"
+              data-testid="home-mode-solo-btn"
+              disabled={isActionDisabled}
+              onClick={handleSoloDirectClick}
+              className="group w-full text-left p-5 flex flex-col justify-between min-h-[215px] sm:min-h-[235px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform"
+            >
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#FFB800]/15 border border-[#FFB800]/45 text-[#FFB800] font-btn font-black text-xs uppercase tracking-wider">
+                  <User className="w-3.5 h-3.5" />
+                  <span>1P CAMPAIGN</span>
+                </span>
+                <span className="w-8 h-8 rounded-lg bg-[#FFB800]/15 border border-[#FFB800]/40 flex items-center justify-center text-[#FFB800] group-hover:bg-[#FFB800] group-hover:text-[#050510] transition-colors">
+                  <ArrowRight className="w-4 h-4" />
+                </span>
               </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-btn text-xs font-black uppercase text-[#EAF4FF] tracking-wide">
-                    {t('ĐẤU TRƯỜNG VS', 'VS ARENA')}
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/50 text-[10px] font-bold text-emerald-300 shrink-0 uppercase">
-                    {t('ĐÃ MỞ KHÓA', 'UNLOCKED')}
-                  </span>
-                </div>
-                <p className="text-[11px] text-neutral-300">
+
+              <div className="space-y-2 mt-auto">
+                <h2 className="font-btn text-2xl font-black text-[#EAF4FF] group-hover:text-[#FFB800] transition-colors uppercase tracking-wide">
+                  SOLO
+                </h2>
+                <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
                   {t(
-                    '3 phút • 3 mạng • Sudden Death • Thu hẹp 20s • Không hòa.',
-                    '3 min • 3 lives • Sudden Death • 20s shrink • No draw.'
+                    'Vào trận ngay lập tức. Chỉ huy xe tăng chiến đấu qua 10 màn chiến dịch và bảo vệ căn cứ Đại Bàng.',
+                    'Jump straight into battle. Command your tank across 10 campaign stages and defend the Eagle Base.'
                   )}
                 </p>
+                <div className="pt-2 flex items-center gap-1.5 text-xs font-btn font-black text-[#FFB800] uppercase tracking-wider">
+                  <span>{t('Vào chiến đấu ngay', 'Launch Battle')}</span>
+                  <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
+                </div>
               </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 shrink-0 w-full sm:w-auto">
-              <button
-                type="button"
-                data-testid="lobby-vs-p1-p2-btn"
-                disabled={isActionDisabled || !onStartVsMatch}
-                onClick={() => onStartVsMatch?.('VS_P1_P2')}
-                className="flex-1 sm:flex-none font-btn px-3 py-2 rounded-lg bg-[#FF0055] hover:bg-rose-500 text-white text-xs font-black uppercase tracking-wide shadow cursor-pointer disabled:opacity-50 transition-transform active:scale-95"
-              >
-                P1 vs P2
-              </button>
-              <button
-                type="button"
-                data-testid="lobby-vs-ai-btn"
-                disabled={isActionDisabled || !onStartVsMatch}
-                onClick={() => onStartVsMatch?.('VS_P1_AI_P2_AI')}
-                className="flex-1 sm:flex-none font-btn px-3 py-2 rounded-lg bg-[#050510] hover:bg-rose-950/70 border border-[#FF0055]/60 text-rose-200 text-xs font-black uppercase tracking-wide shadow cursor-pointer disabled:opacity-50 transition-transform active:scale-95"
-              >
-                P1 + A.I vs P2 + A.I
-              </button>
-            </div>
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={onPlay}
-            disabled={isActionDisabled}
-            className="lg:col-span-4 min-h-[48px] px-5 py-3 rounded-xl bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-btn font-black text-sm uppercase tracking-wider transition-all shadow-lg shadow-[#FFB800]/20 active:scale-95 disabled:opacity-50 cursor-pointer flex items-center justify-center gap-2"
+          {/* 2. CO-OP — Expands CO-OP A.I & CO-OP ONLINE */}
+          <div
+            data-testid="home-mode-card-coop"
+            className={`neo-bevel-card rounded-xl border transition-all duration-150 overflow-hidden flex flex-col ${
+              expandedGroup === 'COOP'
+                ? 'border-[#00F0FF] neo-bevel-cyan'
+                : 'border-[#00F0FF]/45 hover:border-[#00F0FF] hover:-translate-y-0.5'
+            }`}
           >
-            <Shield className="w-4 h-4" />
-            <span>{t('CHỌN CHẾ ĐỘ CHIẾN ĐẤU', 'SELECT BATTLE MODE')}</span>
-          </button>
+            <button
+              type="button"
+              data-testid="home-mode-coop-toggle"
+              aria-expanded={expandedGroup === 'COOP'}
+              disabled={isActionDisabled}
+              onClick={() =>
+                setExpandedGroup((prev) => (prev === 'COOP' ? null : 'COOP'))
+              }
+              className="group w-full text-left p-5 flex flex-col justify-between min-h-[215px] sm:min-h-[235px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform"
+            >
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#00F0FF]/15 border border-[#00F0FF]/45 text-[#00F0FF] font-btn font-black text-xs uppercase tracking-wider">
+                  <Users className="w-3.5 h-3.5" />
+                  <span>2P CO-OP</span>
+                </span>
+                <span
+                  className={`w-8 h-8 rounded-lg bg-[#00F0FF]/15 border border-[#00F0FF]/40 flex items-center justify-center text-[#00F0FF] transition-transform duration-200 ${
+                    expandedGroup === 'COOP' ? 'rotate-180 bg-[#00F0FF] text-[#050510]' : ''
+                  }`}
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </span>
+              </div>
+
+              <div className="space-y-2 mt-auto">
+                <h2 className="font-btn text-2xl font-black text-[#EAF4FF] group-hover:text-[#00F0FF] transition-colors uppercase tracking-wide">
+                  CO-OP
+                </h2>
+                <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
+                  {t(
+                    'Hợp tác 2 chiến xa bảo vệ căn cứ cùng đồng đội A.I hoặc bạn bè trực tuyến qua phòng P2P.',
+                    'Cooperate with an Ally A.I tank or team up with a friend online via P2P room sync.'
+                  )}
+                </p>
+                <div className="pt-2 flex items-center gap-1.5 text-xs font-btn font-black text-[#00F0FF] uppercase tracking-wider">
+                  <span>
+                    {expandedGroup === 'COOP'
+                      ? t('Chọn chế độ CO-OP bên dưới', 'Choose CO-OP mode below')
+                      : t('Mở tùy chọn CO-OP', 'Expand CO-OP Options')}
+                  </span>
+                </div>
+              </div>
+            </button>
+
+            {expandedGroup === 'COOP' && (
+              <div
+                data-testid="home-coop-submodes"
+                className="px-4 pb-4 pt-2 border-t border-[#00F0FF]/25 bg-[#050510]/80 grid grid-cols-1 gap-2 animate-neo-expand"
+              >
+                <button
+                  type="button"
+                  data-testid="home-mode-card-coop-ai"
+                  disabled={isActionDisabled}
+                  onClick={() => handleCoopSubSelect('COOP_AI')}
+                  className="w-full min-h-[46px] px-3.5 py-2.5 rounded-lg bg-[#0b0d1e] hover:bg-[#00F0FF]/15 border border-[#00F0FF]/45 hover:border-[#00F0FF] flex items-center justify-between gap-2 text-left transition-colors cursor-pointer active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Bot className="w-4 h-4 text-[#00F0FF] shrink-0" />
+                    <div className="min-w-0">
+                      <div className="font-btn text-xs sm:text-sm font-black text-white uppercase">
+                        CO-OP A.I
+                      </div>
+                      <div className="text-[11px] text-neutral-400 truncate">
+                        {t('P1 phối hợp xe tăng A.I', 'P1 + Ally A.I Tank')}
+                      </div>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-[#00F0FF] shrink-0" />
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="home-mode-card-coop-online"
+                  disabled={isActionDisabled}
+                  onClick={() => handleCoopSubSelect('COOP_ONLINE')}
+                  className="w-full min-h-[46px] px-3.5 py-2.5 rounded-lg bg-[#0b0d1e] hover:bg-emerald-500/15 border border-emerald-400/45 hover:border-emerald-400 flex items-center justify-between gap-2 text-left transition-colors cursor-pointer active:scale-[0.99]"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Globe className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div className="min-w-0">
+                      <div className="font-btn text-xs sm:text-sm font-black text-white uppercase">
+                        CO-OP ONLINE
+                      </div>
+                      <div className="text-[11px] text-neutral-400 truncate">
+                        {t('Tạo / Tham gia phòng 2 thiết bị', 'Create / Join 2-device room')}
+                      </div>
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-emerald-400 shrink-0" />
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* 3. VS — Expands P1 VS P2 & P1 + A.I VS P2 + A.I (2-Device Online Lobby) */}
+          <div
+            data-testid="home-mode-card-vs"
+            className={`neo-bevel-card rounded-xl border transition-all duration-150 overflow-hidden flex flex-col ${
+              expandedGroup === 'VS'
+                ? 'border-[#FF0055] neo-bevel-red'
+                : 'border-[#FF0055]/45 hover:border-[#FF0055] hover:-translate-y-0.5'
+            }`}
+          >
+            <button
+              type="button"
+              data-testid="home-mode-vs-toggle"
+              aria-expanded={expandedGroup === 'VS'}
+              disabled={isActionDisabled}
+              onClick={() =>
+                setExpandedGroup((prev) => (prev === 'VS' ? null : 'VS'))
+              }
+              className="group w-full text-left p-5 flex flex-col justify-between min-h-[215px] sm:min-h-[235px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform"
+            >
+              <div className="flex items-center justify-between gap-2 mb-4">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#FF0055]/15 border border-[#FF0055]/45 text-[#FF0055] font-btn font-black text-xs uppercase tracking-wider">
+                  <Swords className="w-3.5 h-3.5" />
+                  <span>PVP ONLINE</span>
+                </span>
+                <span
+                  className={`w-8 h-8 rounded-lg bg-[#FF0055]/15 border border-[#FF0055]/40 flex items-center justify-center text-[#FF0055] transition-transform duration-200 ${
+                    expandedGroup === 'VS' ? 'rotate-180 bg-[#FF0055] text-white' : ''
+                  }`}
+                >
+                  <ChevronDown className="w-4 h-4" />
+                </span>
+              </div>
+
+              <div className="space-y-2 mt-auto">
+                <h2 className="font-btn text-2xl font-black text-[#EAF4FF] group-hover:text-[#FF0055] transition-colors uppercase tracking-wide">
+                  VS
+                </h2>
+                <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
+                  {t(
+                    'Đấu trường đối kháng trực tuyến trên 2 thiết bị riêng biệt. 3 phút • 3 mạng • Sudden Death • Không hòa.',
+                    'Real-time online PvP arena on 2 separate devices. 3 min • 3 lives • Sudden Death • No draw.'
+                  )}
+                </p>
+                <div className="pt-2 flex items-center gap-1.5 text-xs font-btn font-black text-[#FF0055] uppercase tracking-wider">
+                  <span>
+                    {expandedGroup === 'VS'
+                      ? t('Chọn thể thức VS Online bên dưới', 'Choose VS Online mode below')
+                      : t('Mở tùy chọn VS Online', 'Expand VS Online Options')}
+                  </span>
+                </div>
+              </div>
+            </button>
+
+            {expandedGroup === 'VS' && (
+              <div
+                data-testid="home-vs-submodes"
+                className="px-4 pb-4 pt-2 border-t border-[#FF0055]/25 bg-[#050510]/80 grid grid-cols-1 gap-2 animate-neo-expand"
+              >
+                <button
+                  type="button"
+                  data-testid="lobby-vs-p1-p2-btn"
+                  disabled={isActionDisabled || !onStartVsMatch}
+                  onClick={() => handleVsSubSelect('VS_P1_P2')}
+                  className="w-full min-h-[46px] px-3.5 py-2.5 rounded-lg bg-[#0b0d1e] hover:bg-[#FF0055]/15 border border-[#FF0055]/45 hover:border-[#FF0055] flex items-center justify-between gap-2 text-left transition-colors cursor-pointer disabled:opacity-50 active:scale-[0.99]"
+                >
+                  <div className="min-w-0">
+                    <div className="font-btn text-xs sm:text-sm font-black text-white uppercase flex items-center gap-1.5">
+                      <span
+                        className="w-2.5 h-2.5 rounded-xs shrink-0"
+                        style={{ backgroundColor: VS_TANK_COLOR_SPEC.P1.hex }}
+                      />
+                      <span>P1 VS P2</span>
+                      <span
+                        className="w-2.5 h-2.5 rounded-xs shrink-0"
+                        style={{ backgroundColor: VS_TANK_COLOR_SPEC.P2.hex }}
+                      />
+                    </div>
+                    <div className="text-[11px] text-neutral-400 truncate">
+                      {t('Đối kháng 1v1 trực tuyến 2 thiết bị', '1v1 Online PvP on 2 devices')}
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-[#FF0055] shrink-0" />
+                </button>
+
+                <button
+                  type="button"
+                  data-testid="lobby-vs-ai-btn"
+                  disabled={isActionDisabled || !onStartVsMatch}
+                  onClick={() => handleVsSubSelect('VS_P1_AI_P2_AI')}
+                  className="w-full min-h-[46px] px-3.5 py-2.5 rounded-lg bg-[#0b0d1e] hover:bg-[#FF0055]/15 border border-[#FF0055]/45 hover:border-[#FF0055] flex items-center justify-between gap-2 text-left transition-colors cursor-pointer disabled:opacity-50 active:scale-[0.99]"
+                >
+                  <div className="min-w-0">
+                    <div className="font-btn text-xs sm:text-sm font-black text-white uppercase flex items-center gap-1.5 flex-wrap">
+                      <span
+                        className="w-2.5 h-2.5 rounded-xs shrink-0"
+                        style={{ backgroundColor: VS_TANK_COLOR_SPEC.P1.hex }}
+                      />
+                      <span
+                        className="w-2.5 h-2.5 rounded-xs shrink-0"
+                        style={{ backgroundColor: VS_TANK_COLOR_SPEC.AI_1.hex }}
+                      />
+                      <span>P1 + A.I VS P2 + A.I</span>
+                      <span
+                        className="w-2.5 h-2.5 rounded-xs shrink-0"
+                        style={{ backgroundColor: VS_TANK_COLOR_SPEC.P2.hex }}
+                      />
+                      <span
+                        className="w-2.5 h-2.5 rounded-xs shrink-0"
+                        style={{ backgroundColor: VS_TANK_COLOR_SPEC.AI_2.hex }}
+                      />
+                    </div>
+                    <div className="text-[11px] text-neutral-400 truncate">
+                      {t('Đối kháng 2v2 trực tuyến 2 thiết bị', '2v2 Online PvP on 2 devices')}
+                    </div>
+                  </div>
+                  <ArrowRight className="w-4 h-4 text-[#FF0055] shrink-0" />
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </main>
 

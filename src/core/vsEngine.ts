@@ -859,6 +859,91 @@ export class VsEngine {
   }
 
   /**
+   * M7.8 Mục XIV: Xử lý rời trận trong chế độ VS ONLINE (chỉ xử lý đúng 1 lần, không ghi đè kết quả đã khóa).
+   * - P1 rời trận -> TEAM_2 (P2 / P2 + A.I) thắng ngay, lý do: "Đối thủ đã rời trận".
+   * - P2 rời trận -> TEAM_1 (P1 / P1 + A.I) thắng ngay, lý do: "Đối thủ đã rời trận".
+   * - Trong P1 + A.I VS P2 + A.I: phe còn lại thắng ngay lập tức, A.I KHÔNG thay thế người chơi đã rời.
+   */
+  public forfeitMatch(leavingRole: 'P1' | 'P2'): VsMatchOutcome {
+    if (this.state.outcome !== null || this.state.phase === 'FINISHED') {
+      return this.state.outcome!;
+    }
+
+    const winnerTeam: VsTeamId = leavingRole === 'P1' ? 'TEAM_2' : 'TEAM_1';
+    const loserTeam: VsTeamId = leavingRole === 'P1' ? 'TEAM_1' : 'TEAM_2';
+
+    const outcome: VsMatchOutcome = Object.freeze({
+      winnerTeam,
+      loserTeam,
+      team1Result: winnerTeam === 'TEAM_1' ? 'WIN' : 'LOSS',
+      team2Result: winnerTeam === 'TEAM_2' ? 'WIN' : 'LOSS',
+      decidedByRandom5050: false,
+      randomRollValue: null,
+      reason: 'OPPONENT_LEFT',
+      forfeitedBy: leavingRole,
+      reasonTextVi: 'Đối thủ đã rời trận',
+      reasonTextEn: 'Opponent left the match',
+      finishedAtTick: this.state.tickCount,
+    });
+
+    this.state.outcome = outcome;
+    this.state.phase = 'FINISHED';
+    this.bullets = [];
+    for (const c of this.state.combatants) {
+      c.respawnTicksRemaining = 0;
+      c.respawnSecondsRemaining = 0;
+      c.pendingRespawnBeforeSuddenDeath = false;
+      if (c.role === leavingRole) {
+        c.tank.isAlive = false;
+        c.isDead = true;
+        c.eliminatedPermanently = true;
+      }
+    }
+    this.syncTeamSummaries();
+    return outcome;
+  }
+
+  /**
+   * M7.8 Mục II: Đồng bộ trạng thái chuẩn (authoritative snapshot) từ máy Host (P1) lên máy Guest (P2).
+   * Guest tuyệt đối không tự chạy mô phỏng logic khi nhận snapshot.
+   */
+  public importAuthoritativeState(
+    snapshot: VsMatchState,
+    bullets: BulletStructure[] = []
+  ): void {
+    this.state = {
+      ...snapshot,
+      combatants: snapshot.combatants.map((c) => ({
+        ...c,
+        tank: { ...c.tank },
+      })),
+      team1: { ...snapshot.team1 },
+      team2: { ...snapshot.team2 },
+      safeZone: {
+        ...snapshot.safeZone,
+        bounds: { ...snapshot.safeZone.bounds },
+        nextBounds: { ...snapshot.safeZone.nextBounds },
+      },
+      outcome: snapshot.outcome ? Object.freeze({ ...snapshot.outcome }) : null,
+      xpGranted: 0,
+      starsGranted: 0,
+      coinsGranted: 0,
+    };
+    this.bullets = bullets.map((b) => ({
+      ...b,
+      team: b.ownerId === 'vs_p1' || b.ownerId === 'vs_ai1' ? 'TEAM_1' : 'TEAM_2',
+      ownerRole:
+        b.ownerId === 'vs_p1'
+          ? 'P1'
+          : b.ownerId === 'vs_ai1'
+            ? 'AI_1'
+            : b.ownerId === 'vs_ai2'
+              ? 'AI_2'
+              : 'P2',
+    }));
+  }
+
+  /**
    * Hàm hỗ trợ kiểm thử & mô phỏng có kiểm soát: đặt vị trí / hướng / trạng thái xe tăng
    * hoặc đẩy nhanh đồng hồ hiệp chính mà vẫn đi qua toàn bộ luật lõi của VsEngine.
    */

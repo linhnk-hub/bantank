@@ -10,30 +10,33 @@ import {
   Crosshair,
   Flame,
   Heart,
-  Pause,
-  RotateCcw,
   Shield,
   Skull,
   Swords,
 } from 'lucide-react';
 import { formatCountdownMMSS } from '../core/constants.ts';
 import type { GameCoreState } from '../core/types.ts';
-import type { VsCombatantState, VsMatchState } from '../core/vsTypes.ts';
+import {
+  VS_TANK_COLOR_SPEC,
+  type VsCombatantState,
+  type VsMatchState,
+} from '../core/vsTypes.ts';
 import { useLanguage } from '../core/i18n.ts';
 
 interface VsHudProps {
   state: GameCoreState | null;
   compact?: boolean;
+  localOnlineRole?: 'HOST' | 'GUEST' | null;
   onPause?: () => void;
   onReset?: () => void;
 }
 
-const CombatantRow: React.FC<{ c: VsCombatantState; accent: 'red' | 'amber' }> = ({
+const CombatantRow: React.FC<{ c: VsCombatantState; isLocal?: boolean }> = ({
   c,
-  accent,
+  isLocal = false,
 }) => {
   const { t } = useLanguage();
-  const isRed = accent === 'red';
+  const colorSpec = VS_TANK_COLOR_SPEC[c.role];
 
   return (
     <div
@@ -43,29 +46,25 @@ const CombatantRow: React.FC<{ c: VsCombatantState; accent: 'red' | 'amber' }> =
           ? 'bg-rose-950/70 border-[#FF0055] animate-pulse'
           : c.eliminatedPermanently
             ? 'bg-neutral-950/70 border-neutral-800 opacity-65'
-            : isRed
-              ? 'bg-red-950/25 border-red-500/35'
-              : 'bg-amber-950/25 border-[#FFB800]/35'
+            : `${colorSpec.badgeBgClass} ${colorSpec.badgeBorderClass}`
       }`}
     >
       <div className="flex items-center justify-between gap-2">
         <div className="flex items-center gap-1.5 min-w-0">
           <span
-            className={`w-2 h-2 rounded-sm shrink-0 ${
-              c.eliminatedPermanently
-                ? 'bg-neutral-600'
-                : isRed
-                  ? c.isAI
-                    ? 'bg-rose-400'
-                    : 'bg-red-500'
-                  : c.isAI
-                    ? 'bg-cyan-400'
-                    : 'bg-[#FFB800]'
-            }`}
+            className="w-2.5 h-2.5 rounded-sm shrink-0 border border-white/30"
+            style={{
+              backgroundColor: c.eliminatedPermanently ? '#525252' : colorSpec.hex,
+            }}
           />
-          <span className="font-btn font-black text-xs text-white tracking-wider truncate">
+          <span className={`font-btn font-black text-xs tracking-wider truncate ${colorSpec.badgeTextClass}`}>
             {c.label}
           </span>
+          {isLocal && (
+            <span className="font-mono text-[9px] font-black px-1 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/50 text-emerald-300">
+              {t('BẠN', 'YOU')}
+            </span>
+          )}
           {c.isAI && (
             <span className="font-mono text-[9px] font-bold px-1 py-0.5 rounded bg-neutral-900 border border-neutral-700 text-neutral-300">
               A.I
@@ -82,13 +81,12 @@ const CombatantRow: React.FC<{ c: VsCombatantState; accent: 'red' | 'amber' }> =
           {[0, 1, 2].map((idx) => (
             <Heart
               key={idx}
-              className={`w-3.5 h-3.5 ${
+              className="w-3.5 h-3.5"
+              style={
                 idx < c.lives
-                  ? isRed
-                    ? 'text-red-500 fill-red-500'
-                    : 'text-[#FFB800] fill-[#FFB800]'
-                  : 'text-neutral-700'
-              }`}
+                  ? { color: colorSpec.hex, fill: colorSpec.hex }
+                  : { color: '#404040' }
+              }
             />
           ))}
           <span className="font-hud text-xs font-black text-neutral-200 ml-0.5">{c.lives}</span>
@@ -142,10 +140,15 @@ const CombatantRow: React.FC<{ c: VsCombatantState; accent: 'red' | 'amber' }> =
   );
 };
 
-export const VsHud: React.FC<VsHudProps> = ({ state, compact = false, onPause, onReset }) => {
+export const VsHud: React.FC<VsHudProps> = ({
+  state,
+  compact = false,
+  localOnlineRole = null,
+}) => {
   const { t } = useLanguage();
   const vs: VsMatchState | null | undefined = state?.vsState;
   if (!vs) return null;
+  const localCombatantRole = localOnlineRole === 'GUEST' ? 'P2' : 'P1';
 
   const isSuddenDeath = vs.phase === 'SUDDEN_DEATH';
   const isTransition = vs.phase === 'SUDDEN_DEATH_TRANSITION';
@@ -213,46 +216,60 @@ export const VsHud: React.FC<VsHudProps> = ({ state, compact = false, onPause, o
         {/* Per-tank mini status pills */}
         <div className="grid grid-cols-2 gap-1.5 text-[10px]">
           <div className="flex flex-wrap gap-1">
-            {team1Members.map((c) => (
-              <span
-                key={c.id}
-                className={`px-1.5 py-0.5 rounded border font-mono font-bold ${
-                  c.inDangerZone
-                    ? 'bg-[#FF0055] border-white text-white'
-                    : c.eliminatedPermanently
-                      ? 'bg-neutral-900 border-neutral-700 text-neutral-500'
-                      : 'bg-red-950/40 border-red-500/40 text-red-200'
-                }`}
-              >
-                {c.label}:♥{c.lives}
-                {c.isDead && c.respawnTicksRemaining > 0
-                  ? ` ⏳${c.respawnSecondsRemaining}s`
-                  : c.protectionTicksRemaining > 0
-                    ? ` 🛡${c.protectionSecondsRemaining}s`
-                    : ''}
-              </span>
-            ))}
+            {team1Members.map((c) => {
+              const colorSpec = VS_TANK_COLOR_SPEC[c.role];
+              return (
+                <span
+                  key={c.id}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-mono font-bold ${
+                    c.inDangerZone
+                      ? 'bg-[#FF0055] border-white text-white'
+                      : c.eliminatedPermanently
+                        ? 'bg-neutral-900 border-neutral-700 text-neutral-500'
+                        : `${colorSpec.badgeBgClass} ${colorSpec.badgeBorderClass} ${colorSpec.badgeTextClass}`
+                  }`}
+                >
+                  <span
+                    className="w-2 h-2 rounded-xs shrink-0"
+                    style={{ backgroundColor: colorSpec.hex }}
+                  />
+                  {c.label}:♥{c.lives}
+                  {c.isDead && c.respawnTicksRemaining > 0
+                    ? ` ⏳${c.respawnSecondsRemaining}s`
+                    : c.protectionTicksRemaining > 0
+                      ? ` 🛡${c.protectionSecondsRemaining}s`
+                      : ''}
+                </span>
+              );
+            })}
           </div>
           <div className="flex flex-wrap justify-end gap-1">
-            {team2Members.map((c) => (
-              <span
-                key={c.id}
-                className={`px-1.5 py-0.5 rounded border font-mono font-bold ${
-                  c.inDangerZone
-                    ? 'bg-[#FF0055] border-white text-white'
-                    : c.eliminatedPermanently
-                      ? 'bg-neutral-900 border-neutral-700 text-neutral-500'
-                      : 'bg-amber-950/40 border-[#FFB800]/40 text-amber-200'
-                }`}
-              >
-                {c.label}:♥{c.lives}
-                {c.isDead && c.respawnTicksRemaining > 0
-                  ? ` ⏳${c.respawnSecondsRemaining}s`
-                  : c.protectionTicksRemaining > 0
-                    ? ` 🛡${c.protectionSecondsRemaining}s`
-                    : ''}
-              </span>
-            ))}
+            {team2Members.map((c) => {
+              const colorSpec = VS_TANK_COLOR_SPEC[c.role];
+              return (
+                <span
+                  key={c.id}
+                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border font-mono font-bold ${
+                    c.inDangerZone
+                      ? 'bg-[#FF0055] border-white text-white'
+                      : c.eliminatedPermanently
+                        ? 'bg-neutral-900 border-neutral-700 text-neutral-500'
+                        : `${colorSpec.badgeBgClass} ${colorSpec.badgeBorderClass} ${colorSpec.badgeTextClass}`
+                  }`}
+                >
+                  <span
+                    className="w-2 h-2 rounded-xs shrink-0"
+                    style={{ backgroundColor: colorSpec.hex }}
+                  />
+                  {c.label}:♥{c.lives}
+                  {c.isDead && c.respawnTicksRemaining > 0
+                    ? ` ⏳${c.respawnSecondsRemaining}s`
+                    : c.protectionTicksRemaining > 0
+                      ? ` 🛡${c.protectionSecondsRemaining}s`
+                      : ''}
+                </span>
+              );
+            })}
           </div>
         </div>
 
@@ -399,7 +416,7 @@ export const VsHud: React.FC<VsHudProps> = ({ state, compact = false, onPause, o
         </div>
         <div className="flex flex-col gap-1.5">
           {team1Members.map((c) => (
-            <CombatantRow key={c.id} c={c} accent="red" />
+            <CombatantRow key={c.id} c={c} isLocal={c.role === localCombatantRole} />
           ))}
         </div>
       </div>
@@ -407,60 +424,38 @@ export const VsHud: React.FC<VsHudProps> = ({ state, compact = false, onPause, o
       {/* TEAM 2 Panel */}
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
-          <span className="font-btn font-black text-xs uppercase tracking-wider text-[#FFB800]">
+          <span className="font-btn font-black text-xs uppercase tracking-wider text-yellow-400">
             {t('PHE 2 (TEAM 2)', 'TEAM 2')}
           </span>
           <span
             data-testid="vs-hud-team2-kills"
-            className="font-mono text-xs font-black text-white px-2 py-0.5 rounded bg-amber-950/70 border border-[#FFB800]/40"
+            className="font-mono text-xs font-black text-white px-2 py-0.5 rounded bg-yellow-950/70 border border-yellow-500/40"
           >
             {t(`Tiêu diệt: ${vs.team2.totalKills}`, `Kills: ${vs.team2.totalKills}`)}
           </span>
         </div>
         <div className="flex flex-col gap-1.5">
           {team2Members.map((c) => (
-            <CombatantRow key={c.id} c={c} accent="amber" />
+            <CombatantRow key={c.id} c={c} isLocal={c.role === localCombatantRole} />
           ))}
         </div>
       </div>
 
-      {/* Keyboard Controls Quick Reference */}
+      {/* Online Single-Device Controls Quick Reference (VS Online: 2 separate devices, NO local pause) */}
       <div className="rounded bg-[#050510] border border-neutral-800 px-3 py-2 text-[11px] font-mono text-neutral-300 space-y-1">
         <div className="flex items-center justify-between gap-2">
-          <span className="text-red-400 font-bold">P1:</span>
-          <span>W A S D • Space / J</span>
+          <span className={localCombatantRole === 'P1' ? 'text-red-400 font-bold' : 'text-yellow-400 font-bold'}>
+            {t(`Vai trò máy này (${localCombatantRole}):`, `Your Tank (${localCombatantRole}):`)}
+          </span>
+          <span>WASD / ↑↓←→ • Space / J</span>
         </div>
-        <div className="flex items-center justify-between gap-2">
-          <span className="text-[#FFB800] font-bold">P2:</span>
-          <span>↑ ↓ ← → • Enter / K / Num0</span>
-        </div>
+        <p className="text-[10px] text-neutral-500">
+          {t(
+            'VS Online không tạm dừng trận đấu. Dùng nút Thoát ở thanh trên để rời trận.',
+            'VS Online cannot be paused. Use the top Exit button to leave the match.'
+          )}
+        </p>
       </div>
-
-      {/* Action Buttons */}
-      {(onPause || onReset) && (
-        <div className="grid grid-cols-2 gap-2 pt-1">
-          {onPause && (
-            <button
-              type="button"
-              onClick={onPause}
-              className="font-btn py-2 px-3 rounded bg-[#050510] hover:bg-neutral-800 border border-[#FFB800]/50 text-[#FFB800] text-xs font-black uppercase flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <Pause className="w-3.5 h-3.5" />
-              <span>{t('Tạm dừng', 'Pause')}</span>
-            </button>
-          )}
-          {onReset && (
-            <button
-              type="button"
-              onClick={onReset}
-              className="font-btn py-2 px-3 rounded bg-[#050510] hover:bg-neutral-800 border border-neutral-700 text-neutral-200 text-xs font-black uppercase flex items-center justify-center gap-1.5 cursor-pointer"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span>{t('Đấu lại', 'Restart')}</span>
-            </button>
-          )}
-        </div>
-      )}
     </div>
   );
 };

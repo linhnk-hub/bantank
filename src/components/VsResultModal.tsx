@@ -4,8 +4,9 @@
  */
 
 import React from 'react';
-import { Crown, Heart, Home, RotateCcw, Shuffle, Swords, Trophy } from 'lucide-react';
+import { Crown, Heart, Home, LogOut, RotateCcw, Shuffle, Swords, Trophy } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
+import { VS_TANK_COLOR_SPEC } from '../core/vsTypes.ts';
 import { useLanguage } from '../core/i18n.ts';
 
 interface VsResultModalProps {
@@ -74,6 +75,22 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
               {loserLabel}: LOSS
             </span>
           </div>
+
+          {/* Opponent Left Forfeit Notice (M7.8 Section XIV) */}
+          {outcome.reason === 'OPPONENT_LEFT' && (
+            <div
+              data-testid="vs-result-opponent-left-notice"
+              className="mt-2 px-3 py-1.5 rounded bg-rose-950/80 border border-[#FF0055]/75 text-rose-200 text-xs font-bold flex items-center gap-1.5"
+            >
+              <LogOut className="w-3.5 h-3.5 shrink-0 text-[#FF0055]" />
+              <span>
+                {t(
+                  outcome.reasonTextVi || 'Đối thủ đã rời trận',
+                  outcome.reasonTextEn || 'Opponent left the match'
+                )}
+              </span>
+            </div>
+          )}
 
           {/* Mandatory 50/50 Simultaneous Elimination Notice */}
           {outcome.decidedByRandom5050 && (
@@ -181,32 +198,34 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
               <span className="col-span-2 text-right">{t('Mạng', 'Lives')}</span>
             </div>
             <div className="divide-y divide-neutral-800/80 text-xs font-mono">
-              {vs.combatants.map((c) => (
-                <div key={c.id} className="px-3 py-2 grid grid-cols-12 items-center">
-                  <span className="col-span-4 font-btn font-bold text-white flex items-center gap-1.5">
+              {vs.combatants.map((c) => {
+                const colorSpec = VS_TANK_COLOR_SPEC[c.role];
+                return (
+                  <div key={c.id} className="px-3 py-2 grid grid-cols-12 items-center">
+                    <span className={`col-span-4 font-btn font-bold flex items-center gap-1.5 ${colorSpec.badgeTextClass}`}>
+                      <span
+                        className="w-2.5 h-2.5 rounded-xs border border-white/30 shrink-0"
+                        style={{ backgroundColor: colorSpec.hex }}
+                      />
+                      {c.label}
+                    </span>
                     <span
-                      className={`w-2 h-2 rounded-sm ${
-                        c.team === 'TEAM_1' ? 'bg-red-500' : 'bg-[#FFB800]'
+                      className={`col-span-2 text-center text-[10px] font-bold ${
+                        c.team === 'TEAM_1' ? 'text-red-400' : 'text-yellow-400'
                       }`}
-                    />
-                    {c.label}
-                  </span>
-                  <span
-                    className={`col-span-2 text-center text-[10px] font-bold ${
-                      c.team === 'TEAM_1' ? 'text-red-400' : 'text-[#FFB800]'
-                    }`}
-                  >
-                    {c.team === 'TEAM_1' ? 'T1' : 'T2'}
-                  </span>
-                  <span className="col-span-2 text-center font-black text-emerald-400">
-                    {c.kills}
-                  </span>
-                  <span className="col-span-2 text-center text-rose-400">{c.deaths}</span>
-                  <span className="col-span-2 text-right font-bold text-neutral-200">
-                    {c.lives}
-                  </span>
-                </div>
-              ))}
+                    >
+                      {c.team === 'TEAM_1' ? 'T1' : 'T2'}
+                    </span>
+                    <span className="col-span-2 text-center font-black text-emerald-400">
+                      {c.kills}
+                    </span>
+                    <span className="col-span-2 text-center text-rose-400">{c.deaths}</span>
+                    <span className="col-span-2 text-right font-bold text-neutral-200">
+                      {c.lives}
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 

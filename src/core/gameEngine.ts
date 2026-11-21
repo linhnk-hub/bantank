@@ -164,7 +164,11 @@ export function validateAndNormalizeAuthoritativeSnapshot(
   if (s.difficulty !== 'DEFAULT' && s.difficulty !== 'EXTREME') {
     return reject('INVALID_DIFFICULTY');
   }
-  const expectedDurationSeconds = getMatchDurationSecondsForDifficulty(s.difficulty);
+
+  const isVsSnap = isVsGameMode(s.gameMode);
+  const expectedDurationSeconds = isVsSnap
+    ? VS_RULES_CONFIG.NORMAL_DURATION_SECONDS
+    : getMatchDurationSecondsForDifficulty(s.difficulty);
   const maxTicks = expectedDurationSeconds * MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
 
   // 5. Validate matchDurationSeconds
@@ -185,9 +189,11 @@ export function validateAndNormalizeAuthoritativeSnapshot(
   ) {
     return reject('INVALID_REMAINING_TICKS');
   }
-  const expectedRemainingTicks = Math.max(0, maxTicks - s.tickCount);
-  if (s.remainingTicks !== expectedRemainingTicks) {
-    return reject('MISMATCHED_REMAINING_TICKS');
+  if (!isVsSnap) {
+    const expectedRemainingTicks = Math.max(0, maxTicks - s.tickCount);
+    if (s.remainingTicks !== expectedRemainingTicks) {
+      return reject('MISMATCHED_REMAINING_TICKS');
+    }
   }
 
   // 7. Validate remainingSeconds === Math.ceil(remainingTicks / 60)
@@ -210,10 +216,12 @@ export function validateAndNormalizeAuthoritativeSnapshot(
   ) {
     return reject('INVALID_ELAPSED_SECONDS');
   }
-  const expectedElapsedSeconds =
-    (maxTicks - s.remainingTicks) / MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
-  if (Math.abs(s.stageElapsedSeconds - expectedElapsedSeconds) > 0.05) {
-    return reject('MISMATCHED_ELAPSED_SECONDS');
+  if (!isVsSnap) {
+    const expectedElapsedSeconds =
+      (maxTicks - s.remainingTicks) / MATCH_TIMER_CONFIG.TICKS_PER_SECOND;
+    if (Math.abs(s.stageElapsedSeconds - expectedElapsedSeconds) > 0.05) {
+      return reject('MISMATCHED_ELAPSED_SECONDS');
+    }
   }
 
   // 9. Validate outcome booleans & mutual exclusion
@@ -263,8 +271,8 @@ export function validateAndNormalizeAuthoritativeSnapshot(
     return reject('MISMATCHED_MATCH_STATE');
   }
 
-  // 11. Validate remainingTicks === 0 terminal outcome resolution
-  if (s.remainingTicks === 0 && !s.isGameOver && !s.isStageClear) {
+  // 11. Validate remainingTicks === 0 terminal outcome resolution (in VS, Sudden Death runs with remainingTicks === 0)
+  if (!isVsSnap && s.remainingTicks === 0 && !s.isGameOver && !s.isStageClear) {
     return reject('UNRESOLVED_ZERO_TICKS_OUTCOME');
   }
 
@@ -602,6 +610,26 @@ export class GameEngine {
 
   public getVsEngine(): VsEngine | null {
     return this.vsEngine;
+  }
+
+  /**
+   * M7.8 Mục XIV: Kết thúc trận VS ONLINE ngay lập tức khi một người chơi rời trận.
+   * Xử lý duy nhất 1 lần (idempotent), khóa kết quả WIN/LOSS rõ ràng với lý do "Đối thủ đã rời trận".
+   */
+  public forfeitVsMatch(leavingRole: 'P1' | 'P2'): boolean {
+    if (!isVsGameMode(this.gameMode) || !this.vsEngine) {
+      return false;
+    }
+    const alreadyFinished = this.vsEngine.getState().phase === 'FINISHED';
+    this.vsEngine.forfeitMatch(leavingRole);
+    this.syncStateFromVsEngine();
+    this.state.isGameOver = true;
+    this.state.matchState = MATCH_STATES.SUMMARY_STATS;
+    this.state.gameOverReason = 'Đối thủ đã rời trận';
+    this.state.peerLeaveNotice =
+      leavingRole === 'P1' ? 'P1 đã rời trận — P2 thắng!' : 'P2 đã rời trận — P1 thắng!';
+    this.matchStateMachine.transitionTo(MATCH_STATES.SUMMARY_STATS, true);
+    return !alreadyFinished;
   }
 
   public setGameMode(mode: GameEngineMode): void {
@@ -2496,6 +2524,15 @@ export class GameEngine {
       }
     }
     this.state.terrain.isBaseDestroyed = snapshot.isBaseDestroyed;
+    if (isVsGameMode(snapshot.gameMode) && snapshot.vsState) {
+      this.gameMode = snapshot.gameMode;
+      this.state.gameMode = snapshot.gameMode;
+      if (!this.vsEngine || this.vsEngine.getState().mode !== snapshot.gameMode) {
+        this.vsEngine = new VsEngine(snapshot.gameMode);
+      }
+      this.vsEngine.importAuthoritativeState(snapshot.vsState, this.state.bullets);
+      this.state.vsState = this.vsEngine.getState();
+    }
     this.state.isGameOver = snapshot.isGameOver;
     this.state.isStageClear = snapshot.isStageClear;
     this.state.isTimeoutGameOver = snapshot.isTimeoutGameOver;

@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
   Info,
@@ -19,6 +19,8 @@ import {
   Keyboard,
   Lock,
   Mail,
+  Swords,
+  MessageSquare,
 } from 'lucide-react';
 import { formatSentenceLineBreaks } from '../core/textFormat.ts';
 import { useLanguage } from '../core/i18n.ts';
@@ -34,10 +36,16 @@ interface SupportModalProps {
 export const SupportModal: React.FC<SupportModalProps> = ({
   isOpen,
   onClose,
-  initialTab = 'GUIDE',
+  initialTab = 'ABOUT',
 }) => {
   const { t } = useLanguage();
   const [activeTab, setActiveTab] = useState<SupportTabId>(initialTab);
+
+  useEffect(() => {
+    if (isOpen) {
+      setActiveTab(initialTab);
+    }
+  }, [isOpen, initialTab]);
 
   if (!isOpen) return null;
 
@@ -175,10 +183,20 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                   <li className="flex items-start gap-2">
                     <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                     <span>
-                      <strong>{t('3 Chế độ chiến đấu:', '3 Battle Modes:')}</strong>{' '}
+                      <strong>{t('3 Nhóm Chế độ Chiến đấu (SOLO • CO-OP • VS ONLINE):', '3 Battle Mode Groups (SOLO • CO-OP • VS ONLINE):')}</strong>{' '}
                       {t(
-                        'SOLO, CO-OP A.I (cùng đồng đội A.I) và CO-OP ONLINE (2 người chơi trực tuyến).',
-                        'SOLO, CO-OP A.I (with A.I partner), and CO-OP ONLINE (2 players online).'
+                        'SOLO vào trận trực tiếp; CO-OP gồm CO-OP A.I và CO-OP ONLINE (2 thiết bị); VS ONLINE đối kháng trực tuyến trên 2 thiết bị riêng biệt (P1 vs P2 và P1 + A.I vs P2 + A.I).',
+                        'SOLO launches directly into battle; CO-OP includes CO-OP A.I and 2-device CO-OP ONLINE; VS ONLINE offers real-time 2-device PvP (P1 vs P2 and P1 + A.I vs P2 + A.I).'
+                      )}
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-2">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
+                    <span>
+                      <strong>{t('Hệ thống Xã hội & Kết bạn:', 'Social & Friends System:')}</strong>{' '}
+                      {t(
+                        'Hiển thị người chơi đang Online, Chat chung thời gian thực, tìm kiếm tài khoản Online/Offline, quản lý Bạn bè (kết bạn, lời mời, xóa bạn, mời vào phòng), Chat riêng 1-1 và Chặn người chơi.',
+                        'Live Online presence, real-time Global Chat, Online/Offline account search, Friends management (requests, unfriend, room invites), 1-on-1 Private Chat, and independent Block controls.'
                       )}
                     </span>
                   </li>
@@ -187,8 +205,8 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                     <span>
                       <strong>{t('Hệ thống 17 Cấp bậc Quân hàm & Sao ⭐:', '17 Military Ranks & Star ⭐ Economy:')}</strong>{' '}
                       {t(
-                        'Tích lũy điểm kinh nghiệm (XP) qua từng trận đấu, thăng tiến từ Binh nhì lên Đại tướng và tự động quy đổi 25 XP = 1 Sao ⭐ theo tài khoản Google cá nhân.',
-                        'Earn XP across matches, advance from Private to General across 17 military ranks, and auto-convert 25 XP = 1 Star ⭐ synced to your Google account.'
+                        'Tích lũy điểm Kinh nghiệm (XP) qua từng trận chiến dịch, thăng tiến từ Binh nhì lên Đại tướng và tự động quy đổi 25 XP = 1 Sao ⭐ theo tài khoản Google cá nhân.',
+                        'Earn Experience (XP) across campaign matches, advance from Private to General across 17 military ranks, and auto-convert 25 XP = 1 Star ⭐ synced to your Google account.'
                       )}
                     </span>
                   </li>
@@ -361,9 +379,11 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                     <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-[#FFB800] font-mono">J</kbd>
                   </li>
                   <li>
-                    • <strong>{t('Tạm dừng:', 'Pause:')}</strong>{' '}
-                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-[#FFB800] font-mono">P</kbd> {t('hoặc', 'or')}{' '}
-                    <kbd className="px-1.5 py-0.5 rounded bg-neutral-800 text-[#FFB800] font-mono">ESC</kbd>
+                    • <strong>{t('Tạm dừng / Thoát:', 'Pause / Exit:')}</strong>{' '}
+                    {t(
+                      'SOLO & CO-OP A.I dùng phím P / ESC hoặc nút 3 gạch để tạm dừng. CO-OP ONLINE & VS ONLINE không tạm dừng — dùng nút Thoát trên thanh đầu trang.',
+                      'SOLO & CO-OP A.I use P / ESC or the hamburger menu to pause. CO-OP ONLINE & VS ONLINE cannot be paused — use the top Exit button.'
+                    )}
                   </li>
                 </ul>
               </div>
@@ -418,13 +438,13 @@ export const SupportModal: React.FC<SupportModalProps> = ({
             </div>
           </div>
 
-          {/* 3. Phân biệt 3 chế độ chơi */}
+          {/* 3. Phân biệt các chế độ chơi (SOLO, CO-OP A.I, CO-OP ONLINE, VS ONLINE) */}
           <div className="bg-[#050510]/85 border border-neutral-800 rounded-lg p-3.5 space-y-2.5">
             <div className="font-btn flex items-center gap-2 text-[#FFB800] font-black uppercase tracking-wider">
               <Users className="w-4 h-4 shrink-0" />
-              <span>{t('3. Các chế độ chơi', '3. Game Modes')}</span>
+              <span>{t('3. Các chế độ chơi & Màu xe tăng VS', '3. Game Modes & VS Tank Colors')}</span>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-[11px]">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px]">
               <div className="p-2.5 rounded bg-[#0b0d1e] border border-neutral-800">
                 <div className="font-btn font-bold text-[#FFB800] flex items-center gap-1.5 mb-1">
                   <Gamepad2 className="w-3.5 h-3.5" />
@@ -432,8 +452,8 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                 </div>
                 <p className="text-neutral-400">
                   {t(
-                    'Chiến đấu độc lập điều khiển chiến xa bảo vệ căn cứ và vượt qua các màn chơi.',
-                    'Command Tank P1 solo to defend the headquarters and conquer all 10 campaign stages.'
+                    'Nhấn SOLO từ màn hình chính để vào trận ngay. Chiến đấu độc lập bảo vệ căn cứ Đại Bàng qua 10 màn chiến dịch.',
+                    'Tap SOLO on Home to enter battle directly. Defend the Eagle Base solo across 10 campaign stages.'
                   )}
                 </p>
               </div>
@@ -444,8 +464,8 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                 </div>
                 <p className="text-neutral-400">
                   {t(
-                    'Sát cánh cùng đồng đội A.I thông minh để bảo vệ căn cứ và vượt qua các màn chơi.',
-                    'Fight alongside an intelligent A.I Tank P2 partner to defend the base and clear stages.'
+                    'Sát cánh cùng đồng đội A.I thông minh để bảo vệ căn cứ. Hỗ trợ tạm dừng bằng nút 3 gạch hoặc P / ESC.',
+                    'Fight alongside an intelligent A.I partner to defend the base. Supports pause via hamburger menu or P / ESC.'
                   )}
                 </p>
               </div>
@@ -456,15 +476,58 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                 </div>
                 <p className="text-neutral-400">
                   {t(
-                    'Tạo phòng hoặc nhập mã phòng 6 ký tự để phối hợp cùng người chơi P2 qua Internet.',
-                    'Create a room or enter a 6-character BTxxxx code to team up with Player 2 online.'
+                    'Tạo phòng hoặc nhập mã phòng BTxxxx cùng người chơi P2 trên 2 thiết bị riêng. Không tạm dừng; dùng nút Thoát để rời trận.',
+                    'Create or join a BTxxxx room with Player 2 on 2 separate devices. No pause; use Exit to leave match.'
+                  )}
+                </p>
+              </div>
+              <div className="p-2.5 rounded bg-[#0b0d1e] border border-[#FF0055]/40">
+                <div className="font-btn font-bold text-[#FF0055] flex items-center gap-1.5 mb-1">
+                  <Swords className="w-3.5 h-3.5" />
+                  <span>VS ONLINE (2 Thiết bị)</span>
+                </div>
+                <p className="text-neutral-400">
+                  {t(
+                    'P1 vs P2 và P1 + A.I vs P2 + A.I trên 2 thiết bị riêng (Host = P1 Đỏ, AI_1 = Xanh biển nhạt, Guest = P2 Vàng, AI_2 = Xám). 3 phút, 3 mạng, Sudden Death thu hẹp mỗi 20s, không hòa. Rời trận sẽ xử thắng đối thủ ("Đối thủ đã rời trận").',
+                    'P1 vs P2 and P1 + A.I vs P2 + A.I across 2 devices (Host = Red P1, Light Sky AI_1, Guest = Yellow P2, Gray AI_2). 3 min, 3 lives, 20s Sudden Death shrink, no draw. Leaving forfeits ("Opponent left the match").'
                   )}
                 </p>
               </div>
             </div>
           </div>
 
-          {/* 4. Xử lý sự cố cơ bản */}
+          {/* 4. Hệ thống Xã hội, Chat & Bạn bè */}
+          <div className="bg-[#050510]/85 border border-neutral-800 rounded-lg p-3.5 space-y-2">
+            <div className="font-btn flex items-center gap-2 text-[#00F0FF] font-black uppercase tracking-wider">
+              <MessageSquare className="w-4 h-4 shrink-0" />
+              <span>{t('4. Online, Chat chung, Tìm kiếm & Bạn bè', '4. Online, Global Chat, Search & Friends')}</span>
+            </div>
+            <ul className="space-y-1 text-[11px] text-neutral-300">
+              <li>
+                • <strong>{t('Nút Online nổi:', 'Floating Online Button:')}</strong>{' '}
+                {t(
+                  'Xem danh sách người chơi đang Online, trò chuyện tại Chat chung (tối đa 300 ký tự) hoặc tìm tài khoản Online/Offline theo tên hoặc mã người chơi.',
+                  'View Online players, chat in real-time Global Chat (max 300 chars), or search Online/Offline players by display name or player tag.'
+                )}
+              </li>
+              <li>
+                • <strong>{t('Mục Bạn bè trên Menu đầu trang:', 'Top Menu Friends Hub:')}</strong>{' '}
+                {t(
+                  'Quản lý 4 tab (Bạn bè, Lời mời nhận, Lời mời gửi, Đã xóa bạn), gửi lời mời vào phòng và mở Chat riêng 1-1.',
+                  'Manage 4 tabs (Friends, Received, Sent, Deleted Friends), send room invites, and open 1-on-1 Private Chat.'
+                )}
+              </li>
+              <li>
+                • <strong>{t('Chặn & Xóa bạn độc lập:', 'Independent Block & Unfriend:')}</strong>{' '}
+                {t(
+                  'Xóa bạn không xóa lịch sử chat và không tự động Chặn; Chặn sẽ khóa tin nhắn riêng nhưng vẫn giữ nguyên lịch sử trò chuyện.',
+                  'Unfriending preserves chat history and does not auto-Block; Blocking restricts private messages without deleting chat history.'
+                )}
+              </li>
+            </ul>
+          </div>
+
+          {/* 5. Xử lý sự cố cơ bản */}
           <div className="bg-[#050510]/85 border border-neutral-800 rounded-lg p-3.5 space-y-1.5">
             <div className="font-btn flex items-center gap-2 text-[#FFB800] font-black uppercase tracking-wider">
               <Wifi className="w-4 h-4 shrink-0" />
