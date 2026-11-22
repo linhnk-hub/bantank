@@ -1273,6 +1273,12 @@ export class SocialManager {
     return this.getOnlinePlayersSnapshot(nowMs).length;
   }
 
+  public async refreshPresenceSnapshot(nowMs: number = Date.now()): Promise<PublicPlayerProfile[]> {
+    const records = await this.adapter.listPresenceRecords(100);
+    this.handlePresenceBatchUpdate(records, nowMs);
+    return this.getOnlinePlayersSnapshot(nowMs);
+  }
+
   private buildPresenceRecordForUser(
     user: AuthIdentityLike,
     sessionId: string | null,
@@ -1895,6 +1901,17 @@ export class SocialManager {
       SOCIAL_CONFIG.PRIVATE_CHAT_PAGE_SIZE,
       onUpdate
     );
+  }
+
+  public subscribeLatestPrivateMessage(
+    myUid: string,
+    peerUid: string,
+    onLatest: (latestMsg: PrivateChatMessage | null) => void
+  ): Unsubscribe {
+    const chatId = buildPairId(myUid, peerUid);
+    return this.adapter.subscribePrivateMessages(chatId, 1, (msgs) => {
+      onLatest(msgs.length > 0 ? msgs[msgs.length - 1] : null);
+    });
   }
 
   public async loadOlderPrivateMessages(

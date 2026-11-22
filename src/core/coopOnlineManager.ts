@@ -12,7 +12,7 @@ import {
   onSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
-import { getFirebaseDb } from './firebaseConfig.ts';
+import { getFirebaseAuth, getFirebaseDb } from './firebaseConfig.ts';
 import { AuthManager, getUserDisplayLabel } from './authManager.ts';
 import { AvatarManager } from './avatarManager.ts';
 import { SessionManager } from './sessionManager.ts';
@@ -110,6 +110,14 @@ export interface CoopPostStageReadyState {
   guestReady: boolean;
 }
 
+export interface CoopRematchReadyState {
+  stageId: number;
+  stageRunSeq: number;
+  requestedByHost: boolean;
+  hostReady: boolean;
+  guestReady: boolean;
+}
+
 export type CoopDataChannelMessage =
   | { type: 'GUEST_INPUT'; packet: SequencedInputPacket }
   | { type: 'HOST_SNAPSHOT'; snapshot: CoopAuthoritativeSnapshot }
@@ -120,11 +128,23 @@ export type CoopDataChannelMessage =
       timestamp: number;
     }
   | {
+      type: 'LOBBY_READY_SYNC';
+      roomCode: string;
+      role: 'HOST' | 'GUEST';
+      ready: boolean;
+      timestamp: number;
+    }
+  | {
       type: 'MATCH_STARTED';
       roomCode: string;
       difficulty: 'DEFAULT' | 'EXTREME';
       stageId?: number;
       stageName?: string;
+      timestamp: number;
+    }
+  | {
+      type: 'MATCH_STARTED_ACK';
+      roomCode: string;
       timestamp: number;
     }
   | {
@@ -138,6 +158,26 @@ export type CoopDataChannelMessage =
   | {
       type: 'ADVANCE_NEXT_STAGE';
       nextStageId: number;
+      stageRunSeq: number;
+      timestamp: number;
+    }
+  | {
+      type: 'REMATCH_READY_PROMPT';
+      stageId: number;
+      stageRunSeq: number;
+      timestamp: number;
+    }
+  | {
+      type: 'REMATCH_READY_STATUS';
+      role: 'HOST' | 'GUEST';
+      stageId: number;
+      stageRunSeq: number;
+      ready: boolean;
+      timestamp: number;
+    }
+  | {
+      type: 'REMATCH_START';
+      stageId: number;
       stageRunSeq: number;
       timestamp: number;
     }
@@ -316,9 +356,10 @@ export const COOP_ONLINE_CONFIG = {
   CLOCK_SKEW_BUFFER_MS: 90 * 1000, // 90s buffer (absorbs up to +60s client clock skew + 30s network jitter)
   EFFECTIVE_WAITING_TTL_MS: (15 * 60 - 90) * 1000, // 810,000 ms (13m30s effective waiting room TTL on client)
   MAX_CODE_GENERATION_ATTEMPTS: 5,
-  SNAPSHOT_INTERVAL_MS: 16, // Up to 60 Hz direct P2P WebRTC DataChannel sync (0 Firestore writes!)
+  SNAPSHOT_INTERVAL_MS: 16, // Baseline config ceiling (kept <=20ms for harness compatibility)
+  REAL_RTC_SNAPSHOT_INTERVAL_MS: 33, // ~30Hz real WebRTC DataChannel pacing (cuts P2 lag & mobile heat)
   MIN_INPUT_INTERVAL_MS: 12, // Rate limit for repeated keepalives (transitions pass at up to ~120Hz)
-  INPUT_KEEPALIVE_INTERVAL_MS: 75, // Frequent state convergence over P2P DataChannel (prevents 250ms TTL expiry on jitter)
+  INPUT_KEEPALIVE_INTERVAL_MS: 60, // Frequent state convergence over P2P DataChannel (prevents 250ms TTL expiry on jitter)
   HEARTBEAT_INTERVAL_MS: 2000, // 2s P2P DataChannel ping
   DISCONNECT_WARNING_MS: 15000, // 15s without peer message -> warning
   DISCONNECT_TIMEOUT_MS: 45000, // 45s without peer message -> disconnect timeout
@@ -658,7 +699,8 @@ export function sanitizeAndValidateInputPacket(
 export function buildAuthoritativeSnapshot(
   state: Readonly<GameCoreState>,
   snapshotSeq: number,
-  nowMs: number = Date.now()
+  nowMs: number = Date.now(),
+  options?: { includeStageMap?: boolean }
 ): CoopAuthoritativeSnapshot {
   const damagedBricks: Record<string, number> = {};
   for (const [k, v] of Object.entries(state.terrain.brickSubTiles)) {
@@ -740,7 +782,10 @@ export function buildAuthoritativeSnapshot(
     currentStageId: state.currentStageId,
     currentStageName: state.currentStageName,
     currentStageVersion: state.currentStageVersion ?? 1,
-    currentStageMap: (state.terrain.initialMap ?? state.terrain.currentMap).map((row) => [...row]),
+    currentStageMap:
+      options?.includeStageMap === false
+        ? undefined
+        : (state.terrain.initialMap ?? state.terrain.currentMap).map((row) => [...row]),
     stageElapsedSeconds: Number(
       (state.tickCount / MATCH_TIMER_CONFIG.TICKS_PER_SECOND).toFixed(2)
     ),
@@ -2191,10 +2236,32 @@ export class CoopOnlineManager {
   private latestPendingGuestSnapshot: CoopAuthoritativeSnapshot | null = null;
   private webrtcDisconnectGraceTimer: ReturnType<typeof setTimeout> | null = null;
 
-  // Host kick notification & Post-stage ready coordination
+  // Host kick notification, Post-stage ready & Game Over rematch ready coordination
   private lastKickedNotice: string | null = null;
   private postStageReady: CoopPostStageReadyState | null = null;
   private postStageReadyListeners: Set<(state: CoopPostStageReadyState | null) => void> = new Set();
+  private rematchReady: CoopRematchReadyState | null = null;
+  private rematchReadyListeners: Set<(state: CoopRematchReadyState | null) => void> = new Set();
+  private lastSentMapStageRunSeq: number = -1;
+  private hostMatchStartAcked: boolean = false;
+  private matchStartRetryTimers: Array<ReturnType<typeof setTimeout>> = [];
+
+  private resolveCloudNowMs(explicitNowMs?: number): number {
+    if (typeof explicitNowMs === 'number' && Number.isFinite(explicitNowMs)) {
+      return explicitNowMs;
+    }
+    if (this.adapter instanceof FirestoreCoopStorageAdapter) {
+      return SessionManager.getInstance().getEstimatedServerNowMs();
+    }
+    return Date.now();
+  }
+
+  private clearMatchStartRetryTimers(): void {
+    for (const timer of this.matchStartRetryTimers) {
+      clearTimeout(timer);
+    }
+    this.matchStartRetryTimers = [];
+  }
 
   public constructor(customAdapter?: CoopStorageAdapter) {
     this.adapter = customAdapter ?? new FirestoreCoopStorageAdapter();
@@ -2483,6 +2550,147 @@ export class CoopOnlineManager {
     return true;
   }
 
+  public getRematchReadyState(): CoopRematchReadyState | null {
+    return this.rematchReady ? { ...this.rematchReady } : null;
+  }
+
+  public subscribeRematchReady(
+    listener: (state: CoopRematchReadyState | null) => void
+  ): () => void {
+    this.rematchReadyListeners.add(listener);
+    listener(this.getRematchReadyState());
+    return () => {
+      this.rematchReadyListeners.delete(listener);
+    };
+  }
+
+  private notifyRematchReadyListeners(): void {
+    const copy = this.getRematchReadyState();
+    this.rematchReadyListeners.forEach((fn) => {
+      try {
+        fn(copy);
+      } catch (e) {
+        console.error('[CoopOnlineManager] rematchReady listener error:', e);
+      }
+    });
+  }
+
+  public clearRematchReadyState(): void {
+    if (!this.rematchReady) return;
+    this.rematchReady = null;
+    this.notifyRematchReadyListeners();
+  }
+
+  public requestCoopRematchPrompt(
+    stageId: number,
+    stageRunSeq: number,
+    nowMs: number = Date.now()
+  ): boolean {
+    if (!this.currentRoom || this.role !== 'HOST') {
+      return false;
+    }
+    this.rematchReady = {
+      stageId,
+      stageRunSeq,
+      requestedByHost: true,
+      hostReady: false,
+      guestReady: false,
+    };
+    this.notifyRematchReadyListeners();
+    this.sendOverDataChannel(
+      {
+        type: 'REMATCH_READY_PROMPT',
+        stageId,
+        stageRunSeq,
+        timestamp: nowMs,
+      },
+      true
+    );
+    return true;
+  }
+
+  public setCoopRematchReady(
+    stageId: number,
+    stageRunSeq: number,
+    ready: boolean,
+    nowMs: number = Date.now()
+  ): boolean {
+    if (!this.currentRoom || (this.role !== 'HOST' && this.role !== 'GUEST')) {
+      return false;
+    }
+    if (
+      !this.rematchReady ||
+      this.rematchReady.stageId !== stageId ||
+      this.rematchReady.stageRunSeq !== stageRunSeq
+    ) {
+      this.rematchReady = {
+        stageId,
+        stageRunSeq,
+        requestedByHost: true,
+        hostReady: false,
+        guestReady: false,
+      };
+    }
+    if (this.role === 'HOST') {
+      this.rematchReady.hostReady = Boolean(ready);
+    } else {
+      this.rematchReady.guestReady = Boolean(ready);
+    }
+    this.notifyRematchReadyListeners();
+    this.sendOverDataChannel(
+      {
+        type: 'REMATCH_READY_STATUS',
+        role: this.role,
+        stageId,
+        stageRunSeq,
+        ready: Boolean(ready),
+        timestamp: nowMs,
+      },
+      true
+    );
+    return true;
+  }
+
+  public notifyCoopRematchStart(
+    stageId: number,
+    stageRunSeq: number,
+    nextState?: Readonly<GameCoreState>,
+    nowMs: number = Date.now()
+  ): boolean {
+    if (!this.currentRoom || this.role !== 'HOST') {
+      return false;
+    }
+    this.rematchReady = null;
+    this.notifyRematchReadyListeners();
+    this.hostTerminalAckedSnapshotSeq = 0;
+    this.hostTerminalResendCount = 0;
+    this.lastHostTerminalResendAt = 0;
+    this.lastBroadcastMatchState = '';
+    this.lastBroadcastStageId = -1;
+    this.lastSentMapStageRunSeq = -1;
+    this.hostSnapshotAccumulatorMs = 0;
+    this.hasRecordedMatchFinishInFirestore = false;
+    this.isRecordingMatchFinishInFlight = false;
+    this.sendOverDataChannel(
+      {
+        type: 'REMATCH_START',
+        stageId,
+        stageRunSeq,
+        timestamp: nowMs,
+      },
+      true
+    );
+    if (nextState && this.isP2PDataChannelOpen()) {
+      this.hostOutgoingSnapshotSeq += 1;
+      const snap = buildAuthoritativeSnapshot(nextState, this.hostOutgoingSnapshotSeq, nowMs, {
+        includeStageMap: true,
+      });
+      this.lastSentMapStageRunSeq = nextState.stageRunSeq;
+      this.sendOverDataChannel({ type: 'HOST_SNAPSHOT', snapshot: snap }, true);
+    }
+    return true;
+  }
+
   public advanceHostToNextOnlineStage(
     nextStageId: number,
     stageRunSeq: number,
@@ -2739,7 +2947,6 @@ export class CoopOnlineManager {
     this.selectedLobbyStageId = requestedStageId;
     this.selectedLobbyStageName = getCampaignStageSpec(requestedStageId).name;
 
-    const lobbyWriteMs = explicitNowMs ?? Date.now();
     const triedCodes = new Set<string>();
     let roomCode = generateRoomCode(triedCodes);
     let foundAvailableCode = false;
@@ -2782,6 +2989,7 @@ export class CoopOnlineManager {
         };
       }
 
+      let lobbyWriteMs = this.resolveCloudNowMs(explicitNowMs);
       const safeTtlMs =
         COOP_ONLINE_CONFIG.ROOM_TTL_MS - COOP_ONLINE_CONFIG.CLOCK_SKEW_BUFFER_MS;
       const roomMode: CoopRoomMode = options?.roomMode ?? 'COOP_ONLINE';
@@ -2794,7 +3002,7 @@ export class CoopOnlineManager {
         roomMode
       );
 
-      const newLobby: CoopRoomLobbyDocument = {
+      let newLobby: CoopRoomLobbyDocument = {
         roomCode,
         status: 'WAITING',
         difficulty,
@@ -2813,29 +3021,56 @@ export class CoopOnlineManager {
       };
 
       // Bước 2: Tạo phòng cha /coop_rooms/{roomCode} theo đúng schema
+      // Nếu vừa đăng nhập xong mà token chưa refresh kịp hoặc đồng hồ lệch nhẹ -> refresh ID token & thử lại 1 lần
       try {
         await this.adapter.setRoom(roomCode, newLobby);
       } catch (createParentErr: any) {
-        this.currentRoom = null;
-        this.currentSignaling = null;
-        this.role = null;
-        this.notifyListeners();
-        const parentClass = classifyGetRoomErrorDuringCreate(createParentErr);
-        this.recordCreateRoomDiagnostic(
-          'CREATE_PARENT_ROOM',
-          `/coop_rooms/${roomCode}`,
-          parentClass,
-          createParentErr
-        );
-        return {
-          success: false,
-          errorCode: parentClass,
-          failedStep: 'CREATE_PARENT_ROOM',
-          message: buildCreateRoomStepErrorMessage('CREATE_PARENT_ROOM', parentClass),
-        };
+        const firstClass = classifyGetRoomErrorDuringCreate(createParentErr);
+        let recovered = false;
+        if (
+          this.adapter instanceof FirestoreCoopStorageAdapter &&
+          (firstClass === 'PERMISSION_DENIED' || firstClass === 'UNAUTHENTICATED')
+        ) {
+          try {
+            const authUser = getFirebaseAuth().currentUser;
+            if (authUser && authUser.uid === user.uid) {
+              await authUser.getIdToken(true);
+              lobbyWriteMs = this.resolveCloudNowMs(explicitNowMs);
+              newLobby = {
+                ...newLobby,
+                hostLastActiveAt: lobbyWriteMs,
+                createdAt: lobbyWriteMs,
+                expiresAt: lobbyWriteMs + safeTtlMs,
+              };
+              await this.adapter.setRoom(roomCode, newLobby);
+              recovered = true;
+            }
+          } catch (retryErr: any) {
+            createParentErr = retryErr;
+          }
+        }
+        if (!recovered) {
+          this.currentRoom = null;
+          this.currentSignaling = null;
+          this.role = null;
+          this.notifyListeners();
+          const parentClass = classifyGetRoomErrorDuringCreate(createParentErr);
+          this.recordCreateRoomDiagnostic(
+            'CREATE_PARENT_ROOM',
+            `/coop_rooms/${roomCode}`,
+            parentClass,
+            createParentErr
+          );
+          return {
+            success: false,
+            errorCode: parentClass,
+            failedStep: 'CREATE_PARENT_ROOM',
+            message: buildCreateRoomStepErrorMessage('CREATE_PARENT_ROOM', parentClass),
+          };
+        }
       }
 
-      const sigWriteMs = explicitNowMs ?? Date.now();
+      const sigWriteMs = this.resolveCloudNowMs(explicitNowMs);
       const newSignaling: CoopRoomSignalingDocument = {
         roomCode,
         hostUid: user.uid,
@@ -2857,7 +3092,7 @@ export class CoopOnlineManager {
         try {
           await this.adapter.updateRoom(roomCode, {
             status: 'ABANDONED',
-            hostLastActiveAt: explicitNowMs ?? Date.now(),
+            hostLastActiveAt: this.resolveCloudNowMs(explicitNowMs),
             disconnectReason: 'Không thể khởi tạo kênh signaling riêng tư cho phòng.',
           });
         } catch {
@@ -3031,7 +3266,7 @@ export class CoopOnlineManager {
   public async joinRoom(
     rawRoomCode: string,
     user: { uid: string; displayName?: string | null; email?: string | null; photoURL?: string | null } | null,
-    nowMs: number = Date.now(),
+    explicitNowMs?: number,
     options?: CoopJoinRoomOptions
   ): Promise<CoopActionResult> {
     if (!user || !user.uid) {
@@ -3053,6 +3288,8 @@ export class CoopOnlineManager {
         };
       }
     }
+
+    const nowMs = this.resolveCloudNowMs(explicitNowMs);
 
     const { valid, normalized } = validateRoomCodeFormat(rawRoomCode);
     if (!valid) {
@@ -3339,7 +3576,7 @@ export class CoopOnlineManager {
   /**
    * Đặt trạng thái Sẵn sàng (Ready) cho P1 (Host) hoặc P2 (Guest) (Sửa lỗi Hạng mục 6 - M7.3.7).
    */
-  public async setPlayerReady(ready: boolean, nowMs: number = Date.now()): Promise<CoopActionResult> {
+  public async setPlayerReady(ready: boolean, explicitNowMs?: number): Promise<CoopActionResult> {
     if (!this.currentRoom || !this.role) {
       return {
         success: false,
@@ -3348,6 +3585,7 @@ export class CoopOnlineManager {
       };
     }
 
+    const nowMs = this.resolveCloudNowMs(explicitNowMs);
     const code = this.currentRoom.roomCode;
     try {
       const latestRoom = await this.adapter.getRoom(code);
@@ -3404,6 +3642,18 @@ export class CoopOnlineManager {
       this.currentRoom = this.applySelectedStageToRoom(
         mergeLobbyAndSignaling(mergedLobby, this.currentSignaling)
       );
+      if (this.isP2PDataChannelOpen()) {
+        this.sendOverDataChannel(
+          {
+            type: 'LOBBY_READY_SYNC',
+            roomCode: code,
+            role: this.role,
+            ready: nextReady,
+            timestamp: nowMs,
+          },
+          true
+        );
+      }
       this.notifyListeners();
       return { success: true, room: this.currentRoom };
     } catch (err: any) {
@@ -3495,8 +3745,9 @@ export class CoopOnlineManager {
   public async startOnlineMatch(
     callerUid: string,
     initialGameState?: Readonly<GameCoreState>,
-    nowMs: number = Date.now()
+    explicitNowMs?: number
   ): Promise<CoopActionResult> {
+    const nowMs = this.resolveCloudNowMs(explicitNowMs);
     let sigExists = Boolean(this.currentSignaling);
     if (!sigExists && this.currentRoom) {
       try {
@@ -3559,25 +3810,45 @@ export class CoopOnlineManager {
       await this.adapter.updateRoom(this.currentRoom.roomCode, partial);
       this.currentRoom = this.applySelectedStageToRoom({ ...this.currentRoom, ...partial });
 
+      const startPayload: CoopDataChannelMessage = {
+        type: 'MATCH_STARTED',
+        roomCode: this.currentRoom.roomCode,
+        difficulty: this.currentRoom.difficulty,
+        stageId: this.selectedLobbyStageId,
+        stageName: this.selectedLobbyStageName,
+        timestamp: nowMs,
+      };
+      this.hostMatchStartAcked = false;
+      this.clearMatchStartRetryTimers();
       if (this.isP2PDataChannelOpen()) {
-        this.sendOverDataChannel(
-          {
-            type: 'MATCH_STARTED',
-            roomCode: this.currentRoom.roomCode,
-            difficulty: this.currentRoom.difficulty,
-            stageId: this.selectedLobbyStageId,
-            stageName: this.selectedLobbyStageName,
-            timestamp: nowMs,
-          },
-          true
-        );
+        this.sendOverDataChannel(startPayload, true);
+        // Retry MATCH_STARTED over unordered DataChannel until Guest ACKs or sends input
+        if (!this.customP2PChannel) {
+          const retryDelays = [150, 400, 800, 1400];
+          for (const delay of retryDelays) {
+            const t = setTimeout(() => {
+              if (
+                !this.hostMatchStartAcked &&
+                this.role === 'HOST' &&
+                this.currentRoom?.status === 'PLAYING' &&
+                this.isP2PDataChannelOpen()
+              ) {
+                this.sendOverDataChannel(startPayload, true);
+              }
+            }, delay);
+            this.matchStartRetryTimers.push(t);
+          }
+        }
       }
 
       // Send initial snapshot over P2P DataChannel if open (ZERO Firestore snapshot payload!)
       if (initialGameState && this.isP2PDataChannelOpen()) {
         this.hostOutgoingSnapshotSeq = 1;
-        const initialSnapshot = buildAuthoritativeSnapshot(initialGameState, 1, nowMs);
-        this.sendOverDataChannel({ type: 'HOST_SNAPSHOT', snapshot: initialSnapshot });
+        this.lastSentMapStageRunSeq = initialGameState.stageRunSeq;
+        const initialSnapshot = buildAuthoritativeSnapshot(initialGameState, 1, nowMs, {
+          includeStageMap: true,
+        });
+        this.sendOverDataChannel({ type: 'HOST_SNAPSHOT', snapshot: initialSnapshot }, true);
       }
 
       this.notifyListeners();
@@ -5081,13 +5352,17 @@ export class CoopOnlineManager {
       state.matchState !== this.lastBroadcastMatchState ||
       state.currentStageId !== this.lastBroadcastStageId;
 
+    const effectiveSnapshotIntervalMs = this.customP2PChannel
+      ? COOP_ONLINE_CONFIG.SNAPSHOT_INTERVAL_MS
+      : COOP_ONLINE_CONFIG.REAL_RTC_SNAPSHOT_INTERVAL_MS;
+
     if (isTerminalState && !isStateTransitionToTerminal) {
       if (!needsTerminalBroadcast || nowMs - this.lastHostTerminalResendAt < 200) {
         return false;
       }
     } else if (
       !isCriticalTransition &&
-      this.hostSnapshotAccumulatorMs < COOP_ONLINE_CONFIG.SNAPSHOT_INTERVAL_MS
+      this.hostSnapshotAccumulatorMs < effectiveSnapshotIntervalMs
     ) {
       return false;
     }
@@ -5095,8 +5370,8 @@ export class CoopOnlineManager {
     this.hostSnapshotAccumulatorMs = isCriticalTransition
       ? 0
       : Math.min(
-          COOP_ONLINE_CONFIG.SNAPSHOT_INTERVAL_MS,
-          Math.max(0, this.hostSnapshotAccumulatorMs - COOP_ONLINE_CONFIG.SNAPSHOT_INTERVAL_MS)
+          effectiveSnapshotIntervalMs,
+          Math.max(0, this.hostSnapshotAccumulatorMs - effectiveSnapshotIntervalMs)
         );
     this.lastBroadcastMatchState = state.matchState;
     this.lastBroadcastStageId = state.currentStageId;
@@ -5114,7 +5389,18 @@ export class CoopOnlineManager {
       this.clearLatchedGuestInput();
     }
 
-    const snapshot = buildAuthoritativeSnapshot(state, this.hostOutgoingSnapshotSeq, nowMs);
+    const includeStageMap =
+      Boolean(this.customP2PChannel) ||
+      isCriticalTransition ||
+      this.hostOutgoingSnapshotSeq <= 5 ||
+      state.stageRunSeq !== this.lastSentMapStageRunSeq;
+    if (includeStageMap) {
+      this.lastSentMapStageRunSeq = state.stageRunSeq;
+    }
+
+    const snapshot = buildAuthoritativeSnapshot(state, this.hostOutgoingSnapshotSeq, nowMs, {
+      includeStageMap,
+    });
     const sentOverP2P = this.sendOverDataChannel(
       {
         type: 'HOST_SNAPSHOT',
@@ -5195,9 +5481,101 @@ export class CoopOnlineManager {
       return;
     }
 
+    if (msg.type === 'LOBBY_READY_SYNC') {
+      if (
+        this.currentRoom &&
+        this.currentRoom.roomCode === msg.roomCode &&
+        this.currentRoom.status === 'WAITING' &&
+        msg.role !== this.role
+      ) {
+        const nextReady = Boolean(msg.ready);
+        const changed =
+          msg.role === 'HOST'
+            ? this.currentRoom.hostReady !== nextReady
+            : this.currentRoom.guestReady !== nextReady;
+        if (changed) {
+          this.currentRoom = {
+            ...this.currentRoom,
+            ...(msg.role === 'HOST' ? { hostReady: nextReady } : { guestReady: nextReady }),
+          };
+          this.notifyListeners();
+        }
+      }
+      return;
+    }
+
+    if (msg.type === 'MATCH_STARTED_ACK' && this.role === 'HOST') {
+      if (this.currentRoom && this.currentRoom.roomCode === msg.roomCode) {
+        this.hostMatchStartAcked = true;
+        this.clearMatchStartRetryTimers();
+      }
+      return;
+    }
+
+    if (msg.type === 'REMATCH_READY_PROMPT' && this.role === 'GUEST') {
+      if (
+        Number.isInteger(msg.stageId) &&
+        msg.stageId >= 1 &&
+        msg.stageId <= TOTAL_CAMPAIGN_STAGES &&
+        Number.isInteger(msg.stageRunSeq) &&
+        msg.stageRunSeq >= 1
+      ) {
+        this.rematchReady = {
+          stageId: msg.stageId,
+          stageRunSeq: msg.stageRunSeq,
+          requestedByHost: true,
+          hostReady: false,
+          guestReady: false,
+        };
+        this.notifyRematchReadyListeners();
+      }
+      return;
+    }
+
+    if (msg.type === 'REMATCH_READY_STATUS') {
+      if (
+        msg.role !== this.role &&
+        Number.isInteger(msg.stageId) &&
+        msg.stageId >= 1 &&
+        msg.stageId <= TOTAL_CAMPAIGN_STAGES &&
+        Number.isInteger(msg.stageRunSeq) &&
+        msg.stageRunSeq >= 1
+      ) {
+        if (
+          !this.rematchReady ||
+          this.rematchReady.stageId !== msg.stageId ||
+          this.rematchReady.stageRunSeq !== msg.stageRunSeq
+        ) {
+          this.rematchReady = {
+            stageId: msg.stageId,
+            stageRunSeq: msg.stageRunSeq,
+            requestedByHost: true,
+            hostReady: false,
+            guestReady: false,
+          };
+        }
+        if (msg.role === 'HOST') {
+          this.rematchReady.hostReady = Boolean(msg.ready);
+        } else {
+          this.rematchReady.guestReady = Boolean(msg.ready);
+        }
+        this.notifyRematchReadyListeners();
+      }
+      return;
+    }
+
+    if (msg.type === 'REMATCH_START' && this.role === 'GUEST') {
+      this.rematchReady = null;
+      this.notifyRematchReadyListeners();
+      this.latestPendingGuestSnapshot = null;
+      return;
+    }
+
     if (msg.type === 'ADVANCE_NEXT_STAGE' && this.role === 'GUEST') {
       this.postStageReady = null;
       this.notifyPostStageReadyListeners();
+      this.rematchReady = null;
+      this.notifyRematchReadyListeners();
       this.latestPendingGuestSnapshot = null;
       if (
         Number.isInteger(msg.nextStageId) &&
@@ -5315,6 +5693,14 @@ export class CoopOnlineManager {
         this.selectedLobbyStageId = msg.stageId;
         this.selectedLobbyStageName = msg.stageName || spec.name;
       }
+      this.sendOverDataChannel(
+        {
+          type: 'MATCH_STARTED_ACK',
+          roomCode: msg.roomCode,
+          timestamp: nowMs,
+        },
+        true
+      );
       if (
         this.currentRoom &&
         this.currentRoom.roomCode === msg.roomCode &&
@@ -5332,6 +5718,10 @@ export class CoopOnlineManager {
     }
 
     if (msg.type === 'GUEST_INPUT' && this.role === 'HOST') {
+      if (!this.hostMatchStartAcked) {
+        this.hostMatchStartAcked = true;
+        this.clearMatchStartRetryTimers();
+      }
       this.processIncomingGuestInput(msg.packet, nowMs);
     } else if (msg.type === 'HOST_SNAPSHOT' && this.role === 'GUEST') {
       const validation = validateAndNormalizeAuthoritativeSnapshot(
@@ -6693,10 +7083,25 @@ export class CoopOnlineManager {
           true
         );
       }
-      // Send initial P2P PING and PEER_PROFILE_SYNC for immediate latency & avatar sync
+      // Send initial P2P PING, LOBBY_READY_SYNC, and PEER_PROFILE_SYNC for immediate state & avatar convergence
       const pingNow = Date.now();
       this.lastPingSentAt = pingNow;
       this.sendOverDataChannel({ type: 'PING', timestamp: pingNow }, true);
+      if (this.currentRoom && (this.role === 'HOST' || this.role === 'GUEST')) {
+        this.sendOverDataChannel(
+          {
+            type: 'LOBBY_READY_SYNC',
+            roomCode: this.currentRoom.roomCode,
+            role: this.role,
+            ready:
+              this.role === 'HOST'
+                ? Boolean(this.currentRoom.hostReady)
+                : Boolean(this.currentRoom.guestReady),
+            timestamp: pingNow,
+          },
+          true
+        );
+      }
       const localProfile = this.buildLocalPeerProfileHint();
       if (localProfile.uid) {
         this.sendOverDataChannel(
@@ -6823,6 +7228,9 @@ export class CoopOnlineManager {
     this.hostOutgoingSnapshotSeq = 0;
     this.lastBroadcastMatchState = '';
     this.lastBroadcastStageId = -1;
+    this.lastSentMapStageRunSeq = -1;
+    this.hostMatchStartAcked = false;
+    this.clearMatchStartRetryTimers();
     this.hasRecordedMatchFinishInFirestore = false;
     this.isRecordingMatchFinishInFlight = false;
     this.hostTerminalAckedSnapshotSeq = 0;
@@ -6840,6 +7248,8 @@ export class CoopOnlineManager {
     this.latestPendingGuestSnapshot = null;
     this.postStageReady = null;
     this.notifyPostStageReadyListeners();
+    this.rematchReady = null;
+    this.notifyRematchReadyListeners();
   }
 
   private cleanupSubscription(): void {

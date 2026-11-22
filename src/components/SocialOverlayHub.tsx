@@ -170,6 +170,61 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
   // Friend Online/Offline toast stack
   const [toasts, setToasts] = useState<FriendPresenceToastEvent[]>([]);
 
+  // Community manual refresh & unread incoming private message blink tracking
+  const [isRefreshingCommunity, setIsRefreshingCommunity] = useState(false);
+  const [unreadSenderUids, setUnreadSenderUids] = useState<string[]>([]);
+  const unreadSenderSet = useMemo(() => new Set(unreadSenderUids), [unreadSenderUids]);
+  const sessionWatchBaselineRef = useRef<number>(Date.now());
+  const lastReadByPeerRef = useRef<Record<string, number>>({});
+  const privateChatPeerUidRef = useRef<string | null>(null);
+  privateChatPeerUidRef.current = privateChatPeer?.uid ?? null;
+
+  useEffect(() => {
+    if (!currentUser?.uid) {
+      lastReadByPeerRef.current = {};
+      setUnreadSenderUids([]);
+      return;
+    }
+    sessionWatchBaselineRef.current = Date.now();
+    try {
+      const raw = window.localStorage.getItem(`bto_social_pm_read_${currentUser.uid}`);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Record<string, number>;
+        if (parsed && typeof parsed === 'object') {
+          lastReadByPeerRef.current = parsed;
+        }
+      }
+    } catch {
+      lastReadByPeerRef.current = {};
+    }
+  }, [currentUser?.uid]);
+
+  const markPeerMessagesRead = useCallback(
+    (peerUid: string, atMs: number = Date.now()) => {
+      if (!currentUser?.uid || !peerUid) return;
+      const nextTs = Math.max(lastReadByPeerRef.current[peerUid] ?? 0, atMs);
+      lastReadByPeerRef.current[peerUid] = nextTs;
+      try {
+        window.localStorage.setItem(
+          `bto_social_pm_read_${currentUser.uid}`,
+          JSON.stringify(lastReadByPeerRef.current)
+        );
+      } catch {
+        // ignore storage quota
+      }
+      setUnreadSenderUids((prev) => (prev.includes(peerUid) ? prev.filter((id) => id !== peerUid) : prev));
+    },
+    [currentUser?.uid]
+  );
+
+  const openPrivateChatWithPeer = useCallback(
+    (peer: PublicPlayerProfile) => {
+      setPrivateChatPeer(peer);
+      markPeerMessagesRead(peer.uid, Date.now());
+    },
+    [markPeerMessagesRead]
+  );
+
   // Quick lookup sets for Add Friend icon visibility
   const friendUidSet = useMemo(
     () => new Set(friendsList.map((f) => f.peer.uid)),
@@ -270,18 +325,75 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
 
   useEffect(() => {
     if (!currentUser?.uid || !privateChatPeer) return;
+    markPeerMessagesRead(privateChatPeer.uid, Date.now());
     void refreshPrivateRelationship();
     const unsub = social.subscribePrivateChat(currentUser.uid, privateChatPeer.uid, (msgs) => {
       setPrivateMessages(msgs);
+      const latestMs = msgs.length > 0 ? msgs[msgs.length - 1].createdAtMs : Date.now();
+      markPeerMessagesRead(privateChatPeer.uid, Math.max(Date.now(), latestMs));
     });
     return () => unsub();
-  }, [currentUser?.uid, privateChatPeer, social, refreshPrivateRelationship]);
+  }, [currentUser?.uid, privateChatPeer, social, refreshPrivateRelationship, markPeerMessagesRead]);
 
   useEffect(() => {
     if (privateChatPeer) {
       privateChatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }
   }, [privateMessages.length, privateChatPeer]);
+
+  // Watch incoming private messages from active online peers & friends to trigger blink alerts
+  const watchedPeerKey = useMemo(() => {
+    if (!currentUser?.uid || sessionStatus !== 'ACTIVE') return '';
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    const add = (uid: string) => {
+      if (!uid || uid === currentUser.uid || seen.has(uid)) return;
+      seen.add(uid);
+      ids.push(uid);
+    };
+    friendsList.forEach((f) => add(f.peer.uid));
+    onlinePlayers.forEach((p) => add(p.uid));
+    return ids.slice(0, 16).join(',');
+  }, [currentUser?.uid, sessionStatus, friendsList, onlinePlayers]);
+
+  useEffect(() => {
+    if (!currentUser?.uid || sessionStatus !== 'ACTIVE' || !watchedPeerKey) return;
+    const peerUids = watchedPeerKey.split(',').filter(Boolean);
+    const unsubs = peerUids.map((peerUid) =>
+      social.subscribeLatestPrivateMessage(currentUser.uid!, peerUid, (latestMsg) => {
+        if (!latestMsg || latestMsg.senderUid !== peerUid) return;
+        const lastRead = Math.max(
+          lastReadByPeerRef.current[peerUid] ?? 0,
+          sessionWatchBaselineRef.current - 5_000
+        );
+        if (latestMsg.createdAtMs <= lastRead) return;
+        if (privateChatPeerUidRef.current === peerUid) {
+          markPeerMessagesRead(peerUid, latestMsg.createdAtMs);
+          return;
+        }
+        setUnreadSenderUids((prev) => (prev.includes(peerUid) ? prev : [...prev, peerUid]));
+      })
+    );
+    return () => {
+      unsubs.forEach((fn) => fn());
+    };
+  }, [currentUser?.uid, sessionStatus, watchedPeerKey, social, markPeerMessagesRead]);
+
+  const handleRefreshCommunity = useCallback(async () => {
+    if (!currentUser?.uid || isRefreshingCommunity) return;
+    setIsRefreshingCommunity(true);
+    try {
+      await Promise.all([social.refreshPresenceSnapshot(), refreshFriendsData()]);
+      if (drawerTab === 'SEARCH') {
+        const res = await social.searchAccounts(searchQuery, Date.now(), true);
+        if (res.success && res.data) {
+          setSearchResults(res.data);
+        }
+      }
+    } finally {
+      setIsRefreshingCommunity(false);
+    }
+  }, [currentUser?.uid, isRefreshingCommunity, social, refreshFriendsData, drawerTab, searchQuery]);
 
   // Search handler
   const handleRunSearch = useCallback(
@@ -451,26 +563,45 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
         </div>
       )}
 
-      {/* M7.8 Mục III: Floating Online Icon on main UI (hidden during active battle so it never obstructs gameplay) */}
+      {/* M7.8 Mục III: Compact Floating Online Icon (no globe icon, tight padding on mobile, blinks when unread private messages arrive) */}
       {!isBattleScreen && (
         <button
           type="button"
           data-testid="floating-online-presence-btn"
           onClick={() => setIsDrawerOpen(true)}
-          className="fixed bottom-4 right-4 z-40 flex items-center gap-2 px-3.5 py-2.5 rounded-lg bg-[#0b0d1e]/95 hover:bg-[#101833] border-2 border-[#00F0FF]/70 hover:border-[#00F0FF] text-[#EAF4FF] shadow-[0_0_20px_rgba(0,240,255,0.28)] transition-transform active:scale-95 cursor-pointer"
-          title={t('Người chơi Online & Chat chung', 'Online Players & Global Chat')}
+          className={`fixed bottom-2.5 right-2.5 sm:bottom-4 sm:right-4 z-40 flex items-center gap-1.5 px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-md bg-[#0b0d1e]/95 hover:bg-[#101833] border text-[#EAF4FF] shadow-[0_0_16px_rgba(0,240,255,0.25)] transition-transform active:scale-95 cursor-pointer ${
+            unreadSenderUids.length > 0 && !isDrawerOpen
+              ? 'social-online-btn-blink border-2 border-[#FFB800]'
+              : 'border-[#00F0FF]/70 hover:border-[#00F0FF]'
+          }`}
+          title={
+            unreadSenderUids.length > 0
+              ? t('Có tin nhắn riêng mới! Bấm để mở Cộng đồng', 'New private message! Click to open Community')
+              : t('Cộng đồng & Chat chung', 'Community & Global Chat')
+          }
         >
-          <span className="relative flex h-2.5 w-2.5">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-400" />
+          <span className="relative flex h-2 w-2 shrink-0">
+            <span
+              className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                unreadSenderUids.length > 0 && !isDrawerOpen ? 'bg-[#FFB800]' : 'bg-emerald-400'
+              }`}
+            />
+            <span
+              className={`relative inline-flex rounded-full h-2 w-2 ${
+                unreadSenderUids.length > 0 && !isDrawerOpen ? 'bg-[#FFB800]' : 'bg-emerald-400'
+              }`}
+            />
           </span>
-          <Globe className="w-4 h-4 text-[#00F0FF]" />
-          <span className="font-btn text-xs font-black tracking-wider uppercase">
+          <span
+            className={`font-btn text-[11px] font-black tracking-wide uppercase leading-none ${
+              unreadSenderUids.length > 0 && !isDrawerOpen ? 'text-[#FFB800]' : 'text-[#EAF4FF]'
+            }`}
+          >
             ONLINE
           </span>
           <span
             data-testid="floating-online-count"
-            className="font-hud px-1.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-xs font-bold leading-none"
+            className="font-hud px-1 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/50 text-emerald-300 text-[10px] font-bold leading-none"
           >
             {Math.max(1, onlinePlayers.length)}
           </span>
@@ -478,37 +609,52 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
       )}
 
       {/* =====================================================================
-          ONLINE PLAYERS & GLOBAL CHAT & SEARCH DRAWER
+          COMMUNITY DRAWER (ONLINE PLAYERS, GLOBAL CHAT, SEARCH)
          ===================================================================== */}
       {isDrawerOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex justify-end"
+          className="fixed inset-0 z-[75] bg-[#050510]/85 flex justify-end"
           onClick={() => setIsDrawerOpen(false)}
         >
           <div
             data-testid="social-online-drawer"
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-md h-full bg-[#0b0d1e] border-l-2 border-[#00F0FF]/45 shadow-2xl flex flex-col overflow-hidden animate-neo-slide-in"
+            className="w-full max-w-md h-full bg-[#0b0d1e] border-l-2 border-[#00F0FF]/50 shadow-2xl flex flex-col overflow-hidden animate-neo-fade-in"
           >
             {/* Header */}
-            <div className="px-4 py-3 bg-[#050510] border-b border-[#00F0FF]/25 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Globe className="w-4 h-4 text-[#00F0FF]" />
-                <h3 className="font-btn text-sm font-black uppercase tracking-wider text-[#EAF4FF]">
-                  {t('Cộng đồng trực tuyến', 'Online Community')}
+            <div className="px-4 py-3 bg-[#050510]/95 border-b border-[#00F0FF]/25 flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-[#00F0FF]/15 border border-[#00F0FF]/45 flex items-center justify-center text-[#00F0FF] shrink-0">
+                  <Globe className="w-4 h-4" />
+                </div>
+                <h3 className="font-btn text-sm sm:text-base font-black uppercase tracking-wider text-[#EAF4FF] truncate">
+                  {t('Cộng đồng', 'Community')}
                 </h3>
-                <span className="font-hud text-xs px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 font-bold">
+                <span className="font-hud text-[11px] px-1.5 py-0.5 rounded bg-emerald-950/70 border border-emerald-500/40 text-emerald-300 font-bold shrink-0">
                   {Math.max(1, onlinePlayers.length)} Online
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={() => setIsDrawerOpen(false)}
-                className="w-8 h-8 rounded bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 flex items-center justify-center cursor-pointer"
-                aria-label="Close"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  type="button"
+                  data-testid="social-community-refresh-btn"
+                  disabled={isRefreshingCommunity}
+                  onClick={() => void handleRefreshCommunity()}
+                  className="w-8 h-8 rounded-lg bg-[#0b0d1e] hover:bg-[#00F0FF]/15 border border-[#00F0FF]/45 text-[#00F0FF] flex items-center justify-center cursor-pointer disabled:opacity-50 transition-colors"
+                  title={t('Làm mới danh sách', 'Refresh')}
+                  aria-label={t('Làm mới', 'Refresh')}
+                >
+                  <RefreshCw className={`w-4 h-4 ${isRefreshingCommunity ? 'animate-spin' : ''}`} />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDrawerOpen(false)}
+                  className="w-8 h-8 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-white flex items-center justify-center cursor-pointer transition-colors"
+                  aria-label={t('Đóng', 'Close')}
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             {/* Tabs */}
@@ -570,12 +716,22 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                   ) : (
                     filteredOnlinePlayers.map((player) => {
                       const isMe = player.uid === currentUser.uid;
+                      const hasUnread = !isMe && unreadSenderSet.has(player.uid);
                       return (
                         <div
                           key={player.uid}
-                          className="p-2.5 rounded-lg bg-[#050510]/90 border border-neutral-800 hover:border-[#00F0FF]/40 flex items-center justify-between gap-2"
+                          className={`p-2.5 rounded-lg bg-[#050510]/90 border flex items-center justify-between gap-2 transition-colors ${
+                            hasUnread
+                              ? 'border-[#FFB800]/80 bg-amber-950/20'
+                              : 'border-neutral-800 hover:border-[#00F0FF]/40'
+                          }`}
                         >
-                          <div className="flex items-center gap-2.5 min-w-0">
+                          <div
+                            className={`flex items-center gap-2.5 min-w-0 ${!isMe ? 'cursor-pointer' : ''}`}
+                            onClick={() => {
+                              if (!isMe) openPrivateChatWithPeer(player);
+                            }}
+                          >
                             <AvatarThumb
                               url={player.avatarUrl}
                               name={player.displayName}
@@ -583,13 +739,21 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                             />
                             <div className="min-w-0">
                               <div className="flex items-center gap-1.5">
-                                <span className="font-btn text-xs font-bold text-[#EAF4FF] truncate">
+                                <span
+                                  data-testid={hasUnread ? `unread-sender-name-${player.uid}` : undefined}
+                                  className={`font-btn text-xs font-bold truncate ${
+                                    hasUnread ? 'social-unread-blink text-[#FFB800]' : 'text-[#EAF4FF]'
+                                  }`}
+                                >
                                   {player.displayName}
                                 </span>
                                 {isMe && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#00F0FF]/15 text-[#00F0FF] font-bold">
                                     {t('Bạn', 'You')}
                                   </span>
+                                )}
+                                {hasUnread && (
+                                  <span className="w-2 h-2 rounded-full bg-[#FFB800] animate-ping shrink-0" />
                                 )}
                               </div>
                               <div className="flex items-center gap-2 text-[10px] text-neutral-400">
@@ -603,8 +767,12 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                             <div className="flex items-center gap-1 shrink-0">
                               <button
                                 type="button"
-                                onClick={() => setPrivateChatPeer(player)}
-                                className="w-8 h-8 rounded bg-[#0b0d1e] hover:bg-[#00F0FF]/20 border border-[#00F0FF]/40 text-[#00F0FF] flex items-center justify-center cursor-pointer"
+                                onClick={() => openPrivateChatWithPeer(player)}
+                                className={`w-8 h-8 rounded border flex items-center justify-center cursor-pointer ${
+                                  hasUnread
+                                    ? 'bg-[#FFB800]/20 border-[#FFB800] text-[#FFB800] social-unread-blink'
+                                    : 'bg-[#0b0d1e] hover:bg-[#00F0FF]/20 border-[#00F0FF]/40 text-[#00F0FF]'
+                                }`}
                                 title={t('Chat riêng', 'Private Chat')}
                               >
                                 <MessageSquare className="w-3.5 h-3.5" />
@@ -715,7 +883,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                               <div className="flex items-center gap-1 shrink-0">
                                 <button
                                   type="button"
-                                  onClick={() => setPrivateChatPeer(senderProfile)}
+                                  onClick={() => openPrivateChatWithPeer(senderProfile)}
                                   className="w-6 h-6 rounded bg-neutral-900 hover:bg-[#00F0FF]/20 text-[#00F0FF] flex items-center justify-center cursor-pointer"
                                   title={t('Chat riêng', 'Private Chat')}
                                 >
@@ -867,7 +1035,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                             <div className="flex items-center gap-1 shrink-0">
                               <button
                                 type="button"
-                                onClick={() => setPrivateChatPeer(acc)}
+                                onClick={() => openPrivateChatWithPeer(acc)}
                                 className="w-8 h-8 rounded bg-[#0b0d1e] hover:bg-[#00F0FF]/20 border border-[#00F0FF]/40 text-[#00F0FF] flex items-center justify-center cursor-pointer"
                                 title={t('Nhắn tin riêng', 'Private Chat')}
                               >
@@ -905,29 +1073,38 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
       )}
 
       {/* =====================================================================
-          M7.8 MỤC VI: FRIENDS MODAL (4 TABS: BẠN BÈ | LỜI MỜI NHẬN | LỜI MỜI GỬI | ĐÃ XÓA BẠN)
+          M7.8 MỤC VI: FRIENDS MODAL (UNIFIED MODAL SHELL WITH SETTINGS, INFO, MESSAGES)
          ===================================================================== */}
       {isFriendsModalOpen && (
         <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3"
+          className="fixed inset-0 z-[75] bg-[#050510]/92 flex items-start justify-center pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 overflow-y-auto"
           onClick={onCloseFriendsModal}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="friends-modal-title"
         >
           <div
             data-testid="friends-modal"
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-2xl max-h-[86vh] bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-xl shadow-2xl flex flex-col overflow-hidden animate-neo-fade-in"
+            className="w-full max-w-2xl max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-xl shadow-[0_0_32px_rgba(0,0,0,0.85)] flex flex-col overflow-hidden animate-neo-fade-in"
           >
-            <div className="px-4 py-3 bg-[#050510] border-b border-[#00F0FF]/25 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-[#00F0FF]" />
-                <h3 className="font-btn text-sm sm:text-base font-black uppercase tracking-wider text-[#EAF4FF]">
+            <div className="px-4 sm:px-5 py-3 bg-[#050510]/95 border-b border-[#00F0FF]/25 flex items-center justify-between gap-2 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#00F0FF]/15 border border-[#00F0FF]/45 flex items-center justify-center text-[#00F0FF] shrink-0">
+                  <Users className="w-4 h-4" />
+                </div>
+                <h3
+                  id="friends-modal-title"
+                  className="font-btn text-sm sm:text-base font-black uppercase tracking-wider text-[#EAF4FF]"
+                >
                   {t('Quản lý Bạn bè', 'Friends')}
                 </h3>
               </div>
               <button
                 type="button"
                 onClick={onCloseFriendsModal}
-                className="w-8 h-8 rounded bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 flex items-center justify-center cursor-pointer"
+                className="w-8 h-8 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
+                aria-label={t('Đóng', 'Close')}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -970,15 +1147,26 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                       )}
                     </p>
                   ) : (
-                    friendsList.map(({ peer }) => (
+                    friendsList.map(({ peer }) => {
+                      const hasUnread = unreadSenderSet.has(peer.uid);
+                      return (
                       <div
                         key={peer.uid}
-                        className="p-3 rounded-lg bg-[#050510]/90 border border-neutral-800 flex flex-wrap items-center justify-between gap-2"
+                        className={`p-3 rounded-lg bg-[#050510]/90 border flex flex-wrap items-center justify-between gap-2 ${
+                          hasUnread ? 'border-[#FFB800]/80 bg-amber-950/20' : 'border-neutral-800'
+                        }`}
                       >
-                        <div className="flex items-center gap-3 min-w-0">
+                        <div
+                          className="flex items-center gap-3 min-w-0 cursor-pointer"
+                          onClick={() => openPrivateChatWithPeer(peer)}
+                        >
                           <AvatarThumb url={peer.avatarUrl} name={peer.displayName} online={peer.isOnline} />
                           <div className="min-w-0">
-                            <p className="font-btn text-xs sm:text-sm font-bold text-[#EAF4FF] truncate">
+                            <p
+                              className={`font-btn text-xs sm:text-sm font-bold truncate ${
+                                hasUnread ? 'social-unread-blink text-[#FFB800]' : 'text-[#EAF4FF]'
+                              }`}
+                            >
                               {peer.displayName}
                             </p>
                             <div className="flex items-center gap-2 text-[11px]">
@@ -1002,8 +1190,12 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                           )}
                           <button
                             type="button"
-                            onClick={() => setPrivateChatPeer(peer)}
-                            className="p-2 rounded bg-[#0b0d1e] hover:bg-[#00F0FF]/20 border border-[#00F0FF]/40 text-[#00F0FF] cursor-pointer"
+                            onClick={() => openPrivateChatWithPeer(peer)}
+                            className={`p-2 rounded border cursor-pointer ${
+                              hasUnread
+                                ? 'bg-[#FFB800]/20 border-[#FFB800] text-[#FFB800] social-unread-blink'
+                                : 'bg-[#0b0d1e] hover:bg-[#00F0FF]/20 border-[#00F0FF]/40 text-[#00F0FF]'
+                            }`}
                             title={t('Chat riêng', 'Private Chat')}
                           >
                             <MessageSquare className="w-4 h-4" />
@@ -1026,7 +1218,8 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                           </button>
                         </div>
                       </div>
-                    ))
+                      );
+                    })
                   )}
                 </>
               )}
@@ -1179,6 +1372,17 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                 </>
               )}
             </div>
+
+            {/* Unified Footer */}
+            <div className="px-4 sm:px-5 py-3 bg-[#050510]/95 border-t border-neutral-800 flex items-center justify-end shrink-0">
+              <button
+                type="button"
+                onClick={onCloseFriendsModal}
+                className="font-btn min-h-[42px] px-5 py-2 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-xs uppercase tracking-wider transition-all shadow active:scale-95 cursor-pointer"
+              >
+                {t('Đóng', 'Close')}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1227,7 +1431,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
          ===================================================================== */}
       {privateChatPeer && (
         <div
-          className="fixed inset-0 z-[60] bg-black/75 backdrop-blur-xs flex items-center justify-center p-3"
+          className="fixed inset-0 z-[80] bg-[#050510]/88 flex items-center justify-center p-3"
           onClick={() => setPrivateChatPeer(null)}
         >
           <div
@@ -1273,23 +1477,18 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                   type="button"
                   data-testid="private-chat-block-toggle-btn"
                   onClick={() => void handleToggleBlock()}
-                  className={`px-2.5 py-1.5 rounded border font-btn font-bold text-[10px] uppercase flex items-center gap-1 cursor-pointer ${
+                  className={`w-8 h-8 rounded border flex items-center justify-center cursor-pointer transition-colors ${
                     privateRel.blockedByMe
-                      ? 'bg-emerald-950/70 border-emerald-500/50 text-emerald-300'
-                      : 'bg-red-950/70 border-red-500/50 text-red-300'
+                      ? 'bg-emerald-950/70 hover:bg-emerald-500/25 border-emerald-500/50 text-emerald-300'
+                      : 'bg-red-950/70 hover:bg-red-500/25 border-red-500/50 text-red-300'
                   }`}
+                  aria-label={privateRel.blockedByMe ? t('Bỏ chặn', 'Unblock') : t('Chặn tin nhắn', 'Block')}
                   title={privateRel.blockedByMe ? t('Bỏ chặn', 'Unblock') : t('Chặn tin nhắn', 'Block')}
                 >
                   {privateRel.blockedByMe ? (
-                    <>
-                      <ShieldCheck className="w-3.5 h-3.5" />
-                      <span>{t('Bỏ chặn', 'Unblock')}</span>
-                    </>
+                    <ShieldCheck className="w-4 h-4" />
                   ) : (
-                    <>
-                      <Ban className="w-3.5 h-3.5" />
-                      <span>{t('Chặn', 'Block')}</span>
-                    </>
+                    <Ban className="w-4 h-4" />
                   )}
                 </button>
                 <button
@@ -1380,13 +1579,13 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
          ===================================================================== */}
       {profileModalUser && (
         <div
-          className="fixed inset-0 z-[65] bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+          className="fixed inset-0 z-[85] bg-[#050510]/88 flex items-center justify-center p-4"
           onClick={() => setProfileModalUser(null)}
         >
           <div
             data-testid="public-profile-modal"
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm bg-[#0b0d1e] border-2 border-[#FFB800]/55 rounded-xl p-5 space-y-4 shadow-2xl animate-neo-fade-in"
+            className="w-full max-w-sm bg-[#0b0d1e] border-2 border-[#00F0FF]/55 rounded-xl p-5 space-y-4 shadow-2xl animate-neo-fade-in"
           >
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
@@ -1435,8 +1634,8 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                   {t('Sao', 'Stars')}
                 </p>
                 <p className="font-hud font-bold text-[#00F0FF] mt-0.5 flex items-center gap-1">
-                  <Star className="w-3.5 h-3.5 text-[#FFB800]" />
-                  {profileModalUser.stars}
+                  <span>{profileModalUser.stars}</span>
+                  <Star className="w-3.5 h-3.5 text-[#FFB800] fill-[#FFB800]" />
                 </p>
               </div>
             </div>
@@ -1448,7 +1647,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                   onClick={() => {
                     const target = profileModalUser;
                     setProfileModalUser(null);
-                    setPrivateChatPeer(target);
+                    openPrivateChatWithPeer(target);
                   }}
                   className="flex-1 py-2 rounded-lg bg-[#00F0FF] hover:bg-cyan-300 text-[#050510] font-btn font-black text-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >

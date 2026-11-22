@@ -458,7 +458,8 @@ export class VsTankAIController {
     const box = getTankHitbox(nx, ny);
     const terr = checkHitboxVsTerrain(box, terrain, { forBullet: false });
     if (terr.collides || terr.isOutOfBounds) return false;
-    if (checkTankVsTanks(selfId, box, otherTanks)) return false;
+    void selfId;
+    void otherTanks;
     return true;
   }
 

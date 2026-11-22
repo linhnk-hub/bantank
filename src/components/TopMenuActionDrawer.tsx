@@ -115,7 +115,7 @@ export const TopMenuActionDrawer: React.FC<TopMenuActionDrawerProps> = ({
             }}
             aria-label={t('Cài đặt', 'Settings')}
             title={t('Cài đặt', 'Settings')}
-            className="flex items-center justify-center min-w-[36px] min-h-[36px] p-1.5 bg-transparent border-0 shadow-none text-[#FFB800] hover:text-[#00F0FF] transition-colors cursor-pointer active:scale-95 shrink-0 touch-manipulation"
+            className="flex items-center justify-center min-w-[36px] min-h-[36px] p-1.5 bg-transparent border-0 shadow-none text-[#00F0FF] hover:text-[#FFB800] transition-colors cursor-pointer active:scale-95 shrink-0 touch-manipulation"
           >
             <Settings className="w-4 h-4" />
           </button>
@@ -149,7 +149,7 @@ export const TopMenuActionDrawer: React.FC<TopMenuActionDrawerProps> = ({
             }}
             aria-label={t('Liên hệ', 'Contact')}
             title={t('Liên hệ', 'Contact')}
-            className="flex items-center justify-center min-w-[36px] min-h-[36px] p-1.5 bg-transparent border-0 shadow-none text-emerald-400 hover:text-[#FFB800] transition-colors cursor-pointer active:scale-95 shrink-0 touch-manipulation"
+            className="flex items-center justify-center min-w-[36px] min-h-[36px] p-1.5 bg-transparent border-0 shadow-none text-[#00F0FF] hover:text-[#FFB800] transition-colors cursor-pointer active:scale-95 shrink-0 touch-manipulation"
           >
             <MessageSquare className="w-4 h-4" />
           </button>
@@ -166,7 +166,7 @@ export const TopMenuActionDrawer: React.FC<TopMenuActionDrawerProps> = ({
             }}
             aria-label="QA (Admin)"
             title="QA (Admin)"
-            className="flex items-center justify-center min-w-[36px] min-h-[36px] p-1.5 bg-transparent border-0 shadow-none text-[#FFB800] hover:text-[#00F0FF] transition-colors cursor-pointer active:scale-95 shrink-0 touch-manipulation"
+            className="flex items-center justify-center min-w-[36px] min-h-[36px] p-1.5 bg-transparent border-0 shadow-none text-[#00F0FF] hover:text-[#FFB800] transition-colors cursor-pointer active:scale-95 shrink-0 touch-manipulation"
           >
             <Wrench className="w-4 h-4" />
           </button>

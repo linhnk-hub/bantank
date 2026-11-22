@@ -477,9 +477,9 @@ export class VsEngine {
         }
       }
 
-      // Di chuyển xe tăng — va chạm với xe tăng khác (cả đồng đội lẫn đối thủ) không gây sát thương
-      const otherTanks = aliveTanksAll.filter((t) => t.id !== c.tank.id);
-      updateTankMovement(c.tank, effectiveInput, this.terrain, otherTanks, 1);
+      // Di chuyển xe tăng — các xe tăng được phép đi xuyên qua nhau để không bị kẹt di chuyển
+      void aliveTanksAll;
+      updateTankMovement(c.tank, effectiveInput, this.terrain, [], 1);
 
       // Luật bảo vệ sau hồi sinh (Mục 4.9):
       // Trong 2 giây bảo vệ: KHÔNG nhận sát thương, KHÔNG gây sát thương, KHÔNG thể bắn gây sát thương đối thủ.

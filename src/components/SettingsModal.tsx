@@ -848,7 +848,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   return (
     <div
       data-testid="settings-modal-backdrop"
-      className="fixed inset-0 z-[70] flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 bg-[#050510]/92 animate-fade-in select-none"
+      className="fixed inset-0 z-[75] flex items-start justify-center overflow-y-auto pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 bg-[#050510]/92 select-none"
+      role="dialog"
+      aria-modal="true"
     >
       <ConfirmationPopupModal
         isOpen={Boolean(popupNotice)}
@@ -860,23 +862,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
       <div
         data-testid="settings-modal-frame"
-        className={`neo-bevel-card bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-lg ${UNIFIED_SETTINGS_MODAL_WIDTH_CLASS} max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-[0_0_32px_rgba(0,0,0,0.85)] overflow-hidden`}
+        className={`bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-xl ${UNIFIED_SETTINGS_MODAL_WIDTH_CLASS} max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col shadow-[0_0_32px_rgba(0,0,0,0.85)] overflow-hidden animate-neo-fade-in`}
       >
         {/* Header */}
-        <div className="bg-[#050510] px-4 py-3 border-b border-[#687386]/40 flex items-center justify-between shrink-0">
+        <div className="bg-[#050510]/95 px-4 sm:px-5 py-3 border-b border-[#00F0FF]/25 flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded bg-[#FFB800]/15 border border-[#FFB800]/50 flex items-center justify-center text-[#FFB800]">
+            <div className="w-8 h-8 rounded-lg bg-[#00F0FF]/15 border border-[#00F0FF]/45 flex items-center justify-center text-[#00F0FF] shrink-0">
               <Sliders className="w-4 h-4" />
             </div>
             <div>
-              <h2 className="font-btn text-sm font-black text-[#EAF4FF] flex items-center gap-2 uppercase tracking-wider">
+              <h2 className="font-btn text-sm sm:text-base font-black text-[#EAF4FF] flex items-center gap-2 uppercase tracking-wider">
                 {t('CÀI ĐẶT HỆ THỐNG', 'SYSTEM SETTINGS')}
               </h2>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
             <LanguageSelector compact />
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-8 h-8 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+              aria-label={t('Đóng', 'Close')}
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
 
@@ -2660,7 +2670,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           setSelectedAccountDetail(null);
                         }
                       }}
-                      className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in"
+                      className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-[#050510]/88 animate-neo-fade-in"
                     >
                       <div className="w-full max-w-lg rounded-2xl bg-neutral-900 border-2 border-amber-500/70 shadow-2xl overflow-hidden text-xs">
                         <div className="px-4 py-3 bg-neutral-950 border-b border-neutral-800 flex items-center justify-between gap-2">
@@ -2997,13 +3007,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="bg-[#050510] px-4 py-3 border-t border-neutral-800 flex items-center justify-end shrink-0">
+        <div className="bg-[#050510]/95 px-4 sm:px-5 py-3 border-t border-neutral-800 flex items-center justify-end shrink-0">
           <button
             type="button"
             onClick={onClose}
-            className="font-btn min-h-[44px] py-2 px-5 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-extrabold text-xs transition-transform active:scale-95 shadow cursor-pointer"
+            className="font-btn min-h-[42px] py-2 px-5 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-xs uppercase tracking-wider transition-all active:scale-95 shadow cursor-pointer"
           >
-            {t('ĐÓNG', 'CLOSE')}
+            {t('Đóng', 'Close')}
           </button>
         </div>
       </div>

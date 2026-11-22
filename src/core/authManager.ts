@@ -1744,11 +1744,39 @@ export class AuthManager {
       };
     }
 
+    let normalizedTargetEmail = (params.targetEmail || '').trim().toLowerCase();
+    if (!normalizedTargetEmail) {
+      try {
+        const dbLookup = getFirebaseDb();
+        const userSnap = await getDoc(doc(dbLookup, 'users', params.targetUid));
+        if (userSnap.exists()) {
+          const uData = userSnap.data() as Record<string, unknown>;
+          if (typeof uData.email === 'string' && uData.email.trim()) {
+            normalizedTargetEmail = uData.email.trim().toLowerCase();
+          }
+        }
+      } catch {
+        // Ignore lookup fallback error
+      }
+    }
+
     const safeDisplayName = (
       params.targetDisplayName ||
-      getUserDisplayLabel({ displayName: null, email: params.targetEmail })
+      getUserDisplayLabel({ displayName: null, email: normalizedTargetEmail || params.targetEmail })
     ).slice(0, 60);
-    const normalizedTargetEmail = (params.targetEmail || '').trim().toLowerCase();
+
+    // Use Firestore server-anchored timestamp when available to prevent client clock skew permission-denied
+    let serverNowMs = Date.now();
+    try {
+      const authInst = getFirebaseAuth();
+      if (authInst?.currentUser) {
+        await authInst.currentUser.getIdToken(false);
+      }
+      const { SessionManager } = await import('./sessionManager.ts');
+      serverNowMs = SessionManager.getInstance().getEstimatedServerNowMs();
+    } catch {
+      serverNowMs = Date.now();
+    }
 
     const candidateAudit = buildRoleChangeAuditEntry({
       actionType: params.newRole === 'MOD' ? 'GRANT_MOD' : 'REVOKE_TO_PLAYER',
@@ -1759,7 +1787,7 @@ export class AuthManager {
       targetDisplayName: safeDisplayName,
       previousRole,
       newRole: params.newRole,
-      timestampMs: Date.now(),
+      timestampMs: serverNowMs,
     });
 
     const auditValidation = validateRoleAuditLogPayload(
@@ -1781,37 +1809,56 @@ export class AuthManager {
 
     try {
       const db = getFirebaseDb();
-      const batch = writeBatch(db);
-      const adminRef = doc(db, 'admins', params.targetUid);
-      const auditRef = doc(db, 'role_audit_logs', candidateAudit.auditId);
+      const commitRoleBatch = async () => {
+        const batch = writeBatch(db);
+        const adminRef = doc(db, 'admins', params.targetUid);
+        const auditRef = doc(db, 'role_audit_logs', candidateAudit.auditId);
 
-      batch.set(adminRef, {
-        uid: params.targetUid,
-        email: normalizedTargetEmail,
-        displayName: safeDisplayName,
-        role: params.newRole === 'MOD' ? 'MOD' : 'PLAYER',
-        isActive: params.newRole === 'MOD',
-        lastAuditId: candidateAudit.auditId,
-        updatedBy: ADMIN_EMAIL,
-        updatedAt: serverTimestamp(),
-      });
+        batch.set(adminRef, {
+          uid: params.targetUid,
+          email: normalizedTargetEmail,
+          displayName: safeDisplayName,
+          role: params.newRole === 'MOD' ? 'MOD' : 'PLAYER',
+          isActive: params.newRole === 'MOD',
+          lastAuditId: candidateAudit.auditId,
+          updatedBy: ADMIN_EMAIL,
+          updatedAt: serverTimestamp(),
+        });
 
-      batch.set(auditRef, {
-        auditId: candidateAudit.auditId,
-        actionType: candidateAudit.actionType,
-        actorUid: candidateAudit.actorUid,
-        actorEmail: candidateAudit.actorEmail,
-        targetUid: candidateAudit.targetUid,
-        targetEmail: candidateAudit.targetEmail,
-        targetDisplayName: candidateAudit.targetDisplayName,
-        previousRole: candidateAudit.previousRole,
-        newRole: candidateAudit.newRole,
-        timestampMs: candidateAudit.timestampMs,
-        createdAt: serverTimestamp(),
-      });
+        batch.set(auditRef, {
+          auditId: candidateAudit.auditId,
+          actionType: candidateAudit.actionType,
+          actorUid: candidateAudit.actorUid,
+          actorEmail: candidateAudit.actorEmail,
+          targetUid: candidateAudit.targetUid,
+          targetEmail: candidateAudit.targetEmail,
+          targetDisplayName: candidateAudit.targetDisplayName,
+          previousRole: candidateAudit.previousRole,
+          newRole: candidateAudit.newRole,
+          timestampMs: candidateAudit.timestampMs,
+          createdAt: serverTimestamp(),
+        });
 
-      // Thực thi nguyên tử cả thay đổi role (/admins/{targetUid}) và nhật ký (/role_audit_logs/{auditId})
-      await batch.commit();
+        // Thực thi nguyên tử cả thay đổi role (/admins/{targetUid}) và nhật ký (/role_audit_logs/{auditId})
+        await batch.commit();
+      };
+
+      try {
+        await commitRoleBatch();
+      } catch (firstErr: any) {
+        const firstCode = String(firstErr?.code || '').toLowerCase();
+        if (firstCode.includes('permission-denied')) {
+          const authInst = getFirebaseAuth();
+          if (authInst?.currentUser) {
+            await authInst.currentUser.getIdToken(true);
+            await commitRoleBatch();
+          } else {
+            throw firstErr;
+          }
+        } else {
+          throw firstErr;
+        }
+      }
 
       setVerifiedServerRoleForUid(params.targetUid, params.newRole);
       const auditEntry = commitRoleChangeAuditEntry(candidateAudit);

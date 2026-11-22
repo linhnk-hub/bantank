@@ -330,11 +330,26 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
       ? gameState?.p2Stats?.score ?? 0
       : gameState?.p1Stats?.score ?? gameState?.score ?? 0;
 
-  const remSec =
-    typeof gameState?.remainingSeconds === 'number'
+  const vsState = gameState?.vsState ?? null;
+  const isVsP1P2 = gameState?.gameMode === 'VS_P1_P2' && Boolean(vsState);
+  const isVs2v2 = gameState?.gameMode === 'VS_P1_AI_P2_AI' && Boolean(vsState);
+  const isVsModeHud = isVsP1P2 || isVs2v2;
+
+  const vsP1 = vsState?.combatants.find((c) => c.role === 'P1');
+  const vsP2 = vsState?.combatants.find((c) => c.role === 'P2');
+  const vsAi1 = vsState?.combatants.find((c) => c.role === 'AI_1');
+  const vsAi2 = vsState?.combatants.find((c) => c.role === 'AI_2');
+
+  const remSec = isVsModeHud && vsState
+    ? vsState.phase === 'SUDDEN_DEATH'
+      ? vsState.suddenDeathElapsedSeconds
+      : vsState.normalRemainingSeconds
+    : typeof gameState?.remainingSeconds === 'number'
       ? gameState.remainingSeconds
       : getMatchDurationSecondsForDifficulty(gameState?.difficulty ?? difficulty);
-  const isCrit = remSec <= MATCH_TIMER_CONFIG.CRITICAL_THRESHOLD_S;
+  const isCrit = isVsModeHud && vsState
+    ? vsState.phase === 'SUDDEN_DEATH' || vsState.normalRemainingSeconds <= 20
+    : remSec <= MATCH_TIMER_CONFIG.CRITICAL_THRESHOLD_S;
   const isWarn = !isCrit && remSec <= MATCH_TIMER_CONFIG.WARNING_THRESHOLD_S;
 
   return (
@@ -366,7 +381,123 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
       </div>
 
       {/* Tactical Metrics Grid */}
-      {isCoopOnline ? (
+      {isVs2v2 && vsState ? (
+        <div
+          data-testid="battle-hud-vs-2v2"
+          className="grid grid-cols-2 gap-1.5 font-hud text-xs sm:text-sm leading-tight"
+        >
+          {/* Left Column Top: P1 Lives */}
+          <div
+            data-testid="battle-hud-lives"
+            className="flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-[#050510]/90 border border-red-500/45"
+          >
+            <span className="inline-flex items-center gap-1 text-red-400 font-black text-[11px]">
+              <Heart className="w-3 h-3 text-red-400 fill-red-400 shrink-0" />
+              P1
+            </span>
+            <span className="font-extrabold text-red-300 whitespace-nowrap">
+              ×{vsP1?.lives ?? 0}
+            </span>
+          </div>
+
+          {/* Right Column Top (replaces Enemy Remaining): P2 Lives */}
+          <div
+            data-testid="battle-hud-vs-p2-lives"
+            className="flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-[#050510]/90 border border-[#FFB800]/45"
+          >
+            <span className="inline-flex items-center gap-1 text-[#FFB800] font-black text-[11px]">
+              <Heart className="w-3 h-3 text-[#FFB800] fill-[#FFB800] shrink-0" />
+              P2
+            </span>
+            <span className="font-extrabold text-[#FFB800] whitespace-nowrap">
+              ×{vsP2?.lives ?? 0}
+            </span>
+          </div>
+
+          {/* Left Column Bottom (directly under P1): AI 1 Lives */}
+          <div
+            data-testid="battle-hud-vs-ai1-lives"
+            className="flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-[#050510]/90 border border-[#00F0FF]/45"
+          >
+            <span className="inline-flex items-center gap-1 text-[#00F0FF] font-black text-[11px]">
+              <Heart className="w-3 h-3 text-[#00F0FF] fill-[#00F0FF] shrink-0" />
+              AI 1
+            </span>
+            <span className="font-extrabold text-[#00F0FF] whitespace-nowrap">
+              ×{vsAi1?.lives ?? 0}
+            </span>
+          </div>
+
+          {/* Right Column Bottom (replaces XP): AI 2 Lives */}
+          <div
+            data-testid="battle-hud-vs-ai2-lives"
+            className="flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-[#050510]/90 border border-neutral-500/45"
+          >
+            <span className="inline-flex items-center gap-1 text-neutral-300 font-black text-[11px]">
+              <Heart className="w-3 h-3 text-neutral-400 fill-neutral-400 shrink-0" />
+              AI 2
+            </span>
+            <span className="font-extrabold text-neutral-200 whitespace-nowrap">
+              ×{vsAi2?.lives ?? 0}
+            </span>
+          </div>
+        </div>
+      ) : isVsP1P2 && vsState ? (
+        <div
+          data-testid="battle-hud-vs-1v1"
+          className="grid grid-cols-2 gap-1.5 font-hud text-xs sm:text-sm leading-tight"
+        >
+          {/* Slot 1: P1 Remaining Lives */}
+          <div
+            data-testid="battle-hud-lives"
+            className="flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-[#050510]/90 border border-red-500/45"
+          >
+            <span className="inline-flex items-center gap-1 text-red-400 font-black text-[11px]">
+              <Heart className="w-3 h-3 text-red-400 fill-red-400 shrink-0" />
+              P1
+            </span>
+            <span className="font-extrabold text-red-300 whitespace-nowrap">
+              ×{vsP1?.lives ?? 0}
+            </span>
+          </div>
+
+          {/* Slot 2 (replaces Enemy Remaining): P2 Remaining Lives */}
+          <div
+            data-testid="battle-hud-vs-p2-lives"
+            className="flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-[#050510]/90 border border-[#FFB800]/45"
+          >
+            <span className="inline-flex items-center gap-1 text-[#FFB800] font-black text-[11px]">
+              <Heart className="w-3 h-3 text-[#FFB800] fill-[#FFB800] shrink-0" />
+              P2
+            </span>
+            <span className="font-extrabold text-[#FFB800] whitespace-nowrap">
+              ×{vsP2?.lives ?? 0}
+            </span>
+          </div>
+
+          {/* Slot 3: Team 1 Kills */}
+          <div
+            data-testid="battle-hud-kills"
+            className="flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-[#050510]/90 border border-red-500/35"
+          >
+            <Skull className="w-3.5 h-3.5 text-red-400 shrink-0" />
+            <span className="font-extrabold text-red-300 text-right whitespace-nowrap">
+              {vsState.team1.totalKills}
+            </span>
+          </div>
+
+          {/* Slot 4: Team 2 Kills */}
+          <div
+            data-testid="battle-hud-vs-p2-kills"
+            className="flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-[#050510]/90 border border-[#FFB800]/35"
+          >
+            <Skull className="w-3.5 h-3.5 text-[#FFB800] shrink-0" />
+            <span className="font-extrabold text-[#FFB800] text-right whitespace-nowrap">
+              {vsState.team2.totalKills}
+            </span>
+          </div>
+        </div>
+      ) : isCoopOnline ? (
         <div className="flex flex-col gap-1.5 font-hud text-xs sm:text-sm leading-tight">
           {/* Row 1: Full-width Combined P1/P2 Lives matching 2 upper slots */}
           <div

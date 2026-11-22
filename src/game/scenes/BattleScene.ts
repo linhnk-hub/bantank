@@ -67,7 +67,10 @@ export class BattleScene extends Phaser.Scene {
   private p1VisualPos: { x: number; y: number } | null = null;
   private p2VisualPos: { x: number; y: number } | null = null;
   private enemyVisualPositions: Map<string, { x: number; y: number }> = new Map();
+  private vsAiVisualPositions: Map<string, { x: number; y: number }> = new Map();
   private bulletVisualPositions: Map<string, { x: number; y: number }> = new Map();
+  private targetFpsLimit: 30 | 60 = 60;
+  private renderThrottleAccumulatorMs: number = 0;
   private activeEnemyIds: Set<string> = new Set();
   private activeBulletIds: Set<string> = new Set();
   private lastDispatchMonotonicMs: number = 0;
@@ -128,9 +131,9 @@ export class BattleScene extends Phaser.Scene {
     this.onPauseCallback = cb;
   }
 
-  public setFpsLimit(_limit: number = 60): void {
-    // Keep native requestAnimationFrame loop (fpsLimit = 0 in Phaser TimeStep)
-    // to prevent stepLimitFPS from skipping frames on 60Hz displays.
+  public setFpsLimit(limit: number = 60): void {
+    this.targetFpsLimit = limit === 30 ? 30 : 60;
+    this.renderThrottleAccumulatorMs = 0;
   }
 
   private startBackgroundHostTimer(): void {
@@ -207,6 +210,7 @@ export class BattleScene extends Phaser.Scene {
     this.p1VisualPos = null;
     this.p2VisualPos = null;
     this.enemyVisualPositions.clear();
+    this.vsAiVisualPositions.clear();
     this.bulletVisualPositions.clear();
   }
 
@@ -247,7 +251,7 @@ export class BattleScene extends Phaser.Scene {
       ? `${vs.phase}:${vs.normalRemainingSeconds}:${vs.suddenDeathElapsedSeconds}:${vs.safeZone.shrinkLevel}:${vs.safeZone.secondsUntilNextShrink}:${vs.anyTankInDangerZone}:${vs.team1.totalKills}:${vs.team2.totalKills}:${vs.outcome?.winnerTeam ?? 'none'}:${vs.combatants.map((c) => `${c.lives}/${c.isDead}/${c.respawnSecondsRemaining}/${c.protectionSecondsRemaining}/${c.inDangerZone}`).join(',')}`
       : 'no_vs';
     const sig = `${state.matchState}|${state.stageRunSeq}|${state.remainingSeconds}|${state.score}|${state.p1State.lives}|${state.p1State.isDead}|${Boolean(state.p1State.isSpectator)}|${state.p2State?.lives ?? -1}|${state.p2State?.isDead ?? false}|${Boolean(state.p2State?.isSpectator)}|${state.peerLeaveNotice ?? ''}|${state.totalDefeatedEnemies}|${state.enemyQueue.length}|${state.enemies.length}|${state.isGameOver}|${state.isStageClear}|${state.isTimeoutGameOver}|${state.terrain.isBaseDestroyed}|${itemSig}|${vsSig}`;
-    if (sig !== this.lastHudSignature || this.hudSyncAccumulatorMs >= 100) {
+    if (sig !== this.lastHudSignature || this.hudSyncAccumulatorMs >= 1000) {
       this.lastHudSignature = sig;
       this.hudSyncAccumulatorMs = 0;
       this.onStateCallback({ ...state });
@@ -597,6 +601,16 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
 
+    // When user enables 30 FPS power-saving mode, keep simulation accurate but throttle sprite/canvas updates to ~30Hz
+    if (this.targetFpsLimit === 30 && state.matchState === 'PLAYING') {
+      this.renderThrottleAccumulatorMs += rawDelta;
+      if (this.renderThrottleAccumulatorMs < 31) {
+        this.reportHudStateIfNeeded(rawDelta, state);
+        return;
+      }
+      this.renderThrottleAccumulatorMs = 0;
+    }
+
     const isOnlineGuest =
       (this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE' || this.engine.isVsMode()) &&
       CoopOnlineManager.getInstance().getRole() === 'GUEST';
@@ -923,7 +937,7 @@ export class BattleScene extends Phaser.Scene {
     this.syncSupportItems(state);
 
     // 5c. Render VS Mode A.I Ally Tanks (AI_1 & AI_2) and Sudden Death Safe Zone / Danger Zone Overlay
-    this.syncVsVisuals(state);
+    this.syncVsVisuals(state, isOnlineGuest, rawDelta);
 
     // 6. Spawn Visual Effects from Combat Events & Trigger Audio
     const newEvents = this.engine.popCombatEvents();
@@ -1432,7 +1446,11 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
-  private syncVsVisuals(state: GameCoreState): void {
+  private syncVsVisuals(
+    state: GameCoreState,
+    isOnlineGuest: boolean = false,
+    rawDelta: number = 16
+  ): void {
     const vs = state.vsState;
     if (!vs) {
       if (this.vsAiSprites.size > 0) {
@@ -1443,29 +1461,46 @@ export class BattleScene extends Phaser.Scene {
         this.vsAiShieldSprites.forEach((sp) => sp.destroy());
         this.vsAiShieldSprites.clear();
       }
+      this.vsAiVisualPositions.clear();
       this.vsSafeZoneGraphics?.clear();
       return;
     }
 
-    // 1. Sync VS A.I ally tank sprites (AI_1 & AI_2)
+    // 1. Sync VS A.I ally tank sprites (AI_1 & AI_2) with Guest interpolation smoothing
     const activeAiIds = new Set<string>();
     for (const c of vs.combatants) {
       if (!c.isAI) continue;
       if (c.isDead || !c.tank.isAlive) continue;
       activeAiIds.add(c.id);
 
+      let aiX = c.tank.x;
+      let aiY = c.tank.y;
+      if (isOnlineGuest && state.matchState === 'PLAYING') {
+        const smoothedAi = this.computeSmoothedPos(
+          this.vsAiVisualPositions.get(c.id),
+          c.tank.x,
+          c.tank.y,
+          rawDelta,
+          24,
+          16
+        );
+        this.vsAiVisualPositions.set(c.id, smoothedAi);
+        aiX = smoothedAi.x;
+        aiY = smoothedAi.y;
+      }
+
       const prefix = c.role === 'AI_1' ? 'tank_ai1' : 'tank_ai2';
       const texKey = `${prefix}_${c.tank.direction.toLowerCase()}`;
       let sprite = this.vsAiSprites.get(c.id);
       if (!sprite) {
-        sprite = this.add.image(c.tank.x, c.tank.y, texKey);
+        sprite = this.add.image(aiX, aiY, texKey);
         sprite.setOrigin(0, 0);
         sprite.setDisplaySize(16, 16);
         sprite.setDepth(10);
         this.vsAiSprites.set(c.id, sprite);
       } else {
-        if (sprite.x !== c.tank.x || sprite.y !== c.tank.y) {
-          sprite.setPosition(c.tank.x, c.tank.y);
+        if (sprite.x !== aiX || sprite.y !== aiY) {
+          sprite.setPosition(aiX, aiY);
         }
         if (sprite.texture.key !== texKey) {
           sprite.setTexture(texKey);
@@ -1477,13 +1512,13 @@ export class BattleScene extends Phaser.Scene {
         const pulse = Math.floor(c.protectionTicksRemaining / 6) % 2 === 0;
         sprite.setAlpha(pulse ? 0.72 : 1.0);
         if (!shield) {
-          shield = this.add.image(c.tank.x - 1, c.tank.y - 1, 'shield_aura');
+          shield = this.add.image(aiX - 1, aiY - 1, 'shield_aura');
           shield.setOrigin(0, 0);
           shield.setDisplaySize(18, 18);
           shield.setDepth(12);
           this.vsAiShieldSprites.set(c.id, shield);
         } else {
-          shield.setPosition(c.tank.x - 1, c.tank.y - 1);
+          shield.setPosition(aiX - 1, aiY - 1);
           shield.setVisible(true);
         }
         shield.setAlpha(pulse ? 0.95 : 0.45);
@@ -1499,12 +1534,16 @@ export class BattleScene extends Phaser.Scene {
       if (!activeAiIds.has(id)) {
         sprite.destroy();
         this.vsAiSprites.delete(id);
+        this.vsAiVisualPositions.delete(id);
         const shield = this.vsAiShieldSprites.get(id);
         if (shield) {
           shield.destroy();
           this.vsAiShieldSprites.delete(id);
         }
       }
+    }
+    if (!isOnlineGuest) {
+      this.vsAiVisualPositions.clear();
     }
 
     // 2. Render Sudden Death Danger Zone & Safe Zone perimeter overlay

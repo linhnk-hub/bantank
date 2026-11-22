@@ -194,6 +194,26 @@ export class SessionManager {
     this.broadcastTabSync('SESSION_SYNC');
   }
 
+  /**
+   * Returns an estimated Firestore server timestamp in milliseconds using the anchored server clock,
+   * protecting room creation & audit logs against client device clock skew.
+   */
+  public getEstimatedServerNowMs(): number {
+    if (
+      this.lastKnownServerActiveMs > 0 &&
+      Number.isFinite(this.lastKnownServerActivePerfMs) &&
+      this.lastKnownServerActivePerfMs > 0
+    ) {
+      const elapsed = Math.max(0, performance.now() - this.lastKnownServerActivePerfMs);
+      const estimated = Math.round(this.lastKnownServerActiveMs + elapsed);
+      // Sanity check against extreme anomalies (> 10 minutes difference vs Date.now)
+      if (Number.isFinite(estimated) && estimated > 1700000000000) {
+        return estimated;
+      }
+    }
+    return Date.now();
+  }
+
   public getDeviceId(): string {
     return this.deviceId;
   }
@@ -567,18 +587,44 @@ export class SessionManager {
     if (this.isSessionOwnershipConfirmed(uid)) {
       return { allowed: true, status: 'ACTIVE', message: null };
     }
+    // Never bypass confirmed single-device displacement or idle pause
+    if (this.status === 'DISPLACED' || this.status === 'PAUSED_IDLE') {
+      return { allowed: false, status: this.status, message: this.statusMessage };
+    }
     if (this.status === 'ACQUIRING') {
       if (this.inFlightAcquirePromise && this.inFlightAcquireUid === uid) {
         await this.inFlightAcquirePromise;
-        const ok = this.isSessionOwnershipConfirmed(uid);
-        return { allowed: ok, status: this.status, message: this.statusMessage };
+        if (this.isSessionOwnershipConfirmed(uid)) {
+          return { allowed: true, status: 'ACTIVE', message: null };
+        }
+        const postAcquireStatus = this.status as SessionStateStatus;
+        if (postAcquireStatus === 'DISPLACED' || postAcquireStatus === 'PAUSED_IDLE') {
+          return { allowed: false, status: postAcquireStatus, message: this.statusMessage };
+        }
       }
-      return { allowed: false, status: this.status, message: this.statusMessage };
-    }
-    if (this.status === 'NO_SESSION') {
+      // Retry acquisition once if the previous transitional attempt didn't finalize ACTIVE
       await this.acquireSession(uid);
       const ok = this.isSessionOwnershipConfirmed(uid);
       return { allowed: ok, status: this.status, message: this.statusMessage };
+    }
+    if (
+      this.status === 'NO_SESSION' ||
+      this.status === 'CONNECTION_LOST_UNVERIFIED' ||
+      this.status === 'HEARTBEAT_REJECTED_UNCLASSIFIED' ||
+      this.status === 'EXPIRED'
+    ) {
+      // Only re-acquire if Firebase Auth currently has this same authenticated user
+      const liveAuthUser = this.authManager.getCurrentUser();
+      if (liveAuthUser && liveAuthUser.uid === uid) {
+        await this.acquireSession(uid);
+        const ok = this.isSessionOwnershipConfirmed(uid);
+        return { allowed: ok, status: this.status, message: this.statusMessage };
+      }
+      if (this.status === 'NO_SESSION') {
+        await this.acquireSession(uid);
+        const ok = this.isSessionOwnershipConfirmed(uid);
+        return { allowed: ok, status: this.status, message: this.statusMessage };
+      }
     }
     return { allowed: false, status: this.status, message: this.statusMessage };
   }

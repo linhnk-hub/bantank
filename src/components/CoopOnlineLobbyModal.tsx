@@ -22,7 +22,6 @@ import {
   Unlock,
   KeyRound,
   Map as MapIcon,
-  UserX,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import {
@@ -53,7 +52,7 @@ interface CoopOnlineLobbyPanelProps {
   difficulty: 'DEFAULT' | 'EXTREME';
   onDifficultyChange?: (diff: 'DEFAULT' | 'EXTREME') => void;
   onBackToDifficulty: () => void;
-  onOnlineMatchStarted: (room: CoopRoomDocument, role: 'HOST' | 'GUEST') => void;
+  onOnlineMatchStarted: (room: CoopRoomDocument, role: 'HOST' | 'GUEST') => boolean | void;
   subView?: CoopLobbySubView;
   onSubViewChange?: (view: CoopLobbySubView) => void;
 }
@@ -156,9 +155,11 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
       ) {
         const matchKey = `${updatedRoom.roomCode}:${updatedRoom.createdAt}`;
         if (launchedMatchKeyRef.current !== matchKey) {
-          launchedMatchKeyRef.current = matchKey;
           onDifficultyChangeRef.current?.(updatedRoom.difficulty);
-          onOnlineMatchStartedRef.current(updatedRoom, updatedRole);
+          const started = onOnlineMatchStartedRef.current(updatedRoom, updatedRole);
+          if (started !== false) {
+            launchedMatchKeyRef.current = matchKey;
+          }
         }
       } else {
         launchedMatchKeyRef.current = null;
@@ -197,22 +198,18 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
     };
   }, [coopManager, avatarManager]);
 
-  // Fail-safe cho Guest (P2) khi cả hai đã Sẵn sàng: chủ động đồng bộ trạng thái phòng từ máy chủ đề phòng snapshot/P2P bị trễ
+  // Fail-safe cho cả Chủ phòng (P1) và Khách (P2) khi phòng chờ đã có 2 người:
+  // chủ động đồng bộ trạng thái Sẵn sàng & trạng thái vào trận từ máy chủ đề phòng snapshot/P2P bị trễ
   useEffect(() => {
-    if (
-      !room ||
-      room.status !== 'WAITING' ||
-      role !== 'GUEST' ||
-      !room.hostReady ||
-      !room.guestReady
-    ) {
+    if (!room || room.status !== 'WAITING' || !room.guestUid) {
       return;
     }
+    const pollIntervalMs = room.hostReady && room.guestReady ? 1200 : 2000;
     const pollTimer = setInterval(() => {
       void coopManager.refreshRoomFromCloud(true);
-    }, 1200);
+    }, pollIntervalMs);
     return () => clearInterval(pollTimer);
-  }, [coopManager, role, room?.roomCode, room?.status, room?.hostReady, room?.guestReady]);
+  }, [coopManager, role, room?.roomCode, room?.status, room?.guestUid, room?.hostReady, room?.guestReady]);
 
   const handleConfirmCreateRoom = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -435,17 +432,24 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                       <LogIn className="w-6 h-6" />
                     </div>
                     <span className="font-btn text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded bg-[#120e05] text-[#FFB800] border border-[#FFB800]/40">
-                      {t('Đồng Đội • P2', 'Partner • P2')}
+                      {isVsOnlineMode
+                        ? t('Đối thủ • P2', 'Opponent • P2')
+                        : t('Đồng Đội • P2', 'Partner • P2')}
                     </span>
                   </div>
                   <h3 className="font-btn text-base sm:text-lg font-black uppercase tracking-wider text-[#EAF4FF]">
                     {t('2. THAM GIA PHÒNG', '2. JOIN ROOM')}
                   </h3>
                   <p className="text-xs text-[#EAF4FF]/80 leading-relaxed">
-                    {t(
-                      'Nhập Mã phòng (và mật khẩu nếu phòng có khóa) để tham gia phối hợp cùng đồng đội.',
-                      'Enter a room code (and password if locked) to join and fight alongside your partner.'
-                    )}
+                    {isVsOnlineMode
+                      ? t(
+                          'Nhập Mã phòng (và mật khẩu nếu phòng có khóa) để vào đấu trực tiếp với đối thủ.',
+                          'Enter a room code (and password if locked) to battle head-to-head against your opponent.'
+                        )
+                      : t(
+                          'Nhập Mã phòng (và mật khẩu nếu phòng có khóa) để tham gia phối hợp cùng đồng đội.',
+                          'Enter a room code (and password if locked) to join and fight alongside your partner.'
+                        )}
                   </p>
                 </div>
 
@@ -546,8 +550,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                 </div>
                 <p className="text-[11px] text-neutral-300 leading-relaxed">
                   {t(
-                    'Đấu đối kháng trực tuyến trên 2 thiết bị riêng biệt (Host = P1, Guest = P2). 3 mạng • 180 giây • Hồi sinh 3s • Khiên 2s • Sudden Death thu hẹp 20s • Không có Hòa.',
-                    'Online PvP on 2 separate devices (Host = P1, Guest = P2). 3 lives • 180s • 3s respawn • 2s shield • Sudden Death 20s shrink • No Draw.'
+                    'Đấu đối kháng trực tuyến trên 2 thiết bị riêng biệt (Host = P1, Guest = P2). 3 mạng • 2 phút (120s) • Hồi sinh 3s • Khiên 2s • Sudden Death thu hẹp 20s • Không có Hòa.',
+                    'Online PvP on 2 separate devices (Host = P1, Guest = P2). 3 lives • 2 min (120s) • 3s respawn • 2s shield • Sudden Death 20s shrink • No Draw.'
                   )}
                 </p>
                 <div className="flex flex-wrap gap-1.5 pt-1">
@@ -864,10 +868,15 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
             'P1 (Host) is Ready — Waiting for P2 to click Ready.'
           )
         : !room.hostReady && room.guestReady
-          ? t(
-              'P2 (Đồng đội) đã Sẵn sàng — Đang chờ Chủ phòng (P1) bấm Sẵn sàng.',
-              'P2 (Partner) is Ready — Waiting for Host (P1) to click Ready.'
-            )
+          ? isVsOnlineMode || (room.roomMode && room.roomMode !== 'COOP_ONLINE')
+            ? t(
+                'P2 (Đối thủ) đã Sẵn sàng — Đang chờ Chủ phòng (P1) bấm Sẵn sàng.',
+                'P2 (Opponent) is Ready — Waiting for Host (P1) to click Ready.'
+              )
+            : t(
+                'P2 (Đồng đội) đã Sẵn sàng — Đang chờ Chủ phòng (P1) bấm Sẵn sàng.',
+                'P2 (Partner) is Ready — Waiting for Host (P1) to click Ready.'
+              )
           : t(
               'P2 đã vào phòng (2/2)! Hãy nhấn sẵn sàng để xuất kích.',
               'P2 joined the room (2/2)! Click Ready to deploy.'
@@ -1023,8 +1032,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
           </div>
           <p className="text-[11px] text-neutral-300 leading-snug">
             {t(
-              'Host điều khiển Tank P1 • Guest điều khiển Tank P2. 3 mạng • 180s • Sudden Death thu hẹp 20s • Rời trận bị xử thua ngay.',
-              'Host controls Tank P1 • Guest controls Tank P2. 3 lives • 180s • Sudden Death 20s shrink • Leaving forfeits immediately.'
+              'Host điều khiển Tank P1 • Guest điều khiển Tank P2. 3 mạng • 2 phút (120s) • Sudden Death thu hẹp 20s • Rời trận bị xử thua ngay.',
+              'Host controls Tank P1 • Guest controls Tank P2. 3 lives • 2 min (120s) • Sudden Death 20s shrink • Leaving forfeits immediately.'
             )}
           </p>
           <div className="flex flex-wrap gap-1.5 pt-0.5">
@@ -1237,7 +1246,9 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     </div>
                     <div className="min-w-0">
                       <div className="text-[10px] font-black uppercase tracking-wider text-emerald-400">
-                        {t('P2 (Đồng đội)', 'P2 (Partner)')}
+                        {isVsOnlineMode || (room.roomMode && room.roomMode !== 'COOP_ONLINE')
+                          ? t('P2 (Đối thủ)', 'P2 (Opponent)')
+                          : t('P2 (Đồng đội)', 'P2 (Partner)')}
                       </div>
                       <div
                         className={`mt-0.5 inline-flex items-baseline px-2 py-0.5 rounded-md bg-neutral-900 text-xs font-bold text-white max-w-[165px] ${guestFrameClasses}`}
@@ -1276,9 +1287,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                           'Mời người chơi P2 ra khỏi phòng',
                           'Remove P2 from the room'
                         )}
-                        className="px-2.5 py-1 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 font-black text-[10px] uppercase inline-flex items-center justify-center gap-1 shrink-0 whitespace-nowrap transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                        className="px-2.5 py-1 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 font-black text-[10px] uppercase inline-flex items-center justify-center shrink-0 whitespace-nowrap transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                       >
-                        <UserX className="w-3 h-3 shrink-0" />
                         <span>{t('Mời ra', 'Kick')}</span>
                       </button>
                     )}
@@ -1297,8 +1307,8 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
         );
       })()}
 
-      {/* Action Buttons */}
-      <div className="flex flex-wrap items-center justify-end gap-3 pt-2 border-t border-neutral-800">
+      {/* Action Buttons — aligned left on mobile so Ready/Unready is never blocked by bottom-right Online button */}
+      <div className="flex flex-wrap items-center justify-start sm:justify-end gap-3 pt-2 border-t border-neutral-800">
         <div className="flex items-center gap-2.5">
           <button
             type="button"

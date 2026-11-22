@@ -37,6 +37,7 @@ import {
   Shield,
   Lock,
   Map as MapIcon,
+  Star,
   Unlock,
 } from 'lucide-react';
 
@@ -66,7 +67,7 @@ export interface ModeSelectionScreenProps {
   isProcessing: boolean;
   onBack: () => void;
   onStartMatch: (mode: GameModeType, twoPlayerOption?: TwoPlayerOption, stageId?: number) => void;
-  onStartOnlineMatch?: (room: CoopRoomDocument, role: 'HOST' | 'GUEST') => void;
+  onStartOnlineMatch?: (room: CoopRoomDocument, role: 'HOST' | 'GUEST') => boolean | void;
   onStartVsMatch?: (mode: VsMode) => void;
   difficulty: 'DEFAULT' | 'EXTREME';
   onDifficultyChange: (d: 'DEFAULT' | 'EXTREME') => void;
@@ -406,7 +407,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
   const handleOnlineMatchStartedProp = useCallback(
     (room: CoopRoomDocument, role: 'HOST' | 'GUEST') => {
-      onStartOnlineMatch?.(room, role);
+      return onStartOnlineMatch?.(room, role);
     },
     [onStartOnlineMatch]
   );
@@ -502,11 +503,11 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
               </span>
               <span
                 data-testid="top-menu-player-stars"
-                className="hidden sm:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-amber-950/50 border border-amber-400/40 text-amber-300 text-xs font-mono font-bold shrink-0"
+                className="hidden sm:inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-950/50 border border-amber-400/40 text-amber-300 text-xs font-mono font-bold shrink-0"
                 title={t('25 XP = 1 Sao ⭐', '25 XP = 1 Star ⭐')}
               >
-                <span>⭐</span>
                 <span>{playerStats.starBalance.toLocaleString('vi-VN')}</span>
+                <Star className="w-3 h-3 text-[#FFB800] fill-[#FFB800] shrink-0" aria-hidden="true" />
               </span>
               <span
                 data-testid="top-menu-player-level"
@@ -826,7 +827,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     <span>{t('CHẾ ĐỘ ĐỐI KHÁNG: VS', 'VERSUS MODE: VS')}</span>
                   </div>
                   <span className="font-btn px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/55 text-emerald-300 text-[11px] font-bold uppercase">
-                    {t('3 PHÚT • 3 MẠNG • SUDDEN DEATH', '3 MIN • 3 LIVES • SUDDEN DEATH')}
+                    {t('2 PHÚT • 3 MẠNG • SUDDEN DEATH', '2 MIN • 3 LIVES • SUDDEN DEATH')}
                   </span>
                 </div>
 

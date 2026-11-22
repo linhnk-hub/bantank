@@ -51,16 +51,16 @@ export const SupportModal: React.FC<SupportModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-[#050510]/92 flex items-start justify-center pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 overflow-y-auto"
+      className="fixed inset-0 z-[75] bg-[#050510]/92 flex items-start justify-center pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-6 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 overflow-y-auto"
       role="dialog"
       aria-modal="true"
       aria-labelledby="support-modal-title"
     >
-      <div className="bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-lg w-full max-w-2xl shadow-2xl overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col">
+      <div className="bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-xl w-full max-w-2xl shadow-[0_0_32px_rgba(0,0,0,0.85)] overflow-hidden max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] flex flex-col animate-neo-fade-in">
         {/* Header */}
-        <div className="px-4 sm:px-5 py-3 border-b border-neutral-800 flex items-center justify-between bg-[#050510]/90 shrink-0">
+        <div className="px-4 sm:px-5 py-3 border-b border-[#00F0FF]/25 flex items-center justify-between gap-2 bg-[#050510]/95 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded bg-[#FFB800]/15 border border-[#FFB800]/40 flex items-center justify-center text-[#FFB800]">
+            <div className="w-8 h-8 rounded-lg bg-[#00F0FF]/15 border border-[#00F0FF]/45 flex items-center justify-center text-[#00F0FF] shrink-0">
               <Info className="w-4 h-4" />
             </div>
             <div>
@@ -73,9 +73,11 @@ export const SupportModal: React.FC<SupportModalProps> = ({
             </div>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
             title={t('Đóng', 'Close')}
+            aria-label={t('Đóng', 'Close')}
           >
             <X className="w-4 h-4" />
           </button>
@@ -488,8 +490,8 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                 </div>
                 <p className="text-neutral-400">
                   {t(
-                    'P1 vs P2 và P1 + A.I vs P2 + A.I trên 2 thiết bị riêng (Host = P1 Đỏ, AI_1 = Xanh biển nhạt, Guest = P2 Vàng, AI_2 = Xám). 3 phút, 3 mạng, Sudden Death thu hẹp mỗi 20s, không hòa. Rời trận sẽ xử thắng đối thủ ("Đối thủ đã rời trận").',
-                    'P1 vs P2 and P1 + A.I vs P2 + A.I across 2 devices (Host = Red P1, Light Sky AI_1, Guest = Yellow P2, Gray AI_2). 3 min, 3 lives, 20s Sudden Death shrink, no draw. Leaving forfeits ("Opponent left the match").'
+                    'P1 vs P2 và P1 + A.I vs P2 + A.I trên 2 thiết bị riêng (Host = P1 Đỏ, AI_1 = Xanh biển nhạt, Guest = P2 Vàng, AI_2 = Xám). 2 phút, 3 mạng, Sudden Death thu hẹp mỗi 20s, không hòa. Rời trận sẽ xử thắng đối thủ ("Đối thủ đã rời trận").',
+                    'P1 vs P2 and P1 + A.I vs P2 + A.I across 2 devices (Host = Red P1, Light Sky AI_1, Guest = Yellow P2, Gray AI_2). 2 min, 3 lives, 20s Sudden Death shrink, no draw. Leaving forfeits ("Opponent left the match").'
                   )}
                 </p>
               </div>
@@ -568,12 +570,13 @@ export const SupportModal: React.FC<SupportModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-4 sm:px-5 py-3 border-t border-neutral-800 bg-[#050510]/90 flex items-center justify-end shrink-0">
+        <div className="px-4 sm:px-5 py-3 border-t border-neutral-800 bg-[#050510]/95 flex items-center justify-end shrink-0">
           <button
+            type="button"
             onClick={onClose}
-            className="font-btn min-h-[44px] px-5 py-2 rounded bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-xs uppercase tracking-wider transition-all shadow active:scale-95 cursor-pointer"
+            className="font-btn min-h-[42px] px-5 py-2 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-xs uppercase tracking-wider transition-all shadow active:scale-95 cursor-pointer"
           >
-            {t('Đã hiểu & Đóng', 'Got It & Close')}
+            {t('Đóng', 'Close')}
           </button>
         </div>
       </div>

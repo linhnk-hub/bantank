@@ -126,11 +126,11 @@ export const ContactModal: React.FC<ContactModalProps> = ({
         </div>
       )}
 
-      <div className="bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-lg w-full max-w-lg shadow-2xl overflow-hidden flex flex-col">
+      <div className="bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-xl w-full max-w-lg shadow-[0_0_32px_rgba(0,0,0,0.85)] overflow-hidden flex flex-col animate-neo-fade-in">
         {/* Header */}
-        <div className="px-4 sm:px-5 py-3 border-b border-neutral-800 flex items-center justify-between bg-[#050510]/90 shrink-0">
+        <div className="px-4 sm:px-5 py-3 border-b border-[#00F0FF]/25 flex items-center justify-between gap-2 bg-[#050510]/95 shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded bg-[#00F0FF]/15 border border-[#00F0FF]/40 flex items-center justify-center text-[#00F0FF]">
+            <div className="w-8 h-8 rounded-lg bg-[#00F0FF]/15 border border-[#00F0FF]/45 flex items-center justify-center text-[#00F0FF] shrink-0">
               <MessageSquare className="w-4 h-4" />
             </div>
             <h2
@@ -143,7 +143,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({
           <button
             type="button"
             onClick={handleCloseAll}
-            className="p-1.5 rounded text-neutral-400 hover:text-white hover:bg-neutral-800 transition-colors cursor-pointer"
+            className="w-8 h-8 rounded-lg bg-neutral-900 hover:bg-neutral-800 border border-neutral-700 text-neutral-300 hover:text-white flex items-center justify-center transition-colors cursor-pointer shrink-0"
             aria-label={t('Đóng', 'Close')}
           >
             <X className="w-4 h-4" />

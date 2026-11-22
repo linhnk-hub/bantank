@@ -14,6 +14,8 @@ interface VsResultModalProps {
   state: GameCoreState | null;
   onReplay: () => void;
   onQuitToMenu: () => void;
+  isReturningToLobby?: boolean;
+  returnToLobbyError?: string | null;
 }
 
 export const VsResultModal: React.FC<VsResultModalProps> = ({
@@ -21,6 +23,8 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
   state,
   onReplay,
   onQuitToMenu,
+  isReturningToLobby = false,
+  returnToLobbyError = null,
 }) => {
   const { t } = useLanguage();
   const vs = state?.vsState;
@@ -29,13 +33,13 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
   if (!isOpen || !vs || !outcome) return null;
 
   const isTeam1Winner = outcome.winnerTeam === 'TEAM_1';
-  const winnerLabel = isTeam1Winner ? t('PHE 1 (TEAM 1)', 'TEAM 1') : t('PHE 2 (TEAM 2)', 'TEAM 2');
-  const loserLabel = isTeam1Winner ? t('PHE 2 (TEAM 2)', 'TEAM 2') : t('PHE 1 (TEAM 1)', 'TEAM 1');
+  const winnerLabel = isTeam1Winner ? t('ĐỘI 1', 'TEAM 1') : t('ĐỘI 2', 'TEAM 2');
+  const loserLabel = isTeam1Winner ? t('ĐỘI 2', 'TEAM 2') : t('ĐỘI 1', 'TEAM 1');
 
   return (
     <div
       data-testid="vs-result-modal"
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-[#050510]/90 backdrop-blur-sm p-3 sm:p-4 select-none overflow-y-auto"
+      className="fixed inset-0 z-[110] flex items-center justify-center bg-[#050510]/92 p-3 sm:p-4 select-none overflow-y-auto"
     >
       <div className="w-full max-w-lg rounded-xl border-2 border-[#FFB800] bg-[#0b0d1e] shadow-2xl overflow-hidden my-auto">
         {/* Top Banner */}
@@ -116,7 +120,7 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="font-btn text-xs font-black text-red-400">PHE 1</span>
+                <span className="font-btn text-xs font-black text-red-400">{t('ĐỘI 1', 'TEAM 1')}</span>
                 <span
                   data-testid="vs-result-team1-outcome"
                   className={`font-btn text-[10px] font-black px-1.5 py-0.5 rounded ${
@@ -156,7 +160,7 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
               }`}
             >
               <div className="flex items-center justify-between">
-                <span className="font-btn text-xs font-black text-[#FFB800]">PHE 2</span>
+                <span className="font-btn text-xs font-black text-[#FFB800]">{t('ĐỘI 2', 'TEAM 2')}</span>
                 <span
                   data-testid="vs-result-team2-outcome"
                   className={`font-btn text-[10px] font-black px-1.5 py-0.5 rounded ${
@@ -192,7 +196,7 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
           <div className="rounded-lg border border-neutral-800 bg-[#050510] overflow-hidden">
             <div className="px-3 py-1.5 bg-neutral-900/90 border-b border-neutral-800 text-[10px] font-btn font-black uppercase tracking-wider text-neutral-400 grid grid-cols-12">
               <span className="col-span-4">{t('Xe tăng', 'Tank')}</span>
-              <span className="col-span-2 text-center">{t('Phe', 'Team')}</span>
+              <span className="col-span-2 text-center">{t('Đội', 'Team')}</span>
               <span className="col-span-2 text-center">{t('Hạ', 'Kills')}</span>
               <span className="col-span-2 text-center">{t('Bị hạ', 'Deaths')}</span>
               <span className="col-span-2 text-right">{t('Mạng', 'Lives')}</span>
@@ -236,16 +240,27 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
             )}
           </p>
 
+          {returnToLobbyError && (
+            <div className="p-2.5 rounded-lg bg-red-950/60 border border-[#FF0055]/40 text-red-300 text-xs text-center">
+              {returnToLobbyError}
+            </div>
+          )}
+
           {/* Action Buttons */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
             <button
               type="button"
               data-testid="vs-result-replay-btn"
+              disabled={isReturningToLobby}
               onClick={onReplay}
-              className="font-btn min-h-[46px] py-2.5 px-4 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-transform active:scale-95"
+              className="font-btn min-h-[46px] py-2.5 px-4 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
             >
               <RotateCcw className="w-4 h-4" />
-              <span>{t('CHƠI LẠI', 'PLAY AGAIN')}</span>
+              <span>
+                {isReturningToLobby
+                  ? t('ĐANG VỀ PHÒNG...', 'RETURNING...')
+                  : t('VỀ LẠI PHÒNG', 'RETURN TO ROOM')}
+              </span>
             </button>
             <button
               type="button"

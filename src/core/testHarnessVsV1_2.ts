@@ -304,11 +304,11 @@ runTest('C', 'C2: Respawn fallback when primary spawn tile is occupied by enemy 
 });
 
 // =========================================================================
-// NHÓM D — HẾT 180 GIÂY & HIỆP PHỤ SUDDEN DEATH
+// NHÓM D — HẾT 120 GIÂY (2 PHÚT) & HIỆP PHỤ SUDDEN DEATH
 // =========================================================================
-runTest('D', 'D1: 180s timer transitions to SUDDEN DEATH (no draw, does not decide by kills)', () => {
+runTest('D', 'D1: 120s timer transitions to SUDDEN DEATH (no draw, does not decide by kills)', () => {
   const vs = new VsEngine('VS_P1_P2');
-  assert(vs.getState().normalRemainingSeconds === 180, 'Must start at 180s');
+  assert(vs.getState().normalRemainingSeconds === 120, 'Must start at 120s');
   // Give TEAM_1 a kill lead before 0s
   vs.debugForceTankPosition('P1', 64, 96, 'RIGHT');
   vs.debugForceTankPosition('P2', 96, 96, 'UP');
@@ -329,7 +329,7 @@ runTest('D', 'D1: 180s timer transitions to SUDDEN DEATH (no draw, does not deci
   assert(st.outcome === null, 'Must NOT declare draw or auto-win by kills on timeout');
   assert(st.safeZone.shrinkLevel === 0, 'Must NOT shrink immediately upon entering SUDDEN_DEATH');
   assert(st.safeZone.ticksUntilNextShrink === 1200, 'Shrink countdown must start at full 1200 ticks (20s)');
-  return '180s->0s with 1-0 kill lead -> SUDDEN_DEATH (no draw, no early kill-count win)';
+  return '120s->0s with 1-0 kill lead -> SUDDEN_DEATH (no draw, no early kill-count win)';
 });
 
 runTest('D', 'D2: Pending respawn before 0s finishes during SUDDEN_DEATH_TRANSITION before 20s shrink starts; no new respawns after SD starts', () => {
@@ -727,7 +727,7 @@ runTest('I', 'I1: Restart resets VS cleanly; Quit to Menu halts simulation & cle
   const restarted = eng.getState();
   assert(restarted.matchState === 'PLAYING', 'Restart must enter PLAYING');
   assert(restarted.vsState?.phase === 'NORMAL', 'Restart must reset phase to NORMAL');
-  assert(restarted.vsState?.normalRemainingSeconds === 180, 'Restart must reset timer to 180s');
+  assert(restarted.vsState?.normalRemainingSeconds === 120, 'Restart must reset timer to 120s');
   assert(restarted.vsState?.safeZone.shrinkLevel === 0, 'Restart must reset shrinkLevel to 0');
   assert(restarted.vsState?.outcome === null, 'Restart must clear outcome');
   assert(
@@ -746,7 +746,7 @@ runTest('I', 'I1: Restart resets VS cleanly; Quit to Menu halts simulation & cle
   assert(eng.getState().matchState === 'MENU', 'Match state must be MENU');
   assert(eng.getState().tickCount === afterQuitTicks, 'No ticks should execute after quitToMenu');
   assert(eng.getState().bullets.length === 0, 'Bullets cleared on quitToMenu');
-  return 'Restart clean (180s/3 lives/0 shrink/null outcome); Quit halts ticks & clears bullets';
+  return 'Restart clean (120s/3 lives/0 shrink/null outcome); Quit halts ticks & clears bullets';
 });
 
 // Summary

@@ -676,12 +676,12 @@ service cloud.firestore {
     // 6. Validation & Role Helpers cho /coop_rooms/{roomCode} (Metadata tối thiểu)
     //    và /coop_rooms/{roomCode}/private/{docId} (Signaling WebRTC & Kết quả riêng)
     // =========================================================================
-    // Kiểm tra timestamp dạng millisecond do client gửi phải nằm trong biên ±60 giây (60,000 ms)
-    // so với giờ máy chủ request.time.toMillis() (chặn cả tương lai xa lẫn quá khứ cũ).
+    // Kiểm tra timestamp dạng millisecond do client gửi phải nằm trong biên ±300 giây (5 phút)
+    // so với giờ máy chủ request.time.toMillis() (chống lệch đồng hồ thiết bị di động mà vẫn chặn giả mạo).
     function isValidClientMillisTimestamp(ts) {
       return ts is int
-        && ts >= request.time.toMillis() - 60000
-        && ts <= request.time.toMillis() + 60000;
+        && ts >= request.time.toMillis() - 300000
+        && ts <= request.time.toMillis() + 300000;
     }
 
     function isValidCoopRoomLobbySchema(data, roomCode) {
@@ -744,16 +744,16 @@ service cloud.firestore {
     }
 
     // Kiểm tra thời gian tạo phòng hợp lệ theo giờ máy chủ (request.time):
-    // - createdAt và hostLastActiveAt không được lệch quá ±60 giây so với request.time.toMillis()
+    // - createdAt và hostLastActiveAt không được lệch quá ±5 phút so với request.time.toMillis()
     // - expiresAt phải > createdAt, > request.time.toMillis()
-    // - expiresAt không vượt quá 15 phút (900,000 ms) kể từ cả createdAt lẫn request.time.toMillis()
+    // - expiresAt không vượt quá 15 phút (900,000 ms) kể từ createdAt và không vượt quá 20 phút từ request.time.toMillis()
     function isValidCoopRoomCreationTime(data) {
       return isValidClientMillisTimestamp(data.createdAt)
         && isValidClientMillisTimestamp(data.hostLastActiveAt)
         && data.expiresAt > data.createdAt
         && data.expiresAt > request.time.toMillis()
         && data.expiresAt <= data.createdAt + 900000
-        && data.expiresAt <= request.time.toMillis() + 900000;
+        && data.expiresAt <= request.time.toMillis() + 1200000;
     }
 
     // Kiểm tra phòng chờ (WAITING) còn hạn 15 phút để Guest tham gia hoặc Host bắt đầu trận

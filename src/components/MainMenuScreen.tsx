@@ -10,6 +10,7 @@ import {
   ChevronDown,
   Globe,
   RefreshCw,
+  Star,
   Swords,
   User,
   UserCheck,
@@ -304,66 +305,88 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             </div>
           </div>
 
-          {/* Section XI: Clean Progression Bar — NO icons before Quân hàm, Kinh nghiệm, Sao; NO (xx/25 XP) suffix */}
+          {/* Stacked Progression Bar: Rank below Quân hàm, XP below Kinh nghiệm, Stars + Star icon below Sao */}
           <div
             data-testid="home-header-stats-bar"
-            className="mt-2 inline-flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 sm:gap-x-4 px-4 py-2 rounded-lg neo-bevel-card border border-[#00F0FF]/30 text-xs sm:text-sm"
+            className="mt-2 inline-grid grid-cols-3 divide-x divide-neutral-800 rounded-lg neo-bevel-card border border-[#00F0FF]/30 text-xs sm:text-sm overflow-hidden"
           >
-            <div className="flex items-center gap-1.5">
-              <span className="text-neutral-400 font-semibold">{t('Quân hàm:', 'Rank:')}</span>
-              <span className="font-btn font-black text-[#FFB800]">{rankDisplayLabel}</span>
+            <div className="flex flex-col items-center justify-center px-3 sm:px-5 py-2 gap-0.5">
+              <span className="text-[11px] sm:text-xs text-neutral-400 font-semibold leading-tight">
+                {t('Quân hàm', 'Rank')}
+              </span>
+              <span className="font-btn font-black text-[#FFB800] leading-tight">
+                {rankDisplayLabel}
+              </span>
             </div>
-            <span className="text-neutral-700">|</span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-neutral-400 font-semibold">{t('Kinh nghiệm:', 'Experience:')}</span>
-              <span className="font-hud font-bold text-[#00F0FF]">
+            <div className="flex flex-col items-center justify-center px-3 sm:px-5 py-2 gap-0.5">
+              <span className="text-[11px] sm:text-xs text-neutral-400 font-semibold leading-tight">
+                {t('Kinh nghiệm', 'Experience')}
+              </span>
+              <span className="font-hud font-bold text-[#00F0FF] leading-tight">
                 {levelProgress.xpVerificationStatus === 'VERIFIED' && levelProgress.totalXp !== null
                   ? `${levelProgress.totalXp} XP`
                   : '--'}
               </span>
             </div>
-            <span className="text-neutral-700">|</span>
-            <div className="flex items-center gap-1.5">
-              <span className="text-neutral-400 font-semibold">{t('Sao:', 'Stars:')}</span>
-              <span className="font-hud font-black text-yellow-300">
-                {levelProgress.starBalance}
+            <div className="flex flex-col items-center justify-center px-3 sm:px-5 py-2 gap-0.5">
+              <span className="text-[11px] sm:text-xs text-neutral-400 font-semibold leading-tight">
+                {t('Sao', 'Stars')}
+              </span>
+              <span className="font-hud font-black text-yellow-300 inline-flex items-center gap-1 leading-tight">
+                <span>{levelProgress.starBalance}</span>
+                <Star className="w-3.5 h-3.5 text-[#FFB800] fill-[#FFB800] shrink-0" aria-hidden="true" />
               </span>
             </div>
           </div>
         </div>
 
-        {/* Section X: NEO-RETRO 3-Card Home Mode Flow (SOLO | CO-OP | VS) — NO avatar backgrounds, NO UNLOCKED badges */}
+        {/* NEO-RETRO 3-Card Home Mode Flow (SOLO | CO-OP | VS) with TV signal glitch backgrounds & equal tablet heights */}
         <div
           data-testid="home-mode-cards-grid"
-          className="w-full grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 items-start"
+          className={`w-full grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 ${
+            expandedGroup ? 'items-start' : 'items-stretch'
+          }`}
         >
           {/* 1. SOLO — Direct Match Entry */}
           <div
             data-testid="home-mode-card-solo"
-            className="neo-bevel-card rounded-xl border border-[#FFB800]/55 hover:border-[#FFB800] transition-transform duration-150 hover:-translate-y-0.5 overflow-hidden flex flex-col"
+            className="relative neo-bevel-card rounded-xl border border-[#FFB800]/55 hover:border-[#FFB800] transition-transform duration-150 hover:-translate-y-0.5 overflow-hidden flex flex-col"
           >
             <button
               type="button"
               data-testid="home-mode-solo-btn"
               disabled={isActionDisabled}
               onClick={handleSoloDirectClick}
-              className="group w-full text-left p-5 flex flex-col justify-between min-h-[215px] sm:min-h-[235px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform"
+              className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[225px] md:min-h-[268px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
-              <div className="flex items-center justify-between gap-2 mb-4">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#FFB800]/15 border border-[#FFB800]/45 text-[#FFB800] font-btn font-black text-xs uppercase tracking-wider">
+              {/* TV Signal Glitch Background Layer */}
+              <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+                <img
+                  src="/solo.png"
+                  alt=""
+                  className="w-full h-full object-cover tv-card-bg-img"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/78 to-[#050510]/45" />
+                <div className="absolute inset-0 tv-card-scanlines opacity-70" />
+                <div className="absolute inset-x-0 top-0 h-10 tv-card-scanline-sweep" />
+                <div className="absolute inset-x-0 top-[36%] h-2.5 tv-card-glitch-bar" />
+              </div>
+
+              <div className="relative z-10 flex items-center justify-between gap-2 mb-4">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050510]/75 border border-[#FFB800]/55 text-[#FFB800] font-btn font-black text-xs uppercase tracking-wider">
                   <User className="w-3.5 h-3.5" />
                   <span>1P CAMPAIGN</span>
                 </span>
-                <span className="w-8 h-8 rounded-lg bg-[#FFB800]/15 border border-[#FFB800]/40 flex items-center justify-center text-[#FFB800] group-hover:bg-[#FFB800] group-hover:text-[#050510] transition-colors">
+                <span className="w-8 h-8 rounded-lg bg-[#050510]/75 border border-[#FFB800]/45 flex items-center justify-center text-[#FFB800] group-hover:bg-[#FFB800] group-hover:text-[#050510] transition-colors">
                   <ArrowRight className="w-4 h-4" />
                 </span>
               </div>
 
-              <div className="space-y-2 mt-auto">
-                <h2 className="font-btn text-2xl font-black text-[#EAF4FF] group-hover:text-[#FFB800] transition-colors uppercase tracking-wide">
+              <div className="relative z-10 space-y-2 mt-auto">
+                <h2 className="font-btn text-2xl font-black text-[#EAF4FF] group-hover:text-[#FFB800] transition-colors uppercase tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
                   SOLO
                 </h2>
-                <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
+                <p className="text-xs sm:text-sm text-neutral-200 leading-relaxed drop-shadow-[0_1px_4px_rgba(0,0,0,0.95)]">
                   {t(
                     'Vào trận ngay lập tức. Chỉ huy xe tăng chiến đấu qua 10 màn chiến dịch và bảo vệ căn cứ Đại Bàng.',
                     'Jump straight into battle. Command your tank across 10 campaign stages and defend the Eagle Base.'
@@ -380,7 +403,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
           {/* 2. CO-OP — Expands CO-OP A.I & CO-OP ONLINE */}
           <div
             data-testid="home-mode-card-coop"
-            className={`neo-bevel-card rounded-xl border transition-all duration-150 overflow-hidden flex flex-col ${
+            className={`relative neo-bevel-card rounded-xl border transition-all duration-150 overflow-hidden flex flex-col ${
               expandedGroup === 'COOP'
                 ? 'border-[#00F0FF] neo-bevel-cyan'
                 : 'border-[#00F0FF]/45 hover:border-[#00F0FF] hover:-translate-y-0.5'
@@ -394,15 +417,35 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               onClick={() =>
                 setExpandedGroup((prev) => (prev === 'COOP' ? null : 'COOP'))
               }
-              className="group w-full text-left p-5 flex flex-col justify-between min-h-[215px] sm:min-h-[235px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform"
+              className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[225px] md:min-h-[268px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
-              <div className="flex items-center justify-between gap-2 mb-4">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#00F0FF]/15 border border-[#00F0FF]/45 text-[#00F0FF] font-btn font-black text-xs uppercase tracking-wider">
+              {/* TV Signal Glitch Background Layer */}
+              <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+                <img
+                  src="/coop.png"
+                  alt=""
+                  style={{ animationDelay: '-1.6s' }}
+                  className="w-full h-full object-cover tv-card-bg-img"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/78 to-[#050510]/45" />
+                <div className="absolute inset-0 tv-card-scanlines opacity-70" />
+                <div
+                  style={{ animationDelay: '-1.4s' }}
+                  className="absolute inset-x-0 top-0 h-10 tv-card-scanline-sweep"
+                />
+                <div
+                  style={{ animationDelay: '-2.1s' }}
+                  className="absolute inset-x-0 top-[48%] h-2.5 tv-card-glitch-bar"
+                />
+              </div>
+
+              <div className="relative z-10 flex items-center justify-between gap-2 mb-4">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050510]/75 border border-[#00F0FF]/55 text-[#00F0FF] font-btn font-black text-xs uppercase tracking-wider">
                   <Users className="w-3.5 h-3.5" />
                   <span>2P CO-OP</span>
                 </span>
                 <span
-                  className={`w-8 h-8 rounded-lg bg-[#00F0FF]/15 border border-[#00F0FF]/40 flex items-center justify-center text-[#00F0FF] transition-transform duration-200 ${
+                  className={`w-8 h-8 rounded-lg bg-[#050510]/75 border border-[#00F0FF]/45 flex items-center justify-center text-[#00F0FF] transition-transform duration-200 ${
                     expandedGroup === 'COOP' ? 'rotate-180 bg-[#00F0FF] text-[#050510]' : ''
                   }`}
                 >
@@ -410,11 +453,11 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 </span>
               </div>
 
-              <div className="space-y-2 mt-auto">
-                <h2 className="font-btn text-2xl font-black text-[#EAF4FF] group-hover:text-[#00F0FF] transition-colors uppercase tracking-wide">
+              <div className="relative z-10 space-y-2 mt-auto">
+                <h2 className="font-btn text-2xl font-black text-[#EAF4FF] group-hover:text-[#00F0FF] transition-colors uppercase tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
                   CO-OP
                 </h2>
-                <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
+                <p className="text-xs sm:text-sm text-neutral-200 leading-relaxed drop-shadow-[0_1px_4px_rgba(0,0,0,0.95)]">
                   {t(
                     'Hợp tác 2 chiến xa bảo vệ căn cứ cùng đồng đội A.I hoặc bạn bè trực tuyến qua phòng P2P.',
                     'Cooperate with an Ally A.I tank or team up with a friend online via P2P room sync.'
@@ -433,7 +476,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             {expandedGroup === 'COOP' && (
               <div
                 data-testid="home-coop-submodes"
-                className="px-4 pb-4 pt-2 border-t border-[#00F0FF]/25 bg-[#050510]/80 grid grid-cols-1 gap-2 animate-neo-expand"
+                className="relative z-10 px-4 pb-4 pt-2 border-t border-[#00F0FF]/25 bg-[#050510]/95 grid grid-cols-1 gap-2 animate-neo-expand"
               >
                 <button
                   type="button"
@@ -483,7 +526,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
           {/* 3. VS — Expands P1 VS P2 & P1 + A.I VS P2 + A.I (2-Device Online Lobby) */}
           <div
             data-testid="home-mode-card-vs"
-            className={`neo-bevel-card rounded-xl border transition-all duration-150 overflow-hidden flex flex-col ${
+            className={`relative neo-bevel-card rounded-xl border transition-all duration-150 overflow-hidden flex flex-col ${
               expandedGroup === 'VS'
                 ? 'border-[#FF0055] neo-bevel-red'
                 : 'border-[#FF0055]/45 hover:border-[#FF0055] hover:-translate-y-0.5'
@@ -497,15 +540,35 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               onClick={() =>
                 setExpandedGroup((prev) => (prev === 'VS' ? null : 'VS'))
               }
-              className="group w-full text-left p-5 flex flex-col justify-between min-h-[215px] sm:min-h-[235px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform"
+              className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[225px] md:min-h-[268px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
-              <div className="flex items-center justify-between gap-2 mb-4">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#FF0055]/15 border border-[#FF0055]/45 text-[#FF0055] font-btn font-black text-xs uppercase tracking-wider">
+              {/* TV Signal Glitch Background Layer */}
+              <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+                <img
+                  src="/vs.png"
+                  alt=""
+                  style={{ animationDelay: '-3.1s' }}
+                  className="w-full h-full object-cover tv-card-bg-img"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/78 to-[#050510]/45" />
+                <div className="absolute inset-0 tv-card-scanlines opacity-70" />
+                <div
+                  style={{ animationDelay: '-2.7s' }}
+                  className="absolute inset-x-0 top-0 h-10 tv-card-scanline-sweep"
+                />
+                <div
+                  style={{ animationDelay: '-3.6s' }}
+                  className="absolute inset-x-0 top-[28%] h-2.5 tv-card-glitch-bar"
+                />
+              </div>
+
+              <div className="relative z-10 flex items-center justify-between gap-2 mb-4">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050510]/75 border border-[#FF0055]/55 text-[#FF0055] font-btn font-black text-xs uppercase tracking-wider">
                   <Swords className="w-3.5 h-3.5" />
                   <span>PVP ONLINE</span>
                 </span>
                 <span
-                  className={`w-8 h-8 rounded-lg bg-[#FF0055]/15 border border-[#FF0055]/40 flex items-center justify-center text-[#FF0055] transition-transform duration-200 ${
+                  className={`w-8 h-8 rounded-lg bg-[#050510]/75 border border-[#FF0055]/45 flex items-center justify-center text-[#FF0055] transition-transform duration-200 ${
                     expandedGroup === 'VS' ? 'rotate-180 bg-[#FF0055] text-white' : ''
                   }`}
                 >
@@ -513,14 +576,14 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 </span>
               </div>
 
-              <div className="space-y-2 mt-auto">
-                <h2 className="font-btn text-2xl font-black text-[#EAF4FF] group-hover:text-[#FF0055] transition-colors uppercase tracking-wide">
+              <div className="relative z-10 space-y-2 mt-auto">
+                <h2 className="font-btn text-2xl font-black text-[#EAF4FF] group-hover:text-[#FF0055] transition-colors uppercase tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
                   VS
                 </h2>
-                <p className="text-xs sm:text-sm text-neutral-300 leading-relaxed">
+                <p className="text-xs sm:text-sm text-neutral-200 leading-relaxed drop-shadow-[0_1px_4px_rgba(0,0,0,0.95)]">
                   {t(
-                    'Đấu trường đối kháng trực tuyến trên 2 thiết bị riêng biệt. 3 phút • 3 mạng • Sudden Death • Không hòa.',
-                    'Real-time online PvP arena on 2 separate devices. 3 min • 3 lives • Sudden Death • No draw.'
+                    'Đấu trường đối kháng trực tuyến trên 2 thiết bị riêng biệt. 2 phút • 3 mạng • Sudden Death • Không hòa.',
+                    'Real-time online PvP arena on 2 separate devices. 2 min • 3 lives • Sudden Death • No draw.'
                   )}
                 </p>
                 <div className="pt-2 flex items-center gap-1.5 text-xs font-btn font-black text-[#FF0055] uppercase tracking-wider">
@@ -536,7 +599,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             {expandedGroup === 'VS' && (
               <div
                 data-testid="home-vs-submodes"
-                className="px-4 pb-4 pt-2 border-t border-[#FF0055]/25 bg-[#050510]/80 grid grid-cols-1 gap-2 animate-neo-expand"
+                className="relative z-10 px-4 pb-4 pt-2 border-t border-[#FF0055]/25 bg-[#050510]/95 grid grid-cols-1 gap-2 animate-neo-expand"
               >
                 <button
                   type="button"

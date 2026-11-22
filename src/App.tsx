@@ -7,7 +7,7 @@ import { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { PhaserGame } from './game/PhaserGame.tsx';
 import { TerrainLegend } from './components/TerrainLegend.tsx';
 import { M3Hud } from './components/M3Hud.tsx';
-import { VsHud } from './components/VsHud.tsx';
+import { VsHud, VsTitleStatusLine } from './components/VsHud.tsx';
 import { VsResultModal } from './components/VsResultModal.tsx';
 import { PauseModal } from './components/PauseModal.tsx';
 import { GameOverModal } from './components/GameOverModal.tsx';
@@ -44,6 +44,7 @@ import {
   type CoopRoomDocument,
   type CoopPlayerRole,
   type CoopPostStageReadyState,
+  type CoopRematchReadyState,
 } from './core/coopOnlineManager.ts';
 import { useOrientation } from './hooks/useOrientation.ts';
 import { useViewportLayout } from './hooks/useViewportLayout.ts';
@@ -150,9 +151,12 @@ export default function App() {
   const [postStageReady, setPostStageReady] = useState<CoopPostStageReadyState | null>(() =>
     coopManager.getPostStageReadyState()
   );
+  const [rematchReady, setRematchReady] = useState<CoopRematchReadyState | null>(() =>
+    coopManager.getRematchReadyState()
+  );
   const [maintenanceInterruptAlert, setMaintenanceInterruptAlert] = useState<string | null>(null);
 
-  // Sync live peer Ping, active lobby room, post-stage ready status & online network telemetry toggle preference
+  // Sync live peer Ping, active lobby room, post-stage/rematch ready status & online network telemetry toggle preference
   useEffect(() => {
     const unsubPing = coopManager.subscribe((room) => {
       setPeerPingMs(coopManager.getPeerPingMs());
@@ -160,6 +164,9 @@ export default function App() {
     });
     const unsubPostStageReady = coopManager.subscribePostStageReady((nextReady) => {
       setPostStageReady(nextReady);
+    });
+    const unsubRematchReady = coopManager.subscribeRematchReady((nextReady) => {
+      setRematchReady(nextReady);
     });
     const unsubAvatar = AvatarManager.getInstance().subscribe(() => {
       setCurrentUser(authManager.getCurrentUser());
@@ -178,6 +185,7 @@ export default function App() {
     return () => {
       unsubPing();
       unsubPostStageReady();
+      unsubRematchReady();
       unsubAvatar();
       window.removeEventListener(ONLINE_NET_STATS_PREF_EVENT, handlePrefEvent);
       window.removeEventListener('storage', handleStorage);
@@ -410,6 +418,7 @@ export default function App() {
         SoundManager.getInstance().stopAllActiveActionSources();
         void coopManager.leaveRoom();
         coopManager.clearPostStageReadyState();
+        coopManager.clearRematchReadyState();
         if (inTrial) {
           authManager.exitTrialMode();
           setIsTrialMode(false);
@@ -688,13 +697,17 @@ export default function App() {
   }, [currentUser?.uid, handleStartMatch]);
 
   const handleStartOnlineMatch = useCallback(
-    (room: CoopRoomDocument, role: CoopPlayerRole) => {
-      if (sessionManager.getSnapshot().status !== 'ACTIVE') return;
+    (room: CoopRoomDocument, role: CoopPlayerRole): boolean => {
+      const sessStatus = sessionManager.getSnapshot().status;
+      if (sessStatus === 'DISPLACED' || sessStatus === 'PAUSED_IDLE') {
+        return false;
+      }
       setOnlineDisconnectMsg(null);
       setShowOnlineExitConfirm(false);
       setIsReturningToLobby(false);
       setReturnToLobbyError(null);
       coopManager.clearPostStageReadyState();
+      coopManager.clearRematchReadyState();
 
       const roomMode = room.roomMode || 'COOP_ONLINE';
       if (roomMode === 'VS_P1_P2' || roomMode === 'VS_P1_AI_P2_AI') {
@@ -704,7 +717,7 @@ export default function App() {
           enforceProgression: false,
         });
         if (!startRes.success) {
-          return;
+          return false;
         }
         setIsPaused(false);
         const st = gameEngine.getState();
@@ -724,7 +737,7 @@ export default function App() {
         });
         setGameState({ ...st });
         setAppScreen('BATTLE');
-        return;
+        return true;
       }
 
       setDifficulty(room.difficulty);
@@ -736,7 +749,7 @@ export default function App() {
         enforceProgression: role === 'HOST',
       });
       if (!startRes.success) {
-        return;
+        return false;
       }
       setIsPaused(false);
       const st = gameEngine.getState();
@@ -756,6 +769,7 @@ export default function App() {
       });
       setGameState({ ...st });
       setAppScreen('BATTLE');
+      return true;
     },
     [sessionManager, currentUser?.uid, gameEngine, coopManager]
   );
@@ -812,6 +826,8 @@ export default function App() {
       setIsMatchAllowed(false);
     } else {
       void coopManager.leaveRoom();
+      coopManager.clearPostStageReadyState();
+      coopManager.clearRematchReadyState();
     }
     setOnlineDisconnectMsg(null);
     setIsReturningToLobby(false);
@@ -854,7 +870,8 @@ export default function App() {
     handleQuitToMenu();
   }, [gameEngine, coopManager, handleQuitToMenu]);
 
-  // M7.8 Section XIII: Opening 3-line Top Menu in SOLO / CO-OP A.I pauses gameplay completely & shows dark Pause overlay
+  // M7.8 Section XIII: Opening 3-line Top Menu in SOLO / CO-OP A.I pauses gameplay completely & shows Pause overlay.
+  // Closing the drawer (e.g. clicking PauseModal buttons or opening a sub-modal) MUST NOT auto-resume so Restart / Return Home click handlers fire reliably.
   const handleBattleTopMenuOpenChange = useCallback(
     (isOpen: boolean) => {
       const gm = gameEngine.getState().gameMode;
@@ -867,30 +884,9 @@ export default function App() {
           topMenuTriggeredPauseRef.current = true;
           handlePause();
         }
-      } else if (
-        topMenuTriggeredPauseRef.current &&
-        !isSettingsOpen &&
-        !isSupportOpen &&
-        !isContactOpen &&
-        !isFriendsModalOpen &&
-        !isDevDrawerOpen
-      ) {
-        topMenuTriggeredPauseRef.current = false;
-        if (gameEngine.getState().matchState === 'PAUSED') {
-          handleResume();
-        }
       }
     },
-    [
-      gameEngine,
-      handlePause,
-      handleResume,
-      isSettingsOpen,
-      isSupportOpen,
-      isContactOpen,
-      isFriendsModalOpen,
-      isDevDrawerOpen,
-    ]
+    [gameEngine, handlePause]
   );
 
   const handleReturnToLobby = useCallback(async () => {
@@ -898,6 +894,7 @@ export default function App() {
       setReturnToLobbyError('Vui lòng đăng nhập lại để quay về phòng chờ.');
       return;
     }
+    const prevMode = gameEngine.getState().gameMode;
     setIsReturningToLobby(true);
     setReturnToLobbyError(null);
     try {
@@ -909,26 +906,49 @@ export default function App() {
         photoURL: currentUser.photoURL,
       });
       if (!res.success) {
+        // Fallback for VS matches where opponent forfeited / closed the room
+        if (prevMode === 'VS_P1_P2' || prevMode === 'VS_P1_AI_P2_AI') {
+          void coopManager.leaveRoom();
+          setOnlineDisconnectMsg(null);
+          clearVirtualTouchInputs();
+          coopManager.clearPostStageReadyState();
+          coopManager.clearRematchReadyState();
+          gameEngine.quitToMenu();
+          setIsPaused(false);
+          SoundManager.getInstance().stopAllActiveActionSources();
+          MusicManager.getInstance().syncMenuPlayback();
+          setGameState({ ...gameEngine.getState() });
+          handleOpenVsOnlineLobby(prevMode);
+          return;
+        }
         setReturnToLobbyError(res.message || 'Không thể quay về phòng chờ chung.');
         return;
       }
       setOnlineDisconnectMsg(null);
       clearVirtualTouchInputs();
       coopManager.clearPostStageReadyState();
+      coopManager.clearRematchReadyState();
       gameEngine.quitToMenu();
       setIsPaused(false);
       SoundManager.getInstance().stopAllActiveActionSources();
       MusicManager.getInstance().syncMenuPlayback();
       setGameState({ ...gameEngine.getState() });
-      setSelectedMode('TWO_PLAYERS');
-      setTwoPlayerOption('P2_REAL');
+      if (prevMode === 'VS_P1_P2' || prevMode === 'VS_P1_AI_P2_AI') {
+        setModeSelectionInitialCard(prevMode);
+        setModeSelectionInitialStep('COOP_ONLINE_LOBBY');
+      } else {
+        setSelectedMode('TWO_PLAYERS');
+        setTwoPlayerOption('P2_REAL');
+        setModeSelectionInitialCard('COOP_ONLINE');
+        setModeSelectionInitialStep('COOP_ONLINE_LOBBY');
+      }
       setAppScreen('MODE_SELECTION');
     } catch (err: any) {
       setReturnToLobbyError(err?.message || 'Lỗi khi quay về phòng chờ chung.');
     } finally {
       setIsReturningToLobby(false);
     }
-  }, [currentUser, coopManager, clearVirtualTouchInputs, gameEngine]);
+  }, [currentUser, coopManager, clearVirtualTouchInputs, gameEngine, handleOpenVsOnlineLobby]);
 
   const handleSignIn = useCallback(async () => {
     setAuthProcessing(true);
@@ -967,6 +987,7 @@ export default function App() {
     try {
       await coopManager.leaveRoom();
       coopManager.clearPostStageReadyState();
+      coopManager.clearRematchReadyState();
       setOnlineDisconnectMsg(null);
       gameEngine.quitToMenu();
       MusicManager.getInstance().pause();
@@ -1308,6 +1329,75 @@ export default function App() {
     coopManager,
     hasTeammateLeft,
     handleNextStageOrReplay,
+  ]);
+
+  const handleRequestRematchPrompt = useCallback(() => {
+    const st = gameEngine.getState();
+    if (st.gameMode !== 'TWO_PLAYERS_ONLINE') return;
+    if (coopManager.getLocalRole() !== 'HOST') return;
+    coopManager.requestCoopRematchPrompt(st.currentStageId ?? 1, st.stageRunSeq);
+  }, [gameEngine, coopManager]);
+
+  const handleToggleRematchReady = useCallback(() => {
+    const st = gameEngine.getState();
+    if (st.gameMode !== 'TWO_PLAYERS_ONLINE') return;
+    const role = coopManager.getLocalRole();
+    const cur = coopManager.getRematchReadyState();
+    const stageId = st.currentStageId ?? 1;
+    const seq = st.stageRunSeq;
+    const isMatching = Boolean(cur && cur.stageId === stageId && cur.stageRunSeq === seq);
+    const currentReady = isMatching
+      ? role === 'GUEST'
+        ? Boolean(cur?.guestReady)
+        : Boolean(cur?.hostReady)
+      : false;
+    coopManager.setCoopRematchReady(stageId, seq, !currentReady);
+  }, [gameEngine, coopManager]);
+
+  const autoRematchStageKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !isGameOverModalOpen ||
+      !gameState ||
+      gameState.gameMode !== 'TWO_PLAYERS_ONLINE' ||
+      coopManager.getLocalRole() !== 'HOST' ||
+      hasTeammateLeft
+    ) {
+      return;
+    }
+    const stageId = gameState.currentStageId ?? 1;
+    if (
+      !rematchReady ||
+      !rematchReady.requestedByHost ||
+      rematchReady.stageId !== stageId ||
+      rematchReady.stageRunSeq !== gameState.stageRunSeq ||
+      !rematchReady.hostReady ||
+      !rematchReady.guestReady
+    ) {
+      return;
+    }
+    const rematchKey = `${stageId}:${gameState.stageRunSeq}`;
+    if (autoRematchStageKeyRef.current === rematchKey) return;
+    autoRematchStageKeyRef.current = rematchKey;
+
+    clearVirtualTouchInputs();
+    gameEngine.restartStage();
+    setIsPaused(false);
+    const nextSt = gameEngine.getState();
+    coopManager.notifyCoopRematchStart(nextSt.currentStageId ?? 1, nextSt.stageRunSeq, nextSt);
+    MusicManager.getInstance().syncPlaybackWithContext(
+      Math.max(1, nextSt.currentStageId),
+      'TWO_PLAYER'
+    );
+    setGameState({ ...nextSt });
+  }, [
+    isGameOverModalOpen,
+    gameState,
+    rematchReady,
+    coopManager,
+    hasTeammateLeft,
+    clearVirtualTouchInputs,
+    gameEngine,
   ]);
 
   // M7.5.1 & M7.5.2: Record per-UID completed match outcome (WIN / LOSS) with exact per-player enemy XP breakdown (zero bonus XP)
@@ -1768,7 +1858,7 @@ export default function App() {
         </div>
       )}
 
-      {/* Centered Stage Headline Across All Battle Views + Ping/FPS Below Stage Name in Co-op Online */}
+      {/* Centered Stage Headline Across All Battle Views + VS Status Line + Ping/FPS in Co-op Online & VS Online */}
       <div
         data-testid="battle-stage-center-banner"
         className="w-full py-1.5 px-2.5 sm:px-4 bg-[#050510]/90 border-b border-[#00F0FF]/15 flex flex-col items-center justify-center gap-1 shrink-0 z-30"
@@ -1782,7 +1872,8 @@ export default function App() {
             {centeredStageTitle}
           </h2>
         </div>
-        {isCoopOnlineMatch && showOnlineNetStats && (
+        {isVsMatch && <VsTitleStatusLine state={gameState} />}
+        {(isCoopOnlineMatch || isVsMatch) && showOnlineNetStats && (
           <span
             data-testid={layout.isLandscape ? 'landscape-online-net-stats' : 'portrait-online-net-stats'}
             className="px-2 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-[11px] sm:text-xs font-bold shrink-0 whitespace-nowrap"
@@ -1890,15 +1981,11 @@ export default function App() {
                 isLocalSpectator ? 'pointer-events-none opacity-40' : ''
               }`}
             >
-              {isVsMatch ? (
-                <VsHud state={gameState} compact localOnlineRole={localOnlineRole} />
-              ) : (
-                <BattleCenterHudStats
-                  gameState={gameState}
-                  difficulty={difficulty}
-                  localOnlineRole={localOnlineRole}
-                />
-              )}
+              <BattleCenterHudStats
+                gameState={gameState}
+                difficulty={difficulty}
+                localOnlineRole={localOnlineRole}
+              />
               {!isOnlineBattleMode && (
                 <button
                   type="button"
@@ -1927,13 +2014,8 @@ export default function App() {
           onDragStart={(e) => e.preventDefault()}
           className="battle-touch-lock notranslate flex-1 flex flex-col justify-start w-full overflow-hidden bg-[#050510]"
         >
-          {/* Main Content Stack: (VS Compact HUD) -> Canvas -> Controls */}
+          {/* Main Content Stack: Canvas -> Controls (VS lives displayed inside TouchControls center HUD) */}
           <div className="flex-1 flex flex-col items-center justify-start w-full overflow-hidden px-2 pt-1 pb-2">
-            {isVsMatch && (
-              <div className="w-full mb-1.5 flex flex-col items-center gap-1">
-                <VsHud state={gameState} compact localOnlineRole={localOnlineRole} />
-              </div>
-            )}
             <main
               style={{
                 width: `${layout.canvasSizePx}px`,
@@ -2033,7 +2115,8 @@ export default function App() {
                         {centeredStageTitle} {isPaused ? '(PAUSED)' : ''}
                       </span>
                     </div>
-                    {isCoopOnlineMatch && showOnlineNetStats && (
+                    {isVsMatch && <VsTitleStatusLine state={gameState} />}
+                    {(isCoopOnlineMatch || isVsMatch) && showOnlineNetStats && (
                       <span
                         data-testid="desktop-online-net-stats"
                         className="font-hud px-2 py-0.5 rounded bg-sky-950/75 border border-[#00F0FF]/50 text-[#00F0FF] text-xs font-bold"
@@ -2216,7 +2299,15 @@ export default function App() {
           MATCH MODALS (Pause, Online Exit Confirm, GameOver, StageClear, VsResult)
          ========================================================================= */}
       <PauseModal
-        isOpen={isPaused && !isOnlineBattleMode}
+        isOpen={
+          isPaused &&
+          !isOnlineBattleMode &&
+          !isSettingsOpen &&
+          !isSupportOpen &&
+          !isContactOpen &&
+          !isFriendsModalOpen &&
+          !isDevDrawerOpen
+        }
         onResume={handleResume}
         onRestart={handleRestart}
         onQuitToMenu={handleQuitToMenu}
@@ -2228,7 +2319,7 @@ export default function App() {
       {showOnlineExitConfirm && isOnlineBattleMode && (
         <div
           data-testid="online-battle-exit-confirm-modal"
-          className="fixed inset-0 z-[120] flex items-center justify-center bg-[#050510]/90 backdrop-blur-xs p-4 select-none animate-neo-fade-in"
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-[#050510]/92 p-4 select-none animate-neo-fade-in"
         >
           <div className="w-full max-w-md rounded-xl border-2 border-[#FF0055] bg-[#0b0d1e] shadow-2xl overflow-hidden">
             <div className="px-5 py-3.5 border-b border-neutral-800 bg-rose-950/40 flex items-center gap-2.5">
@@ -2285,6 +2376,10 @@ export default function App() {
         returnToLobbyError={returnToLobbyError}
         isTrialMode={isTrialMode}
         localOnlineRole={localOnlineRole}
+        rematchReady={rematchReady}
+        onRequestRematchPrompt={isCoopOnlineMatch ? handleRequestRematchPrompt : undefined}
+        onToggleRematchReady={isCoopOnlineMatch ? handleToggleRematchReady : undefined}
+        hasTeammateLeft={hasTeammateLeft}
       />
 
       <StageClearModal
@@ -2306,16 +2401,10 @@ export default function App() {
         isOpen={isVsResultModalOpen}
         state={gameState}
         onReplay={() => {
-          const vsMode =
-            gameState?.gameMode === 'VS_P1_AI_P2_AI' ? 'VS_P1_AI_P2_AI' : 'VS_P1_P2';
-          void coopManager.leaveRoom();
-          gameEngine.quitToMenu();
-          setIsPaused(false);
-          SoundManager.getInstance().stopAllActiveActionSources();
-          MusicManager.getInstance().syncMenuPlayback();
-          setGameState({ ...gameEngine.getState() });
-          handleOpenVsOnlineLobby(vsMode);
+          void handleReturnToLobby();
         }}
+        isReturningToLobby={isReturningToLobby}
+        returnToLobbyError={returnToLobbyError}
         onQuitToMenu={handleQuitToMenu}
       />
 

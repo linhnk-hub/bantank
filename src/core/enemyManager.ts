@@ -331,11 +331,8 @@ export class EnemyManager {
           snapResult.success &&
           (snapResult.snappedX !== enemy.x || snapResult.snappedY !== enemy.y)
         ) {
-          const snappedBox = getTankHitbox(snapResult.snappedX, snapResult.snappedY);
-          if (!checkTankVsTanks(enemy.id, snappedBox, otherTanks)) {
-            enemy.x = snapResult.snappedX;
-            enemy.y = snapResult.snappedY;
-          }
+          enemy.x = snapResult.snappedX;
+          enemy.y = snapResult.snappedY;
         }
 
         enemy.direction = requestedDir;
@@ -354,18 +351,15 @@ export class EnemyManager {
 
         const nextBox = getTankHitbox(nextX, nextY);
 
-        // Check Terrain collision
+        // Check Terrain collision only (tanks pass through each other across the entire game)
         const terrainColl = checkHitboxVsTerrain(nextBox, terrain, { forBullet: false });
 
-        // Check Tank-to-Tank collision (includes P1, P2, and other enemies)
-        const tankColl = checkTankVsTanks(enemy.id, nextBox, otherTanks);
-
-        if (!terrainColl.collides && !tankColl) {
+        if (!terrainColl.collides) {
           enemy.x = nextX;
           enemy.y = nextY;
           enemy.consecutiveBlockCount = 0;
         } else {
-          const hitOtherEnemy = checkTankVsTanks(enemy.id, nextBox, otherEnemies);
+          const hitOtherEnemy = false;
           const readyToShoot = enemy.shootCooldown <= 0 && enemy.spawnShieldTimer <= 0 && !enemyHasBullet;
           const facingBrick = isFacingBrickObstacle(enemy, terrain);
 

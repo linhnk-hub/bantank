@@ -4,8 +4,9 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Award, Home, LogOut, RotateCcw, ShieldAlert, Star } from 'lucide-react';
+import { Award, CheckCircle2, Home, LogOut, RotateCcw, ShieldAlert, Star } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
+import type { CoopRematchReadyState } from '../core/coopOnlineManager.ts';
 import { TOTAL_CAMPAIGN_STAGES } from '../core/campaignStages.ts';
 import { AuthManager } from '../core/authManager.ts';
 import {
@@ -24,6 +25,10 @@ export interface GameOverModalProps {
   returnToLobbyError?: string | null;
   isTrialMode?: boolean;
   localOnlineRole?: 'HOST' | 'GUEST' | null;
+  rematchReady?: CoopRematchReadyState | null;
+  onRequestRematchPrompt?: () => void;
+  onToggleRematchReady?: () => void;
+  hasTeammateLeft?: boolean;
 }
 
 export const GameOverModal: React.FC<GameOverModalProps> = ({
@@ -36,6 +41,10 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   returnToLobbyError = null,
   isTrialMode = false,
   localOnlineRole = null,
+  rematchReady = null,
+  onRequestRematchPrompt,
+  onToggleRematchReady,
+  hasTeammateLeft = false,
 }) => {
   const { lang, t } = useLanguage();
   const levelMgr = PlayerLevelManager.getInstance();
@@ -189,17 +198,96 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
           </div>
         ) : (
           <div className="space-y-2.5">
-            {isOnlineGuest ? (
+            {isCoopOnline && !hasTeammateLeft && rematchReady?.requestedByHost &&
+            rematchReady.stageId === stageId &&
+            rematchReady.stageRunSeq === state.stageRunSeq ? (
+              <div
+                data-testid="coop-gameover-rematch-ready-panel"
+                className="w-full p-3.5 rounded-xl bg-[#050510] border-2 border-[#00F0FF]/60 space-y-2.5"
+              >
+                <div className="text-center">
+                  <div className="font-btn text-xs font-black uppercase tracking-wider text-[#00F0FF]">
+                    {isOnlineGuest
+                      ? t(
+                          'Chủ phòng (P1) mời chơi lại màn này!',
+                          'Host (P1) invited to replay this stage!'
+                        )
+                      : t('Xác nhận Sẵn sàng chơi lại', 'Confirm Ready to Replay')}
+                  </div>
+                  <p className="text-[11px] text-neutral-300 mt-0.5">
+                    {t(
+                      'Cả 2 người chơi cùng bấm Sẵn sàng để vào lại trận.',
+                      'Both players must click Ready to re-enter the stage.'
+                    )}
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-[11px] font-mono">
+                  <div
+                    className={`px-2.5 py-1.5 rounded-lg border flex items-center justify-between ${
+                      rematchReady.hostReady
+                        ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300'
+                        : 'bg-[#0b0d1e] border-neutral-800 text-neutral-400'
+                    }`}
+                  >
+                    <span className="font-bold">P1</span>
+                    <span className="font-black">
+                      {rematchReady.hostReady ? t('Sẵn sàng', 'Ready') : t('Đang chờ', 'Waiting')}
+                    </span>
+                  </div>
+                  <div
+                    className={`px-2.5 py-1.5 rounded-lg border flex items-center justify-between ${
+                      rematchReady.guestReady
+                        ? 'bg-emerald-950/60 border-emerald-500/60 text-emerald-300'
+                        : 'bg-[#0b0d1e] border-neutral-800 text-neutral-400'
+                    }`}
+                  >
+                    <span className="font-bold">P2</span>
+                    <span className="font-black">
+                      {rematchReady.guestReady ? t('Sẵn sàng', 'Ready') : t('Đang chờ', 'Waiting')}
+                    </span>
+                  </div>
+                </div>
+
+                {onToggleRematchReady && (() => {
+                  const myReady = isOnlineGuest ? rematchReady.guestReady : rematchReady.hostReady;
+                  return (
+                    <button
+                      type="button"
+                      data-testid="coop-gameover-rematch-ready-btn"
+                      onClick={onToggleRematchReady}
+                      className={`font-btn w-full min-h-[46px] py-2.5 px-4 rounded-lg font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer ${
+                        myReady
+                          ? 'bg-neutral-800 hover:bg-neutral-700 text-[#FFB800] border border-[#FFB800]/50'
+                          : 'bg-emerald-500 hover:bg-emerald-400 text-[#050510] shadow-lg shadow-emerald-500/20'
+                      }`}
+                    >
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>
+                        {myReady
+                          ? t('HỦY SẴN SÀNG', 'CANCEL READY')
+                          : t('SẴN SÀNG CHƠI LẠI', 'READY TO REPLAY')}
+                      </span>
+                    </button>
+                  );
+                })()}
+              </div>
+            ) : isOnlineGuest ? (
               <div className="w-full py-3 px-4 rounded-lg bg-[#050510] border border-neutral-700 text-[#FFB800] font-bold text-xs text-center">
                 {t(
-                  'Đang chờ Chủ phòng (P1) khởi động lại màn chơi...',
-                  'Waiting for Room Host (P1) to restart...'
+                  'Đang chờ Chủ phòng (P1) bấm Chơi lại...',
+                  'Waiting for Room Host (P1) to click Play Again...'
                 )}
               </div>
             ) : (
               <button
                 type="button"
-                onClick={onRestart}
+                data-testid="gameover-restart-btn"
+                onClick={
+                  isCoopOnline && !hasTeammateLeft && onRequestRematchPrompt
+                    ? onRequestRematchPrompt
+                    : onRestart
+                }
                 className="font-btn w-full min-h-[48px] py-3 px-5 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-sm uppercase tracking-wider transition-all shadow-lg shadow-[#FFB800]/20 active:scale-95 cursor-pointer flex items-center justify-center gap-2"
               >
                 <RotateCcw className="w-4 h-4" />

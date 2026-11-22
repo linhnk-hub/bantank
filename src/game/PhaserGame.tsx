@@ -71,8 +71,17 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       activeScene = battleScene;
     }
 
+    const isCoarseTouchDevice =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(pointer: coarse)').matches;
+
+    if (mode === 'battle' && battleSceneRef.current && fpsLimit !== undefined) {
+      battleSceneRef.current.setFpsLimit(fpsLimit);
+    }
+
     const config: Phaser.Types.Core.GameConfig = {
-      type: Phaser.AUTO,
+      type: isCoarseTouchDevice ? Phaser.CANVAS : Phaser.AUTO,
       parent: containerRef.current,
       width: MAP_DIMENSIONS.TOTAL_WIDTH_PX,
       height: MAP_DIMENSIONS.TOTAL_HEIGHT_PX,

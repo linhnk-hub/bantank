@@ -103,14 +103,13 @@ export function updateTankMovement(
       return false;
     }
 
-    // 4. Test collision at next position
+    // 4. Test collision at next position (tanks pass through other tanks to prevent movement jams)
     const nextHitbox = getTankHitbox(nextX, nextY);
     const collision = checkHitboxVsTerrain(nextHitbox, terrain, { forBullet: false });
+    void otherTanks;
+    void checkTankVsTanks;
 
-    // 5. Test Tank-to-Tank collision if other tanks are provided
-    const tankConflict = otherTanks ? checkTankVsTanks(tank.id, nextHitbox, otherTanks) : false;
-
-    if (!collision.collides && !tankConflict) {
+    if (!collision.collides) {
       tank.x = nextX;
       tank.y = nextY;
       return true;

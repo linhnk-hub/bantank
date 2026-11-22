@@ -2330,10 +2330,8 @@ export class GameEngine {
 
     const nextHitbox = getTankHitbox(nextX, nextY);
     const terrainColl = checkHitboxVsTerrain(nextHitbox, this.state.terrain, { forBullet: false });
-    const obstacles = this.state.enemies;
-    const tankColl = checkTankVsTanks('p2', nextHitbox, obstacles);
 
-    if (!terrainColl.collides && !tankColl) {
+    if (!terrainColl.collides) {
       v.p2RenderX = nextX;
       v.p2RenderY = nextY;
     }

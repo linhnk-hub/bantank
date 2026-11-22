@@ -140,6 +140,90 @@ const CombatantRow: React.FC<{ c: VsCombatantState; isLocal?: boolean }> = ({
   );
 };
 
+export const VsTitleStatusLine: React.FC<{
+  state: GameCoreState | null;
+}> = ({ state }) => {
+  const { t } = useLanguage();
+  const vs: VsMatchState | null | undefined = state?.vsState;
+  if (!vs) return null;
+
+  const isSuddenDeath = vs.phase === 'SUDDEN_DEATH';
+  const isTransition = vs.phase === 'SUDDEN_DEATH_TRANSITION';
+  const timerDisplay = isSuddenDeath
+    ? formatCountdownMMSS(vs.suddenDeathElapsedSeconds)
+    : isTransition
+      ? '00:00'
+      : formatCountdownMMSS(vs.normalRemainingSeconds);
+
+  const activeAlerts: string[] = [];
+  if (vs.anyTankInDangerZone) {
+    activeAlerts.push(t('NGOÀI VÙNG AN TOÀN!', 'OUTSIDE SAFE ZONE!'));
+  }
+  if (isSuddenDeath) {
+    activeAlerts.push(
+      t(
+        `Thu hẹp cấp ${vs.safeZone.shrinkLevel} • Sau ${vs.safeZone.secondsUntilNextShrink}s`,
+        `Shrink Lv.${vs.safeZone.shrinkLevel} • Next ${vs.safeZone.secondsUntilNextShrink}s`
+      )
+    );
+  }
+  for (const c of vs.combatants) {
+    if (!c.eliminatedPermanently && c.isDead && c.respawnTicksRemaining > 0) {
+      activeAlerts.push(
+        t(`${c.label} hồi sinh ${c.respawnSecondsRemaining}s`, `${c.label} respawn ${c.respawnSecondsRemaining}s`)
+      );
+    }
+  }
+
+  return (
+    <div
+      data-testid="vs-title-status-line"
+      className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-[11px] sm:text-xs font-mono leading-tight"
+    >
+      <span
+        className={`font-btn font-black uppercase tracking-wider ${
+          isSuddenDeath
+            ? 'text-[#FF0055] animate-pulse'
+            : isTransition
+              ? 'text-[#FFB800]'
+              : 'text-[#00F0FF]'
+        }`}
+      >
+        {isSuddenDeath
+          ? t('Hiệp phụ (Sudden Death)', 'Sudden Death')
+          : isTransition
+            ? t('Đang chuyển hiệp...', 'Transitioning...')
+            : t('Hiệp chính', 'Main Round')}
+      </span>
+      <span className="text-neutral-600">•</span>
+      <span
+        data-testid="vs-title-timer"
+        className={`font-hud font-black ${
+          isSuddenDeath
+            ? 'text-[#FF0055]'
+            : vs.normalRemainingSeconds <= 20
+              ? 'text-rose-400 animate-pulse'
+              : 'text-[#FFB800]'
+        }`}
+      >
+        {timerDisplay}
+      </span>
+      {activeAlerts.length > 0 && (
+        <>
+          <span className="text-neutral-600">•</span>
+          <span
+            className={`font-bold ${
+              vs.anyTankInDangerZone ? 'text-[#FF0055] animate-pulse' : 'text-amber-300'
+            }`}
+          >
+            {activeAlerts.join(' • ')}
+          </span>
+        </>
+      )}
+    </div>
+  );
+};
+
 export const VsHud: React.FC<VsHudProps> = ({
   state,
   compact = false,
@@ -170,7 +254,7 @@ export const VsHud: React.FC<VsHudProps> = ({
         <div className="flex items-center justify-between gap-2">
           {/* Team 1 Compact */}
           <div className="flex items-center gap-1.5 min-w-0">
-            <span className="font-btn font-black text-red-400">PHE 1</span>
+            <span className="font-btn font-black text-red-400">{t('ĐỘI 1', 'TEAM 1')}</span>
             <span className="font-hud font-black text-white bg-red-950/70 border border-red-500/40 px-1.5 py-0.5 rounded">
               {vs.team1.totalKills}
             </span>
@@ -209,7 +293,7 @@ export const VsHud: React.FC<VsHudProps> = ({
             <span className="font-hud font-black text-white bg-amber-950/70 border border-[#FFB800]/40 px-1.5 py-0.5 rounded">
               {vs.team2.totalKills}
             </span>
-            <span className="font-btn font-black text-[#FFB800]">PHE 2</span>
+            <span className="font-btn font-black text-[#FFB800]">{t('ĐỘI 2', 'TEAM 2')}</span>
           </div>
         </div>
 
@@ -345,7 +429,7 @@ export const VsHud: React.FC<VsHudProps> = ({
               ? t('HIỆP PHỤ SINH TỬ (KHÔNG GIỚI HẠN)', 'SUDDEN DEATH (UNLIMITED)')
               : isTransition
                 ? t('ĐANG HOÀN TẤT HỒI SINH...', 'COMPLETING PENDING RESPAWNS...')
-                : t('THỜI GIAN CHÍNH THỨC (3:00)', 'OFFICIAL MATCH TIMER (3:00)')}
+                : t('THỜI GIAN CHÍNH THỨC (2:00)', 'OFFICIAL MATCH TIMER (2:00)')}
           </span>
         </div>
         <div
@@ -405,7 +489,7 @@ export const VsHud: React.FC<VsHudProps> = ({
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="font-btn font-black text-xs uppercase tracking-wider text-red-400">
-            {t('PHE 1 (TEAM 1)', 'TEAM 1')}
+            {t('ĐỘI 1', 'TEAM 1')}
           </span>
           <span
             data-testid="vs-hud-team1-kills"
@@ -425,7 +509,7 @@ export const VsHud: React.FC<VsHudProps> = ({
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between">
           <span className="font-btn font-black text-xs uppercase tracking-wider text-yellow-400">
-            {t('PHE 2 (TEAM 2)', 'TEAM 2')}
+            {t('ĐỘI 2', 'TEAM 2')}
           </span>
           <span
             data-testid="vs-hud-team2-kills"
