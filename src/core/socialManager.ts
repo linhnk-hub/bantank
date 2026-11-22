@@ -244,6 +244,11 @@ export interface SocialStorageAdapter {
   upsertFriendRequest(req: FriendRequestRecord): Promise<void>;
   deleteFriendRequest(id: string): Promise<void>;
   listFriendRequestsForUser(uid: string): Promise<FriendRequestRecord[]>;
+  subscribeIncomingFriendRequests(
+    uid: string,
+    onUpdate: (requests: FriendRequestRecord[]) => void,
+    onError?: (err: unknown) => void
+  ): Unsubscribe;
 
   getFriendship(pairId: string): Promise<FriendshipRecord | null>;
   upsertFriendship(record: FriendshipRecord): Promise<void>;
@@ -355,6 +360,26 @@ function isFirestorePermissionError(err: unknown): boolean {
   return code.includes('permission-denied') || msg.includes('missing or insufficient permissions');
 }
 
+function sanitizeSocialDisplayName(raw: unknown): string {
+  const cleaned = String(raw ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 60);
+  return cleaned.length >= 1 ? cleaned : 'Commander';
+}
+
+function sanitizeSocialAvatarUrl(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed.length > 1024) return null;
+  return trimmed;
+}
+
+function sanitizeSocialHandleTag(raw: unknown, uid: string): string {
+  const cleaned = String(raw ?? '').trim().slice(0, 20);
+  return cleaned.length >= 3 ? cleaned : buildHandleTag(uid);
+}
+
 /**
  * In-memory deterministic storage adapter (dùng cho kiểm thử tự động và fallback cục bộ an toàn).
  */
@@ -372,6 +397,17 @@ export class InMemorySocialStorageAdapter implements SocialStorageAdapter {
   private presenceSubs = new Set<(records: PresenceRecord[]) => void>();
   private globalChatSubs = new Set<(msgs: GlobalChatMessage[]) => void>();
   private privateChatSubs = new Map<string, Set<(msgs: PrivateChatMessage[]) => void>>();
+  private incomingFriendReqSubs = new Map<string, Set<(reqs: FriendRequestRecord[]) => void>>();
+
+  private emitIncomingFriendRequests(uid: string): void {
+    const subs = this.incomingFriendReqSubs.get(uid);
+    if (!subs) return;
+    const list = Array.from(this.friendRequests.values())
+      .filter((r) => r.status === 'PENDING' && r.toUid === uid)
+      .sort((a, b) => b.createdAtMs - a.createdAtMs)
+      .map((r) => ({ ...r }));
+    for (const cb of subs) cb(list);
+  }
 
   private emitPresence(): void {
     const list = Array.from(this.presenceMap.values());
@@ -532,10 +568,15 @@ export class InMemorySocialStorageAdapter implements SocialStorageAdapter {
 
   public async upsertFriendRequest(req: FriendRequestRecord): Promise<void> {
     this.friendRequests.set(req.id, { ...req });
+    this.emitIncomingFriendRequests(req.toUid);
   }
 
   public async deleteFriendRequest(id: string): Promise<void> {
+    const existing = this.friendRequests.get(id);
     this.friendRequests.delete(id);
+    if (existing) {
+      this.emitIncomingFriendRequests(existing.toUid);
+    }
   }
 
   public async listFriendRequestsForUser(uid: string): Promise<FriendRequestRecord[]> {
@@ -543,6 +584,22 @@ export class InMemorySocialStorageAdapter implements SocialStorageAdapter {
       .filter((r) => r.status === 'PENDING' && (r.fromUid === uid || r.toUid === uid))
       .sort((a, b) => b.createdAtMs - a.createdAtMs)
       .map((r) => ({ ...r }));
+  }
+
+  public subscribeIncomingFriendRequests(
+    uid: string,
+    onUpdate: (requests: FriendRequestRecord[]) => void
+  ): Unsubscribe {
+    let subs = this.incomingFriendReqSubs.get(uid);
+    if (!subs) {
+      subs = new Set();
+      this.incomingFriendReqSubs.set(uid, subs);
+    }
+    subs.add(onUpdate);
+    this.emitIncomingFriendRequests(uid);
+    return () => {
+      subs?.delete(onUpdate);
+    };
   }
 
   public async getFriendship(pairId: string): Promise<FriendshipRecord | null> {
@@ -787,16 +844,37 @@ export class FirestoreSocialStorageAdapter implements SocialStorageAdapter {
   }
 
   public async addGlobalMessage(msg: GlobalChatMessage): Promise<void> {
-    await this.fallback.addGlobalMessage(msg);
     const db = this.getDbOrNull();
-    if (!db) return;
+    if (!db) {
+      await this.fallback.addGlobalMessage(msg);
+      return;
+    }
+    const writeWithPayload = async (payload: GlobalChatMessage) => {
+      await setDoc(doc(db, 'global_chat_messages', payload.id), payload);
+    };
     try {
-      await setDoc(doc(db, 'global_chat_messages', msg.id), msg);
+      await writeWithPayload(msg);
+      await this.fallback.addGlobalMessage(msg);
       this.rulesDenied = false;
     } catch (err) {
-      if (!this.handleErr(err)) {
-        throw err;
+      if (isFirestorePermissionError(err)) {
+        // Retry once with Date.now() (covers mobile sleep drift on performance.now) & PLAYER fallback role badge
+        try {
+          const retryPayload: GlobalChatMessage = {
+            ...msg,
+            senderRoleBadge: 'PLAYER',
+            createdAtMs: Math.floor(Date.now()),
+          };
+          await writeWithPayload(retryPayload);
+          await this.fallback.addGlobalMessage(retryPayload);
+          this.rulesDenied = false;
+          return;
+        } catch (retryErr) {
+          this.handleErr(retryErr);
+          throw retryErr;
+        }
       }
+      throw err;
     }
   }
 
@@ -862,16 +940,32 @@ export class FirestoreSocialStorageAdapter implements SocialStorageAdapter {
   }
 
   public async addPrivateMessage(msg: PrivateChatMessage): Promise<void> {
-    await this.fallback.addPrivateMessage(msg);
     const db = this.getDbOrNull();
-    if (!db) return;
+    if (!db) {
+      await this.fallback.addPrivateMessage(msg);
+      return;
+    }
     try {
       await setDoc(doc(db, 'private_chats', msg.chatId, 'messages', msg.id), msg);
+      await this.fallback.addPrivateMessage(msg);
       this.rulesDenied = false;
     } catch (err) {
-      if (!this.handleErr(err)) {
-        throw err;
+      if (isFirestorePermissionError(err)) {
+        try {
+          const retryPayload: PrivateChatMessage = {
+            ...msg,
+            createdAtMs: Math.floor(Date.now()),
+          };
+          await setDoc(doc(db, 'private_chats', retryPayload.chatId, 'messages', retryPayload.id), retryPayload);
+          await this.fallback.addPrivateMessage(retryPayload);
+          this.rulesDenied = false;
+          return;
+        } catch (retryErr) {
+          this.handleErr(retryErr);
+          throw retryErr;
+        }
       }
+      throw err;
     }
   }
 
@@ -943,14 +1037,35 @@ export class FirestoreSocialStorageAdapter implements SocialStorageAdapter {
   }
 
   public async upsertFriendRequest(req: FriendRequestRecord): Promise<void> {
-    await this.fallback.upsertFriendRequest(req);
     const db = this.getDbOrNull();
-    if (!db) return;
+    if (!db) {
+      await this.fallback.upsertFriendRequest(req);
+      return;
+    }
     try {
-      await setDoc(doc(db, 'friend_requests', req.id), req, { merge: true });
+      await setDoc(doc(db, 'friend_requests', req.id), req);
+      await this.fallback.upsertFriendRequest(req);
       this.rulesDenied = false;
     } catch (err) {
+      if (isFirestorePermissionError(err)) {
+        try {
+          const retryNow = Math.floor(Date.now());
+          const retryReq: FriendRequestRecord = {
+            ...req,
+            createdAtMs: retryNow,
+            updatedAtMs: retryNow,
+          };
+          await setDoc(doc(db, 'friend_requests', retryReq.id), retryReq);
+          await this.fallback.upsertFriendRequest(retryReq);
+          this.rulesDenied = false;
+          return;
+        } catch (retryErr) {
+          this.handleErr(retryErr);
+          throw retryErr;
+        }
+      }
       this.handleErr(err);
+      throw err;
     }
   }
 
@@ -970,32 +1085,56 @@ export class FirestoreSocialStorageAdapter implements SocialStorageAdapter {
     if (!db) return this.fallback.listFriendRequestsForUser(uid);
     try {
       const [sentSnap, recvSnap] = await Promise.all([
-        getDocs(
-          query(
-            collection(db, 'friend_requests'),
-            where('fromUid', '==', uid),
-            where('status', '==', 'PENDING'),
-            limit(50)
-          )
-        ),
-        getDocs(
-          query(
-            collection(db, 'friend_requests'),
-            where('toUid', '==', uid),
-            where('status', '==', 'PENDING'),
-            limit(50)
-          )
-        ),
+        getDocs(query(collection(db, 'friend_requests'), where('fromUid', '==', uid), limit(50))),
+        getDocs(query(collection(db, 'friend_requests'), where('toUid', '==', uid), limit(50))),
       ]);
       const merged = new Map<string, FriendRequestRecord>();
-      sentSnap.docs.forEach((d) => merged.set(d.id, d.data() as FriendRequestRecord));
-      recvSnap.docs.forEach((d) => merged.set(d.id, d.data() as FriendRequestRecord));
+      sentSnap.docs.forEach((d) => {
+        const rec = d.data() as FriendRequestRecord;
+        if (rec.status === 'PENDING') merged.set(d.id, rec);
+      });
+      recvSnap.docs.forEach((d) => {
+        const rec = d.data() as FriendRequestRecord;
+        if (rec.status === 'PENDING') merged.set(d.id, rec);
+      });
       this.rulesDenied = false;
       return Array.from(merged.values()).sort((a, b) => b.createdAtMs - a.createdAtMs);
     } catch (err) {
       this.handleErr(err);
       return this.fallback.listFriendRequestsForUser(uid);
     }
+  }
+
+  public subscribeIncomingFriendRequests(
+    uid: string,
+    onUpdate: (requests: FriendRequestRecord[]) => void,
+    onError?: (err: unknown) => void
+  ): Unsubscribe {
+    const db = this.getDbOrNull();
+    if (!db) return this.fallback.subscribeIncomingFriendRequests(uid, onUpdate);
+    const q = query(collection(db, 'friend_requests'), where('toUid', '==', uid), limit(50));
+    let fallbackUnsub: Unsubscribe | null = null;
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        this.rulesDenied = false;
+        const list = snap.docs
+          .map((d) => d.data() as FriendRequestRecord)
+          .filter((r) => r.status === 'PENDING')
+          .sort((a, b) => b.createdAtMs - a.createdAtMs);
+        onUpdate(list);
+      },
+      (err) => {
+        if (this.handleErr(err)) {
+          fallbackUnsub = this.fallback.subscribeIncomingFriendRequests(uid, onUpdate);
+        }
+        onError?.(err);
+      }
+    );
+    return () => {
+      unsub();
+      fallbackUnsub?.();
+    };
   }
 
   public async getFriendship(pairId: string): Promise<FriendshipRecord | null> {
@@ -1011,14 +1150,32 @@ export class FirestoreSocialStorageAdapter implements SocialStorageAdapter {
   }
 
   public async upsertFriendship(record: FriendshipRecord): Promise<void> {
-    await this.fallback.upsertFriendship(record);
     const db = this.getDbOrNull();
-    if (!db) return;
+    if (!db) {
+      await this.fallback.upsertFriendship(record);
+      return;
+    }
     try {
       await setDoc(doc(db, 'friendships', record.pairId), record);
+      await this.fallback.upsertFriendship(record);
       this.rulesDenied = false;
     } catch (err) {
-      this.handleErr(err);
+      if (isFirestorePermissionError(err)) {
+        try {
+          const retryRecord: FriendshipRecord = {
+            ...record,
+            createdAtMs: Math.floor(Date.now()),
+          };
+          await setDoc(doc(db, 'friendships', retryRecord.pairId), retryRecord);
+          await this.fallback.upsertFriendship(retryRecord);
+          this.rulesDenied = false;
+          return;
+        } catch (retryErr) {
+          this.handleErr(retryErr);
+          throw retryErr;
+        }
+      }
+      throw err;
     }
   }
 
@@ -1237,6 +1394,16 @@ export class SocialManager {
     return false;
   }
 
+  private resolveNowMs(explicitNowMs?: number): number {
+    if (typeof explicitNowMs === 'number' && Number.isFinite(explicitNowMs)) {
+      return Math.floor(explicitNowMs);
+    }
+    if (this.adapter.isFirestoreBacked) {
+      return Math.floor(SessionManager.getInstance().getEstimatedServerNowMs());
+    }
+    return Date.now();
+  }
+
   private emitMutation(): void {
     for (const cb of this.socialMutationListeners) cb();
   }
@@ -1285,15 +1452,15 @@ export class SocialManager {
     nowMs: number
   ): PresenceRecord {
     const uid = user.uid || '';
-    const avatarUrl = user.photoURL || null;
+    const avatarUrl = sanitizeSocialAvatarUrl(user.photoURL);
     const stats = uid ? PlayerStatsManager.getInstance().getPlayerStatisticsSnapshot(uid) : null;
     return {
       uid,
       handleTag: buildHandleTag(uid),
-      displayName: getUserDisplayLabel(user as any) || 'Commander',
+      displayName: sanitizeSocialDisplayName(getUserDisplayLabel(user as any)),
       avatarUrl,
       roleBadge: resolveUserRole(user),
-      rankTitle: stats?.rankNameVi || 'Binh nhì',
+      rankTitle: (stats?.rankNameVi || 'Binh nhì').slice(0, 60),
       stars: stats?.starBalance ?? 0,
       online: true,
       lastHeartbeatMs: nowMs,
@@ -1309,8 +1476,9 @@ export class SocialManager {
     user: AuthIdentityLike | null,
     sessionStatus: string,
     sessionId: string | null,
-    nowMs: number = Date.now()
+    explicitNowMs?: number
   ): Promise<void> {
+    const nowMs = this.resolveNowMs(explicitNowMs);
     if (!user || !user.uid || sessionStatus !== 'ACTIVE') {
       await this.stopPresence(nowMs);
       return;
@@ -1335,7 +1503,7 @@ export class SocialManager {
     if (!this.presenceUnsub || switchingUser) {
       this.presenceUnsub?.();
       this.presenceUnsub = this.adapter.subscribePresence(100, (records) => {
-        this.handlePresenceBatchUpdate(records, Date.now());
+        this.handlePresenceBatchUpdate(records, this.resolveNowMs());
       });
     }
 
@@ -1347,16 +1515,17 @@ export class SocialManager {
         const liveUser = AuthManager.getInstance().getCurrentUser();
         const snap = SessionManager.getInstance().getSnapshot();
         if (!liveUser || !liveUser.uid || snap.status !== 'ACTIVE') {
-          void this.stopPresence(Date.now());
+          void this.stopPresence(this.resolveNowMs());
           return;
         }
-        const beat = this.buildPresenceRecordForUser(liveUser, snap.sessionId, Date.now());
+        const beat = this.buildPresenceRecordForUser(liveUser, snap.sessionId, this.resolveNowMs());
         void this.adapter.upsertPresenceAndProfile(beat);
       }, SOCIAL_CONFIG.PRESENCE_HEARTBEAT_MS);
     }
   }
 
-  public async stopPresence(nowMs: number = Date.now()): Promise<void> {
+  public async stopPresence(explicitNowMs?: number): Promise<void> {
+    const nowMs = this.resolveNowMs(explicitNowMs);
     const uid = this.activeUid;
     this.activeUid = null;
     if (this.heartbeatTimer) {
@@ -1526,7 +1695,7 @@ export class SocialManager {
     rawContent: string,
     options?: { clientMsgId?: string; nowMs?: number }
   ): Promise<SocialActionResult<GlobalChatMessage>> {
-    const nowMs = options?.nowMs ?? Date.now();
+    const nowMs = this.resolveNowMs(options?.nowMs);
     if (!sender || !sender.uid) {
       return {
         success: false,
@@ -1564,8 +1733,8 @@ export class SocialManager {
       clientMsgId,
       senderUid: sender.uid,
       senderHandleTag: buildHandleTag(sender.uid),
-      senderDisplayName: getUserDisplayLabel(sender as any) || 'Commander',
-      senderAvatarUrl: sender.photoURL || null,
+      senderDisplayName: sanitizeSocialDisplayName(getUserDisplayLabel(sender as any)),
+      senderAvatarUrl: sanitizeSocialAvatarUrl(sender.photoURL),
       senderRoleBadge: resolveUserRole(sender),
       content: validation.cleaned,
       createdAtMs: nowMs,
@@ -1582,6 +1751,13 @@ export class SocialManager {
       }
       return { success: true, data: msg };
     } catch (err: any) {
+      if (isFirestorePermissionError(err)) {
+        return {
+          success: false,
+          errorCode: 'PERMISSION_DENIED',
+          message: 'Không thể gửi tin nhắn chung do quyền Firestore hoặc lệch giờ thiết bị. Vui lòng thử lại.',
+        };
+      }
       return {
         success: false,
         errorCode: 'NETWORK_ERROR',
@@ -1643,8 +1819,9 @@ export class SocialManager {
   public async sendFriendRequest(
     sender: AuthIdentityLike | null,
     target: Pick<PublicPlayerProfile, 'uid' | 'displayName' | 'handleTag' | 'avatarUrl'>,
-    nowMs: number = Date.now()
+    explicitNowMs?: number
   ): Promise<SocialActionResult<{ autoAccepted: boolean }>> {
+    const nowMs = this.resolveNowMs(explicitNowMs);
     if (!sender || !sender.uid) {
       return { success: false, errorCode: 'UNAUTHENTICATED', message: 'Vui lòng đăng nhập để kết bạn.' };
     }
@@ -1683,8 +1860,8 @@ export class SocialManager {
       };
     }
 
-    const senderDisplayName = getUserDisplayLabel(sender as any) || 'Commander';
-    const senderAvatarUrl = sender.photoURL || null;
+    const senderDisplayName = sanitizeSocialDisplayName(getUserDisplayLabel(sender as any));
+    const senderAvatarUrl = sanitizeSocialAvatarUrl(sender.photoURL);
 
     const req: FriendRequestRecord = {
       id: reqId,
@@ -1693,28 +1870,37 @@ export class SocialManager {
       fromHandleTag: buildHandleTag(sender.uid),
       fromAvatarUrl: senderAvatarUrl,
       toUid: target.uid,
-      toDisplayName: target.displayName || 'Commander',
-      toHandleTag: target.handleTag || buildHandleTag(target.uid),
-      toAvatarUrl: target.avatarUrl || null,
+      toDisplayName: sanitizeSocialDisplayName(target.displayName),
+      toHandleTag: sanitizeSocialHandleTag(target.handleTag, target.uid),
+      toAvatarUrl: sanitizeSocialAvatarUrl(target.avatarUrl),
       status: 'PENDING',
       createdAtMs: nowMs,
       updatedAtMs: nowMs,
     };
 
-    await this.adapter.upsertFriendRequest(req);
-    this.emitMutation();
-    return {
-      success: true,
-      message: `Đã gửi lời mời kết bạn tới ${target.displayName}.`,
-      data: { autoAccepted: false },
-    };
+    try {
+      await this.adapter.upsertFriendRequest(req);
+      this.emitMutation();
+      return {
+        success: true,
+        message: `Đã gửi lời mời kết bạn tới ${target.displayName}.`,
+        data: { autoAccepted: false },
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        errorCode: isFirestorePermissionError(err) ? 'PERMISSION_DENIED' : 'NETWORK_ERROR',
+        message: 'Không thể gửi lời mời kết bạn lúc này. Vui lòng thử lại.',
+      };
+    }
   }
 
   public async acceptFriendRequest(
     actor: AuthIdentityLike | null,
     requestId: string,
-    nowMs: number = Date.now()
+    explicitNowMs?: number
   ): Promise<SocialActionResult<FriendshipRecord>> {
+    const nowMs = this.resolveNowMs(explicitNowMs);
     if (!actor || !actor.uid) {
       return { success: false, errorCode: 'UNAUTHENTICATED', message: 'Vui lòng đăng nhập.' };
     }
@@ -1732,22 +1918,39 @@ export class SocialManager {
       pairId,
       userA: isFromA ? req.fromUid : req.toUid,
       userB: isFromA ? req.toUid : req.fromUid,
-      userADisplayName: isFromA ? req.fromDisplayName : req.toDisplayName,
-      userBDisplayName: isFromA ? req.toDisplayName : req.fromDisplayName,
-      userAHandleTag: isFromA ? req.fromHandleTag : req.toHandleTag,
-      userBHandleTag: isFromA ? req.toHandleTag : req.fromHandleTag,
-      userAAvatarUrl: isFromA ? req.fromAvatarUrl : req.toAvatarUrl,
-      userBAvatarUrl: isFromA ? req.toAvatarUrl : req.fromAvatarUrl,
+      userADisplayName: sanitizeSocialDisplayName(isFromA ? req.fromDisplayName : req.toDisplayName),
+      userBDisplayName: sanitizeSocialDisplayName(isFromA ? req.toDisplayName : req.fromDisplayName),
+      userAHandleTag: sanitizeSocialHandleTag(isFromA ? req.fromHandleTag : req.toHandleTag, isFromA ? req.fromUid : req.toUid),
+      userBHandleTag: sanitizeSocialHandleTag(isFromA ? req.toHandleTag : req.fromHandleTag, isFromA ? req.toUid : req.fromUid),
+      userAAvatarUrl: sanitizeSocialAvatarUrl(isFromA ? req.fromAvatarUrl : req.toAvatarUrl),
+      userBAvatarUrl: sanitizeSocialAvatarUrl(isFromA ? req.toAvatarUrl : req.fromAvatarUrl),
       createdAtMs: nowMs,
     };
 
-    await this.adapter.upsertFriendship(friendship);
+    try {
+      await this.adapter.upsertFriendship(friendship);
+    } catch (err: any) {
+      return {
+        success: false,
+        errorCode: isFirestorePermissionError(err) ? 'PERMISSION_DENIED' : 'NETWORK_ERROR',
+        message: 'Không thể lưu quan hệ bạn bè lên máy chủ. Vui lòng thử lại.',
+      };
+    }
+
+    // Chỉ xóa lời mời sau khi đã ghi nhận quan hệ bạn bè thành công
     await this.adapter.deleteFriendRequest(requestId);
-    // Xóa luôn lời mời chiều ngược lại nếu tồn tại để chống trùng lặp
-    await this.adapter.deleteFriendRequest(`${req.toUid}__${req.fromUid}`);
-    // Xóa khỏi danh sách đã xóa bạn nếu trước đây từng hủy kết bạn
-    await this.adapter.deleteDeletedFriend(actor.uid, req.fromUid);
-    await this.adapter.deleteDeletedFriend(req.fromUid, actor.uid);
+    // Xóa lời mời chiều ngược lại nếu tồn tại để chống trùng lặp (không làm hỏng luồng nếu không tồn tại)
+    try {
+      await this.adapter.deleteFriendRequest(`${req.toUid}__${req.fromUid}`);
+    } catch {
+      // ignore
+    }
+    // Chỉ xóa khỏi danh sách đã xóa bạn của chính actor (tuân thủ Firestore rule isOwner(uid))
+    try {
+      await this.adapter.deleteDeletedFriend(actor.uid, req.fromUid);
+    } catch {
+      // ignore
+    }
 
     if (this.activeUid === actor.uid) {
       this.cachedFriendUids.add(req.fromUid);
@@ -1803,8 +2006,9 @@ export class SocialManager {
   public async unfriend(
     actor: AuthIdentityLike | null,
     friendUid: string,
-    nowMs: number = Date.now()
+    explicitNowMs?: number
   ): Promise<SocialActionResult> {
+    const nowMs = this.resolveNowMs(explicitNowMs);
     if (!actor || !actor.uid) {
       return { success: false, errorCode: 'UNAUTHENTICATED', message: 'Vui lòng đăng nhập.' };
     }
@@ -1883,6 +2087,13 @@ export class SocialManager {
     };
   }
 
+  public subscribeIncomingFriendRequests(
+    uid: string,
+    onUpdate: (requests: FriendRequestRecord[]) => void
+  ): Unsubscribe {
+    return this.adapter.subscribeIncomingFriendRequests(uid, onUpdate);
+  }
+
   public async listDeletedFriendsForUser(uid: string): Promise<DeletedFriendRecord[]> {
     return this.adapter.listDeletedFriends(uid);
   }
@@ -1929,7 +2140,7 @@ export class SocialManager {
     rawContent: string,
     options?: { clientMsgId?: string; nowMs?: number }
   ): Promise<SocialActionResult<PrivateChatMessage>> {
-    const nowMs = options?.nowMs ?? Date.now();
+    const nowMs = this.resolveNowMs(options?.nowMs);
     if (!sender || !sender.uid) {
       return { success: false, errorCode: 'UNAUTHENTICATED', message: 'Vui lòng đăng nhập để nhắn tin.' };
     }
@@ -1993,8 +2204,8 @@ export class SocialManager {
       chatId,
       clientMsgId,
       senderUid: sender.uid,
-      senderDisplayName: getUserDisplayLabel(sender as any) || 'Commander',
-      senderAvatarUrl: sender.photoURL || null,
+      senderDisplayName: sanitizeSocialDisplayName(getUserDisplayLabel(sender as any)),
+      senderAvatarUrl: sanitizeSocialAvatarUrl(sender.photoURL),
       recipientUid,
       content: validation.cleaned,
       createdAtMs: nowMs,
@@ -2006,6 +2217,13 @@ export class SocialManager {
       this.sentClientMsgIds.add(clientMsgId);
       return { success: true, data: msg };
     } catch (err: any) {
+      if (isFirestorePermissionError(err)) {
+        return {
+          success: false,
+          errorCode: 'PERMISSION_DENIED',
+          message: 'Không thể gửi tin nhắn riêng do quyền Firestore hoặc lệch giờ thiết bị. Vui lòng thử lại.',
+        };
+      }
       return {
         success: false,
         errorCode: 'NETWORK_ERROR',
@@ -2022,8 +2240,9 @@ export class SocialManager {
   public async blockUser(
     actor: AuthIdentityLike | null,
     targetUid: string,
-    nowMs: number = Date.now()
+    explicitNowMs?: number
   ): Promise<SocialActionResult> {
+    const nowMs = this.resolveNowMs(explicitNowMs);
     if (!actor || !actor.uid) {
       return { success: false, errorCode: 'UNAUTHENTICATED', message: 'Vui lòng đăng nhập.' };
     }
@@ -2062,8 +2281,9 @@ export class SocialManager {
     roomCode: string,
     roomMode: CoopRoomMode,
     hasPassword: boolean,
-    nowMs: number = Date.now()
+    explicitNowMs?: number
   ): Promise<SocialActionResult<RoomInviteRecord>> {
+    const nowMs = this.resolveNowMs(explicitNowMs);
     if (!sender || !sender.uid) {
       return { success: false, errorCode: 'UNAUTHENTICATED', message: 'Vui lòng đăng nhập.' };
     }
@@ -2075,7 +2295,7 @@ export class SocialManager {
     const invite: RoomInviteRecord = {
       id: `inv_${roomCode}_${sender.uid}_${friendUid}`,
       fromUid: sender.uid,
-      fromDisplayName: getUserDisplayLabel(sender as any) || 'Commander',
+      fromDisplayName: sanitizeSocialDisplayName(getUserDisplayLabel(sender as any)),
       toUid: friendUid,
       roomCode,
       roomMode,

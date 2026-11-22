@@ -1207,7 +1207,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                 </div>
               </div>
               <span
-                className={`px-2.5 py-1 rounded border text-[10px] font-black uppercase inline-flex items-center justify-center text-center shrink-0 whitespace-nowrap ${
+                className={`w-[112px] h-[28px] px-2 rounded border text-[10px] font-black uppercase inline-flex items-center justify-center text-center shrink-0 whitespace-nowrap ${
                   room.hostReady
                     ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
                     : 'bg-neutral-900 text-neutral-400 border-neutral-700'
@@ -1267,7 +1267,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                   </div>
                   <div className="flex flex-col items-end gap-1.5 shrink-0">
                     <span
-                      className={`px-2.5 py-1 rounded border text-[10px] font-black uppercase inline-flex items-center justify-center text-center shrink-0 whitespace-nowrap ${
+                      className={`w-[112px] h-[28px] px-2 rounded border text-[10px] font-black uppercase inline-flex items-center justify-center text-center shrink-0 whitespace-nowrap ${
                         room.guestReady
                           ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50'
                           : 'bg-neutral-900 text-neutral-400 border-neutral-700'
@@ -1287,7 +1287,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                           'Mời người chơi P2 ra khỏi phòng',
                           'Remove P2 from the room'
                         )}
-                        className="px-2.5 py-1 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 font-black text-[10px] uppercase inline-flex items-center justify-center shrink-0 whitespace-nowrap transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+                        className="w-[112px] h-[28px] px-2 rounded bg-rose-950/80 hover:bg-rose-900 border border-rose-500/50 text-rose-200 font-black text-[10px] uppercase inline-flex items-center justify-center text-center shrink-0 whitespace-nowrap transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
                       >
                         <span>{t('Mời ra', 'Kick')}</span>
                       </button>

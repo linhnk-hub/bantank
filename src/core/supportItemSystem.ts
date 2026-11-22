@@ -80,6 +80,9 @@ export const SUPPORT_ITEM_BOMB_MAX_ENEMY_KILLS = 2;
 
 export const EAGLE_SHIELD_SIDE_WALL_COORDS: readonly { readonly row: number; readonly col: number }[] = [
   { row: 12, col: 5 },
+  { row: 11, col: 5 },
+  { row: 11, col: 6 },
+  { row: 11, col: 7 },
   { row: 12, col: 7 },
 ] as const;
 

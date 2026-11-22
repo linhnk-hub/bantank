@@ -51,6 +51,7 @@ import {
   type StageClearProof,
 } from './stageProgression.ts';
 import {
+  EAGLE_SHIELD_SIDE_WALL_COORDS,
   createInitialStageItemSystemState,
   stepSupportItemSystemTick,
   isTileProtectedByEagleShield,
@@ -2508,15 +2509,16 @@ export class GameEngine {
     }
     if (snapshot.itemSystem && typeof snapshot.itemSystem === 'object') {
       this.state.itemSystem = cloneStageItemSystemState(snapshot.itemSystem);
-      // Sync Eagle Shield side walls (12,5) and (12,7) on Guest map
+      // Sync all 5 Eagle Shield walls wrapping Left-Top-Right of Eagle on Guest map
       const shieldActive = (this.state.itemSystem.eagleShieldTicksRemaining ?? 0) > 0;
-      for (const col of [5, 7]) {
-        if (this.state.terrain.currentMap[12]) {
+      for (const coord of EAGLE_SHIELD_SIDE_WALL_COORDS) {
+        if (this.state.terrain.currentMap[coord.row]) {
+          const key = `${coord.row}_${coord.col}`;
           if (shieldActive) {
-            this.state.terrain.currentMap[12][col] = 2; // STEEL
+            this.state.terrain.currentMap[coord.row][coord.col] = 2; // STEEL
           } else {
-            const brickMask = this.state.terrain.brickSubTiles[`12_${col}`] ?? 0b1111;
-            this.state.terrain.currentMap[12][col] = brickMask === 0 ? 0 : 1; // BRICK or EMPTY
+            const brickMask = this.state.terrain.brickSubTiles[key] ?? 0b1111;
+            this.state.terrain.currentMap[coord.row][coord.col] = brickMask === 0 ? 0 : 1; // BRICK or EMPTY
           }
         }
       }

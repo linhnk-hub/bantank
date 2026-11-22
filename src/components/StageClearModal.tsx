@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Award, CheckCircle2, Home, LogOut, RotateCcw, Star, Trophy } from 'lucide-react';
+import { CheckCircle2, RotateCcw, Trophy } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
 import type { CoopPostStageReadyState } from '../core/coopOnlineManager.ts';
 import { SCORE_VALUES } from '../core/scoreManager.ts';
@@ -272,23 +272,18 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
 
             <div className="border-t border-neutral-800 pt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
               <div className="bg-[#0b0d1e] border border-neutral-800 rounded-lg p-2.5">
-                <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center gap-1">
-                  <Star className="w-3 h-3 text-yellow-300 fill-yellow-300" />
-                  <span>{t('Quy đổi Sao (25 XP = 1 ⭐)', 'Stars (25 XP = 1 ⭐)')}</span>
+                <div className="text-[10px] uppercase font-bold text-neutral-400">
+                  <span>{t('Tổng Sao hiện có', 'Total Stars')}</span>
                 </div>
-                <div className="mt-1 flex items-baseline justify-between">
+                <div className="mt-1 flex items-baseline">
                   <span className="text-yellow-300 font-black font-hud text-sm">
                     {levelProgress.starBalance} ⭐
-                  </span>
-                  <span className="text-[11px] font-hud text-neutral-400">
-                    {levelProgress.unconvertedXp}/25 XP
                   </span>
                 </div>
               </div>
 
               <div className="bg-[#0b0d1e] border border-neutral-800 rounded-lg p-2.5">
-                <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center gap-1">
-                  <Award className="w-3 h-3 text-[#FFB800]" />
+                <div className="text-[10px] uppercase font-bold text-neutral-400">
                   <span>{t('Quân hàm hiện tại', 'Military Rank')}</span>
                 </div>
                 <div className="mt-1 flex items-baseline justify-between gap-2">
@@ -369,9 +364,8 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
             <button
               type="button"
               onClick={onQuitToMenu}
-              className="font-btn w-full min-h-[46px] py-2.5 px-5 rounded-lg bg-[#050510] hover:bg-neutral-800 text-[#EAF4FF] border border-neutral-700 font-bold text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+              className="font-btn w-full min-h-[46px] py-2.5 px-5 rounded-lg bg-[#050510] hover:bg-neutral-800 text-[#EAF4FF] border border-neutral-700 font-bold text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer flex items-center justify-center"
             >
-              <Home className="w-4 h-4" />
               <span>{t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
             </button>
           </div>
@@ -405,9 +399,8 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
             <button
               type="button"
               onClick={onQuitToMenu}
-              className="font-btn w-full min-h-[46px] py-2.5 px-5 rounded-lg bg-[#050510] hover:bg-neutral-800 text-neutral-300 border border-neutral-700 font-bold text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+              className="font-btn w-full min-h-[46px] py-2.5 px-5 rounded-lg bg-[#050510] hover:bg-neutral-800 text-neutral-300 border border-neutral-700 font-bold text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer flex items-center justify-center"
             >
-              <LogOut className="w-4 h-4" />
               <span>{t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
             </button>
           </div>

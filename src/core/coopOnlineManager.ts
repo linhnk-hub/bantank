@@ -2153,6 +2153,7 @@ export class CoopOnlineManager {
   private addedRemoteCandidateSignatures: Set<string> = new Set();
   private pendingRemoteIceCandidates: RTCIceCandidateInit[] = [];
   private lastPeerP2PActiveAt: number = 0;
+  private matchEnteredPlayingAtMs: number = 0;
   private lastPingSentAt: number = 0;
   private peerPingMs: number | null = null;
   private guestReturnAckResolvers: Array<(roomCode: string) => void> = [];
@@ -2254,6 +2255,16 @@ export class CoopOnlineManager {
       return SessionManager.getInstance().getEstimatedServerNowMs();
     }
     return Date.now();
+  }
+
+  /**
+   * Làm mới mốc thời gian hoạt động ngay khi chuyển từ Phòng chờ sang Màn đấu (chống hiểu nhầm timeout ở frame đầu).
+   */
+  public markMatchTransitionActive(explicitNowMs?: number): void {
+    const nowMs = this.resolveCloudNowMs(explicitNowMs);
+    this.lastPeerP2PActiveAt = nowMs;
+    this.matchEnteredPlayingAtMs = nowMs;
+    this.processedPeerLeaveRoles.clear();
   }
 
   private clearMatchStartRetryTimers(): void {
@@ -3799,6 +3810,7 @@ export class CoopOnlineManager {
 
     this.resetSyncCounters();
     this.lastPeerP2PActiveAt = nowMs;
+    this.matchEnteredPlayingAtMs = nowMs;
 
     const partial: Partial<CoopRoomLobbyDocument> = {
       status: 'PLAYING',
@@ -5432,9 +5444,10 @@ export class CoopOnlineManager {
    */
   public handleIncomingDataChannelMessage(
     msg: CoopDataChannelMessage,
-    nowMs: number = Date.now()
+    explicitNowMs?: number
   ): void {
     if (!msg || typeof msg !== 'object') return;
+    const nowMs = this.resolveCloudNowMs(explicitNowMs);
     this.lastPeerP2PActiveAt = nowMs;
 
     if (msg.type === 'PLAYER_LEFT') {
@@ -5706,6 +5719,9 @@ export class CoopOnlineManager {
         this.currentRoom.roomCode === msg.roomCode &&
         this.currentRoom.status === 'WAITING'
       ) {
+        this.lastPeerP2PActiveAt = nowMs;
+        this.matchEnteredPlayingAtMs = nowMs;
+        this.processedPeerLeaveRoles.clear();
         this.currentRoom = this.applySelectedStageToRoom({
           ...this.currentRoom,
           status: 'PLAYING',
@@ -6321,7 +6337,7 @@ export class CoopOnlineManager {
   /**
    * Kiểm tra tình trạng mất kết nối của đối phương dựa trên tín hiệu P2P DataChannel và trạng thái phòng.
    */
-  public evaluatePeerConnectionStatus(nowMs: number = Date.now()): {
+  public evaluatePeerConnectionStatus(explicitNowMs?: number): {
     peerConnected: boolean;
     warningMessage: string | null;
     isTimedOut: boolean;
@@ -6329,6 +6345,7 @@ export class CoopOnlineManager {
     if (!this.currentRoom || !this.role) {
       return { peerConnected: false, warningMessage: null, isTimedOut: false };
     }
+    const nowMs = this.resolveCloudNowMs(explicitNowMs);
 
     // M7.3.9 Trường hợp E: Nếu P2 (Guest) đã chủ động rời trận khi Host (P1) đang chơi,
     // Host nhận thông báo "P2 đã rời trận." và tiếp tục chơi solo (không báo timeout dừng trận của P1).
@@ -6379,6 +6396,10 @@ export class CoopOnlineManager {
       };
     }
 
+    if (this.currentRoom.status === 'WAITING') {
+      return { peerConnected: true, warningMessage: null, isTimedOut: false };
+    }
+
     const fallbackFirestoreActive =
       this.role === 'HOST'
         ? this.currentRoom.guestLastActiveAt
@@ -6386,7 +6407,8 @@ export class CoopOnlineManager {
 
     const effectiveLastActive = Math.max(
       this.lastPeerP2PActiveAt || 0,
-      fallbackFirestoreActive || 0
+      fallbackFirestoreActive || 0,
+      this.matchEnteredPlayingAtMs || 0
     );
 
     if (!effectiveLastActive) {
@@ -7063,7 +7085,8 @@ export class CoopOnlineManager {
       }
       this.rtcState = 'CONNECTED';
       this.webrtcErrorMessage = null;
-      this.lastPeerP2PActiveAt = Date.now();
+      const openNowMs = this.resolveCloudNowMs();
+      this.lastPeerP2PActiveAt = openNowMs;
       if (this.currentRoom) {
         this.currentRoom = { ...this.currentRoom, rtcConnectionState: 'CONNECTED' };
       }
@@ -7071,14 +7094,14 @@ export class CoopOnlineManager {
       // Fix 1: Chỉ Host ghi xác nhận CONNECTED lên tài liệu phòng sau khi DataChannel.onopen thực sự mở
       if (this.role === 'HOST') {
         void this.adapter
-          .updateRoom(roomCode, { rtcConnectionState: 'CONNECTED', hostLastActiveAt: Date.now() })
+          .updateRoom(roomCode, { rtcConnectionState: 'CONNECTED', hostLastActiveAt: openNowMs })
           .catch(() => undefined);
         this.sendOverDataChannel(
           {
             type: 'LOBBY_STAGE_SELECTED',
             stageId: this.selectedLobbyStageId,
             stageName: this.selectedLobbyStageName,
-            timestamp: Date.now(),
+            timestamp: openNowMs,
           },
           true
         );
@@ -7240,6 +7263,7 @@ export class CoopOnlineManager {
     this.guestLastAppliedStageRunSeq = 0;
     this.guestLastAppliedTickCount = -1;
     this.lastPingSentAt = 0;
+    this.matchEnteredPlayingAtMs = 0;
     this.peerPingMs = null;
     this.isLocalGuestSpectator = false;
     this.isRemoteGuestSpectator = false;

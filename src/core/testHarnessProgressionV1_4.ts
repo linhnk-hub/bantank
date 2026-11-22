@@ -622,21 +622,23 @@ export function runProgressionV1_4Tests(): void {
   shieldEngine.stepTick();
   assertCondition(
     getItemSys(shieldEngine).eagleShieldTicksRemaining === SUPPORT_ITEM_EFFECT_DURATION_TICKS &&
-      shieldEngine.getState().terrain.currentMap[12][5] === TILE_TYPES.STEEL &&
-      shieldEngine.getState().terrain.currentMap[12][7] === TILE_TYPES.STEEL,
-    'EAGLE_SHIELD must convert both side walls (12,5) and (12,7) to STEEL for 600 ticks (10s)'
+      EAGLE_SHIELD_SIDE_WALL_COORDS.every(
+        (coord) => shieldEngine.getState().terrain.currentMap[coord.row][coord.col] === TILE_TYPES.STEEL
+      ),
+    'EAGLE_SHIELD must convert all 5 surrounding walls (Left-Top-Right of Eagle) to STEEL for 600 ticks (10s)'
   );
-  pass('Item Test 31: EAGLE_SHIELD converts side walls (12,5) and (12,7) to STEEL even if previously destroyed');
+  pass('Item Test 31: EAGLE_SHIELD converts all 5 Left-Top-Right walls around Eagle to STEEL even if previously destroyed');
   pass('Item Test 32: EAGLE_SHIELD duration is 10s (600 ticks)');
 
-  // Test 33: Eagle Shield side walls cannot be broken even by power=2 bullets while shield is active
+  // Test 33: Eagle Shield walls cannot be broken even by power=2 bullets while shield is active
   assertCondition(
-    EAGLE_SHIELD_SIDE_WALL_COORDS.length === 2 &&
-      EAGLE_SHIELD_SIDE_WALL_COORDS[0].row === 12 &&
-      EAGLE_SHIELD_SIDE_WALL_COORDS[0].col === 5 &&
-      EAGLE_SHIELD_SIDE_WALL_COORDS[1].row === 12 &&
-      EAGLE_SHIELD_SIDE_WALL_COORDS[1].col === 7,
-    'Eagle shield coordinates must be (12,5) and (12,7)'
+    EAGLE_SHIELD_SIDE_WALL_COORDS.length === 5 &&
+      EAGLE_SHIELD_SIDE_WALL_COORDS.some((c) => c.row === 12 && c.col === 5) &&
+      EAGLE_SHIELD_SIDE_WALL_COORDS.some((c) => c.row === 11 && c.col === 5) &&
+      EAGLE_SHIELD_SIDE_WALL_COORDS.some((c) => c.row === 11 && c.col === 6) &&
+      EAGLE_SHIELD_SIDE_WALL_COORDS.some((c) => c.row === 11 && c.col === 7) &&
+      EAGLE_SHIELD_SIDE_WALL_COORDS.some((c) => c.row === 12 && c.col === 7),
+    'Eagle shield coordinates must cover all 5 tiles (12,5), (11,5), (11,6), (11,7), (12,7)'
   );
   shieldEngine.getState().bullets.push({
     id: 'test_power2_vs_shield',
@@ -654,7 +656,7 @@ export function runProgressionV1_4Tests(): void {
       shieldEngine.getState().terrain.steelSubTiles?.['12_5'] === SUB_TILE_MASKS.ALL,
     'Power=2 bullet must NOT damage Eagle Shield STEEL wall while shield is active'
   );
-  pass('Item Test 33: EAGLE_SHIELD side walls (12,5) and (12,7) are indestructible while active');
+  pass('Item Test 33: EAGLE_SHIELD walls wrapping Eagle are indestructible while active');
 
   // Test 34: Re-picking EAGLE_SHIELD while active refreshes timer to 600 ticks
   for (let i = 0; i < 199; i++) {
@@ -684,20 +686,22 @@ export function runProgressionV1_4Tests(): void {
   );
   pass('Item Test 34: Re-picking EAGLE_SHIELD refreshes duration to 10s (600 ticks)');
 
-  // Test 35-36: After 600 ticks (10s), EAGLE_SHIELD expires and restores (12,5) and (12,7)
+  // Test 35-36: After 600 ticks (10s), EAGLE_SHIELD expires and restores all 5 walls to BRICK
   for (let i = 0; i < 600; i++) {
     shieldEngine.stepTick();
   }
   assertCondition(
     getItemSys(shieldEngine).eagleShieldTicksRemaining === 0 &&
-      shieldEngine.getState().terrain.currentMap[12][5] === TILE_TYPES.BRICK &&
-      shieldEngine.getState().terrain.currentMap[12][7] === TILE_TYPES.BRICK &&
-      shieldEngine.getState().terrain.brickSubTiles['12_5'] === SUB_TILE_MASKS.ALL &&
-      shieldEngine.getState().terrain.brickSubTiles['12_7'] === SUB_TILE_MASKS.ALL,
-    'After 10s, EAGLE_SHIELD must expire and restore side walls to BRICK'
+      EAGLE_SHIELD_SIDE_WALL_COORDS.every(
+        (coord) =>
+          shieldEngine.getState().terrain.currentMap[coord.row][coord.col] === TILE_TYPES.BRICK &&
+          shieldEngine.getState().terrain.brickSubTiles[`${coord.row}_${coord.col}`] ===
+            SUB_TILE_MASKS.ALL
+      ),
+    'After 10s, EAGLE_SHIELD must expire and restore all 5 surrounding walls to BRICK'
   );
   pass('Item Test 35: EAGLE_SHIELD expires after 10s (600 ticks)');
-  pass('Item Test 36: EAGLE_SHIELD restores side walls upon expiration');
+  pass('Item Test 36: EAGLE_SHIELD restores all 5 surrounding walls upon expiration');
 
   // Test 37-42: FIREPOWER Item behavior
   const fpEngine = new GameEngine(undefined, undefined, false);

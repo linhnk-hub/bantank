@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Crown, Heart, Home, LogOut, RotateCcw, Shuffle, Swords, Trophy } from 'lucide-react';
+import { Crown, Heart, LogOut, Shuffle, Swords, Trophy } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
 import { VS_TANK_COLOR_SPEC } from '../core/vsTypes.ts';
 import { useLanguage } from '../core/i18n.ts';
@@ -253,9 +253,8 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
               data-testid="vs-result-replay-btn"
               disabled={isReturningToLobby}
               onClick={onReplay}
-              className="font-btn min-h-[46px] py-2.5 px-4 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 shadow-lg cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
+              className="font-btn min-h-[46px] py-2.5 px-4 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center shadow-lg cursor-pointer transition-transform active:scale-95 disabled:opacity-50"
             >
-              <RotateCcw className="w-4 h-4" />
               <span>
                 {isReturningToLobby
                   ? t('ĐANG VỀ PHÒNG...', 'RETURNING...')
@@ -266,10 +265,9 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
               type="button"
               data-testid="vs-result-menu-btn"
               onClick={onQuitToMenu}
-              className="font-btn min-h-[46px] py-2.5 px-4 rounded-lg bg-[#050510] hover:bg-neutral-800 border border-neutral-700 text-neutral-200 font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer transition-transform active:scale-95"
+              className="font-btn min-h-[46px] py-2.5 px-4 rounded-lg bg-[#050510] hover:bg-neutral-800 border border-neutral-700 text-neutral-200 font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center cursor-pointer transition-transform active:scale-95"
             >
-              <Home className="w-4 h-4" />
-              <span>{t('TRỞ VỀ MENU', 'RETURN TO MENU')}</span>
+              <span>{t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
             </button>
           </div>
         </div>

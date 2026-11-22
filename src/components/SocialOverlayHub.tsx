@@ -13,6 +13,7 @@ import {
   Clock,
   Globe,
   Info,
+  Mail,
   MessageSquare,
   RefreshCw,
   Search,
@@ -130,6 +131,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
   const [globalInput, setGlobalInput] = useState('');
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [lastFailedGlobalText, setLastFailedGlobalText] = useState<string | null>(null);
+  const [isSendingGlobal, setIsSendingGlobal] = useState(false);
   const [loadingOlderGlobal, setLoadingOlderGlobal] = useState(false);
   const globalChatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -141,6 +143,8 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
   const [receivedRequests, setReceivedRequests] = useState<FriendRequestRecord[]>([]);
   const [sentRequests, setSentRequests] = useState<FriendRequestRecord[]>([]);
   const [deletedFriends, setDeletedFriends] = useState<DeletedFriendRecord[]>([]);
+  const [deferredFriendRequestIds, setDeferredFriendRequestIds] = useState<string[]>([]);
+  const [processingFriendReqId, setProcessingFriendReqId] = useState<string | null>(null);
   const [socialFeedback, setSocialFeedback] = useState<string | null>(null);
   const [unfriendConfirmTarget, setUnfriendConfirmTarget] = useState<PublicPlayerProfile | null>(
     null
@@ -151,6 +155,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
   const [privateMessages, setPrivateMessages] = useState<PrivateChatMessage[]>([]);
   const [privateInput, setPrivateInput] = useState('');
   const [privateError, setPrivateError] = useState<string | null>(null);
+  const [isSendingPrivate, setIsSendingPrivate] = useState(false);
   const [privateRel, setPrivateRel] = useState<{
     isFriend: boolean;
     pendingDirection: 'NONE' | 'SENT' | 'RECEIVED';
@@ -170,57 +175,72 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
   // Friend Online/Offline toast stack
   const [toasts, setToasts] = useState<FriendPresenceToastEvent[]>([]);
 
-  // Community manual refresh & unread incoming private message blink tracking
+  // Community manual refresh & unread incoming private message blink tracking (message-ID based, immune to clock skew)
   const [isRefreshingCommunity, setIsRefreshingCommunity] = useState(false);
   const [unreadSenderUids, setUnreadSenderUids] = useState<string[]>([]);
+  const [unreadSenderProfiles, setUnreadSenderProfiles] = useState<
+    Record<string, PublicPlayerProfile>
+  >({});
   const unreadSenderSet = useMemo(() => new Set(unreadSenderUids), [unreadSenderUids]);
-  const sessionWatchBaselineRef = useRef<number>(Date.now());
-  const lastReadByPeerRef = useRef<Record<string, number>>({});
+  const lastReadMsgIdByPeerRef = useRef<Record<string, string>>({});
+  const seenInitialMsgIdByPeerRef = useRef<Record<string, string>>({});
   const privateChatPeerUidRef = useRef<string | null>(null);
   privateChatPeerUidRef.current = privateChatPeer?.uid ?? null;
 
   useEffect(() => {
     if (!currentUser?.uid) {
-      lastReadByPeerRef.current = {};
+      lastReadMsgIdByPeerRef.current = {};
+      seenInitialMsgIdByPeerRef.current = {};
       setUnreadSenderUids([]);
+      setUnreadSenderProfiles({});
+      setDeferredFriendRequestIds([]);
       return;
     }
-    sessionWatchBaselineRef.current = Date.now();
+    seenInitialMsgIdByPeerRef.current = {};
     try {
-      const raw = window.localStorage.getItem(`bto_social_pm_read_${currentUser.uid}`);
+      const raw = window.localStorage.getItem(`bto_social_pm_read_ids_${currentUser.uid}`);
       if (raw) {
-        const parsed = JSON.parse(raw) as Record<string, number>;
+        const parsed = JSON.parse(raw) as Record<string, string>;
         if (parsed && typeof parsed === 'object') {
-          lastReadByPeerRef.current = parsed;
+          lastReadMsgIdByPeerRef.current = parsed;
         }
       }
     } catch {
-      lastReadByPeerRef.current = {};
+      lastReadMsgIdByPeerRef.current = {};
     }
   }, [currentUser?.uid]);
 
   const markPeerMessagesRead = useCallback(
-    (peerUid: string, atMs: number = Date.now()) => {
+    (peerUid: string, latestMsgId?: string) => {
       if (!currentUser?.uid || !peerUid) return;
-      const nextTs = Math.max(lastReadByPeerRef.current[peerUid] ?? 0, atMs);
-      lastReadByPeerRef.current[peerUid] = nextTs;
-      try {
-        window.localStorage.setItem(
-          `bto_social_pm_read_${currentUser.uid}`,
-          JSON.stringify(lastReadByPeerRef.current)
-        );
-      } catch {
-        // ignore storage quota
+      const msgIdToRecord = latestMsgId || seenInitialMsgIdByPeerRef.current[peerUid];
+      if (msgIdToRecord) {
+        lastReadMsgIdByPeerRef.current[peerUid] = msgIdToRecord;
+        seenInitialMsgIdByPeerRef.current[peerUid] = msgIdToRecord;
+        try {
+          window.localStorage.setItem(
+            `bto_social_pm_read_ids_${currentUser.uid}`,
+            JSON.stringify(lastReadMsgIdByPeerRef.current)
+          );
+        } catch {
+          // ignore storage quota
+        }
       }
-      setUnreadSenderUids((prev) => (prev.includes(peerUid) ? prev.filter((id) => id !== peerUid) : prev));
+      setUnreadSenderUids((prev) =>
+        prev.includes(peerUid) ? prev.filter((id) => id !== peerUid) : prev
+      );
     },
     [currentUser?.uid]
   );
 
   const openPrivateChatWithPeer = useCallback(
     (peer: PublicPlayerProfile) => {
+      if (privateChatPeerUidRef.current !== peer.uid) {
+        setPrivateMessages([]);
+        setPrivateError(null);
+      }
       setPrivateChatPeer(peer);
-      markPeerMessagesRead(peer.uid, Date.now());
+      markPeerMessagesRead(peer.uid);
     },
     [markPeerMessagesRead]
   );
@@ -258,7 +278,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
     onPendingFriendRequestsChange?.(reqSplit.received.length);
   }, [currentUser?.uid, social, onPendingFriendRequestsChange]);
 
-  // Subscribe online players & friend presence toasts
+  // Subscribe online players, incoming friend requests & friend presence toasts
   useEffect(() => {
     if (!currentUser?.uid || sessionStatus !== 'ACTIVE') {
       setOnlinePlayers([]);
@@ -266,6 +286,10 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
     }
     const unsubOnline = social.subscribeOnlinePlayers((list) => {
       setOnlinePlayers(list);
+    });
+    const unsubIncomingReqs = social.subscribeIncomingFriendRequests(currentUser.uid, (reqs) => {
+      setReceivedRequests(reqs);
+      onPendingFriendRequestsChange?.(reqs.length);
     });
     const unsubToast = social.subscribeFriendToasts((ev) => {
       setToasts((prev) => {
@@ -284,10 +308,11 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
     void refreshFriendsData();
     return () => {
       unsubOnline();
+      unsubIncomingReqs();
       unsubToast();
       unsubMut();
     };
-  }, [currentUser?.uid, sessionStatus, social, refreshFriendsData]);
+  }, [currentUser?.uid, sessionStatus, social, refreshFriendsData, onPendingFriendRequestsChange]);
 
   // Refresh friends whenever modal or drawer opens
   useEffect(() => {
@@ -325,12 +350,12 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
 
   useEffect(() => {
     if (!currentUser?.uid || !privateChatPeer) return;
-    markPeerMessagesRead(privateChatPeer.uid, Date.now());
+    markPeerMessagesRead(privateChatPeer.uid);
     void refreshPrivateRelationship();
     const unsub = social.subscribePrivateChat(currentUser.uid, privateChatPeer.uid, (msgs) => {
       setPrivateMessages(msgs);
-      const latestMs = msgs.length > 0 ? msgs[msgs.length - 1].createdAtMs : Date.now();
-      markPeerMessagesRead(privateChatPeer.uid, Math.max(Date.now(), latestMs));
+      const latestMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+      markPeerMessagesRead(privateChatPeer.uid, latestMsg?.id);
     });
     return () => unsub();
   }, [currentUser?.uid, privateChatPeer, social, refreshPrivateRelationship, markPeerMessagesRead]);
@@ -341,7 +366,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
     }
   }, [privateMessages.length, privateChatPeer]);
 
-  // Watch incoming private messages from active online peers & friends to trigger blink alerts
+  // Watch incoming private messages from active online peers, friends & pending requests (message-ID based)
   const watchedPeerKey = useMemo(() => {
     if (!currentUser?.uid || sessionStatus !== 'ACTIVE') return '';
     const ids: string[] = [];
@@ -353,25 +378,68 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
     };
     friendsList.forEach((f) => add(f.peer.uid));
     onlinePlayers.forEach((p) => add(p.uid));
-    return ids.slice(0, 16).join(',');
-  }, [currentUser?.uid, sessionStatus, friendsList, onlinePlayers]);
+    receivedRequests.forEach((r) => add(r.fromUid));
+    sentRequests.forEach((r) => add(r.toUid));
+    return ids.slice(0, 30).join(',');
+  }, [currentUser?.uid, sessionStatus, friendsList, onlinePlayers, receivedRequests, sentRequests]);
 
   useEffect(() => {
     if (!currentUser?.uid || sessionStatus !== 'ACTIVE' || !watchedPeerKey) return;
     const peerUids = watchedPeerKey.split(',').filter(Boolean);
     const unsubs = peerUids.map((peerUid) =>
       social.subscribeLatestPrivateMessage(currentUser.uid!, peerUid, (latestMsg) => {
-        if (!latestMsg || latestMsg.senderUid !== peerUid) return;
-        const lastRead = Math.max(
-          lastReadByPeerRef.current[peerUid] ?? 0,
-          sessionWatchBaselineRef.current - 5_000
-        );
-        if (latestMsg.createdAtMs <= lastRead) return;
-        if (privateChatPeerUidRef.current === peerUid) {
-          markPeerMessagesRead(peerUid, latestMsg.createdAtMs);
+        if (!latestMsg) {
+          seenInitialMsgIdByPeerRef.current[peerUid] = '';
           return;
         }
-        setUnreadSenderUids((prev) => (prev.includes(peerUid) ? prev : [...prev, peerUid]));
+        const prevSeenId = seenInitialMsgIdByPeerRef.current[peerUid];
+        seenInitialMsgIdByPeerRef.current[peerUid] = latestMsg.id;
+
+        if (latestMsg.senderUid !== peerUid) return;
+
+        // Cache sender profile so user can always click & reply even if sender goes offline
+        setUnreadSenderProfiles((prev) => {
+          const existing = prev[peerUid];
+          if (
+            existing &&
+            existing.displayName === latestMsg.senderDisplayName &&
+            existing.avatarUrl === latestMsg.senderAvatarUrl
+          ) {
+            return prev;
+          }
+          const shortTag = `#BT-${peerUid.slice(0, 6).toUpperCase()}`;
+          return {
+            ...prev,
+            [peerUid]: {
+              uid: peerUid,
+              handleTag: existing?.handleTag || shortTag,
+              displayName: latestMsg.senderDisplayName || existing?.displayName || 'Chiến binh',
+              avatarUrl: latestMsg.senderAvatarUrl ?? existing?.avatarUrl ?? null,
+              roleBadge: existing?.roleBadge || 'PLAYER',
+              rankTitle: existing?.rankTitle || 'Binh nhì',
+              stars: existing?.stars ?? 0,
+              isOnline: existing?.isOnline ?? false,
+              lastSeenMs: latestMsg.createdAtMs,
+            },
+          };
+        });
+
+        if (privateChatPeerUidRef.current === peerUid) {
+          markPeerMessagesRead(peerUid, latestMsg.id);
+          return;
+        }
+
+        const lastReadId = lastReadMsgIdByPeerRef.current[peerUid];
+        if (lastReadId === latestMsg.id) return;
+
+        const isLiveNewArrival = prevSeenId !== undefined && prevSeenId !== latestMsg.id;
+        const hasUnreadDeltaFromSaved = Boolean(lastReadId) && lastReadId !== latestMsg.id;
+        const isRecentFirstTime =
+          !lastReadId && Math.abs(Date.now() - latestMsg.createdAtMs) <= 600_000;
+
+        if (isLiveNewArrival || hasUnreadDeltaFromSaved || isRecentFirstTime) {
+          setUnreadSenderUids((prev) => (prev.includes(peerUid) ? prev : [...prev, peerUid]));
+        }
       })
     );
     return () => {
@@ -420,19 +488,76 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
     }
   }, [isDrawerOpen, drawerTab, currentUser?.uid]);
 
-  const handleSendGlobal = async (overrideText?: string) => {
-    const textToSend = overrideText ?? globalInput;
-    setGlobalError(null);
-    const res = await social.sendGlobalMessage(currentUser, textToSend);
-    if (!res.success) {
-      setGlobalError(res.message || t('Gửi tin nhắn thất bại.', 'Failed to send message.'));
-      if (res.errorCode === 'NETWORK_ERROR') {
-        setLastFailedGlobalText(textToSend);
+  const handleClearSearch = useCallback(() => {
+    setSearchQuery('');
+    setSearchResults([]);
+    setSearchNotice(null);
+  }, []);
+
+  const handleAcceptFriendRequest = useCallback(
+    async (requestId: string) => {
+      if (!currentUser || processingFriendReqId) return;
+      setProcessingFriendReqId(requestId);
+      try {
+        const res = await social.acceptFriendRequest(currentUser, requestId);
+        if (res.success) {
+          showTempFeedback(t('Đã chấp nhận lời mời kết bạn.', 'Friend request accepted.'));
+          setDeferredFriendRequestIds((prev) => prev.filter((id) => id !== requestId));
+          await refreshFriendsData();
+        } else {
+          showTempFeedback(
+            res.message || t('Không thể chấp nhận lời mời kết bạn.', 'Failed to accept friend request.')
+          );
+        }
+      } finally {
+        setProcessingFriendReqId(null);
       }
-      return;
+    },
+    [currentUser, processingFriendReqId, social, showTempFeedback, t, refreshFriendsData]
+  );
+
+  const handleRejectFriendRequest = useCallback(
+    async (requestId: string) => {
+      if (!currentUser || processingFriendReqId) return;
+      setProcessingFriendReqId(requestId);
+      try {
+        const res = await social.rejectFriendRequest(currentUser, requestId);
+        if (res.success) {
+          showTempFeedback(t('Đã từ chối lời mời kết bạn.', 'Friend request rejected.'));
+          setDeferredFriendRequestIds((prev) => prev.filter((id) => id !== requestId));
+          await refreshFriendsData();
+        } else {
+          showTempFeedback(
+            res.message || t('Không thể từ chối lời mời kết bạn.', 'Failed to reject friend request.')
+          );
+        }
+      } finally {
+        setProcessingFriendReqId(null);
+      }
+    },
+    [currentUser, processingFriendReqId, social, showTempFeedback, t, refreshFriendsData]
+  );
+
+  const handleSendGlobal = async (overrideText?: string) => {
+    if (isSendingGlobal) return;
+    const textToSend = overrideText ?? globalInput;
+    if (!textToSend.trim()) return;
+    setGlobalError(null);
+    setIsSendingGlobal(true);
+    try {
+      const res = await social.sendGlobalMessage(currentUser, textToSend);
+      if (!res.success) {
+        setGlobalError(res.message || t('Gửi tin nhắn thất bại.', 'Failed to send message.'));
+        if (res.errorCode === 'NETWORK_ERROR' || res.errorCode === 'PERMISSION_DENIED') {
+          setLastFailedGlobalText(textToSend);
+        }
+        return;
+      }
+      setGlobalInput('');
+      setLastFailedGlobalText(null);
+    } finally {
+      setIsSendingGlobal(false);
     }
-    setGlobalInput('');
-    setLastFailedGlobalText(null);
   };
 
   const handleLoadOlderGlobal = async () => {
@@ -464,15 +589,24 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
   };
 
   const handleSendPrivate = async () => {
-    if (!privateChatPeer) return;
+    if (!privateChatPeer || isSendingPrivate) return;
+    if (!privateInput.trim()) return;
     setPrivateError(null);
-    const res = await social.sendPrivateMessage(currentUser, privateChatPeer.uid, privateInput);
-    if (!res.success) {
-      setPrivateError(res.message || t('Không thể gửi tin nhắn.', 'Failed to send message.'));
-      await refreshPrivateRelationship();
-      return;
+    setIsSendingPrivate(true);
+    try {
+      const res = await social.sendPrivateMessage(currentUser, privateChatPeer.uid, privateInput);
+      if (!res.success) {
+        setPrivateError(res.message || t('Không thể gửi tin nhắn.', 'Failed to send message.'));
+        await refreshPrivateRelationship();
+        return;
+      }
+      if (res.data?.id) {
+        markPeerMessagesRead(privateChatPeer.uid, res.data.id);
+      }
+      setPrivateInput('');
+    } finally {
+      setIsSendingPrivate(false);
     }
-    setPrivateInput('');
   };
 
   const handleToggleBlock = async () => {
@@ -501,22 +635,105 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
     return null;
   }
 
-  const filteredOnlinePlayers = onlinePlayers.filter((p) => {
+  // Merge any unread message senders who might be offline so user can always see the blink & open chat
+  const mergedCommunityPlayers = (() => {
+    const byUid = new Map<string, PublicPlayerProfile>();
+    onlinePlayers.forEach((p) => byUid.set(p.uid, p));
+    unreadSenderUids.forEach((uid) => {
+      if (!byUid.has(uid)) {
+        const fromFriend = friendsList.find((f) => f.peer.uid === uid)?.peer;
+        const fallbackProfile = unreadSenderProfiles[uid];
+        if (fromFriend) {
+          byUid.set(uid, fromFriend);
+        } else if (fallbackProfile) {
+          byUid.set(uid, fallbackProfile);
+        }
+      }
+    });
+    return Array.from(byUid.values()).sort((a, b) => {
+      const aUnread = unreadSenderSet.has(a.uid) ? 1 : 0;
+      const bUnread = unreadSenderSet.has(b.uid) ? 1 : 0;
+      if (aUnread !== bUnread) return bUnread - aUnread;
+      return 0;
+    });
+  })();
+
+  const filteredOnlinePlayers = mergedCommunityPlayers.filter((p) => {
     const kw = onlineFilter.trim().toLowerCase();
     if (!kw) return true;
     return p.displayName.toLowerCase().includes(kw) || p.handleTag.toLowerCase().includes(kw);
   });
+
+  const activeFriendReqPopup =
+    receivedRequests.find((req) => !deferredFriendRequestIds.includes(req.id)) ?? null;
 
   const canShowAddFriend = (uid: string) =>
     uid !== currentUser.uid && !friendUidSet.has(uid) && !pendingUidSet.has(uid);
 
   return (
     <>
+      {/* Real-time Incoming Friend Request Popup (Đồng ý / Từ chối / Để sau) */}
+      {!isBattleScreen && activeFriendReqPopup && (
+        <div
+          data-testid="incoming-friend-request-popup"
+          className="fixed top-16 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-3 z-[60] w-[calc(100vw-1.5rem)] max-w-[340px] rounded-xl bg-[#0b0d1e]/98 border-2 border-[#FFB800]/80 shadow-[0_0_24px_rgba(255,184,0,0.35)] p-3 space-y-2.5 animate-neo-fade-in"
+        >
+          <div className="flex items-start gap-2.5">
+            <AvatarThumb
+              url={activeFriendReqPopup.fromAvatarUrl}
+              name={activeFriendReqPopup.fromDisplayName}
+              size="sm"
+            />
+            <p className="text-xs text-[#EAF4FF] leading-snug flex-1">
+              {t(
+                `Đã nhận được lời mời kết bạn từ "${activeFriendReqPopup.fromDisplayName}"`,
+                `Received a friend request from "${activeFriendReqPopup.fromDisplayName}"`
+              )}
+            </p>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            <button
+              type="button"
+              data-testid="incoming-friend-req-accept"
+              disabled={processingFriendReqId === activeFriendReqPopup.id}
+              onClick={() => void handleAcceptFriendRequest(activeFriendReqPopup.id)}
+              className="py-1.5 px-2 rounded-md bg-emerald-500 hover:bg-emerald-400 text-[#050510] font-btn font-black text-[11px] uppercase tracking-wide cursor-pointer disabled:opacity-50"
+            >
+              {t('Đồng ý', 'Accept')}
+            </button>
+            <button
+              type="button"
+              data-testid="incoming-friend-req-reject"
+              disabled={processingFriendReqId === activeFriendReqPopup.id}
+              onClick={() => void handleRejectFriendRequest(activeFriendReqPopup.id)}
+              className="py-1.5 px-2 rounded-md bg-red-600/85 hover:bg-red-500 text-white font-btn font-black text-[11px] uppercase tracking-wide cursor-pointer disabled:opacity-50"
+            >
+              {t('Từ chối', 'Reject')}
+            </button>
+            <button
+              type="button"
+              data-testid="incoming-friend-req-later"
+              disabled={processingFriendReqId === activeFriendReqPopup.id}
+              onClick={() =>
+                setDeferredFriendRequestIds((prev) =>
+                  prev.includes(activeFriendReqPopup.id)
+                    ? prev
+                    : [...prev, activeFriendReqPopup.id]
+                )
+              }
+              className="py-1.5 px-2 rounded-md bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 text-neutral-200 font-btn font-bold text-[11px] uppercase tracking-wide cursor-pointer disabled:opacity-50"
+            >
+              {t('Để sau', 'Later')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* M7.8 Mục VIII: Friend Online/Offline Toast Notifications */}
       {toasts.length > 0 && (
         <div
           data-testid="friend-presence-toasts"
-          className="fixed top-16 right-3 z-50 flex flex-col gap-2 max-w-[290px] pointer-events-none"
+          className={`fixed ${activeFriendReqPopup ? 'top-44' : 'top-16'} right-3 z-50 flex flex-col gap-2 max-w-[290px] pointer-events-none`}
         >
           {toasts.map((toast) => (
             <div
@@ -563,7 +780,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
         </div>
       )}
 
-      {/* M7.8 Mục III: Compact Floating Online Icon (no globe icon, tight padding on mobile, blinks when unread private messages arrive) */}
+      {/* M7.8 Mục III: Compact Floating Online Icon with rising yellow Mail icon when unread private messages arrive */}
       {!isBattleScreen && (
         <button
           type="button"
@@ -580,6 +797,14 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
               : t('Cộng đồng & Chat chung', 'Community & Global Chat')
           }
         >
+          {unreadSenderUids.length > 0 && !isDrawerOpen && (
+            <span
+              data-testid="floating-online-unread-mail"
+              className="absolute -top-4 -right-1 flex items-center justify-center px-1.5 py-0.5 rounded-md bg-[#050510] border border-[#FFB800] text-[#FFB800] shadow-[0_0_12px_rgba(255,184,0,0.85)] social-mail-pop-up pointer-events-none"
+            >
+              <Mail className="w-3.5 h-3.5 text-[#FFB800]" />
+            </span>
+          )}
           <span className="relative flex h-2 w-2 shrink-0">
             <span
               className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
@@ -747,6 +972,15 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                                 >
                                   {player.displayName}
                                 </span>
+                                {!isMe && friendUidSet.has(player.uid) && (
+                                  <span
+                                    data-testid={`online-friend-icon-${player.uid}`}
+                                    title={t('Bạn bè', 'Friend')}
+                                    className="inline-flex items-center text-emerald-400 shrink-0"
+                                  >
+                                    <UserCheck className="w-3.5 h-3.5" />
+                                  </span>
+                                )}
                                 {isMe && (
                                   <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#00F0FF]/15 text-[#00F0FF] font-bold">
                                     {t('Bạn', 'You')}
@@ -757,7 +991,9 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                                 )}
                               </div>
                               <div className="flex items-center gap-2 text-[10px] text-neutral-400">
-                                <span className="text-emerald-400 font-semibold">● Online</span>
+                                <span className={player.isOnline ? 'text-emerald-400 font-semibold' : 'text-neutral-500'}>
+                                  ● {player.isOnline ? 'Online' : 'Offline'}
+                                </span>
                                 <span>{player.handleTag}</span>
                               </div>
                             </div>
@@ -953,7 +1189,8 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                   />
                   <button
                     type="submit"
-                    className="px-3.5 py-2 rounded-lg bg-[#00F0FF] hover:bg-cyan-300 text-[#050510] font-btn font-black text-xs flex items-center gap-1 cursor-pointer shrink-0"
+                    disabled={isSendingGlobal || !globalInput.trim()}
+                    className="px-3.5 py-2 rounded-lg bg-[#00F0FF] hover:bg-cyan-300 text-[#050510] font-btn font-black text-xs flex items-center gap-1 cursor-pointer shrink-0 disabled:opacity-50"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>{t('Gửi', 'Send')}</span>
@@ -973,9 +1210,9 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                     e.preventDefault();
                     void handleRunSearch(searchQuery);
                   }}
-                  className="flex items-center gap-2"
+                  className="flex items-center gap-1.5"
                 >
-                  <div className="relative flex-1">
+                  <div className="relative flex-1 min-w-0">
                     <Search className="w-4 h-4 text-neutral-400 absolute left-3 top-1/2 -translate-y-1/2" />
                     <input
                       type="text"
@@ -988,9 +1225,19 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                   <button
                     type="submit"
                     disabled={searchLoading}
-                    className="px-3 py-2 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-btn font-black text-xs cursor-pointer"
+                    className="px-3 py-2 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-btn font-black text-xs cursor-pointer shrink-0"
                   >
                     {t('Tìm', 'Find')}
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="social-search-clear-btn"
+                    onClick={handleClearSearch}
+                    disabled={!searchQuery && searchResults.length === 0 && !searchNotice}
+                    className="px-2.5 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 text-neutral-200 font-btn font-bold text-xs cursor-pointer shrink-0 disabled:opacity-40"
+                    title={t('Xóa danh sách tìm kiếm', 'Clear search results')}
+                  >
+                    {t('Xóa', 'Clear')}
                   </button>
                 </form>
 
@@ -1249,24 +1496,18 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                         <div className="flex items-center gap-1.5 shrink-0">
                           <button
                             type="button"
-                            onClick={async () => {
-                              await social.acceptFriendRequest(currentUser, req.id);
-                              showTempFeedback(t('Đã chấp nhận lời mời kết bạn.', 'Friend request accepted.'));
-                              await refreshFriendsData();
-                            }}
-                            className="px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-[#050510] font-btn font-black text-xs flex items-center gap-1 cursor-pointer"
+                            disabled={processingFriendReqId === req.id}
+                            onClick={() => void handleAcceptFriendRequest(req.id)}
+                            className="px-3 py-1.5 rounded bg-emerald-500 hover:bg-emerald-400 text-[#050510] font-btn font-black text-xs flex items-center gap-1 cursor-pointer disabled:opacity-50"
                           >
                             <Check className="w-3.5 h-3.5" />
                             <span>{t('Chấp nhận', 'Accept')}</span>
                           </button>
                           <button
                             type="button"
-                            onClick={async () => {
-                              await social.rejectFriendRequest(currentUser, req.id);
-                              showTempFeedback(t('Đã từ chối lời mời.', 'Request rejected.'));
-                              await refreshFriendsData();
-                            }}
-                            className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-red-900/60 border border-neutral-700 text-neutral-200 font-btn font-bold text-xs cursor-pointer"
+                            disabled={processingFriendReqId === req.id}
+                            onClick={() => void handleRejectFriendRequest(req.id)}
+                            className="px-3 py-1.5 rounded bg-neutral-800 hover:bg-red-900/60 border border-neutral-700 text-neutral-200 font-btn font-bold text-xs cursor-pointer disabled:opacity-50"
                           >
                             {t('Từ chối', 'Reject')}
                           </button>
@@ -1563,7 +1804,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
               />
               <button
                 type="submit"
-                disabled={privateRel.blockedByMe || privateRel.blockedByOther}
+                disabled={isSendingPrivate || !privateInput.trim() || privateRel.blockedByMe || privateRel.blockedByOther}
                 className="px-3.5 py-2 rounded-lg bg-[#00F0FF] hover:bg-cyan-300 text-[#050510] font-btn font-black text-xs flex items-center gap-1 cursor-pointer disabled:opacity-40"
               >
                 <Send className="w-3.5 h-3.5" />

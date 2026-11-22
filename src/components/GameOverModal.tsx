@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { Award, CheckCircle2, Home, LogOut, RotateCcw, ShieldAlert, Star } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
 import type { CoopRematchReadyState } from '../core/coopOnlineManager.ts';
 import { TOTAL_CAMPAIGN_STAGES } from '../core/campaignStages.ts';
@@ -97,9 +97,6 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
       <div className="w-full max-w-md bg-[#0b0d1e] border-2 border-[#FF0055]/80 rounded-xl p-5 sm:p-6 shadow-2xl text-[#EAF4FF] my-auto">
         {/* Header */}
         <div className="text-center border-b border-neutral-800 pb-4 mb-4">
-          <div className="inline-flex items-center justify-center w-11 h-11 rounded-lg bg-[#FF0055]/15 text-[#FF0055] border border-[#FF0055]/40 mb-2">
-            <ShieldAlert className="w-6 h-6" />
-          </div>
           <div className="font-hud text-xs font-bold tracking-widest uppercase text-[#FF0055]">
             {reasonText}
           </div>
@@ -133,7 +130,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
           {!isTrialMode && (
             <>
-              <div className="flex justify-between items-center text-xs">
+              <div className="flex justify-between items-center">
                 <span className="text-neutral-400">
                   {t('XP tiêu diệt địch màn này:', 'Stage Combat XP:')}
                 </span>
@@ -142,23 +139,18 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
 
               <div className="border-t border-neutral-800 pt-2.5 grid grid-cols-2 gap-2 text-xs">
                 <div className="bg-[#0b0d1e] border border-neutral-800 rounded-lg p-2.5">
-                  <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center gap-1">
-                    <Star className="w-3 h-3 text-yellow-300 fill-yellow-300" />
+                  <div className="text-[10px] uppercase font-bold text-neutral-400">
                     <span>{t('Tổng Sao hiện có', 'Total Stars')}</span>
                   </div>
-                  <div className="mt-1 flex items-baseline justify-between">
+                  <div className="mt-1 flex items-baseline">
                     <span className="font-hud font-black text-yellow-300 text-sm">
                       {levelProgress.starBalance} ⭐
-                    </span>
-                    <span className="text-[10px] font-hud text-neutral-400">
-                      {levelProgress.unconvertedXp}/25 XP
                     </span>
                   </div>
                 </div>
 
                 <div className="bg-[#0b0d1e] border border-neutral-800 rounded-lg p-2.5">
-                  <div className="text-[10px] uppercase font-bold text-neutral-400 flex items-center gap-1">
-                    <Award className="w-3 h-3 text-[#FFB800]" />
+                  <div className="text-[10px] uppercase font-bold text-neutral-400">
                     <span>{t('Quân hàm', 'Rank')}</span>
                   </div>
                   <div className="mt-1 font-btn font-black text-[#FFB800] text-sm truncate">
@@ -190,9 +182,8 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <button
               type="button"
               onClick={onQuitToMenu}
-              className="font-btn w-full min-h-[46px] py-2.5 px-5 rounded-lg bg-[#050510] hover:bg-neutral-800 text-[#EAF4FF] border border-neutral-700 font-bold text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+              className="font-btn w-full min-h-[46px] py-2.5 px-5 rounded-lg bg-[#050510] hover:bg-neutral-800 text-[#EAF4FF] border border-neutral-700 font-bold text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer flex items-center justify-center"
             >
-              <Home className="w-4 h-4" />
               <span>{t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
             </button>
           </div>
@@ -256,13 +247,12 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                       type="button"
                       data-testid="coop-gameover-rematch-ready-btn"
                       onClick={onToggleRematchReady}
-                      className={`font-btn w-full min-h-[46px] py-2.5 px-4 rounded-lg font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center gap-2 transition-all active:scale-95 cursor-pointer ${
+                      className={`font-btn w-full min-h-[46px] py-2.5 px-4 rounded-lg font-black text-xs sm:text-sm uppercase tracking-wider flex items-center justify-center transition-all active:scale-95 cursor-pointer ${
                         myReady
                           ? 'bg-neutral-800 hover:bg-neutral-700 text-[#FFB800] border border-[#FFB800]/50'
                           : 'bg-emerald-500 hover:bg-emerald-400 text-[#050510] shadow-lg shadow-emerald-500/20'
                       }`}
                     >
-                      <CheckCircle2 className="w-4 h-4" />
                       <span>
                         {myReady
                           ? t('HỦY SẴN SÀNG', 'CANCEL READY')
@@ -288,9 +278,8 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
                     ? onRequestRematchPrompt
                     : onRestart
                 }
-                className="font-btn w-full min-h-[48px] py-3 px-5 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-sm uppercase tracking-wider transition-all shadow-lg shadow-[#FFB800]/20 active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+                className="font-btn w-full min-h-[48px] py-3 px-5 rounded-lg bg-[#FFB800] hover:bg-amber-400 text-[#050510] font-black text-sm uppercase tracking-wider transition-all shadow-lg shadow-[#FFB800]/20 active:scale-95 cursor-pointer flex items-center justify-center"
               >
-                <RotateCcw className="w-4 h-4" />
                 <span>{t('CHƠI LẠI', 'PLAY AGAIN')}</span>
               </button>
             )}
@@ -311,9 +300,8 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
             <button
               type="button"
               onClick={onQuitToMenu}
-              className="font-btn w-full min-h-[46px] py-2.5 px-5 rounded-lg bg-[#050510] hover:bg-neutral-800 text-neutral-300 border border-neutral-700 font-bold text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2"
+              className="font-btn w-full min-h-[46px] py-2.5 px-5 rounded-lg bg-[#050510] hover:bg-neutral-800 text-neutral-300 border border-neutral-700 font-bold text-xs uppercase tracking-wider transition-all active:scale-95 cursor-pointer flex items-center justify-center"
             >
-              <LogOut className="w-4 h-4" />
               <span>{t('VỀ TRANG CHỦ', 'RETURN HOME')}</span>
             </button>
           </div>

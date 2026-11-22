@@ -479,12 +479,13 @@ export default function App() {
 
       if (isVsOnline) {
         if (engState.vsState?.phase === 'FINISHED') return;
+        if (room && room.status === 'WAITING') return;
         const opponentVsRole: 'P1' | 'P2' = localRole === 'GUEST' ? 'P1' : 'P2';
         if (!room || room.status === 'ABANDONED') {
           triggerVsOpponentForfeit(opponentVsRole);
           return;
         }
-        const status = coopManager.evaluatePeerConnectionStatus(Date.now());
+        const status = coopManager.evaluatePeerConnectionStatus();
         if (status.isTimedOut) {
           triggerVsOpponentForfeit(opponentVsRole);
         }
@@ -524,7 +525,7 @@ export default function App() {
           return;
         }
       }
-      const status = coopManager.evaluatePeerConnectionStatus(Date.now());
+      const status = coopManager.evaluatePeerConnectionStatus();
       if (status.isTimedOut) {
         setOnlineDisconnectMsg(status.warningMessage || 'Đồng đội đã ngắt kết nối.');
       }
@@ -556,7 +557,7 @@ export default function App() {
 
       if (isVsOnline) {
         if (engState.vsState?.phase === 'FINISHED') return;
-        const status = coopManager.evaluatePeerConnectionStatus(Date.now());
+        const status = coopManager.evaluatePeerConnectionStatus();
         if (status.isTimedOut) {
           const opponentVsRole: 'P1' | 'P2' = coopManager.getLocalRole() === 'GUEST' ? 'P1' : 'P2';
           triggerVsOpponentForfeit(opponentVsRole);
@@ -565,7 +566,7 @@ export default function App() {
       }
 
       if (engState.isGameOver || engState.isStageClear) return;
-      const status = coopManager.evaluatePeerConnectionStatus(Date.now());
+      const status = coopManager.evaluatePeerConnectionStatus();
       if (status.isTimedOut) {
         setOnlineDisconnectMsg(status.warningMessage || 'Đồng đội đã ngắt kết nối.');
       }
@@ -708,6 +709,7 @@ export default function App() {
       setReturnToLobbyError(null);
       coopManager.clearPostStageReadyState();
       coopManager.clearRematchReadyState();
+      coopManager.markMatchTransitionActive();
 
       const roomMode = room.roomMode || 'COOP_ONLINE';
       if (roomMode === 'VS_P1_P2' || roomMode === 'VS_P1_AI_P2_AI') {
