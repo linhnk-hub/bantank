@@ -199,18 +199,16 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       translate="no"
       onContextMenu={(e) => e.preventDefault()}
       onDragStart={(e) => e.preventDefault()}
-      className="battle-touch-lock notranslate relative flex items-start justify-center w-full h-full select-none overflow-hidden p-0 m-0"
+      className="battle-touch-lock notranslate relative flex items-center justify-center w-full h-full select-none overflow-hidden p-0 m-0"
     >
-      {/* Crisp pixel scaling container: strictly aspect-square 1:1, 1px thin border, no rounded-corner clipping */}
+      {/* Crisp pixel scaling container: strictly fits 100% inside parent with zero edge clipping */}
       <div
         ref={containerRef}
-        className="game-canvas-container aspect-square rounded-none sm:rounded-sm border border-neutral-800/90 shadow-2xl overflow-hidden bg-black flex items-start justify-center shrink-0 p-0 m-0"
+        className="game-canvas-container aspect-square w-full h-full overflow-hidden bg-black flex items-center justify-center shrink-0 p-0 m-0"
         style={{
-          boxSizing: 'content-box',
-          width: canvasSizePx ? `${canvasSizePx}px` : '100%',
-          height: canvasSizePx ? `${canvasSizePx}px` : '100%',
-          maxWidth: canvasSizePx ? `${canvasSizePx}px` : '100%',
-          maxHeight: canvasSizePx ? `${canvasSizePx}px` : '100%',
+          boxSizing: 'border-box',
+          maxWidth: '100%',
+          maxHeight: '100%',
           imageRendering: 'pixelated',
         }}
       />

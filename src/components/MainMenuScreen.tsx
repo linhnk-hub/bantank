@@ -9,6 +9,7 @@ import {
   Bot,
   ChevronDown,
   Globe,
+  Lock,
   RefreshCw,
   Star,
   Swords,
@@ -29,6 +30,8 @@ import {
   PlayerLevelManager,
   type PlayerLevelProgressInfo,
 } from '../core/playerLevelSystem.ts';
+import { StageProgressionManager } from '../core/stageProgression.ts';
+import { StageManager } from '../core/stageManager.ts';
 import { useLanguage } from '../core/i18n.ts';
 import { getSessionBadgeInfo } from './AuthSessionBanner.tsx';
 import { TopMenuActionDrawer } from './TopMenuActionDrawer.tsx';
@@ -36,7 +39,7 @@ import { GameLogo } from './GameLogo.tsx';
 import { VS_TANK_COLOR_SPEC, type VsMode } from '../core/vsTypes.ts';
 
 export type LobbyCardMode = 'SOLO' | 'COOP_AI' | 'COOP_ONLINE';
-type ExpandedMenuGroup = 'COOP' | 'VS' | null;
+type ExpandedMenuGroup = 'SOLO' | 'COOP' | 'VS' | null;
 
 export interface MainMenuScreenProps {
   user: {
@@ -52,7 +55,7 @@ export interface MainMenuScreenProps {
   selectedLobbyMode: LobbyCardMode;
   onSelectLobbyMode: (mode: LobbyCardMode) => void;
   onConfirmMode: (mode: LobbyCardMode) => void;
-  onStartSoloDirect?: () => void;
+  onStartSoloDirect?: (stageId?: number) => void;
   onStartVsMatch?: (mode: VsMode) => void;
   onPlay?: () => void;
   onSignOut: () => void;
@@ -175,11 +178,19 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
         : levelProgress.rankNameVi
       : t('Chưa xác minh', 'Unverified');
 
-  const handleSoloDirectClick = () => {
+  const stageProgressionMgr = StageProgressionManager.getInstance();
+  const stageMgr = StageManager.getInstance();
+  const soloUnlockedStage = effectiveUid
+    ? Math.min(10, Math.max(1, stageProgressionMgr.getUnlockedStageForUser(effectiveUid, isSuperAdmin)))
+    : 1;
+  const soloStages = stageMgr.getLiveCampaignStageViews();
+
+  const handleSoloStageSelect = (stageId: number) => {
     if (isActionDisabled) return;
+    if (!isSuperAdmin && stageId > soloUnlockedStage) return;
     onSelectLobbyMode('SOLO');
     if (onStartSoloDirect) {
-      onStartSoloDirect();
+      onStartSoloDirect(stageId);
     } else {
       onConfirmMode('SOLO');
     }
@@ -347,57 +358,102 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             expandedGroup ? 'items-start' : 'items-stretch'
           }`}
         >
-          {/* 1. SOLO — Direct Match Entry */}
+          {/* 1. SOLO — Expands Campaign Stage List (Màn 1–10) */}
           <div
             data-testid="home-mode-card-solo"
-            className="relative neo-bevel-card rounded-xl border border-[#FFB800]/55 hover:border-[#FFB800] transition-transform duration-150 hover:-translate-y-0.5 overflow-hidden flex flex-col"
+            className={`relative neo-bevel-card rounded-xl border transition-all duration-150 overflow-hidden flex flex-col ${
+              expandedGroup === 'SOLO'
+                ? 'border-[#FFB800] neo-bevel-amber'
+                : 'border-[#FFB800]/65 hover:border-[#FFB800] hover:-translate-y-0.5'
+            }`}
           >
             <button
               type="button"
               data-testid="home-mode-solo-btn"
+              aria-expanded={expandedGroup === 'SOLO'}
               disabled={isActionDisabled}
-              onClick={handleSoloDirectClick}
-              className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[225px] md:min-h-[268px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
+              onClick={() =>
+                setExpandedGroup((prev) => (prev === 'SOLO' ? null : 'SOLO'))
+              }
+              className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[196px] md:min-h-[224px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
-              {/* TV Signal Glitch Background Layer */}
+              {/* Bright Height-Fitted Horizontal Scrolling Background + TV Signal Layer */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-                <img
-                  src="/solo.png"
-                  alt=""
-                  className="w-full h-full object-cover tv-card-bg-img"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/78 to-[#050510]/45" />
-                <div className="absolute inset-0 tv-card-scanlines opacity-70" />
-                <div className="absolute inset-x-0 top-0 h-10 tv-card-scanline-sweep" />
+                <div className="flex h-full w-max tv-card-scroll-ltr">
+                  <div className="flex h-full shrink-0">
+                    <img src="/solo.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
+                    <img src="/solo.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
+                  </div>
+                  <div className="flex h-full shrink-0">
+                    <img src="/solo.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
+                    <img src="/solo.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
+                  </div>
+                </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/22 to-[#050510]/10" />
+                <div className="absolute inset-0 tv-card-scanlines opacity-45" />
+                <div className="absolute inset-x-0 top-0 h-12 tv-card-scanline-sweep" />
                 <div className="absolute inset-x-0 top-[36%] h-2.5 tv-card-glitch-bar" />
               </div>
 
               <div className="relative z-10 flex items-center justify-between gap-2 mb-4">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050510]/75 border border-[#FFB800]/55 text-[#FFB800] font-btn font-black text-xs uppercase tracking-wider">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050510]/75 border border-[#FFB800]/65 text-[#FFB800] font-btn font-black text-xs uppercase tracking-wider shadow-[0_0_12px_rgba(255,184,0,0.3)]">
                   <User className="w-3.5 h-3.5" />
                   <span>1P CAMPAIGN</span>
                 </span>
-                <span className="w-8 h-8 rounded-lg bg-[#050510]/75 border border-[#FFB800]/45 flex items-center justify-center text-[#FFB800] group-hover:bg-[#FFB800] group-hover:text-[#050510] transition-colors">
-                  <ArrowRight className="w-4 h-4" />
+                <span
+                  className={`w-8 h-8 rounded-lg bg-[#050510]/75 border border-[#FFB800]/55 flex items-center justify-center text-[#FFB800] transition-transform duration-200 ${
+                    expandedGroup === 'SOLO' ? 'rotate-180 bg-[#FFB800] text-[#050510]' : ''
+                  }`}
+                >
+                  <ChevronDown className="w-4 h-4" />
                 </span>
               </div>
 
-              <div className="relative z-10 space-y-2 mt-auto">
-                <h2 className="font-btn text-2xl font-black text-[#EAF4FF] group-hover:text-[#FFB800] transition-colors uppercase tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
+              <div className="relative z-10 mt-auto">
+                <h2 className="font-btn text-2xl sm:text-3xl font-black text-[#EAF4FF] group-hover:text-[#FFB800] transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]">
                   SOLO
                 </h2>
-                <p className="text-xs sm:text-sm text-neutral-200 leading-relaxed drop-shadow-[0_1px_4px_rgba(0,0,0,0.95)]">
-                  {t(
-                    'Vào trận ngay lập tức. Chỉ huy xe tăng chiến đấu qua 10 màn chiến dịch và bảo vệ căn cứ Đại Bàng.',
-                    'Jump straight into battle. Command your tank across 10 campaign stages and defend the Eagle Base.'
-                  )}
-                </p>
-                <div className="pt-2 flex items-center gap-1.5 text-xs font-btn font-black text-[#FFB800] uppercase tracking-wider">
-                  <span>{t('Vào chiến đấu ngay', 'Launch Battle')}</span>
-                  <ArrowRight className="w-3.5 h-3.5 transition-transform group-hover:translate-x-1" />
-                </div>
               </div>
             </button>
+
+            {expandedGroup === 'SOLO' && (
+              <div
+                data-testid="home-solo-stages"
+                className="relative z-10 px-3.5 pb-3.5 pt-2.5 border-t border-[#FFB800]/25 bg-[#050510]/95 grid grid-cols-2 gap-1.5 animate-neo-expand max-h-[260px] overflow-y-auto"
+              >
+                {soloStages.map((stage) => {
+                  const isUnlocked = isSuperAdmin || stage.id <= soloUnlockedStage;
+                  return (
+                    <button
+                      key={stage.id}
+                      type="button"
+                      data-testid={`home-solo-stage-btn-${stage.id}`}
+                      disabled={isActionDisabled || !isUnlocked}
+                      onClick={() => handleSoloStageSelect(stage.id)}
+                      className={`min-h-[42px] px-2.5 py-2 rounded-lg border flex items-center justify-between gap-1.5 text-left transition-colors ${
+                        isUnlocked
+                          ? 'bg-[#0b0d1e] hover:bg-[#FFB800]/18 border-[#FFB800]/45 hover:border-[#FFB800] text-white cursor-pointer active:scale-[0.99]'
+                          : 'bg-[#080a16] border-neutral-800/90 text-neutral-500 cursor-not-allowed opacity-65'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="font-btn text-xs font-black uppercase truncate">
+                          {t(`Màn ${stage.id}`, `Stage ${stage.id}`)}
+                        </div>
+                        <div className="text-[10px] text-neutral-400 truncate">
+                          {stage.name}
+                        </div>
+                      </div>
+                      {isUnlocked ? (
+                        <ArrowRight className="w-3.5 h-3.5 text-[#FFB800] shrink-0" />
+                      ) : (
+                        <Lock className="w-3.5 h-3.5 text-neutral-600 shrink-0" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* 2. CO-OP — Expands CO-OP A.I & CO-OP ONLINE */}
@@ -406,7 +462,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             className={`relative neo-bevel-card rounded-xl border transition-all duration-150 overflow-hidden flex flex-col ${
               expandedGroup === 'COOP'
                 ? 'border-[#00F0FF] neo-bevel-cyan'
-                : 'border-[#00F0FF]/45 hover:border-[#00F0FF] hover:-translate-y-0.5'
+                : 'border-[#00F0FF]/55 hover:border-[#00F0FF] hover:-translate-y-0.5'
             }`}
           >
             <button
@@ -417,21 +473,25 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               onClick={() =>
                 setExpandedGroup((prev) => (prev === 'COOP' ? null : 'COOP'))
               }
-              className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[225px] md:min-h-[268px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
+              className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[196px] md:min-h-[224px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
-              {/* TV Signal Glitch Background Layer */}
+              {/* Bright Height-Fitted Horizontal Scrolling Background + TV Signal Layer */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-                <img
-                  src="/coop.png"
-                  alt=""
-                  style={{ animationDelay: '-1.6s' }}
-                  className="w-full h-full object-cover tv-card-bg-img"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/78 to-[#050510]/45" />
-                <div className="absolute inset-0 tv-card-scanlines opacity-70" />
+                <div className="flex h-full w-max tv-card-scroll-rtl">
+                  <div className="flex h-full shrink-0">
+                    <img src="/coop.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
+                    <img src="/coop.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
+                  </div>
+                  <div className="flex h-full shrink-0">
+                    <img src="/coop.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
+                    <img src="/coop.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
+                  </div>
+                </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/22 to-[#050510]/10" />
+                <div className="absolute inset-0 tv-card-scanlines opacity-45" />
                 <div
                   style={{ animationDelay: '-1.4s' }}
-                  className="absolute inset-x-0 top-0 h-10 tv-card-scanline-sweep"
+                  className="absolute inset-x-0 top-0 h-12 tv-card-scanline-sweep"
                 />
                 <div
                   style={{ animationDelay: '-2.1s' }}
@@ -440,12 +500,12 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               </div>
 
               <div className="relative z-10 flex items-center justify-between gap-2 mb-4">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050510]/75 border border-[#00F0FF]/55 text-[#00F0FF] font-btn font-black text-xs uppercase tracking-wider">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050510]/75 border border-[#00F0FF]/65 text-[#00F0FF] font-btn font-black text-xs uppercase tracking-wider shadow-[0_0_12px_rgba(0,240,255,0.3)]">
                   <Users className="w-3.5 h-3.5" />
                   <span>2P CO-OP</span>
                 </span>
                 <span
-                  className={`w-8 h-8 rounded-lg bg-[#050510]/75 border border-[#00F0FF]/45 flex items-center justify-center text-[#00F0FF] transition-transform duration-200 ${
+                  className={`w-8 h-8 rounded-lg bg-[#050510]/75 border border-[#00F0FF]/55 flex items-center justify-center text-[#00F0FF] transition-transform duration-200 ${
                     expandedGroup === 'COOP' ? 'rotate-180 bg-[#00F0FF] text-[#050510]' : ''
                   }`}
                 >
@@ -453,23 +513,10 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 </span>
               </div>
 
-              <div className="relative z-10 space-y-2 mt-auto">
-                <h2 className="font-btn text-2xl font-black text-[#EAF4FF] group-hover:text-[#00F0FF] transition-colors uppercase tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
+              <div className="relative z-10 mt-auto">
+                <h2 className="font-btn text-2xl sm:text-3xl font-black text-[#EAF4FF] group-hover:text-[#00F0FF] transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]">
                   CO-OP
                 </h2>
-                <p className="text-xs sm:text-sm text-neutral-200 leading-relaxed drop-shadow-[0_1px_4px_rgba(0,0,0,0.95)]">
-                  {t(
-                    'Hợp tác 2 chiến xa bảo vệ căn cứ cùng đồng đội A.I hoặc bạn bè trực tuyến qua phòng P2P.',
-                    'Cooperate with an Ally A.I tank or team up with a friend online via P2P room sync.'
-                  )}
-                </p>
-                <div className="pt-2 flex items-center gap-1.5 text-xs font-btn font-black text-[#00F0FF] uppercase tracking-wider">
-                  <span>
-                    {expandedGroup === 'COOP'
-                      ? t('Chọn chế độ CO-OP bên dưới', 'Choose CO-OP mode below')
-                      : t('Mở tùy chọn CO-OP', 'Expand CO-OP Options')}
-                  </span>
-                </div>
               </div>
             </button>
 
@@ -529,7 +576,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             className={`relative neo-bevel-card rounded-xl border transition-all duration-150 overflow-hidden flex flex-col ${
               expandedGroup === 'VS'
                 ? 'border-[#FF0055] neo-bevel-red'
-                : 'border-[#FF0055]/45 hover:border-[#FF0055] hover:-translate-y-0.5'
+                : 'border-[#FF0055]/55 hover:border-[#FF0055] hover:-translate-y-0.5'
             }`}
           >
             <button
@@ -540,21 +587,25 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               onClick={() =>
                 setExpandedGroup((prev) => (prev === 'VS' ? null : 'VS'))
               }
-              className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[225px] md:min-h-[268px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
+              className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[196px] md:min-h-[224px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
-              {/* TV Signal Glitch Background Layer */}
+              {/* Bright Height-Fitted Horizontal Scrolling Background + TV Signal Layer */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-                <img
-                  src="/vs.png"
-                  alt=""
-                  style={{ animationDelay: '-3.1s' }}
-                  className="w-full h-full object-cover tv-card-bg-img"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#050510] via-[#050510]/78 to-[#050510]/45" />
-                <div className="absolute inset-0 tv-card-scanlines opacity-70" />
+                <div className="flex h-full w-max tv-card-scroll-ltr">
+                  <div className="flex h-full shrink-0">
+                    <img src="/vs.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
+                    <img src="/vs.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
+                  </div>
+                  <div className="flex h-full shrink-0">
+                    <img src="/vs.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
+                    <img src="/vs.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
+                  </div>
+                </div>
+                <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/22 to-[#050510]/10" />
+                <div className="absolute inset-0 tv-card-scanlines opacity-45" />
                 <div
                   style={{ animationDelay: '-2.7s' }}
-                  className="absolute inset-x-0 top-0 h-10 tv-card-scanline-sweep"
+                  className="absolute inset-x-0 top-0 h-12 tv-card-scanline-sweep"
                 />
                 <div
                   style={{ animationDelay: '-3.6s' }}
@@ -563,12 +614,12 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               </div>
 
               <div className="relative z-10 flex items-center justify-between gap-2 mb-4">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050510]/75 border border-[#FF0055]/55 text-[#FF0055] font-btn font-black text-xs uppercase tracking-wider">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050510]/75 border border-[#FF0055]/65 text-[#FF0055] font-btn font-black text-xs uppercase tracking-wider shadow-[0_0_12px_rgba(255,0,85,0.35)]">
                   <Swords className="w-3.5 h-3.5" />
                   <span>PVP ONLINE</span>
                 </span>
                 <span
-                  className={`w-8 h-8 rounded-lg bg-[#050510]/75 border border-[#FF0055]/45 flex items-center justify-center text-[#FF0055] transition-transform duration-200 ${
+                  className={`w-8 h-8 rounded-lg bg-[#050510]/75 border border-[#FF0055]/55 flex items-center justify-center text-[#FF0055] transition-transform duration-200 ${
                     expandedGroup === 'VS' ? 'rotate-180 bg-[#FF0055] text-white' : ''
                   }`}
                 >
@@ -576,23 +627,10 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 </span>
               </div>
 
-              <div className="relative z-10 space-y-2 mt-auto">
-                <h2 className="font-btn text-2xl font-black text-[#EAF4FF] group-hover:text-[#FF0055] transition-colors uppercase tracking-wide drop-shadow-[0_2px_6px_rgba(0,0,0,0.9)]">
+              <div className="relative z-10 mt-auto">
+                <h2 className="font-btn text-2xl sm:text-3xl font-black text-[#EAF4FF] group-hover:text-[#FF0055] transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]">
                   VS
                 </h2>
-                <p className="text-xs sm:text-sm text-neutral-200 leading-relaxed drop-shadow-[0_1px_4px_rgba(0,0,0,0.95)]">
-                  {t(
-                    'Đấu trường đối kháng trực tuyến trên 2 thiết bị riêng biệt. 2 phút • 3 mạng • Sudden Death • Không hòa.',
-                    'Real-time online PvP arena on 2 separate devices. 2 min • 3 lives • Sudden Death • No draw.'
-                  )}
-                </p>
-                <div className="pt-2 flex items-center gap-1.5 text-xs font-btn font-black text-[#FF0055] uppercase tracking-wider">
-                  <span>
-                    {expandedGroup === 'VS'
-                      ? t('Chọn thể thức VS Online bên dưới', 'Choose VS Online mode below')
-                      : t('Mở tùy chọn VS Online', 'Expand VS Online Options')}
-                  </span>
-                </div>
               </div>
             </button>
 

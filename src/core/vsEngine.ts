@@ -18,6 +18,7 @@ import { updateTankMovement } from './tank.ts';
 import { spawnBullet, updateBullet } from './bullet.ts';
 import {
   checkBulletVsBullet,
+  checkHitboxVsTerrain,
   getBulletHitbox,
   getTankHitbox,
   intersectAABB,
@@ -171,6 +172,7 @@ export class VsEngine {
   private combatEvents: CombatEvent[] = [];
   private randomFn: () => number;
   private eventSeq: number = 0;
+  private overlapStationaryTicks: Map<string, number> = new Map();
 
   constructor(mode: VsMode = 'VS_P1_P2', options?: VsEngineOptions) {
     this.mode = mode;
@@ -182,6 +184,7 @@ export class VsEngine {
 
   private initAiControllers(): void {
     this.aiControllers.clear();
+    this.overlapStationaryTicks.clear();
     for (const c of this.state.combatants) {
       if (c.isAI) {
         this.aiControllers.set(c.id, new VsTankAIController());
@@ -450,12 +453,22 @@ export class VsEngine {
   }
 
   private stepCombatantsMovementAndShooting(p1Input: InputState, p2Input: InputState): void {
-    const aliveTanksAll = this.state.combatants
-      .filter((c) => !c.isDead && c.tank.isAlive)
-      .map((c) => c.tank);
+    const prevPositions = new Map<string, { x: number; y: number }>();
+    const activeSafeBounds =
+      this.state.phase === 'SUDDEN_DEATH' && !this.state.safeZone.bounds.isFullyCollapsed
+        ? this.state.safeZone.bounds
+        : null;
+    const tilePx = MAP_DIMENSIONS.TILE_SIZE_PX;
 
     for (const c of this.state.combatants) {
-      if (c.isDead || !c.tank.isAlive) continue;
+      if (c.isDead || !c.tank.isAlive) {
+        this.overlapStationaryTicks.delete(c.id);
+        continue;
+      }
+
+      const prevX = c.tank.x;
+      const prevY = c.tank.y;
+      prevPositions.set(c.id, { x: prevX, y: prevY });
 
       let effectiveInput: InputState = NEUTRAL_VS_INPUT;
       if (c.role === 'P1') {
@@ -478,8 +491,44 @@ export class VsEngine {
       }
 
       // Di chuyển xe tăng — các xe tăng được phép đi xuyên qua nhau để không bị kẹt di chuyển
-      void aliveTanksAll;
+      const wasInsideSafe = activeSafeBounds
+        ? isTankInsideSafeZone(c.tank, activeSafeBounds)
+        : true;
       updateTankMovement(c.tank, effectiveInput, this.terrain, [], 1);
+
+      // Không cho phép xe tăng di chuyển ra khỏi vùng an toàn vào vùng đỏ đã bị thu hẹp
+      if (activeSafeBounds) {
+        const minX = activeSafeBounds.minCol * tilePx;
+        const maxX = (activeSafeBounds.maxCol + 1) * tilePx - tilePx;
+        const minY = activeSafeBounds.minRow * tilePx;
+        const maxY = (activeSafeBounds.maxRow + 1) * tilePx - tilePx;
+        const nowInsideSafe = isTankInsideSafeZone(c.tank, activeSafeBounds);
+        if (wasInsideSafe && !nowInsideSafe) {
+          const clampedX = Math.max(minX, Math.min(maxX, c.tank.x));
+          const clampedY = Math.max(minY, Math.min(maxY, c.tank.y));
+          if (!checkHitboxVsTerrain(getTankHitbox(clampedX, clampedY), this.terrain)) {
+            c.tank.x = clampedX;
+            c.tank.y = clampedY;
+          } else {
+            c.tank.x = prevX;
+            c.tank.y = prevY;
+          }
+        } else if (!wasInsideSafe && !nowInsideSafe) {
+          // Nếu đang ở vùng đỏ (do vòng bo vừa thu hẹp lên), chỉ cho đứng yên hoặc chạy vào vùng an toàn, cấm đi sâu ra ngoài
+          const safeCenterX = ((activeSafeBounds.minCol + activeSafeBounds.maxCol + 1) * tilePx) / 2;
+          const safeCenterY = ((activeSafeBounds.minRow + activeSafeBounds.maxRow + 1) * tilePx) / 2;
+          const prevDistSq =
+            Math.pow(prevX + tilePx / 2 - safeCenterX, 2) +
+            Math.pow(prevY + tilePx / 2 - safeCenterY, 2);
+          const nextDistSq =
+            Math.pow(c.tank.x + tilePx / 2 - safeCenterX, 2) +
+            Math.pow(c.tank.y + tilePx / 2 - safeCenterY, 2);
+          if (nextDistSq > prevDistSq + 0.01) {
+            c.tank.x = prevX;
+            c.tank.y = prevY;
+          }
+        }
+      }
 
       // Luật bảo vệ sau hồi sinh (Mục 4.9):
       // Trong 2 giây bảo vệ: KHÔNG nhận sát thương, KHÔNG gây sát thương, KHÔNG thể bắn gây sát thương đối thủ.
@@ -500,6 +549,57 @@ export class VsEngine {
           this.bullets.push(vsBullet);
           this.emitCombatEvent('HIT_SPARK', vsBullet.x + 2, vsBullet.y + 2);
         }
+      }
+    }
+
+    // Cơ chế chống chồng xe: cho phép 2 tank đi qua nhau, nếu chồng lên nhau liên tục 1 giây (60 ticks) không di chuyển
+    // thì tự động reset xe tăng đó về vị trí xuất phát của nó
+    const aliveCombatants = this.state.combatants.filter((c) => !c.isDead && c.tank.isAlive);
+    for (const c of aliveCombatants) {
+      const prev = prevPositions.get(c.id);
+      const movedDist = prev ? Math.hypot(c.tank.x - prev.x, c.tank.y - prev.y) : 0;
+      const myBox = getTankHitbox(c.tank.x, c.tank.y);
+      const isOverlappingOther = aliveCombatants.some(
+        (other) => other.id !== c.id && intersectAABB(myBox, getTankHitbox(other.tank.x, other.tank.y))
+      );
+      if (isOverlappingOther && movedDist < 0.25) {
+        const nextTicks = (this.overlapStationaryTicks.get(c.id) ?? 0) + 1;
+        if (nextTicks >= 60) {
+          const spawnX = c.spawnCol * tilePx;
+          const spawnY = c.spawnRow * tilePx;
+          const spawnInsideSafe =
+            !activeSafeBounds ||
+            isTankInsideSafeZone(
+              { ...c.tank, x: spawnX, y: spawnY },
+              activeSafeBounds
+            );
+          if (spawnInsideSafe && !checkHitboxVsTerrain(getTankHitbox(spawnX, spawnY), this.terrain)) {
+            c.tank.x = spawnX;
+            c.tank.y = spawnY;
+          } else {
+            const otherTanks = aliveCombatants
+              .filter((o) => o.id !== c.id)
+              .map((o) => o.tank);
+            const fallback = findValidVsRespawnPosition(
+              c.team,
+              c.spawnRow,
+              c.spawnCol,
+              this.terrain,
+              otherTanks,
+              c.id
+            );
+            if (fallback) {
+              c.tank.x = fallback.x;
+              c.tank.y = fallback.y;
+            }
+          }
+          c.tank.direction = c.spawnDirection;
+          this.overlapStationaryTicks.set(c.id, 0);
+        } else {
+          this.overlapStationaryTicks.set(c.id, nextTicks);
+        }
+      } else {
+        this.overlapStationaryTicks.set(c.id, 0);
       }
     }
   }

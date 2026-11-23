@@ -55,6 +55,9 @@ export class VsTankAIController {
   private lastPosX: number = -1;
   private lastPosY: number = -1;
   private stuckTicks: number = 0;
+  private stationaryTicks: number = 0;
+  private forceMoveDir: Direction | null = null;
+  private forceMoveTicks: number = 0;
   private evadeDir: Direction | null = null;
   private evadeTicks: number = 0;
 
@@ -64,6 +67,9 @@ export class VsTankAIController {
     this.lastPosX = -1;
     this.lastPosY = -1;
     this.stuckTicks = 0;
+    this.stationaryTicks = 0;
+    this.forceMoveDir = null;
+    this.forceMoveTicks = 0;
     this.evadeDir = null;
     this.evadeTicks = 0;
   }
@@ -97,7 +103,7 @@ export class VsTankAIController {
       .filter((c) => c.id !== self.id && !c.isDead && c.tank.isAlive)
       .map((c) => c.tank);
 
-    // Track stuck status
+    // Track stuck & stationary status (3 seconds = 180 ticks triggers forced movement to break AI deadlocks)
     const movedDist =
       this.lastPosX < 0 ? 10 : Math.abs(tank.x - this.lastPosX) + Math.abs(tank.y - this.lastPosY);
     if (movedDist < 0.25) {
@@ -105,11 +111,17 @@ export class VsTankAIController {
     } else {
       this.stuckTicks = 0;
     }
+    if (movedDist < 0.5) {
+      this.stationaryTicks++;
+    } else {
+      this.stationaryTicks = 0;
+    }
     this.lastPosX = tank.x;
     this.lastPosY = tank.y;
 
     if (this.repathCooldown > 0) this.repathCooldown--;
     if (this.evadeTicks > 0) this.evadeTicks--;
+    if (this.forceMoveTicks > 0) this.forceMoveTicks--;
 
     // 2. Xác định vùng an toàn mục tiêu trong SUDDEN DEATH
     const activeSafeBounds: VsSafeZoneBounds | null =
@@ -192,6 +204,60 @@ export class VsTankAIController {
         return directionToInput(dir, false);
       }
       return { ...NEUTRAL_AI_INPUT };
+    }
+
+    // 5b. Cơ chế chống kẹt 3 giây (180 ticks): Nếu A.I đứng im/dính nhau tại 1 vị trí >= 3s, tự động di chuyển thoát kẹt
+    if (this.stationaryTicks >= 180) {
+      const candidateDirs: Direction[] = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+      const perpDirs: Direction[] =
+        tank.direction === 'UP' || tank.direction === 'DOWN'
+          ? ['LEFT', 'RIGHT', 'UP', 'DOWN']
+          : ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+      let chosenDir: Direction | null = null;
+      let bestDirScore = -Infinity;
+      for (const dir of perpDirs) {
+        if (!this.canStepSafelyInDir(tank, dir, terrain, [], self.id, activeSafeBounds)) {
+          continue;
+        }
+        const vec =
+          dir === 'UP'
+            ? { dx: 0, dy: -tilePx }
+            : dir === 'DOWN'
+              ? { dx: 0, dy: tilePx }
+              : dir === 'LEFT'
+                ? { dx: -tilePx, dy: 0 }
+                : { dx: tilePx, dy: 0 };
+        const nx = tank.x + vec.dx;
+        const ny = tank.y + vec.dy;
+        let minDistToOther = 999;
+        for (const other of otherAliveTanks) {
+          const d = Math.hypot(nx - other.x, ny - other.y);
+          if (d < minDistToOther) minDistToOther = d;
+        }
+        // Ưu tiên hướng tách xa tank đang dính/gần và vuông góc với hướng cũ
+        const perpBonus = dir !== tank.direction ? 18 : 0;
+        const score = minDistToOther + perpBonus + ((tickCount + candidateDirs.indexOf(dir)) % 5);
+        if (score > bestDirScore) {
+          bestDirScore = score;
+          chosenDir = dir;
+        }
+      }
+      if (chosenDir) {
+        this.forceMoveDir = chosenDir;
+        this.forceMoveTicks = 36;
+        this.stationaryTicks = 0;
+        this.stuckTicks = 0;
+        this.path = [];
+      }
+    }
+
+    if (this.forceMoveTicks > 0 && this.forceMoveDir) {
+      if (this.canStepSafelyInDir(tank, this.forceMoveDir, terrain, [], self.id, activeSafeBounds)) {
+        this.lastDir = this.forceMoveDir;
+        return directionToInput(this.forceMoveDir, false);
+      }
+      this.forceMoveTicks = 0;
+      this.forceMoveDir = null;
     }
 
     // 6. Kiểm tra tuyến bắn trực tiếp vào bất kỳ đối thủ nào (ưu tiên kẻ thù gần nhất & không có đồng đội chắn)

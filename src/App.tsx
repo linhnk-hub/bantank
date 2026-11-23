@@ -92,6 +92,7 @@ import {
   AlertTriangle,
   Eye,
   LogOut,
+  X,
 } from 'lucide-react';
 
 export default function App() {
@@ -683,19 +684,29 @@ export default function App() {
     [currentUser?.uid, launchVerifiedMatch]
   );
 
-  // M7.8 Section X: Home Menu SOLO direct battle entry (skips intermediate mode/difficulty screen)
-  const handleStartSoloDirect = useCallback(() => {
-    const uid = currentUser?.uid ?? '';
-    const unlockedStage = uid
-      ? Math.min(
-          10,
-          Math.max(1, StageProgressionManager.getInstance().getUnlockedStageForUser(uid, false))
-        )
-      : 1;
-    setSelectedMode('SOLO');
-    setSelectedLobbyMode('SOLO');
-    handleStartMatch('SOLO', undefined, unlockedStage);
-  }, [currentUser?.uid, handleStartMatch]);
+  // M7.8 Section X: Home Menu SOLO direct battle entry with stage picker
+  const handleStartSoloDirect = useCallback(
+    (stageId?: number) => {
+      const uid = currentUser?.uid ?? '';
+      const unlockedStage = uid
+        ? Math.min(
+            10,
+            Math.max(
+              1,
+              StageProgressionManager.getInstance().getUnlockedStageForUser(uid, isSuperAdmin)
+            )
+          )
+        : 1;
+      const targetStage =
+        typeof stageId === 'number' && Number.isFinite(stageId)
+          ? Math.min(isSuperAdmin ? 10 : unlockedStage, Math.max(1, Math.floor(stageId)))
+          : unlockedStage;
+      setSelectedMode('SOLO');
+      setSelectedLobbyMode('SOLO');
+      handleStartMatch('SOLO', undefined, targetStage);
+    },
+    [currentUser?.uid, isSuperAdmin, handleStartMatch]
+  );
 
   const handleStartOnlineMatch = useCallback(
     (room: CoopRoomDocument, role: CoopPlayerRole): boolean => {
@@ -1856,6 +1867,14 @@ export default function App() {
             >
               {t('Về trang chủ', 'Return Home')}
             </button>
+            <button
+              type="button"
+              onClick={() => setOnlineDisconnectMsg(null)}
+              className="p-1 rounded bg-red-900/60 hover:bg-red-800/80 text-red-100 cursor-pointer"
+              aria-label={t('Đóng', 'Close')}
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </div>
       )}
@@ -1919,12 +1938,13 @@ export default function App() {
             <div className="flex-none flex flex-col items-center justify-center gap-1.5 mx-auto">
               <div
                 style={{
+                  boxSizing: 'content-box',
                   width: `${layout.canvasSizePx}px`,
                   height: `${layout.canvasSizePx}px`,
                   maxWidth: `${layout.canvasSizePx}px`,
                   maxHeight: `${layout.canvasSizePx}px`,
                 }}
-                className="flex-none flex items-start justify-center overflow-hidden p-0 relative mx-auto"
+                className="flex-none flex items-center justify-center overflow-hidden p-0 relative mx-auto rounded-md border-2 border-[#00F0FF]/35 bg-black"
               >
                 <PhaserGame
                   mode="battle"
@@ -2020,12 +2040,13 @@ export default function App() {
           <div className="flex-1 flex flex-col items-center justify-start w-full overflow-hidden px-2 pt-1 pb-2">
             <main
               style={{
+                boxSizing: 'content-box',
                 width: `${layout.canvasSizePx}px`,
                 height: `${layout.canvasSizePx}px`,
                 maxWidth: `${layout.canvasSizePx}px`,
                 maxHeight: `${layout.canvasSizePx}px`,
               }}
-              className="shrink-0 flex items-start justify-center overflow-hidden relative mx-auto rounded-lg border-2 border-[#00F0FF]/35 bg-black shadow-2xl mt-0.5 sm:mt-1"
+              className="shrink-0 flex items-center justify-center overflow-hidden relative mx-auto rounded-lg border-2 border-[#00F0FF]/35 bg-black shadow-2xl mt-0.5 sm:mt-1"
             >
               <PhaserGame
                 mode="battle"
@@ -2165,7 +2186,7 @@ export default function App() {
 
                 {/* Canvas Container - Top Aligned */}
                 <div className="p-3 sm:p-4 lg:p-5 bg-[#050510]/90 flex items-start justify-center relative">
-                  <div className="w-full max-w-[min(calc(100dvh-140px),832px)] aspect-square flex items-start justify-center">
+                  <div className="w-full max-w-[min(calc(100dvh-140px),832px)] aspect-square flex items-center justify-center rounded-md border-2 border-[#00F0FF]/35 bg-black overflow-hidden">
                     <PhaserGame
                       mode="battle"
                       engine={gameEngine}
@@ -2376,6 +2397,7 @@ export default function App() {
         onReturnToLobby={isCoopOnlineMatch ? handleReturnToLobby : undefined}
         isReturningToLobby={isReturningToLobby}
         returnToLobbyError={returnToLobbyError}
+        onDismissReturnError={() => setReturnToLobbyError(null)}
         isTrialMode={isTrialMode}
         localOnlineRole={localOnlineRole}
         rematchReady={rematchReady}
@@ -2392,6 +2414,7 @@ export default function App() {
         onReturnToLobby={isCoopOnlineMatch ? handleReturnToLobby : undefined}
         isReturningToLobby={isReturningToLobby}
         returnToLobbyError={returnToLobbyError}
+        onDismissReturnError={() => setReturnToLobbyError(null)}
         isTrialMode={isTrialMode}
         localOnlineRole={localOnlineRole}
         postStageReady={postStageReady}
@@ -2407,6 +2430,7 @@ export default function App() {
         }}
         isReturningToLobby={isReturningToLobby}
         returnToLobbyError={returnToLobbyError}
+        onDismissReturnError={() => setReturnToLobbyError(null)}
         onQuitToMenu={handleQuitToMenu}
       />
 

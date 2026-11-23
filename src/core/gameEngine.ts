@@ -365,6 +365,7 @@ export class GameEngine {
   private activeMatchToken: StageMatchSessionToken | null = null;
   private lastStageClearProof: StageClearProof | null = null;
   private lastUnlockedStageFromClear: number | null = null;
+  private playerOverlapStationaryTicks: Map<string, number> = new Map();
 
   public isCoopMode(): boolean {
     return this.gameMode === 'TWO_PLAYERS_AI' || this.gameMode === 'TWO_PLAYERS_ONLINE';
@@ -1652,6 +1653,11 @@ export class GameEngine {
       );
     }
 
+    const p1PrevX = this.state.p1.x;
+    const p1PrevY = this.state.p1.y;
+    const p2PrevX = this.state.p2?.x ?? 0;
+    const p2PrevY = this.state.p2?.y ?? 0;
+
     // 2. P1 Tank Movement & Continuous Shooting (disabled when dead or in Spectator mode)
     // P1 & P2 tanks can pass through each other in Co-op modes to prevent close-quarters collision lock
     if (
@@ -1779,6 +1785,65 @@ export class GameEngine {
           this.emit('P2_SHOOT', p2Bullet);
         }
       }
+    }
+
+    // 2c. Anti-stuck overlap reset (1s = 60 ticks): P1 & P2 may pass through each other,
+    // but if overlapping without moving for 1 second, reset that tank back to its spawn position.
+    const p1AliveForOverlap =
+      this.state.p1.isAlive &&
+      !this.state.p1State.isDead &&
+      !this.state.p1State.isSpectator &&
+      !this.state.p1State.hasLeftMatch;
+    const p2AliveForOverlap = Boolean(
+      this.state.p2 &&
+        this.state.p2State &&
+        this.state.p2.isAlive &&
+        !this.state.p2State.isDead &&
+        !this.state.p2State.isSpectator &&
+        !this.state.p2State.hasLeftMatch
+    );
+    if (p1AliveForOverlap && p2AliveForOverlap && this.state.p2) {
+      const p1Box = getTankHitbox(this.state.p1.x, this.state.p1.y);
+      const p2Box = getTankHitbox(this.state.p2.x, this.state.p2.y);
+      if (intersectAABB(p1Box, p2Box)) {
+        const p1Moved = Math.hypot(this.state.p1.x - p1PrevX, this.state.p1.y - p1PrevY);
+        if (p1Moved < 0.25) {
+          const t1 = (this.playerOverlapStationaryTicks.get('p1') ?? 0) + 1;
+          if (t1 >= 60) {
+            const spawnP1 = createP1Tank();
+            this.state.p1.x = spawnP1.x;
+            this.state.p1.y = spawnP1.y;
+            this.state.p1.direction = spawnP1.direction;
+            this.playerOverlapStationaryTicks.set('p1', 0);
+          } else {
+            this.playerOverlapStationaryTicks.set('p1', t1);
+          }
+        } else {
+          this.playerOverlapStationaryTicks.set('p1', 0);
+        }
+
+        const p2Moved = Math.hypot(this.state.p2.x - p2PrevX, this.state.p2.y - p2PrevY);
+        if (p2Moved < 0.25) {
+          const t2 = (this.playerOverlapStationaryTicks.get('p2') ?? 0) + 1;
+          if (t2 >= 60) {
+            const spawnP2 = createP2Tank();
+            this.state.p2.x = spawnP2.x;
+            this.state.p2.y = spawnP2.y;
+            this.state.p2.direction = spawnP2.direction;
+            this.playerOverlapStationaryTicks.set('p2', 0);
+          } else {
+            this.playerOverlapStationaryTicks.set('p2', t2);
+          }
+        } else {
+          this.playerOverlapStationaryTicks.set('p2', 0);
+        }
+      } else {
+        this.playerOverlapStationaryTicks.set('p1', 0);
+        this.playerOverlapStationaryTicks.set('p2', 0);
+      }
+    } else {
+      this.playerOverlapStationaryTicks.set('p1', 0);
+      this.playerOverlapStationaryTicks.set('p2', 0);
     }
 
     // 3. Update Enemies (AI, movement, and shooting)

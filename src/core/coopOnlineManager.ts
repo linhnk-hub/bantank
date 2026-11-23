@@ -523,6 +523,34 @@ export function computeRoomPasswordDigest(roomCode: string, rawPassword: string)
 
 const ROOM_LOCK_TAG_REGEX = /\s*\[LOCK:([0-9a-f]{16})\]/i;
 const ROOM_MODE_TAG_REGEX = /\s*\[(VS1|VS2)\]/i;
+const REMATCH_POINTER_PREFIX = 'REMATCH_NEXT::';
+
+export function encodeRematchPointer(
+  nextRoomCode: string,
+  rawPassword: string = '',
+  stageId: number = 1
+): string {
+  const safeCode = nextRoomCode.trim().toUpperCase();
+  const safeStage = Number.isInteger(stageId) && stageId >= 1 ? stageId : 1;
+  const safePass = rawPassword.trim().slice(0, 64);
+  return `${REMATCH_POINTER_PREFIX}${safeCode}::${safeStage}::${safePass}`.slice(0, 230);
+}
+
+export function parseRematchPointer(raw: string | null | undefined): {
+  nextRoomCode: string;
+  stageId: number;
+  password: string;
+} | null {
+  if (typeof raw !== 'string' || !raw.startsWith(REMATCH_POINTER_PREFIX)) return null;
+  const rest = raw.slice(REMATCH_POINTER_PREFIX.length);
+  const parts = rest.split('::');
+  const code = (parts[0] || '').trim().toUpperCase();
+  if (!/^BT[0-9]{4}$/.test(code)) return null;
+  const parsedStage = Number.parseInt(parts[1] || '1', 10);
+  const stageId = Number.isInteger(parsedStage) && parsedStage >= 1 && parsedStage <= TOTAL_CAMPAIGN_STAGES ? parsedStage : 1;
+  const password = parts.slice(2).join('::');
+  return { nextRoomCode: code, stageId, password };
+}
 
 export function getRoomModeLabelVi(mode: CoopRoomMode): string {
   if (mode === 'VS_P1_P2') return 'VS Online (P1 VS P2)';
@@ -2219,6 +2247,7 @@ export class CoopOnlineManager {
     ) => void
   > = [];
   private isAutoProvisioningRematch: boolean = false;
+  private inFlightRematchPromise: Promise<CoopActionResult> | null = null;
   private selectedLobbyStageId: number = 1;
   private selectedLobbyStageName: string = getCampaignStageSpec(1).name;
 
@@ -5910,12 +5939,41 @@ export class CoopOnlineManager {
       return { success: true, room: this.currentRoom };
     }
 
-    const difficulty = this.currentRoom?.difficulty ?? 'DEFAULT';
+    if (this.inFlightRematchPromise) {
+      return this.inFlightRematchPromise;
+    }
+
+    const work = this.executeProvisionSharedRematchRoom(user, explicitNowMs);
+    this.inFlightRematchPromise = work;
+    try {
+      return await work;
+    } finally {
+      if (this.inFlightRematchPromise === work) {
+        this.inFlightRematchPromise = null;
+      }
+    }
+  }
+
+  private async executeProvisionSharedRematchRoom(
+    user: {
+      uid: string;
+      displayName?: string | null;
+      email?: string | null;
+      emailVerified?: boolean;
+      photoURL?: string | null;
+    },
+    explicitNowMs: number = Date.now()
+  ): Promise<CoopActionResult> {
+    const prevRoom = this.currentRoom;
+    const difficulty = prevRoom?.difficulty ?? 'DEFAULT';
     const usePassword = this.lastCreatedRoomHasPassword;
     const rawPassword = this.lastCreatedRoomPassword;
 
     const lobbyWriteMs = explicitNowMs;
     const triedCodes = new Set<string>();
+    if (prevRoom?.roomCode) {
+      triedCodes.add(prevRoom.roomCode);
+    }
     let nextRoomCode = generateRoomCode(triedCodes);
     let foundAvailableCode = false;
 
@@ -5941,7 +5999,7 @@ export class CoopOnlineManager {
 
       const safeTtlMs =
         COOP_ONLINE_CONFIG.ROOM_TTL_MS - COOP_ONLINE_CONFIG.CLOCK_SKEW_BUFFER_MS;
-      const roomMode: CoopRoomMode = this.currentRoom?.roomMode ?? 'COOP_ONLINE';
+      const roomMode: CoopRoomMode = prevRoom?.roomMode ?? 'COOP_ONLINE';
       const cleanHostName = (getUserDisplayLabel(user) || 'Commander').trim().slice(0, 80);
       const encodedHostDisplayName = encodeHostDisplayNameWithLock(
         cleanHostName,
@@ -5992,6 +6050,23 @@ export class CoopOnlineManager {
         };
       }
 
+      // Persist rematch pointer on the previous PLAYING room in Firestore so Guest (P2)
+      // can always locate and join Host's exact new room even if WebRTC DataChannel dropped or closed.
+      if (prevRoom && prevRoom.status === 'PLAYING' && prevRoom.hostUid === user.uid) {
+        try {
+          await this.adapter.updateRoom(prevRoom.roomCode, {
+            disconnectReason: encodeRematchPointer(
+              nextRoomCode,
+              usePassword ? rawPassword : '',
+              this.selectedLobbyStageId
+            ),
+            hostLastActiveAt: lobbyWriteMs,
+          });
+        } catch {
+          // Best-effort Firestore pointer; DataChannel fast-path still runs below
+        }
+      }
+
       const oldDcOpen = !this.customP2PChannel && Boolean(this.dataChannel && this.dataChannel.readyState === 'open');
       const returnInvitePayload: CoopDataChannelMessage = {
         type: 'RETURN_TO_LOBBY',
@@ -6015,7 +6090,8 @@ export class CoopOnlineManager {
           const finish = () => {
             if (settled) return;
             settled = true;
-            clearTimeout(resendTimer);
+            clearTimeout(resendTimer1);
+            clearTimeout(resendTimer2);
             clearTimeout(maxWaitTimer);
             if (ackResolverRef) {
               const idx = this.guestReturnAckResolvers.indexOf(ackResolverRef);
@@ -6029,12 +6105,17 @@ export class CoopOnlineManager {
             }
           };
           this.guestReturnAckResolvers.push(ackResolverRef);
-          const resendTimer = setTimeout(() => {
+          const resendTimer1 = setTimeout(() => {
             if (this.isP2PDataChannelOpen()) {
               this.sendOverDataChannel(returnInvitePayload, true);
             }
           }, 150);
-          const maxWaitTimer = setTimeout(finish, 450);
+          const resendTimer2 = setTimeout(() => {
+            if (this.isP2PDataChannelOpen()) {
+              this.sendOverDataChannel(returnInvitePayload, true);
+            }
+          }, 400);
+          const maxWaitTimer = setTimeout(finish, 800);
         });
       }
 
@@ -6060,7 +6141,7 @@ export class CoopOnlineManager {
   }
 
   /**
-   * Cả P1 (Host) và P2 (Guest) gọi khi bấm nút "Về phòng chờ" ở màn hình kết thúc trận Co-op Online.
+   * Cả P1 (Host) và P2 (Guest) gọi khi bấm nút "Về phòng chờ" ở màn hình kết thúc trận Co-op/VS Online.
    */
   public async returnToLobbyFromMatch(
     user: {
@@ -6085,23 +6166,79 @@ export class CoopOnlineManager {
     }
 
     if (this.role === 'GUEST') {
-      let invite = this.pendingRematchInvite;
-      if (!invite && this.isP2PDataChannelOpen()) {
-        this.sendOverDataChannel({ type: 'REQUEST_RETURN_TO_LOBBY', timestamp: nowMs }, true);
+      const prevRoomCode = this.currentRoom?.roomCode ?? null;
+      const prevRoomMode: CoopRoomMode = this.currentRoom?.roomMode ?? 'COOP_ONLINE';
+      const prevDifficulty = this.currentRoom?.difficulty ?? 'DEFAULT';
+      const prevHostUid = this.currentRoom?.hostUid ?? '';
+
+      const extractPointerInvite = (reason: string | null | undefined) => {
+        const ptr = parseRematchPointer(reason);
+        if (!ptr) return null;
+        return {
+          nextRoomCode: ptr.nextRoomCode,
+          hasPassword: Boolean(ptr.password),
+          password: ptr.password || undefined,
+          difficulty: prevDifficulty,
+          hostUid: prevHostUid,
+          stageId: ptr.stageId,
+          stageName: getCampaignStageSpec(ptr.stageId).name,
+          timestamp: Date.now(),
+        };
+      };
+
+      let invite =
+        this.pendingRematchInvite ?? extractPointerInvite(this.currentRoom?.disconnectReason);
+
+      if (!invite && prevRoomCode) {
+        try {
+          const freshOldRoom = await this.adapter.getRoom(prevRoomCode);
+          invite = extractPointerInvite(freshOldRoom?.disconnectReason);
+        } catch {
+          // ignore
+        }
+      }
+
+      if (!invite) {
+        if (this.isP2PDataChannelOpen()) {
+          this.sendOverDataChannel({ type: 'REQUEST_RETURN_TO_LOBBY', timestamp: nowMs }, true);
+        }
         invite = await new Promise((resolve) => {
           let settled = false;
+          let pollTimer: ReturnType<typeof setInterval> | null = null;
           const finish = (val: typeof invite) => {
             if (settled) return;
             settled = true;
             clearTimeout(timer);
+            if (pollTimer) clearInterval(pollTimer);
+            const idx = this.rematchInviteResolvers.indexOf(finish);
+            if (idx >= 0) this.rematchInviteResolvers.splice(idx, 1);
             resolve(val);
           };
           const timer = setTimeout(() => {
-            const idx = this.rematchInviteResolvers.indexOf(finish);
-            if (idx >= 0) this.rematchInviteResolvers.splice(idx, 1);
-            finish(this.pendingRematchInvite);
-          }, 5000);
+            finish(
+              this.pendingRematchInvite ??
+                extractPointerInvite(this.currentRoom?.disconnectReason)
+            );
+          }, 6000);
           this.rematchInviteResolvers.push(finish);
+
+          if (prevRoomCode) {
+            pollTimer = setInterval(() => {
+              if (this.pendingRematchInvite) {
+                finish(this.pendingRematchInvite);
+                return;
+              }
+              void this.adapter
+                .getRoom(prevRoomCode)
+                .then((fresh) => {
+                  const found = extractPointerInvite(fresh?.disconnectReason);
+                  if (found) {
+                    finish(found);
+                  }
+                })
+                .catch(() => undefined);
+            }, 500);
+          }
         });
       }
 
@@ -6119,12 +6256,14 @@ export class CoopOnlineManager {
       let joinRes = await this.joinRoom(invite.nextRoomCode, user, Date.now(), {
         password: invite.password,
         stageId: inviteStageId,
+        expectedRoomMode: prevRoomMode,
       } as CoopJoinRoomOptions);
-      if (!joinRes.success && joinRes.errorCode === 'ROOM_NOT_FOUND') {
-        await new Promise((resolve) => setTimeout(resolve, 300));
+      for (let retry = 0; retry < 3 && !joinRes.success && joinRes.errorCode === 'ROOM_NOT_FOUND'; retry++) {
+        await new Promise((resolve) => setTimeout(resolve, 350));
         joinRes = await this.joinRoom(invite.nextRoomCode, user, Date.now(), {
           password: invite.password,
           stageId: inviteStageId,
+          expectedRoomMode: prevRoomMode,
         } as CoopJoinRoomOptions);
       }
       return joinRes;
@@ -6133,7 +6272,7 @@ export class CoopOnlineManager {
     return {
       success: false,
       errorCode: 'ROOM_NOT_FOUND',
-      message: 'Không còn phiên phòng Co-op Online trước đó.',
+      message: 'Không còn phiên phòng trực tuyến trước đó.',
     };
   }
 
@@ -6584,7 +6723,22 @@ export class CoopOnlineManager {
             this.handleLocalGuestKicked('Bạn đã được chủ phòng mời ra khỏi phòng chờ.');
             return;
           }
-          if (updatedLobby.status === 'ABANDONED' && this.role) {
+          const rematchPtr = parseRematchPointer(updatedLobby.disconnectReason);
+          if (this.role === 'GUEST' && rematchPtr) {
+            const invite = {
+              nextRoomCode: rematchPtr.nextRoomCode,
+              hasPassword: Boolean(rematchPtr.password),
+              password: rematchPtr.password || undefined,
+              difficulty: updatedLobby.difficulty,
+              hostUid: updatedLobby.hostUid,
+              stageId: rematchPtr.stageId,
+              stageName: getCampaignStageSpec(rematchPtr.stageId).name,
+              timestamp: Date.now(),
+            };
+            this.pendingRematchInvite = invite;
+            this.resolveAllRematchWaiters(invite);
+          }
+          if (updatedLobby.status === 'ABANDONED' && this.role && !rematchPtr) {
             const peerRole = this.role === 'HOST' ? 'GUEST' : 'HOST';
             this.recordPeerActiveLeave(peerRole, updatedLobby.disconnectReason || undefined);
           }

@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useState } from 'react';
-import { RotateCcw } from 'lucide-react';
+import { RotateCcw, X } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
 import type { CoopRematchReadyState } from '../core/coopOnlineManager.ts';
 import { TOTAL_CAMPAIGN_STAGES } from '../core/campaignStages.ts';
@@ -23,6 +23,7 @@ export interface GameOverModalProps {
   onReturnToLobby?: () => void;
   isReturningToLobby?: boolean;
   returnToLobbyError?: string | null;
+  onDismissReturnError?: () => void;
   isTrialMode?: boolean;
   localOnlineRole?: 'HOST' | 'GUEST' | null;
   rematchReady?: CoopRematchReadyState | null;
@@ -39,6 +40,7 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
   onReturnToLobby,
   isReturningToLobby = false,
   returnToLobbyError = null,
+  onDismissReturnError,
   isTrialMode = false,
   localOnlineRole = null,
   rematchReady = null,
@@ -163,8 +165,18 @@ export const GameOverModal: React.FC<GameOverModalProps> = ({
         </div>
 
         {returnToLobbyError && (
-          <div className="mb-3 p-2.5 rounded-lg bg-red-950/60 border border-[#FF0055]/40 text-red-300 text-xs text-center">
-            {returnToLobbyError}
+          <div className="mb-3 p-2.5 rounded-lg bg-red-950/60 border border-[#FF0055]/40 text-red-300 text-xs flex items-center justify-between gap-2">
+            <span className="flex-1 text-center">{returnToLobbyError}</span>
+            {onDismissReturnError && (
+              <button
+                type="button"
+                onClick={onDismissReturnError}
+                className="p-1 rounded hover:bg-red-900/60 text-red-200 hover:text-white shrink-0 cursor-pointer"
+                aria-label={t('Đóng', 'Close')}
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         )}
 

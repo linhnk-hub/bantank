@@ -288,6 +288,9 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
     return coopMgr.subscribe((room) => {
       setActiveOnlineRoom(room);
       setSignalingReady(coopMgr.isRoomSignalingReady());
+      if (room && room.roomMode && room.status !== 'ABANDONED' && room.status !== 'EXPIRED') {
+        setCardMode(room.roomMode);
+      }
       if (
         room &&
         room.status === 'WAITING' &&
@@ -424,7 +427,14 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
   const handleTopBack = () => {
     if (isInsideOnlineWaitingRoom) {
+      const preservedMode = activeOnlineRoom?.roomMode;
+      if (preservedMode) {
+        setCardMode(preservedMode);
+      }
       void CoopOnlineManager.getInstance().leaveRoom().finally(() => {
+        if (preservedMode) {
+          setCardMode(preservedMode);
+        }
         setOnlineLobbySubView('MAIN');
       });
       return;
@@ -1021,8 +1031,16 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                     </div>
 
                     {stageSelectError && (
-                      <div className="p-2.5 rounded bg-rose-950/80 border border-[#FF0055]/70 text-rose-200 text-xs sm:text-sm font-medium whitespace-pre-line">
-                        {formatSentenceLineBreaks(stageSelectError)}
+                      <div className="p-2.5 rounded bg-rose-950/80 border border-[#FF0055]/70 text-rose-200 text-xs sm:text-sm font-medium flex items-center justify-between gap-2">
+                        <span className="whitespace-pre-line">{formatSentenceLineBreaks(stageSelectError)}</span>
+                        <button
+                          type="button"
+                          onClick={() => setStageSelectError(null)}
+                          className="px-2 py-0.5 rounded bg-rose-900/80 hover:bg-rose-800 text-rose-100 text-xs font-bold shrink-0 cursor-pointer"
+                          aria-label={t('Đóng', 'Close')}
+                        >
+                          ×
+                        </button>
                       </div>
                     )}
                   </section>

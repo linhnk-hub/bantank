@@ -89,7 +89,6 @@ const CombatantRow: React.FC<{ c: VsCombatantState; isLocal?: boolean }> = ({
               }
             />
           ))}
-          <span className="font-hud text-xs font-black text-neutral-200 ml-0.5">{c.lives}</span>
         </div>
       </div>
 
@@ -194,19 +193,6 @@ export const VsTitleStatusLine: React.FC<{
           : isTransition
             ? t('Đang chuyển hiệp...', 'Transitioning...')
             : t('Hiệp chính', 'Main Round')}
-      </span>
-      <span className="text-neutral-600">•</span>
-      <span
-        data-testid="vs-title-timer"
-        className={`font-hud font-black ${
-          isSuddenDeath
-            ? 'text-[#FF0055]'
-            : vs.normalRemainingSeconds <= 20
-              ? 'text-rose-400 animate-pulse'
-              : 'text-[#FFB800]'
-        }`}
-      >
-        {timerDisplay}
       </span>
       {activeAlerts.length > 0 && (
         <>

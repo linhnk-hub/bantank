@@ -22,6 +22,7 @@ import {
   Unlock,
   KeyRound,
   Map as MapIcon,
+  X,
 } from 'lucide-react';
 import type { User } from 'firebase/auth';
 import {
@@ -378,9 +379,19 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
         )}
 
         {errorMsg && (
-          <div className="p-3 rounded-xl bg-red-950/70 border border-red-500/50 text-red-200 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-            <span className="whitespace-pre-line">{formatSentenceLineBreaks(errorMsg)}</span>
+          <div className="p-3 rounded-xl bg-red-950/70 border border-red-500/50 text-red-200 text-xs flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+              <span className="whitespace-pre-line">{formatSentenceLineBreaks(errorMsg)}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setErrorMsg(null)}
+              className="p-1 rounded hover:bg-red-900/60 text-red-200 hover:text-white shrink-0 cursor-pointer"
+              aria-label={t('Đóng', 'Close')}
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
 
@@ -403,10 +414,15 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     {t('1. TẠO PHÒNG', '1. CREATE ROOM')}
                   </h3>
                   <p className="text-xs text-[#EAF4FF]/80 leading-relaxed">
-                    {t(
-                      'Thiết lập độ khó chiến dịch (Giải trí / Thử thách) và chế độ bảo mật phòng (Có mật khẩu hoặc Không mật khẩu).',
-                      'Configure campaign difficulty (Casual / Challenge) and room security mode (Password-protected or Public).'
-                    )}
+                    {isVsOnlineMode
+                      ? t(
+                          'Tạo phòng đấu đối kháng trực tuyến và cấu hình chế độ bảo mật phòng (Có mật khẩu hoặc Không mật khẩu).',
+                          'Create an online PvP room and configure room security mode (Password-protected or Public).'
+                        )
+                      : t(
+                          'Thiết lập độ khó chiến dịch (Giải trí / Thử thách) và chế độ bảo mật phòng (Có mật khẩu hoặc Không mật khẩu).',
+                          'Configure campaign difficulty (Casual / Challenge) and room security mode (Password-protected or Public).'
+                        )}
                   </p>
                 </div>
 
@@ -550,29 +566,29 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                 </div>
                 <p className="text-[11px] text-neutral-300 leading-relaxed">
                   {t(
-                    'Đấu đối kháng trực tuyến trên 2 thiết bị riêng biệt (Host = P1, Guest = P2). 3 mạng • 2 phút (120s) • Hồi sinh 3s • Khiên 2s • Sudden Death thu hẹp 20s • Không có Hòa.',
-                    'Online PvP on 2 separate devices (Host = P1, Guest = P2). 3 lives • 2 min (120s) • 3s respawn • 2s shield • Sudden Death 20s shrink • No Draw.'
+                    '3 mạng • 2 phút (120s) • Hồi sinh 3s • Khiên 2s • Vòng bo xuất hiện trong hiệp phụ • Không có Hòa.',
+                    '3 lives • 2 min (120s) • 3s respawn • 2s shield • Safe zone shrinks in overtime • No Draw.'
                   )}
                 </p>
                 <div className="flex flex-wrap gap-1.5 pt-1">
                   <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.P1.badgeBgClass} ${VS_TANK_COLOR_SPEC.P1.badgeBorderClass} ${VS_TANK_COLOR_SPEC.P1.badgeTextClass}`}>
                     <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.P1.dotClass}`} />
-                    P1 ({t('Đỏ', 'Red')})
+                    P1
                   </span>
                   {roomMode === 'VS_P1_AI_P2_AI' && (
                     <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.AI_1.badgeBgClass} ${VS_TANK_COLOR_SPEC.AI_1.badgeBorderClass} ${VS_TANK_COLOR_SPEC.AI_1.badgeTextClass}`}>
                       <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.AI_1.dotClass}`} />
-                      A.I 1 ({t('Xanh biển nhạt', 'Light Sky Blue')})
+                      A.I 1
                     </span>
                   )}
                   <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.P2.badgeBgClass} ${VS_TANK_COLOR_SPEC.P2.badgeBorderClass} ${VS_TANK_COLOR_SPEC.P2.badgeTextClass}`}>
                     <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.P2.dotClass}`} />
-                    P2 ({t('Vàng', 'Yellow')})
+                    P2
                   </span>
                   {roomMode === 'VS_P1_AI_P2_AI' && (
                     <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.AI_2.badgeBgClass} ${VS_TANK_COLOR_SPEC.AI_2.badgeBorderClass} ${VS_TANK_COLOR_SPEC.AI_2.badgeTextClass}`}>
                       <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.AI_2.dotClass}`} />
-                      A.I 2 ({t('Xám', 'Gray')})
+                      A.I 2
                     </span>
                   )}
                 </div>
@@ -601,11 +617,6 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                       {t('Có mật khẩu', 'Password')}
                     </div>
                   </div>
-                  {createHasPassword && (
-                    <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded bg-sky-500 text-black font-black font-mono shrink-0">
-                      {t('CHỌN', 'ON')}
-                    </span>
-                  )}
                 </button>
 
                 {/* Tùy chọn: Không mật khẩu */}
@@ -624,11 +635,6 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                       {t('Không mật khẩu', 'No Password')}
                     </div>
                   </div>
-                  {!createHasPassword && (
-                    <span className="text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded bg-emerald-500 text-black font-black font-mono shrink-0">
-                      {t('CHỌN', 'ON')}
-                    </span>
-                  )}
                 </button>
               </div>
 
@@ -895,17 +901,17 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
           <div>
             <div className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
               {room.roomMode && room.roomMode !== 'COOP_ONLINE'
-                ? `${t('PHÒNG CHỜ', 'WAITING ROOM')} ${getRoomModeLabelVi(room.roomMode)}`
+                ? t('PHÒNG CHỜ', 'WAITING ROOM')
                 : t('PHÒNG CHỜ CO-OP ONLINE', 'CO-OP ONLINE WAITING ROOM')}
             </div>
             <div className="flex items-center flex-wrap gap-1.5 mt-1">
               {room.roomMode && room.roomMode !== 'COOP_ONLINE' ? (
                 <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded border bg-rose-950/80 text-rose-300 border-rose-500/45 flex items-center gap-1">
-                  {room.roomMode === 'VS_P1_P2' ? 'P1 VS P2 • 2 THIẾT BỊ' : 'P1 + A.I VS P2 + A.I • 2 THIẾT BỊ'}
+                  {room.roomMode === 'VS_P1_P2' ? 'P1 VS P2' : 'P1 + A.I VS P2 + A.I'}
                 </span>
               ) : (
                 <span
-                  className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border flex items-center gap-1 ${
+                  className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border flex items-center ${
                     room.difficulty === 'EXTREME'
                       ? 'bg-rose-950/80 text-rose-300 border-rose-500/40'
                       : 'bg-amber-950/80 text-amber-300 border-amber-500/40'
@@ -915,34 +921,22 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     'Room difficulty configured by Host (P1)'
                   )}
                 >
-                  {room.difficulty === 'EXTREME' ? (
-                    <>
-                      <Flame className="w-3 h-3" /> {t('Độ khó: Thử thách', 'Difficulty: Challenge')}
-                    </>
-                  ) : (
-                    <>
-                      <Shield className="w-3 h-3" /> {t('Độ khó: Giải trí', 'Difficulty: Casual')}
-                    </>
-                  )}
+                  {room.difficulty === 'EXTREME'
+                    ? t('Độ khó: Thử thách', 'Difficulty: Challenge')
+                    : t('Độ khó: Giải trí', 'Difficulty: Casual')}
                 </span>
               )}
 
               <span
-                className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border flex items-center gap-1 ${
+                className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border flex items-center ${
                   room.hasPassword
                     ? 'bg-sky-950/80 text-sky-300 border-sky-500/40'
                     : 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
                 }`}
               >
-                {room.hasPassword ? (
-                  <>
-                    <Lock className="w-3 h-3" /> {t('CÓ MẬT KHẨU', 'PASSWORD PROTECTED')}
-                  </>
-                ) : (
-                  <>
-                    <Unlock className="w-3 h-3" /> {t('PHÒNG CÔNG KHAI', 'PUBLIC ROOM')}
-                  </>
-                )}
+                {room.hasPassword
+                  ? t('CÓ MẬT KHẨU', 'PASSWORD PROTECTED')
+                  : t('PHÒNG CÔNG KHAI', 'PUBLIC ROOM')}
               </span>
             </div>
           </div>
@@ -970,9 +964,19 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
       </div>
 
       {errorMsg && (
-        <div className="p-3 rounded-xl bg-red-950/70 border border-red-500/50 text-red-200 text-xs flex items-center gap-2">
-          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-          <span className="whitespace-pre-line">{formatSentenceLineBreaks(errorMsg)}</span>
+        <div className="p-3 rounded-xl bg-red-950/70 border border-red-500/50 text-red-200 text-xs flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+            <span className="whitespace-pre-line">{formatSentenceLineBreaks(errorMsg)}</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setErrorMsg(null)}
+            className="p-1 rounded hover:bg-red-900/60 text-red-200 hover:text-white shrink-0 cursor-pointer"
+            aria-label={t('Đóng', 'Close')}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
@@ -1028,33 +1032,33 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
           className="p-3.5 rounded-xl bg-neutral-950/85 border border-rose-500/40 space-y-2"
         >
           <div className="text-xs font-btn font-black text-rose-300 uppercase">
-            {t('Đấu trường VS Online (2 thiết bị riêng biệt)', 'VS Online Arena (2 Separate Devices)')}
+            {t('Luật chơi', 'Rules')}
           </div>
           <p className="text-[11px] text-neutral-300 leading-snug">
             {t(
-              'Host điều khiển Tank P1 • Guest điều khiển Tank P2. 3 mạng • 2 phút (120s) • Sudden Death thu hẹp 20s • Rời trận bị xử thua ngay.',
-              'Host controls Tank P1 • Guest controls Tank P2. 3 lives • 2 min (120s) • Sudden Death 20s shrink • Leaving forfeits immediately.'
+              '3 mạng • 2 phút (120s) • Vòng bo xuất hiện trong hiệp phụ • Rời trận bị xử thua ngay.',
+              '3 lives • 2 min (120s) • Safe zone shrinks in overtime • Leaving forfeits immediately.'
             )}
           </p>
           <div className="flex flex-wrap gap-1.5 pt-0.5">
             <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.P1.badgeBgClass} ${VS_TANK_COLOR_SPEC.P1.badgeBorderClass} ${VS_TANK_COLOR_SPEC.P1.badgeTextClass}`}>
               <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.P1.dotClass}`} />
-              P1 ({t('Đỏ', 'Red')})
+              P1
             </span>
             {room.roomMode === 'VS_P1_AI_P2_AI' && (
               <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.AI_1.badgeBgClass} ${VS_TANK_COLOR_SPEC.AI_1.badgeBorderClass} ${VS_TANK_COLOR_SPEC.AI_1.badgeTextClass}`}>
                 <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.AI_1.dotClass}`} />
-                A.I 1 ({t('Xanh biển nhạt', 'Light Sky Blue')})
+                A.I 1
               </span>
             )}
             <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.P2.badgeBgClass} ${VS_TANK_COLOR_SPEC.P2.badgeBorderClass} ${VS_TANK_COLOR_SPEC.P2.badgeTextClass}`}>
               <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.P2.dotClass}`} />
-              P2 ({t('Vàng', 'Yellow')})
+              P2
             </span>
             {room.roomMode === 'VS_P1_AI_P2_AI' && (
               <span className={`px-2 py-0.5 rounded border text-[10px] font-btn font-bold flex items-center gap-1 ${VS_TANK_COLOR_SPEC.AI_2.badgeBgClass} ${VS_TANK_COLOR_SPEC.AI_2.badgeBorderClass} ${VS_TANK_COLOR_SPEC.AI_2.badgeTextClass}`}>
                 <span className={`w-2 h-2 rounded-full ${VS_TANK_COLOR_SPEC.AI_2.dotClass}`} />
-                A.I 2 ({t('Xám', 'Gray')})
+                A.I 2
               </span>
             )}
           </div>

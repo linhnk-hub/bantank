@@ -272,6 +272,9 @@
   .lobby-ava-fade-pair-a,
   .lobby-ava-fade-pair-b,
   .tv-card-bg-img,
+  .tv-card-bg-img-bright,
+  .tv-card-scroll-ltr,
+  .tv-card-scroll-rtl,
   .tv-card-scanline-sweep,
   .tv-card-glitch-bar,
   .social-unread-blink,
@@ -506,9 +509,48 @@
   }
 }
 
+@keyframes tvCardScrollLtr {
+  0% {
+    transform: translate3d(-50%, 0, 0);
+  }
+  100% {
+    transform: translate3d(0%, 0, 0);
+  }
+}
+
+@keyframes tvCardScrollRtl {
+  0% {
+    transform: translate3d(0%, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.tv-card-scroll-ltr {
+  animation: tvCardScrollLtr 22s linear infinite;
+  will-change: transform;
+}
+
+.tv-card-scroll-rtl {
+  animation: tvCardScrollRtl 22s linear infinite;
+  will-change: transform;
+}
+
 .tv-card-bg-img {
   animation: tvSignalJitter 4.8s steps(2, end) infinite;
   will-change: transform, opacity;
+}
+
+.tv-card-bg-img-bright {
+  opacity: 0.88;
+  filter: brightness(1.24) contrast(1.08) saturate(1.16);
+  transition: filter 200ms ease, opacity 200ms ease;
+}
+
+.group:hover .tv-card-bg-img-bright {
+  opacity: 0.96;
+  filter: brightness(1.36) contrast(1.1) saturate(1.24);
 }
 
 .tv-card-scanlines {
@@ -516,8 +558,8 @@
     to bottom,
     rgba(0, 0, 0, 0) 0px,
     rgba(0, 0, 0, 0) 2px,
-    rgba(0, 0, 0, 0.38) 3px,
-    rgba(0, 240, 255, 0.06) 4px
+    rgba(0, 0, 0, 0.24) 3px,
+    rgba(0, 240, 255, 0.1) 4px
   );
 }
 
@@ -525,21 +567,21 @@
   background: linear-gradient(
     to bottom,
     rgba(255, 255, 255, 0) 0%,
-    rgba(0, 240, 255, 0.16) 50%,
+    rgba(0, 240, 255, 0.34) 50%,
     rgba(255, 255, 255, 0) 100%
   );
-  animation: tvScanlineSweep 4.2s linear infinite;
+  animation: tvScanlineSweep 3.8s linear infinite;
   will-change: transform, opacity;
 }
 
 .tv-card-glitch-bar {
   background: linear-gradient(
     90deg,
-    rgba(255, 0, 85, 0.28) 0%,
-    rgba(255, 255, 255, 0.18) 45%,
-    rgba(0, 240, 255, 0.32) 100%
+    rgba(255, 0, 85, 0.42) 0%,
+    rgba(255, 255, 255, 0.34) 45%,
+    rgba(0, 240, 255, 0.48) 100%
   );
-  animation: tvGlitchBand 5.4s steps(2, end) infinite;
+  animation: tvGlitchBand 4.8s steps(2, end) infinite;
   will-change: transform, opacity;
 }
 

@@ -177,6 +177,8 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
 
   // Community manual refresh & unread incoming private message blink tracking (message-ID based, immune to clock skew)
   const [isRefreshingCommunity, setIsRefreshingCommunity] = useState(false);
+  const [dismissedRulesBanner, setDismissedRulesBanner] = useState(false);
+  const hasClearedSearchRef = useRef(false);
   const [unreadSenderUids, setUnreadSenderUids] = useState<string[]>([]);
   const [unreadSenderProfiles, setUnreadSenderProfiles] = useState<
     Record<string, PublicPlayerProfile>
@@ -291,6 +293,9 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
       setReceivedRequests(reqs);
       onPendingFriendRequestsChange?.(reqs.length);
     });
+    const unsubFriendships = social.subscribeFriendships(currentUser.uid, () => {
+      void refreshFriendsData();
+    });
     const unsubToast = social.subscribeFriendToasts((ev) => {
       setToasts((prev) => {
         if (prev.some((x) => x.friendUid === ev.friendUid && x.status === ev.status)) {
@@ -309,6 +314,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
     return () => {
       unsubOnline();
       unsubIncomingReqs();
+      unsubFriendships();
       unsubToast();
       unsubMut();
     };
@@ -452,7 +458,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
     setIsRefreshingCommunity(true);
     try {
       await Promise.all([social.refreshPresenceSnapshot(), refreshFriendsData()]);
-      if (drawerTab === 'SEARCH') {
+      if (drawerTab === 'SEARCH' && (!hasClearedSearchRef.current || searchQuery.trim().length > 0)) {
         const res = await social.searchAccounts(searchQuery, Date.now(), true);
         if (res.success && res.data) {
           setSearchResults(res.data);
@@ -466,6 +472,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
   // Search handler
   const handleRunSearch = useCallback(
     async (kw: string) => {
+      hasClearedSearchRef.current = false;
       setSearchLoading(true);
       setSearchNotice(null);
       try {
@@ -484,11 +491,14 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
 
   useEffect(() => {
     if (isDrawerOpen && drawerTab === 'SEARCH' && currentUser?.uid) {
-      void handleRunSearch(searchQuery);
+      if (!hasClearedSearchRef.current) {
+        void handleRunSearch(searchQuery);
+      }
     }
   }, [isDrawerOpen, drawerTab, currentUser?.uid]);
 
   const handleClearSearch = useCallback(() => {
+    hasClearedSearchRef.current = true;
     setSearchQuery('');
     setSearchResults([]);
     setSearchNotice(null);
@@ -775,8 +785,16 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
 
       {/* Feedback Toast */}
       {socialFeedback && (
-        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-[70] px-4 py-2 rounded-lg bg-[#0b0d1e] border border-[#FFB800]/60 text-[#FFB800] text-xs font-btn font-bold shadow-2xl animate-neo-fade-in">
-          {socialFeedback}
+        <div className="fixed bottom-16 left-1/2 -translate-x-1/2 z-[70] px-3.5 py-2 rounded-lg bg-[#0b0d1e] border border-[#FFB800]/60 text-[#FFB800] text-xs font-btn font-bold shadow-2xl animate-neo-fade-in flex items-center gap-2 max-w-[90vw]">
+          <span>{socialFeedback}</span>
+          <button
+            type="button"
+            onClick={() => setSocialFeedback(null)}
+            className="text-amber-300/80 hover:text-white cursor-pointer shrink-0"
+            aria-label={t('Đóng', 'Close')}
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
         </div>
       )}
 
@@ -911,12 +929,22 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
               })}
             </div>
 
-            {social.isRulesPendingDeployment() && (
-              <div className="mx-3 mt-2 px-3 py-2 rounded bg-amber-950/60 border border-amber-500/40 text-amber-200 text-[11px] leading-snug">
-                {t(
-                  'Chế độ tương thích cục bộ: Firestore Rules M7.8 đang chờ quản trị viên phê duyệt & công bố để đồng bộ thời gian thực liên máy.',
-                  'Local compatibility mode: M7.8 Firestore Rules are awaiting administrator approval & deployment for cross-device real-time sync.'
-                )}
+            {social.isRulesPendingDeployment() && !dismissedRulesBanner && (
+              <div className="mx-3 mt-2 px-3 py-2 rounded bg-amber-950/60 border border-amber-500/40 text-amber-200 text-[11px] leading-snug flex items-start justify-between gap-2">
+                <span>
+                  {t(
+                    'Chế độ tương thích cục bộ: Firestore Rules M7.8 đang chờ quản trị viên phê duyệt & công bố để đồng bộ thời gian thực liên máy.',
+                    'Local compatibility mode: M7.8 Firestore Rules are awaiting administrator approval & deployment for cross-device real-time sync.'
+                  )}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDismissedRulesBanner(true)}
+                  className="p-0.5 rounded hover:bg-amber-900/50 text-amber-200 hover:text-white shrink-0 cursor-pointer"
+                  aria-label={t('Đóng', 'Close')}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             )}
 
@@ -994,7 +1022,6 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                                 <span className={player.isOnline ? 'text-emerald-400 font-semibold' : 'text-neutral-500'}>
                                   ● {player.isOnline ? 'Online' : 'Offline'}
                                 </span>
-                                <span>{player.handleTag}</span>
                               </div>
                             </div>
                           </div>
@@ -1102,6 +1129,14 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                                   <span className="font-btn text-xs font-bold text-[#EAF4FF] truncate">
                                     {msg.senderDisplayName}
                                   </span>
+                                  {!isMe && friendUidSet.has(msg.senderUid) && (
+                                    <span
+                                      title={t('Bạn bè', 'Friend')}
+                                      className="inline-flex items-center text-emerald-400 shrink-0"
+                                    >
+                                      <UserCheck className="w-3.5 h-3.5" />
+                                    </span>
+                                  )}
                                   {msg.senderRoleBadge !== 'PLAYER' && (
                                     <span className="text-[9px] px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/50 text-amber-300 font-black">
                                       {msg.senderRoleBadge}
@@ -1158,17 +1193,27 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
 
                 {globalError && (
                   <div className="px-2.5 py-1.5 rounded bg-red-950/70 border border-red-500/40 text-red-200 text-[11px] flex items-center justify-between gap-2">
-                    <span>{globalError}</span>
-                    {lastFailedGlobalText && (
+                    <span className="flex-1">{globalError}</span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {lastFailedGlobalText && (
+                        <button
+                          type="button"
+                          onClick={() => void handleSendGlobal(lastFailedGlobalText)}
+                          className="px-2 py-0.5 rounded bg-red-500 text-white font-bold text-[10px] cursor-pointer flex items-center gap-1"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          {t('Thử lại', 'Retry')}
+                        </button>
+                      )}
                       <button
                         type="button"
-                        onClick={() => void handleSendGlobal(lastFailedGlobalText)}
-                        className="px-2 py-0.5 rounded bg-red-500 text-white font-bold text-[10px] shrink-0 cursor-pointer flex items-center gap-1"
+                        onClick={() => setGlobalError(null)}
+                        className="p-0.5 rounded hover:bg-red-900/60 text-red-200 hover:text-white cursor-pointer"
+                        aria-label={t('Đóng', 'Close')}
                       >
-                        <RefreshCw className="w-3 h-3" />
-                        {t('Thử lại', 'Retry')}
+                        <X className="w-3.5 h-3.5" />
                       </button>
-                    )}
+                    </div>
                   </div>
                 )}
 
@@ -1242,8 +1287,16 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                 </form>
 
                 {searchNotice && (
-                  <div className="px-3 py-2 rounded bg-amber-950/60 border border-amber-500/40 text-amber-200 text-xs">
-                    {searchNotice}
+                  <div className="px-3 py-2 rounded bg-amber-950/60 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-2">
+                    <span>{searchNotice}</span>
+                    <button
+                      type="button"
+                      onClick={() => setSearchNotice(null)}
+                      className="p-0.5 rounded hover:bg-amber-900/60 text-amber-200 hover:text-white shrink-0 cursor-pointer"
+                      aria-label={t('Đóng', 'Close')}
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 )}
 
@@ -1267,9 +1320,20 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                               online={acc.isOnline}
                             />
                             <div className="min-w-0">
-                              <p className="font-btn text-xs font-bold text-[#EAF4FF] truncate">
-                                {acc.displayName}
-                              </p>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-btn text-xs font-bold text-[#EAF4FF] truncate">
+                                  {acc.displayName}
+                                </p>
+                                {!isMe && friendUidSet.has(acc.uid) && (
+                                  <span
+                                    data-testid={`search-friend-icon-${acc.uid}`}
+                                    title={t('Bạn bè', 'Friend')}
+                                    className="inline-flex items-center text-emerald-400 shrink-0"
+                                  >
+                                    <UserCheck className="w-3.5 h-3.5" />
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex items-center gap-2 text-[10px]">
                                 <span className={acc.isOnline ? 'text-emerald-400 font-semibold' : 'text-neutral-500'}>
                                   ● {acc.isOnline ? 'Online' : 'Offline'}
@@ -1628,9 +1692,9 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
         </div>
       )}
 
-      {/* Unfriend Confirmation Popup */}
+      {/* Unfriend Confirmation Popup (above Friends modal z-[75]) */}
       {unfriendConfirmTarget && (
-        <div className="fixed inset-0 z-[65] bg-black/80 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[90] bg-black/80 flex items-center justify-center p-4">
           <div className="w-full max-w-sm bg-[#0b0d1e] border-2 border-red-500/50 rounded-xl p-5 space-y-4 shadow-2xl">
             <h4 className="font-btn text-sm font-black uppercase text-red-400">
               {t('Xác nhận hủy kết bạn', 'Confirm Unfriend')}
@@ -1774,14 +1838,26 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
 
             {/* Block status banner or error */}
             {(privateRel.blockedByMe || privateRel.blockedByOther || privateError) && (
-              <div className="px-3 py-2 bg-red-950/70 border-t border-red-500/40 text-red-200 text-[11px] flex items-center gap-1.5">
-                <ShieldAlert className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                <span>
-                  {privateError ||
-                    (privateRel.blockedByOther
-                      ? t('Bạn không thể gửi tin nhắn vì người dùng này đã chặn bạn.', 'You cannot send messages because this user blocked you.')
-                      : t('Bạn đang chặn người dùng này. Bỏ chặn để tiếp tục nhắn tin.', 'You blocked this user. Unblock to send messages.'))}
-                </span>
+              <div className="px-3 py-2 bg-red-950/70 border-t border-red-500/40 text-red-200 text-[11px] flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <ShieldAlert className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                  <span>
+                    {privateError ||
+                      (privateRel.blockedByOther
+                        ? t('Bạn không thể gửi tin nhắn vì người dùng này đã chặn bạn.', 'You cannot send messages because this user blocked you.')
+                        : t('Bạn đang chặn người dùng này. Bỏ chặn để tiếp tục nhắn tin.', 'You blocked this user. Unblock to send messages.'))}
+                  </span>
+                </div>
+                {privateError && (
+                  <button
+                    type="button"
+                    onClick={() => setPrivateError(null)}
+                    className="p-0.5 rounded hover:bg-red-900/60 text-red-200 hover:text-white shrink-0 cursor-pointer"
+                    aria-label={t('Đóng', 'Close')}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             )}
 

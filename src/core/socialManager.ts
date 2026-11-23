@@ -254,6 +254,11 @@ export interface SocialStorageAdapter {
   upsertFriendship(record: FriendshipRecord): Promise<void>;
   deleteFriendship(pairId: string): Promise<void>;
   listFriendshipsForUser(uid: string): Promise<FriendshipRecord[]>;
+  subscribeFriendshipsForUser(
+    uid: string,
+    onUpdate: (friendships: FriendshipRecord[]) => void,
+    onError?: (err: unknown) => void
+  ): Unsubscribe;
   listAllFriendships(maxItems: number): Promise<FriendshipRecord[]>;
 
   // Private Deleted Friends History
@@ -602,6 +607,18 @@ export class InMemorySocialStorageAdapter implements SocialStorageAdapter {
     };
   }
 
+  private friendshipSubs = new Map<string, Set<(friendships: FriendshipRecord[]) => void>>();
+
+  private emitFriendshipsForUser(uid: string): void {
+    const subs = this.friendshipSubs.get(uid);
+    if (!subs || subs.size === 0) return;
+    const list = Array.from(this.friendships.values())
+      .filter((f) => f.userA === uid || f.userB === uid)
+      .sort((a, b) => b.createdAtMs - a.createdAtMs)
+      .map((f) => ({ ...f }));
+    subs.forEach((cb) => cb(list));
+  }
+
   public async getFriendship(pairId: string): Promise<FriendshipRecord | null> {
     const r = this.friendships.get(pairId);
     return r ? { ...r } : null;
@@ -609,10 +626,17 @@ export class InMemorySocialStorageAdapter implements SocialStorageAdapter {
 
   public async upsertFriendship(record: FriendshipRecord): Promise<void> {
     this.friendships.set(record.pairId, { ...record });
+    this.emitFriendshipsForUser(record.userA);
+    this.emitFriendshipsForUser(record.userB);
   }
 
   public async deleteFriendship(pairId: string): Promise<void> {
+    const existing = this.friendships.get(pairId);
     this.friendships.delete(pairId);
+    if (existing) {
+      this.emitFriendshipsForUser(existing.userA);
+      this.emitFriendshipsForUser(existing.userB);
+    }
   }
 
   public async listFriendshipsForUser(uid: string): Promise<FriendshipRecord[]> {
@@ -620,6 +644,22 @@ export class InMemorySocialStorageAdapter implements SocialStorageAdapter {
       .filter((f) => f.userA === uid || f.userB === uid)
       .sort((a, b) => b.createdAtMs - a.createdAtMs)
       .map((f) => ({ ...f }));
+  }
+
+  public subscribeFriendshipsForUser(
+    uid: string,
+    onUpdate: (friendships: FriendshipRecord[]) => void
+  ): Unsubscribe {
+    let subs = this.friendshipSubs.get(uid);
+    if (!subs) {
+      subs = new Set();
+      this.friendshipSubs.set(uid, subs);
+    }
+    subs.add(onUpdate);
+    this.emitFriendshipsForUser(uid);
+    return () => {
+      subs?.delete(onUpdate);
+    };
   }
 
   public async listAllFriendships(maxItems: number): Promise<FriendshipRecord[]> {
@@ -1207,6 +1247,57 @@ export class FirestoreSocialStorageAdapter implements SocialStorageAdapter {
       this.handleErr(err);
       return this.fallback.listFriendshipsForUser(uid);
     }
+  }
+
+  public subscribeFriendshipsForUser(
+    uid: string,
+    onUpdate: (friendships: FriendshipRecord[]) => void,
+    onError?: (err: unknown) => void
+  ): Unsubscribe {
+    const db = this.getDbOrNull();
+    if (!db) return this.fallback.subscribeFriendshipsForUser(uid, onUpdate);
+    let fallbackUnsub: Unsubscribe | null = null;
+    let mapA = new Map<string, FriendshipRecord>();
+    let mapB = new Map<string, FriendshipRecord>();
+    const emitMerged = () => {
+      const merged = new Map<string, FriendshipRecord>();
+      mapA.forEach((v, k) => merged.set(k, v));
+      mapB.forEach((v, k) => merged.set(k, v));
+      onUpdate(Array.from(merged.values()).sort((a, b) => b.createdAtMs - a.createdAtMs));
+    };
+    const handleSubErr = (err: unknown) => {
+      if (this.handleErr(err) && !fallbackUnsub) {
+        fallbackUnsub = this.fallback.subscribeFriendshipsForUser(uid, onUpdate);
+      }
+      onError?.(err);
+    };
+    const qA = query(collection(db, 'friendships'), where('userA', '==', uid), limit(100));
+    const qB = query(collection(db, 'friendships'), where('userB', '==', uid), limit(100));
+    const unsubA = onSnapshot(
+      qA,
+      (snap) => {
+        this.rulesDenied = false;
+        mapA = new Map();
+        snap.docs.forEach((d) => mapA.set(d.id, d.data() as FriendshipRecord));
+        emitMerged();
+      },
+      handleSubErr
+    );
+    const unsubB = onSnapshot(
+      qB,
+      (snap) => {
+        this.rulesDenied = false;
+        mapB = new Map();
+        snap.docs.forEach((d) => mapB.set(d.id, d.data() as FriendshipRecord));
+        emitMerged();
+      },
+      handleSubErr
+    );
+    return () => {
+      unsubA();
+      unsubB();
+      fallbackUnsub?.();
+    };
   }
 
   public async listAllFriendships(maxItems: number): Promise<FriendshipRecord[]> {
@@ -2092,6 +2183,13 @@ export class SocialManager {
     onUpdate: (requests: FriendRequestRecord[]) => void
   ): Unsubscribe {
     return this.adapter.subscribeIncomingFriendRequests(uid, onUpdate);
+  }
+
+  public subscribeFriendships(
+    uid: string,
+    onUpdate: (friendships: FriendshipRecord[]) => void
+  ): Unsubscribe {
+    return this.adapter.subscribeFriendshipsForUser(uid, onUpdate);
   }
 
   public async listDeletedFriendsForUser(uid: string): Promise<DeletedFriendRecord[]> {

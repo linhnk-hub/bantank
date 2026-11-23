@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Crown, Heart, LogOut, Shuffle, Swords, Trophy } from 'lucide-react';
+import { Crown, Heart, Shuffle, X } from 'lucide-react';
 import type { GameCoreState } from '../core/types.ts';
 import { VS_TANK_COLOR_SPEC } from '../core/vsTypes.ts';
 import { useLanguage } from '../core/i18n.ts';
@@ -16,6 +16,7 @@ interface VsResultModalProps {
   onQuitToMenu: () => void;
   isReturningToLobby?: boolean;
   returnToLobbyError?: string | null;
+  onDismissReturnError?: () => void;
 }
 
 export const VsResultModal: React.FC<VsResultModalProps> = ({
@@ -25,6 +26,7 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
   onQuitToMenu,
   isReturningToLobby = false,
   returnToLobbyError = null,
+  onDismissReturnError,
 }) => {
   const { t } = useLanguage();
   const vs = state?.vsState;
@@ -34,7 +36,6 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
 
   const isTeam1Winner = outcome.winnerTeam === 'TEAM_1';
   const winnerLabel = isTeam1Winner ? t('ĐỘI 1', 'TEAM 1') : t('ĐỘI 2', 'TEAM 2');
-  const loserLabel = isTeam1Winner ? t('ĐỘI 2', 'TEAM 2') : t('ĐỘI 1', 'TEAM 1');
 
   return (
     <div
@@ -51,16 +52,12 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
           }`}
         >
           <div className="flex items-center gap-2 text-xs font-mono font-bold uppercase tracking-widest text-neutral-300">
-            <Swords className="w-3.5 h-3.5 text-[#00F0FF]" />
             <span>
               {vs.mode === 'VS_P1_P2' ? 'VS • P1 vs P2' : 'VS • P1 + A.I vs P2 + A.I'}
             </span>
           </div>
 
-          <div className="flex items-center justify-center gap-2 mt-1">
-            <Trophy
-              className={`w-7 h-7 ${isTeam1Winner ? 'text-red-400' : 'text-[#FFB800]'}`}
-            />
+          <div className="flex items-center justify-center mt-1">
             <h2
               data-testid="vs-result-winner-heading"
               className={`font-btn text-xl sm:text-2xl font-black uppercase tracking-wider ${
@@ -71,22 +68,12 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
             </h2>
           </div>
 
-          <div className="flex items-center justify-center gap-2 text-xs font-btn font-black">
-            <span className="px-2.5 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/60 text-emerald-300">
-              {winnerLabel}: WIN
-            </span>
-            <span className="px-2.5 py-0.5 rounded bg-rose-500/20 border border-rose-500/50 text-rose-300">
-              {loserLabel}: LOSS
-            </span>
-          </div>
-
           {/* Opponent Left Forfeit Notice (M7.8 Section XIV) */}
           {outcome.reason === 'OPPONENT_LEFT' && (
             <div
               data-testid="vs-result-opponent-left-notice"
               className="mt-2 px-3 py-1.5 rounded bg-rose-950/80 border border-[#FF0055]/75 text-rose-200 text-xs font-bold flex items-center gap-1.5"
             >
-              <LogOut className="w-3.5 h-3.5 shrink-0 text-[#FF0055]" />
               <span>
                 {t(
                   outcome.reasonTextVi || 'Đối thủ đã rời trận',
@@ -233,16 +220,19 @@ export const VsResultModal: React.FC<VsResultModalProps> = ({
             </div>
           </div>
 
-          <p className="text-[10px] text-center font-mono text-neutral-500">
-            {t(
-              'Chế độ VS không cộng XP, Sao, Xu và không ảnh hưởng tiến trình Chiến Dịch.',
-              'VS Mode grants 0 XP, 0 Stars, 0 Coins and does not affect Campaign progression.'
-            )}
-          </p>
-
           {returnToLobbyError && (
-            <div className="p-2.5 rounded-lg bg-red-950/60 border border-[#FF0055]/40 text-red-300 text-xs text-center">
-              {returnToLobbyError}
+            <div className="p-2.5 rounded-lg bg-red-950/60 border border-[#FF0055]/40 text-red-300 text-xs flex items-center justify-between gap-2">
+              <span className="flex-1 text-center">{returnToLobbyError}</span>
+              {onDismissReturnError && (
+                <button
+                  type="button"
+                  onClick={onDismissReturnError}
+                  className="p-1 rounded hover:bg-red-900/60 text-red-200 hover:text-white shrink-0 cursor-pointer"
+                  aria-label={t('Đóng', 'Close')}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
           )}
 
