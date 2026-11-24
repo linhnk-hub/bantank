@@ -168,7 +168,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
   initialCardMode,
   isSuperAdmin = false,
 }) => {
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
 
   const deriveInitialCardMode = (): SelectionCardMode => {
     const activeRoom = CoopOnlineManager.getInstance().getCurrentRoom();
@@ -509,7 +509,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 data-testid="top-menu-player-rank"
                 className="hidden sm:inline-flex items-center px-1.5 py-0.5 rounded bg-amber-950/70 border border-[#FFB800]/50 text-[#FFB800] text-xs font-bold shrink-0"
               >
-                {playerStats.rankBadge}
+                {lang === 'en' ? playerStats.rankNameEn : playerStats.rankNameVi}
               </span>
               <span
                 data-testid="top-menu-player-stars"
@@ -523,7 +523,7 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
                 data-testid="top-menu-player-level"
                 className="hidden"
               >
-                {playerStats.rankBadge}
+                {lang === 'en' ? playerStats.rankNameEn : playerStats.rankNameVi}
               </span>
               {badgeInfo.label && (
                 <span className={`hidden sm:inline-block text-xs px-1.5 py-0.5 rounded font-medium shrink-0 ${badgeInfo.badgeStyle}`}>

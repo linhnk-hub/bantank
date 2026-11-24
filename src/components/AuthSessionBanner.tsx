@@ -313,7 +313,7 @@ export const AuthSessionBanner: React.FC<AuthSessionBannerProps> = ({
   return (
     <>
       {/* Top Banner Status Bar — Frameless Player Name & Unified Action Menu */}
-      <div className="bg-[#050510]/95 border-b border-[#00F0FF]/25 px-3 py-1.5 flex items-center justify-between gap-2 text-xs sm:text-sm text-[#EAF4FF] shrink-0 z-40">
+      <div className="relative bg-[#050510]/95 border-b border-[#00F0FF]/25 px-3 py-1.5 flex items-center justify-between gap-2 text-xs sm:text-sm text-[#EAF4FF] shrink-0 z-40">
         <div className="flex items-center gap-2 min-w-0">
           {user ? (
             (() => {

@@ -304,6 +304,7 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
     gameState?.gameMode === 'TWO_PLAYERS_AI' ||
     gameState?.gameMode === 'TWO_PLAYERS_ONLINE';
   const isCoopOnline = gameState?.gameMode === 'TWO_PLAYERS_ONLINE';
+  const isCoopAi = gameState?.gameMode === 'TWO_PLAYERS_AI';
 
   const p1Lives =
     gameState?.p1State.lives ??
@@ -555,6 +556,61 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
               <span className="font-black text-emerald-400 shrink-0 text-[11px] sm:text-xs">
                 XP
               </span>
+              <span className="font-extrabold text-emerald-400 text-right whitespace-nowrap">
+                {xpScore}
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : isCoopAi ? (
+        <div
+          data-testid="battle-hud-coop-ai"
+          className="flex flex-col gap-1.5 font-hud text-xs sm:text-sm leading-tight"
+        >
+          {/* Unified single frame: P1 remaining lives, AI remaining lives, Remaining Enemies */}
+          <div
+            data-testid="battle-hud-coop-ai-summary"
+            className="w-full flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-[#050510]/90 border border-[#00F0FF]/40 font-extrabold whitespace-nowrap"
+          >
+            <span
+              data-testid="battle-hud-lives"
+              className="inline-flex items-center gap-2 shrink-0"
+            >
+              <span className="inline-flex items-center gap-1 text-[#FF0055]">
+                <Heart className="w-3 h-3 text-[#FF0055] fill-[#FF0055] shrink-0" />
+                <span>P1:{p1Lives}</span>
+              </span>
+              <span className="inline-flex items-center gap-1 text-emerald-400">
+                <Heart className="w-3 h-3 text-emerald-400 fill-emerald-400 shrink-0" />
+                <span>AI:{p2Lives}</span>
+              </span>
+            </span>
+            <span
+              data-testid="battle-hud-enemies-remaining"
+              className="inline-flex items-center gap-1 text-[#FFB800] shrink-0"
+            >
+              <EnemyTankHudIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>{remainingEnemies}</span>
+            </span>
+          </div>
+
+          {/* Row 2: Kills & XP */}
+          <div className="grid grid-cols-2 gap-1.5">
+            <div
+              data-testid="battle-hud-kills"
+              className="flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-[#050510]/90 border border-[#00F0FF]/35 min-w-0"
+            >
+              <Skull className="w-3.5 h-3.5 text-[#00F0FF] shrink-0" />
+              <span className="font-extrabold text-[#00F0FF] text-right whitespace-nowrap">
+                {enemiesKilled}
+              </span>
+            </div>
+
+            <div
+              data-testid="battle-hud-xp"
+              className="flex items-center justify-between gap-1.5 px-2 py-1 rounded bg-[#050510]/90 border border-emerald-500/35 min-w-0"
+            >
+              <Trophy className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
               <span className="font-extrabold text-emerald-400 text-right whitespace-nowrap">
                 {xpScore}
               </span>

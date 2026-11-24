@@ -1263,7 +1263,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-sm font-extrabold font-mono tabular-nums text-amber-300">
-                        {playerStats.rankNameVi}
+                        {lang === 'en' ? playerStats.rankNameEn : playerStats.rankNameVi}
                       </span>
                       {playerStats.isMaxRank && (
                         <span
@@ -1278,7 +1278,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       {playerStats.rankTier !== null
                         ? t(
                             `Bậc ${playerStats.rankTier}/17 • ${playerStats.rankNameEn}`,
-                            `Tier ${playerStats.rankTier}/17 • ${playerStats.rankNameEn}`
+                            `Tier ${playerStats.rankTier}/17`
                           )
                         : t('Chưa xác minh XP', 'Unverified XP')}
                     </div>
@@ -1348,7 +1348,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="flex items-center gap-2 text-xs font-extrabold font-mono text-amber-200">
                       <span>
                         {t('Tiến độ Quân hàm:', 'Military Rank Progress:')}{' '}
-                        {playerStats.rankNameVi}
+                        {lang === 'en' ? playerStats.rankNameEn : playerStats.rankNameVi}
                       </span>
                       {playerStats.isMaxRank && (
                         <span className="px-2 py-0.5 rounded bg-amber-500 text-black text-[10px] font-black uppercase">
@@ -1402,7 +1402,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <span>
                         {t(
                           'Đã đạt cấp bậc tối đa (Đại tướng) • Tiếp tục tích lũy XP & Sao ⭐',
-                          'Max Military Rank (General) reached • Continue accumulating XP & Stars ⭐'
+                          'Max Military Rank (General of the Army) reached • Continue accumulating XP & Stars ⭐'
                         )}
                       </span>
                     </div>
@@ -2796,7 +2796,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                             <div className="p-2.5 rounded-xl bg-neutral-950 border border-neutral-800 space-y-0.5">
                               <div className="text-[10px] text-neutral-400">Quân hàm &amp; Tổng XP</div>
                               <div className="font-mono text-xs font-extrabold text-amber-300">
-                                {calculateMilitaryRankFromTotalXp(selectedAccountDetail.totalXp).nameVi}{' '}
+                                {(() => {
+                                  const rankInfo = calculateMilitaryRankFromTotalXp(selectedAccountDetail.totalXp);
+                                  return lang === 'en' ? rankInfo.nameEn : rankInfo.nameVi;
+                                })()}{' '}
                                 •{' '}
                                 <span className="text-sky-300">
                                   {selectedAccountDetail.totalXp.toLocaleString('vi-VN')} XP

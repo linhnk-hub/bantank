@@ -375,7 +375,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               onClick={() =>
                 setExpandedGroup((prev) => (prev === 'SOLO' ? null : 'SOLO'))
               }
-              className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[196px] md:min-h-[224px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
+              className="group relative w-full flex-1 text-left px-4 py-2.5 sm:px-4 sm:py-3 flex flex-col justify-between min-h-[98px] md:min-h-[112px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
               {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
@@ -390,13 +390,13 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 <div className="absolute inset-x-0 top-[36%] h-2.5 tv-card-glitch-bar" />
               </div>
 
-              <div className="relative z-10 flex items-center justify-between gap-2 mb-4">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050510]/75 border border-[#FFB800]/65 text-[#FFB800] font-btn font-black text-xs uppercase tracking-wider shadow-[0_0_12px_rgba(255,184,0,0.3)]">
-                  <User className="w-3.5 h-3.5" />
+              <div className="relative z-10 flex items-center justify-between gap-2 mb-1.5">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#050510]/75 border border-[#FFB800]/65 text-[#FFB800] font-btn font-black text-[11px] uppercase tracking-wider shadow-[0_0_12px_rgba(255,184,0,0.3)]">
+                  <User className="w-3 h-3" />
                   <span>1P CAMPAIGN</span>
                 </span>
                 <span
-                  className={`w-8 h-8 rounded-lg bg-[#050510]/75 border border-[#FFB800]/55 flex items-center justify-center text-[#FFB800] transition-transform duration-200 ${
+                  className={`w-7 h-7 rounded-lg bg-[#050510]/75 border border-[#FFB800]/55 flex items-center justify-center text-[#FFB800] transition-transform duration-200 ${
                     expandedGroup === 'SOLO' ? 'rotate-180 bg-[#FFB800] text-[#050510]' : ''
                   }`}
                 >
@@ -405,7 +405,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               </div>
 
               <div className="relative z-10 mt-auto">
-                <h2 className="font-btn text-2xl sm:text-3xl font-black text-[#EAF4FF] group-hover:text-[#FFB800] transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]">
+                <h2 className="font-btn text-xl sm:text-2xl font-black text-[#EAF4FF] group-hover:text-[#FFB800] transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight">
                   SOLO
                 </h2>
               </div>
@@ -468,7 +468,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               onClick={() =>
                 setExpandedGroup((prev) => (prev === 'COOP' ? null : 'COOP'))
               }
-              className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[196px] md:min-h-[224px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
+              className="group relative w-full flex-1 text-left px-4 py-2.5 sm:px-4 sm:py-3 flex flex-col justify-between min-h-[98px] md:min-h-[112px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
               {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
@@ -489,13 +489,13 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 />
               </div>
 
-              <div className="relative z-10 flex items-center justify-between gap-2 mb-4">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050510]/75 border border-[#00F0FF]/65 text-[#00F0FF] font-btn font-black text-xs uppercase tracking-wider shadow-[0_0_12px_rgba(0,240,255,0.3)]">
-                  <Users className="w-3.5 h-3.5" />
+              <div className="relative z-10 flex items-center justify-between gap-2 mb-1.5">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#050510]/75 border border-[#00F0FF]/65 text-[#00F0FF] font-btn font-black text-[11px] uppercase tracking-wider shadow-[0_0_12px_rgba(0,240,255,0.3)]">
+                  <Users className="w-3 h-3" />
                   <span>2P CO-OP</span>
                 </span>
                 <span
-                  className={`w-8 h-8 rounded-lg bg-[#050510]/75 border border-[#00F0FF]/55 flex items-center justify-center text-[#00F0FF] transition-transform duration-200 ${
+                  className={`w-7 h-7 rounded-lg bg-[#050510]/75 border border-[#00F0FF]/55 flex items-center justify-center text-[#00F0FF] transition-transform duration-200 ${
                     expandedGroup === 'COOP' ? 'rotate-180 bg-[#00F0FF] text-[#050510]' : ''
                   }`}
                 >
@@ -504,7 +504,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               </div>
 
               <div className="relative z-10 mt-auto">
-                <h2 className="font-btn text-2xl sm:text-3xl font-black text-[#EAF4FF] group-hover:text-[#00F0FF] transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]">
+                <h2 className="font-btn text-xl sm:text-2xl font-black text-[#EAF4FF] group-hover:text-[#00F0FF] transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight">
                   CO-OP
                 </h2>
               </div>
@@ -577,7 +577,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               onClick={() =>
                 setExpandedGroup((prev) => (prev === 'VS' ? null : 'VS'))
               }
-              className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[196px] md:min-h-[224px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
+              className="group relative w-full flex-1 text-left px-4 py-2.5 sm:px-4 sm:py-3 flex flex-col justify-between min-h-[98px] md:min-h-[112px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
               {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
@@ -598,13 +598,13 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 />
               </div>
 
-              <div className="relative z-10 flex items-center justify-between gap-2 mb-4">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#050510]/75 border border-[#FF0055]/65 text-[#FF0055] font-btn font-black text-xs uppercase tracking-wider shadow-[0_0_12px_rgba(255,0,85,0.35)]">
-                  <Swords className="w-3.5 h-3.5" />
+              <div className="relative z-10 flex items-center justify-between gap-2 mb-1.5">
+                <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#050510]/75 border border-[#FF0055]/65 text-[#FF0055] font-btn font-black text-[11px] uppercase tracking-wider shadow-[0_0_12px_rgba(255,0,85,0.35)]">
+                  <Swords className="w-3 h-3" />
                   <span>PVP ONLINE</span>
                 </span>
                 <span
-                  className={`w-8 h-8 rounded-lg bg-[#050510]/75 border border-[#FF0055]/55 flex items-center justify-center text-[#FF0055] transition-transform duration-200 ${
+                  className={`w-7 h-7 rounded-lg bg-[#050510]/75 border border-[#FF0055]/55 flex items-center justify-center text-[#FF0055] transition-transform duration-200 ${
                     expandedGroup === 'VS' ? 'rotate-180 bg-[#FF0055] text-white' : ''
                   }`}
                 >
@@ -613,7 +613,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               </div>
 
               <div className="relative z-10 mt-auto">
-                <h2 className="font-btn text-2xl sm:text-3xl font-black text-[#EAF4FF] group-hover:text-[#FF0055] transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)]">
+                <h2 className="font-btn text-xl sm:text-2xl font-black text-[#EAF4FF] group-hover:text-[#FF0055] transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight">
                   VS
                 </h2>
               </div>

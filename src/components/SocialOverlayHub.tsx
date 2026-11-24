@@ -41,6 +41,7 @@ import {
 } from '../core/socialManager.ts';
 import type { AuthIdentityLike } from '../core/authManager.ts';
 import type { CoopRoomDocument } from '../core/coopOnlineManager.ts';
+import { localizeMilitaryRankTitle } from '../core/playerLevelSystem.ts';
 import { useLanguage } from '../core/i18n.ts';
 
 interface SocialOverlayHubProps {
@@ -112,7 +113,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
   activeLobbyRoom,
   onPendingFriendRequestsChange,
 }) => {
-  const { t } = useLanguage();
+  const { lang, t } = useLanguage();
   const social = useMemo(() => SocialManager.getInstance(), []);
 
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
@@ -1940,7 +1941,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                   {t('Quân hàm', 'Rank')}
                 </p>
                 <p className="font-btn font-black text-[#FFB800] mt-0.5">
-                  {profileModalUser.rankTitle}
+                  {localizeMilitaryRankTitle(profileModalUser.rankTitle, lang)}
                 </p>
               </div>
               <div className="p-2.5 rounded-lg bg-[#050510] border border-neutral-800">

@@ -36,12 +36,12 @@ export const PauseModal: React.FC<PauseModalProps> = ({
 
   if (!isOpen) return null;
 
+  void belowHeader;
+
   return (
     <div
       data-testid="pause-modal-overlay"
-      className={`fixed inset-0 ${
-        belowHeader ? 'z-[35]' : 'z-50'
-      } flex items-start justify-center overflow-y-auto bg-[#050510]/90 pt-16 sm:pt-20 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 select-none animate-neo-fade-in`}
+      className="fixed inset-0 z-[35] flex items-start justify-center overflow-y-auto bg-[#050510]/90 pt-16 sm:pt-20 pb-[max(0.75rem,env(safe-area-inset-bottom))] px-3 sm:px-4 select-none animate-neo-fade-in"
     >
       <div className="bg-[#0b0d1e] border-2 border-[#00F0FF]/50 rounded-lg max-w-sm w-full max-h-[calc(100dvh-5.5rem)] overflow-y-auto p-5 sm:p-6 shadow-2xl text-center space-y-4 sm:space-y-5 scrollbar-thin">
         {!showQuitConfirm ? (

@@ -243,7 +243,7 @@ const RAW_MILITARY_RANKS_ASC: ReadonlyArray<{
     tier: 16,
     code: 'THUONG_TUONG',
     nameVi: 'Thượng tướng',
-    nameEn: ' Colonel General',
+    nameEn: 'Colonel General',
     xpRequired: 13500,
     xpDeltaFromPrevious: 2500,
   },
@@ -272,6 +272,37 @@ export const OFFICIAL_MILITARY_RANKS_DESC: ReadonlyArray<MilitaryRankDefinition>
 );
 
 export const MAX_MILITARY_RANK_XP_REQUIRED = 16500; // Đại tướng
+
+/**
+ * Localizes any stored military rank string (Vietnamese title, English title, or rank code)
+ * across all 17 official ranks plus unverified/fallback labels.
+ */
+export function localizeMilitaryRankTitle(
+  rankTitleOrCode: string | null | undefined,
+  lang: 'vi' | 'en'
+): string {
+  const raw = (rankTitleOrCode || '').trim();
+  if (!raw) {
+    return lang === 'en' ? OFFICIAL_MILITARY_RANKS_ASC[0].nameEn : OFFICIAL_MILITARY_RANKS_ASC[0].nameVi;
+  }
+  const normalized = raw.toLowerCase();
+  if (normalized === 'chưa xác minh' || normalized === 'unverified') {
+    return lang === 'en' ? 'Unverified' : 'Chưa xác minh';
+  }
+  if (normalized === 'chiến binh' || normalized === 'soldier') {
+    return lang === 'en' ? 'Soldier' : 'Chiến binh';
+  }
+  const matched = OFFICIAL_MILITARY_RANKS_ASC.find(
+    (r) =>
+      r.nameVi.toLowerCase() === normalized ||
+      r.nameEn.toLowerCase() === normalized ||
+      r.code.toLowerCase() === normalized
+  );
+  if (matched) {
+    return lang === 'en' ? matched.nameEn : matched.nameVi;
+  }
+  return raw;
+}
 
 export function getOfficialMilitaryRankTableAsc(): ReadonlyArray<MilitaryRankDefinition> {
   return OFFICIAL_MILITARY_RANKS_ASC;

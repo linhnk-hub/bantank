@@ -7,6 +7,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { AuthManager } from '../core/authManager.ts';
 import { AvatarManager, type AvatarCatalogItem } from '../core/avatarManager.ts';
 import { PlayerStatsManager } from '../core/playerStatsManager.ts';
+import { useLanguage } from '../core/i18n.ts';
 import {
   X,
   User,
@@ -42,6 +43,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   user,
   onProfileUpdated,
 }) => {
+  const { lang, t } = useLanguage();
   const avatarManager = AvatarManager.getInstance();
   const authManager = AuthManager.getInstance();
   const currentUser = authManager.getCurrentUser();
@@ -324,14 +326,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <div className="flex items-center gap-1.5 font-mono font-extrabold text-xs text-amber-300">
                 <Award className="w-4 h-4 text-amber-400 shrink-0" />
                 <span>
-                  Quân hàm hiện tại: {playerStats.rankNameVi}
+                  {t('Quân hàm hiện tại:', 'Current Military Rank:')}{' '}
+                  {lang === 'en' ? playerStats.rankNameEn : playerStats.rankNameVi}
                 </span>
                 {playerStats.isMaxRank && (
                   <span
                     data-testid="profile-max-level-badge"
                     className="px-1.5 py-0.5 rounded bg-amber-500 text-black text-[9px] font-black uppercase"
                   >
-                    CẤP BẬC TỐI ĐA
+                    {t('CẤP BẬC TỐI ĐA', 'MAX RANK')}
                   </span>
                 )}
               </div>
@@ -363,24 +366,31 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
             {playerStats.xpVerificationStatus !== 'VERIFIED' ? (
               <div className="text-[11px] font-mono text-neutral-400">
-                Chưa xác minh XP — hệ thống không hiển thị Quân hàm giả định.
+                {t(
+                  'Chưa xác minh XP — hệ thống không hiển thị Quân hàm giả định.',
+                  'XP unverified — system does not display an assumed Military Rank.'
+                )}
               </div>
             ) : playerStats.isMaxRank ? (
               <div className="text-[11px] font-mono tabular-nums text-amber-200 flex items-center justify-between flex-wrap gap-1">
-                <span>Tổng XP: {playerStats.totalXp.toLocaleString('vi-VN')} XP</span>
-                <span>CẤP BẬC TỐI ĐA (Đại tướng)</span>
+                <span>
+                  {t('Tổng XP:', 'Total XP:')} {playerStats.totalXp.toLocaleString('vi-VN')} XP
+                </span>
+                <span>{t('CẤP BẬC TỐI ĐA (Đại tướng)', 'MAX RANK (General of the Army)')}</span>
               </div>
             ) : (
               <div className="grid grid-cols-3 gap-1.5 text-[10px] font-mono tabular-nums text-neutral-300">
                 <div>
-                  <span className="text-neutral-500 block">Tổng XP</span>
+                  <span className="text-neutral-500 block">{t('Tổng XP', 'Total XP')}</span>
                   <strong className="text-amber-300">
                     {playerStats.totalXp.toLocaleString('vi-VN')} XP
                   </strong>
                 </div>
                 <div>
                   <span className="text-neutral-500 block">
-                    {playerStats.nextRankNameVi || 'Quân hàm kế'}
+                    {lang === 'en'
+                      ? playerStats.nextRankNameEn || 'Next Rank'
+                      : playerStats.nextRankNameVi || 'Quân hàm kế'}
                   </span>
                   <strong className="text-sky-300">
                     {(playerStats.rankXpNext ?? 0).toLocaleString('vi-VN')} XP

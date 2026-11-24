@@ -1895,6 +1895,21 @@ export default function App() {
             {centeredStageTitle}
           </h2>
         </div>
+        {gameState?.gameMode === 'TWO_PLAYERS_AI' && (
+          <span
+            data-testid="battle-stage-difficulty-note"
+            className={`text-[11px] sm:text-xs font-bold tracking-wide ${
+              (gameState?.difficulty ?? difficulty) === 'EXTREME'
+                ? 'text-[#FF0055]'
+                : 'text-[#00F0FF]'
+            }`}
+          >
+            {t('Độ khó:', 'Difficulty:')}{' '}
+            {(gameState?.difficulty ?? difficulty) === 'EXTREME'
+              ? t('Thử thách', 'Challenge')
+              : t('Giải trí', 'Casual')}
+          </span>
+        )}
         {isVsMatch && <VsTitleStatusLine state={gameState} />}
         {(isCoopOnlineMatch || isVsMatch) && showOnlineNetStats && (
           <span

@@ -110,11 +110,25 @@ export const M3Hud: React.FC<M3HudProps> = ({
       {/* Top Header: Stage, Countdown Timer, Score, High Score & Lives */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-800 pb-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="font-btn flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#FFB800]/15 border border-[#FFB800]/40 text-[#FFB800] font-bold">
-            <span>
-              {t('MÀN', 'STAGE')} {state.currentStageId ?? 1} •{' '}
-              {state.currentStageName || getCampaignStageSpec(state.currentStageId ?? 1).shortTitle}
-            </span>
+          <div className="flex flex-col gap-0.5">
+            <div className="font-btn flex items-center gap-1.5 px-2.5 py-1 rounded bg-[#FFB800]/15 border border-[#FFB800]/40 text-[#FFB800] font-bold">
+              <span>
+                {t('MÀN', 'STAGE')} {state.currentStageId ?? 1} •{' '}
+                {state.currentStageName || getCampaignStageSpec(state.currentStageId ?? 1).shortTitle}
+              </span>
+            </div>
+            {state.gameMode === 'TWO_PLAYERS_AI' && (
+              <span
+                className={`px-1 text-[11px] font-bold ${
+                  state.difficulty === 'EXTREME' ? 'text-[#FF0055]' : 'text-[#00F0FF]'
+                }`}
+              >
+                {t('Độ khó:', 'Difficulty:')}{' '}
+                {state.difficulty === 'EXTREME'
+                  ? t('Thử thách', 'Challenge')
+                  : t('Giải trí', 'Casual')}
+              </span>
+            )}
           </div>
 
           <div
@@ -157,11 +171,36 @@ export const M3Hud: React.FC<M3HudProps> = ({
             <span className="text-neutral-200 font-bold">{state.highScore} XP</span>
           </div>
 
-          <div className="font-hud flex items-center gap-1.5 px-3 py-1 rounded bg-[#050510] border border-[#FF0055]/40">
-            <Heart className="w-4 h-4 text-[#FF0055] fill-[#FF0055]" />
-            <span className="text-neutral-400">{t('MẠNG P1:', 'P1 LIVES:')}</span>
-            <span className="text-[#FF0055] font-black text-base">{p1State.lives}</span>
-          </div>
+          {state.gameMode === 'TWO_PLAYERS_AI' ? (
+            <div
+              data-testid="m3hud-coop-ai-summary"
+              className="font-hud flex flex-wrap items-center gap-3 px-3 py-1.5 rounded bg-[#050510] border border-[#00F0FF]/45"
+            >
+              <span className="inline-flex items-center gap-1">
+                <Heart className="w-4 h-4 text-[#FF0055] fill-[#FF0055]" />
+                <span className="text-neutral-400">P1:</span>
+                <span className="text-[#FF0055] font-black text-base">{p1State.lives}</span>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Heart className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+                <span className="text-emerald-300">AI:</span>
+                <span className="text-emerald-400 font-black text-base">{state.p2State?.lives ?? 0}</span>
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Skull className="w-4 h-4 text-[#FFB800]" />
+                <span className="text-neutral-400">{t('Địch:', 'Enemies:')}</span>
+                <span className="text-[#FFB800] font-black text-base">
+                  {Math.max(0, 30 - state.totalDefeatedEnemies)}
+                </span>
+              </span>
+            </div>
+          ) : (
+            <div className="font-hud flex items-center gap-1.5 px-3 py-1 rounded bg-[#050510] border border-[#FF0055]/40">
+              <Heart className="w-4 h-4 text-[#FF0055] fill-[#FF0055]" />
+              <span className="text-neutral-400">{t('MẠNG P1:', 'P1 LIVES:')}</span>
+              <span className="text-[#FF0055] font-black text-base">{p1State.lives}</span>
+            </div>
+          )}
 
           {p1State.shieldTimer > 0 && (
             <div className="font-hud flex items-center gap-1 px-2.5 py-1 rounded bg-sky-950/80 border border-[#00F0FF] text-[#00F0FF] text-sm animate-pulse">
@@ -172,15 +211,15 @@ export const M3Hud: React.FC<M3HudProps> = ({
 
           {isCoop && state.p2State && (
             <>
-              <div className="font-hud flex items-center gap-1.5 px-3 py-1 rounded bg-emerald-950/60 border border-emerald-500/70">
-                <Heart className="w-4 h-4 text-emerald-400 fill-emerald-400" />
-                <span className="text-emerald-300">
-                  {state.gameMode === 'TWO_PLAYERS_ONLINE'
-                    ? t('MẠNG P2 (ONLINE):', 'P2 LIVES (ONLINE):')
-                    : t('MẠNG P2 (A.I):', 'P2 LIVES (A.I):')}
-                </span>
-                <span className="text-emerald-400 font-black text-base">{state.p2State.lives}</span>
-              </div>
+              {state.gameMode !== 'TWO_PLAYERS_AI' && (
+                <div className="font-hud flex items-center gap-1.5 px-3 py-1 rounded bg-emerald-950/60 border border-emerald-500/70">
+                  <Heart className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+                  <span className="text-emerald-300">
+                    {t('MẠNG P2 (ONLINE):', 'P2 LIVES (ONLINE):')}
+                  </span>
+                  <span className="text-emerald-400 font-black text-base">{state.p2State.lives}</span>
+                </div>
+              )}
 
               {state.p2State.shieldTimer > 0 && (
                 <div className="font-hud flex items-center gap-1 px-2.5 py-1 rounded bg-amber-950/80 border border-[#FFB800] text-[#FFB800] text-sm animate-pulse">
