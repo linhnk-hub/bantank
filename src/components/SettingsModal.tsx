@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Volume2,
@@ -282,7 +282,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [, setRenderTick] = useState<number>(0);
   const [avatarLoadError, setAvatarLoadError] = useState<boolean>(false);
   const [brokenCatalogIds, setBrokenCatalogIds] = useState<Record<string, boolean>>({});
-  const [isBusy, setIsBusy] = useState<boolean>(false);
+  const [isSavingDisplayName, setIsSavingDisplayName] = useState<boolean>(false);
+  const [optimisticAvatar, setOptimisticAvatar] = useState<
+    { type: 'google' } | { type: 'catalog'; avatarId: string; url: string | null } | null
+  >(null);
+  const avatarSelectionSeqRef = useRef<number>(0);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(
     null
   );
@@ -578,6 +582,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     const meta = avatarManager.getUserMetadata(uid);
     setDisplayName(meta?.displayName || authUser?.displayName || '');
     setAvatarLoadError(false);
+    setOptimisticAvatar(null);
     setFeedback(null);
     setAccountsRoleFeedback(null);
     setPendingRoleChangeConfirm(null);
@@ -663,17 +668,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const canShowAdminMusic = isVerifiedSuperAdmin && musicManager.canManageMusic();
 
-  const effectiveAvatarUrl = avatarManager.getEffectivePlayerAvatarUrl({
-    uid: currentUid,
-    photoURL: currentUser?.photoURL,
-  });
-
-  const selectedAvatarType = userMeta?.avatarType || 'google';
+  const selectedAvatarType = optimisticAvatar
+    ? optimisticAvatar.type
+    : userMeta?.avatarType || 'google';
   const selectedCatalogId =
-    selectedAvatarType === 'catalog' ? userMeta?.avatarId || null : null;
+    selectedAvatarType === 'catalog'
+      ? optimisticAvatar?.type === 'catalog'
+        ? optimisticAvatar.avatarId
+        : userMeta?.avatarId || null
+      : null;
   const isSelectedCatalogActive = Boolean(
     selectedCatalogId && activeCatalog.some((item) => item.avatarId === selectedCatalogId)
   );
+  const effectiveAvatarUrl =
+    optimisticAvatar?.type === 'google'
+      ? currentUser?.photoURL || null
+      : optimisticAvatar?.type === 'catalog'
+        ? optimisticAvatar.url ||
+          avatarManager.getEffectivePlayerAvatarUrl({
+            uid: currentUid,
+            photoURL: currentUser?.photoURL,
+          })
+        : avatarManager.getEffectivePlayerAvatarUrl({
+            uid: currentUid,
+            photoURL: currentUser?.photoURL,
+          });
 
   const handleBgmToggle = () => {
     soundManager.unlock();
@@ -721,56 +740,62 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSelectGoogleAvatar = async () => {
     setFeedback(null);
-    setIsBusy(true);
-    try {
-      const res = await avatarManager.selectGoogleAvatar();
-      if (res.success) {
-        setAvatarLoadError(false);
-        onProfileUpdated?.();
-      } else {
-        const errText = res.message || 'Không thể chọn ảnh đại diện.';
-        setFeedback({
-          type: 'error',
-          text: errText,
-        });
-        setPopupNotice({
-          type: 'error',
-          messages: [errText],
-        });
-      }
-    } finally {
-      setIsBusy(false);
+    setAvatarLoadError(false);
+    setOptimisticAvatar({ type: 'google' });
+    const seq = ++avatarSelectionSeqRef.current;
+    const res = await avatarManager.selectGoogleAvatar();
+    if (seq !== avatarSelectionSeqRef.current) return;
+    if (res.success) {
+      setUserMeta(avatarManager.getUserMetadata(currentUid));
+      setOptimisticAvatar(null);
+      onProfileUpdated?.();
+    } else {
+      setOptimisticAvatar(null);
+      const errText = res.message || 'Không thể chọn ảnh đại diện.';
+      setFeedback({
+        type: 'error',
+        text: errText,
+      });
+      setPopupNotice({
+        type: 'error',
+        messages: [errText],
+      });
     }
   };
 
   const handleSelectCatalogAvatar = async (item: AvatarCatalogItem) => {
     setFeedback(null);
-    setIsBusy(true);
-    try {
-      const res = await avatarManager.selectCatalogAvatar(item.avatarId);
-      if (res.success) {
-        setAvatarLoadError(false);
-        onProfileUpdated?.();
-      } else {
-        const errText = res.message || 'Không thể chọn ảnh đại diện này.';
-        setFeedback({
-          type: 'error',
-          text: errText,
-        });
-        setPopupNotice({
-          type: 'error',
-          messages: [errText],
-        });
-      }
-    } finally {
-      setIsBusy(false);
+    setAvatarLoadError(false);
+    setOptimisticAvatar({
+      type: 'catalog',
+      avatarId: item.avatarId,
+      url: avatarManager.getCatalogItemUrl(item.storagePath),
+    });
+    const seq = ++avatarSelectionSeqRef.current;
+    const res = await avatarManager.selectCatalogAvatar(item.avatarId);
+    if (seq !== avatarSelectionSeqRef.current) return;
+    if (res.success) {
+      setUserMeta(avatarManager.getUserMetadata(currentUid));
+      setOptimisticAvatar(null);
+      onProfileUpdated?.();
+    } else {
+      setOptimisticAvatar(null);
+      const errText = res.message || 'Không thể chọn ảnh đại diện này.';
+      setFeedback({
+        type: 'error',
+        text: errText,
+      });
+      setPopupNotice({
+        type: 'error',
+        messages: [errText],
+      });
     }
   };
 
   const handleSaveDisplayName = async (e: React.FormEvent) => {
     e.preventDefault();
     setFeedback(null);
-    setIsBusy(true);
+    setIsSavingDisplayName(true);
     try {
       const res = await avatarManager.updateDisplayName(displayName);
       setFeedback({
@@ -785,7 +810,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         onProfileUpdated?.();
       }
     } finally {
-      setIsBusy(false);
+      setIsSavingDisplayName(false);
     }
   };
 
@@ -1052,10 +1077,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   {/* Option 1: Google Avatar Image */}
                   <button
                     type="button"
-                    disabled={isBusy}
                     onClick={handleSelectGoogleAvatar}
                     aria-label={t('Chọn ảnh đại diện mặc định', 'Select default avatar')}
-                    className={`relative p-2.5 rounded-2xl border-2 transition-all flex items-center justify-center cursor-pointer group ${
+                    className={`relative p-2.5 rounded-2xl border-2 transition-colors flex items-center justify-center cursor-pointer group ${
                       selectedAvatarType === 'google' || !isSelectedCatalogActive
                         ? 'bg-amber-950/40 border-amber-500 ring-2 ring-amber-500/30 shadow-lg shadow-amber-500/10'
                         : 'bg-neutral-950/70 border-neutral-800 hover:border-amber-500/50 hover:bg-neutral-900'
@@ -1096,10 +1120,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       <button
                         key={item.avatarId}
                         type="button"
-                        disabled={isBusy || hasError}
+                        disabled={hasError}
                         onClick={() => handleSelectCatalogAvatar(item)}
                         aria-label={t('Chọn ảnh đại diện', 'Select avatar')}
-                        className={`relative p-2.5 rounded-2xl border-2 transition-all flex items-center justify-center cursor-pointer disabled:opacity-50 group ${
+                        className={`relative p-2.5 rounded-2xl border-2 transition-colors flex items-center justify-center cursor-pointer disabled:opacity-50 group ${
                           isSelected
                             ? 'bg-emerald-950/40 border-emerald-500 ring-2 ring-emerald-500/30 shadow-lg shadow-emerald-500/10'
                             : 'bg-neutral-950/70 border-neutral-800 hover:border-emerald-500/50 hover:bg-neutral-900'
@@ -1152,7 +1176,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     />
                     <button
                       type="submit"
-                      disabled={isBusy}
+                      disabled={isSavingDisplayName}
                       className="px-3 py-2 rounded bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs flex items-center gap-1 shadow active:scale-95 disabled:opacity-50 cursor-pointer shrink-0"
                     >
                       <Save className="w-3.5 h-3.5" />

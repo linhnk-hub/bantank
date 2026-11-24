@@ -599,6 +599,8 @@ export default function App() {
 
   const handleRestart = useCallback(() => {
     clearVirtualTouchInputs();
+    topMenuTriggeredPauseRef.current = false;
+    setIsTopMenuOpenInBattle(false);
     gameEngine.restartStage();
     setIsPaused(false);
     const st = gameEngine.getState();

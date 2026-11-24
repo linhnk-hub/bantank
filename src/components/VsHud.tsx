@@ -72,23 +72,22 @@ const CombatantRow: React.FC<{ c: VsCombatantState; isLocal?: boolean }> = ({
           )}
         </div>
 
-        {/* Remaining Lives Hearts */}
+        {/* Remaining Lives Count */}
         <div
           data-testid={`vs-hud-lives-${c.role.toLowerCase()}`}
-          className="flex items-center gap-1 shrink-0"
+          className="inline-flex items-center gap-1 font-hud text-xs font-extrabold shrink-0"
+          style={{ color: c.lives > 0 ? colorSpec.hex : '#737373' }}
           title={t('Mạng còn lại', 'Remaining lives')}
         >
-          {[0, 1, 2].map((idx) => (
-            <Heart
-              key={idx}
-              className="w-3.5 h-3.5"
-              style={
-                idx < c.lives
-                  ? { color: colorSpec.hex, fill: colorSpec.hex }
-                  : { color: '#404040' }
-              }
-            />
-          ))}
+          <Heart
+            className="w-3.5 h-3.5 shrink-0"
+            style={
+              c.lives > 0
+                ? { color: colorSpec.hex, fill: colorSpec.hex }
+                : { color: '#525252' }
+            }
+          />
+          <span>{c.lives}</span>
         </div>
       </div>
 

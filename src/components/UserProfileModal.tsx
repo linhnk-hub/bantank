@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AuthManager } from '../core/authManager.ts';
 import { AvatarManager, type AvatarCatalogItem } from '../core/avatarManager.ts';
 import { PlayerStatsManager } from '../core/playerStatsManager.ts';
@@ -50,6 +50,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   const [displayName, setDisplayName] = useState<string>('');
   const [avatarLoadError, setAvatarLoadError] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [optimisticAvatar, setOptimisticAvatar] = useState<
+    { type: 'google' } | { type: 'catalog'; avatarId: string; url: string | null } | null
+  >(null);
+  const avatarSelectionSeqRef = useRef<number>(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [activeCatalog, setActiveCatalog] = useState<AvatarCatalogItem[]>(() =>
@@ -65,6 +69,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     if (user && isOpen) {
       setDisplayName(user.displayName || '');
       setAvatarLoadError(false);
+      setOptimisticAvatar(null);
       setErrorMessage(null);
       setSuccessMessage(null);
       avatarManager.observeCatalog();
@@ -94,49 +99,69 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   if (!isOpen || !user) return null;
 
-  const effectiveAvatarUrl = avatarManager.getEffectivePlayerAvatarUrl({
-    uid: currentUid,
-    photoURL: user.photoURL,
-  });
-
-  const selectedAvatarType = userMeta?.avatarType || 'google';
+  const selectedAvatarType = optimisticAvatar
+    ? optimisticAvatar.type
+    : userMeta?.avatarType || 'google';
   const selectedCatalogId =
-    selectedAvatarType === 'catalog' ? userMeta?.avatarId || null : null;
+    selectedAvatarType === 'catalog'
+      ? optimisticAvatar?.type === 'catalog'
+        ? optimisticAvatar.avatarId
+        : userMeta?.avatarId || null
+      : null;
   const isSelectedCatalogActive = Boolean(
     selectedCatalogId && activeCatalog.some((item) => item.avatarId === selectedCatalogId)
   );
+  const effectiveAvatarUrl =
+    optimisticAvatar?.type === 'google'
+      ? user.photoURL || null
+      : optimisticAvatar?.type === 'catalog'
+        ? optimisticAvatar.url ||
+          avatarManager.getEffectivePlayerAvatarUrl({
+            uid: currentUid,
+            photoURL: user.photoURL,
+          })
+        : avatarManager.getEffectivePlayerAvatarUrl({
+            uid: currentUid,
+            photoURL: user.photoURL,
+          });
 
   const handleSelectGoogle = async () => {
     setErrorMessage(null);
     setSuccessMessage(null);
-    setIsSaving(true);
-    try {
-      const res = await avatarManager.selectGoogleAvatar();
-      if (res.success) {
-        setAvatarLoadError(false);
-        onProfileUpdated?.();
-      } else {
-        setErrorMessage(res.message || 'Không thể chọn ảnh đại diện.');
-      }
-    } finally {
-      setIsSaving(false);
+    setAvatarLoadError(false);
+    setOptimisticAvatar({ type: 'google' });
+    const seq = ++avatarSelectionSeqRef.current;
+    const res = await avatarManager.selectGoogleAvatar();
+    if (seq !== avatarSelectionSeqRef.current) return;
+    if (res.success) {
+      setUserMeta(avatarManager.getUserMetadata(currentUid));
+      setOptimisticAvatar(null);
+      onProfileUpdated?.();
+    } else {
+      setOptimisticAvatar(null);
+      setErrorMessage(res.message || 'Không thể chọn ảnh đại diện.');
     }
   };
 
   const handleSelectCatalog = async (item: AvatarCatalogItem) => {
     setErrorMessage(null);
     setSuccessMessage(null);
-    setIsSaving(true);
-    try {
-      const res = await avatarManager.selectCatalogAvatar(item.avatarId);
-      if (res.success) {
-        setAvatarLoadError(false);
-        onProfileUpdated?.();
-      } else {
-        setErrorMessage(res.message || 'Không thể chọn ảnh đại diện.');
-      }
-    } finally {
-      setIsSaving(false);
+    setAvatarLoadError(false);
+    setOptimisticAvatar({
+      type: 'catalog',
+      avatarId: item.avatarId,
+      url: avatarManager.getCatalogItemUrl(item.storagePath),
+    });
+    const seq = ++avatarSelectionSeqRef.current;
+    const res = await avatarManager.selectCatalogAvatar(item.avatarId);
+    if (seq !== avatarSelectionSeqRef.current) return;
+    if (res.success) {
+      setUserMeta(avatarManager.getUserMetadata(currentUid));
+      setOptimisticAvatar(null);
+      onProfileUpdated?.();
+    } else {
+      setOptimisticAvatar(null);
+      setErrorMessage(res.message || 'Không thể chọn ảnh đại diện.');
     }
   };
 
@@ -229,10 +254,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <div className="grid grid-cols-4 gap-2.5 w-full justify-items-center pt-1">
                 <button
                   type="button"
-                  disabled={isSaving}
                   onClick={handleSelectGoogle}
                   aria-label="Chọn ảnh đại diện mặc định"
-                  className={`relative p-1.5 rounded-xl border-2 transition-all flex items-center justify-center cursor-pointer ${
+                  className={`relative p-1.5 rounded-xl border-2 transition-colors flex items-center justify-center cursor-pointer ${
                     selectedAvatarType === 'google' || !isSelectedCatalogActive
                       ? 'border-amber-500 bg-amber-950/40'
                       : 'border-neutral-800 bg-neutral-900 hover:border-amber-500/50'
@@ -262,10 +286,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     <button
                       key={item.avatarId}
                       type="button"
-                      disabled={isSaving}
                       onClick={() => handleSelectCatalog(item)}
                       aria-label="Chọn ảnh đại diện"
-                      className={`relative p-1.5 rounded-xl border-2 transition-all flex items-center justify-center cursor-pointer ${
+                      className={`relative p-1.5 rounded-xl border-2 transition-colors flex items-center justify-center cursor-pointer ${
                         isSelected
                           ? 'border-emerald-500 bg-emerald-950/40'
                           : 'border-neutral-800 bg-neutral-900 hover:border-emerald-500/50'

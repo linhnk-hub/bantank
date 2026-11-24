@@ -377,20 +377,15 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               }
               className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[196px] md:min-h-[224px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
-              {/* Bright Height-Fitted Horizontal Scrolling Background + TV Signal Layer */}
+              {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-                <div className="flex h-full w-max tv-card-scroll-ltr">
-                  <div className="flex h-full shrink-0">
-                    <img src="/solo.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
-                    <img src="/solo.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
-                  </div>
-                  <div className="flex h-full shrink-0">
-                    <img src="/solo.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
-                    <img src="/solo.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
-                  </div>
-                </div>
-                <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/22 to-[#050510]/10" />
-                <div className="absolute inset-0 tv-card-scanlines opacity-45" />
+                <img
+                  src="/solo.png"
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover object-center tv-card-bg-static"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/25 to-[#050510]/15" />
+                <div className="absolute inset-0 tv-card-scanlines opacity-40" />
                 <div className="absolute inset-x-0 top-0 h-12 tv-card-scanline-sweep" />
                 <div className="absolute inset-x-0 top-[36%] h-2.5 tv-card-glitch-bar" />
               </div>
@@ -475,20 +470,15 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               }
               className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[196px] md:min-h-[224px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
-              {/* Bright Height-Fitted Horizontal Scrolling Background + TV Signal Layer */}
+              {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-                <div className="flex h-full w-max tv-card-scroll-rtl">
-                  <div className="flex h-full shrink-0">
-                    <img src="/coop.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
-                    <img src="/coop.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
-                  </div>
-                  <div className="flex h-full shrink-0">
-                    <img src="/coop.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
-                    <img src="/coop.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
-                  </div>
-                </div>
-                <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/22 to-[#050510]/10" />
-                <div className="absolute inset-0 tv-card-scanlines opacity-45" />
+                <img
+                  src="/coop.png"
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover object-center tv-card-bg-static"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/25 to-[#050510]/15" />
+                <div className="absolute inset-0 tv-card-scanlines opacity-40" />
                 <div
                   style={{ animationDelay: '-1.4s' }}
                   className="absolute inset-x-0 top-0 h-12 tv-card-scanline-sweep"
@@ -589,20 +579,15 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               }
               className="group relative w-full flex-1 text-left p-5 flex flex-col justify-between min-h-[196px] md:min-h-[224px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
-              {/* Bright Height-Fitted Horizontal Scrolling Background + TV Signal Layer */}
+              {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-                <div className="flex h-full w-max tv-card-scroll-ltr">
-                  <div className="flex h-full shrink-0">
-                    <img src="/vs.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
-                    <img src="/vs.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
-                  </div>
-                  <div className="flex h-full shrink-0">
-                    <img src="/vs.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
-                    <img src="/vs.png" alt="" className="h-full w-auto max-w-none shrink-0 tv-card-bg-img-bright" />
-                  </div>
-                </div>
-                <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/22 to-[#050510]/10" />
-                <div className="absolute inset-0 tv-card-scanlines opacity-45" />
+                <img
+                  src="/vs.png"
+                  alt=""
+                  className="absolute inset-0 w-full h-full object-cover object-center tv-card-bg-static"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/25 to-[#050510]/15" />
+                <div className="absolute inset-0 tv-card-scanlines opacity-40" />
                 <div
                   style={{ animationDelay: '-2.7s' }}
                   className="absolute inset-x-0 top-0 h-12 tv-card-scanline-sweep"

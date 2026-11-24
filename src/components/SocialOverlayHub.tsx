@@ -1484,7 +1484,6 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                               <span className={peer.isOnline ? 'text-emerald-400 font-semibold' : 'text-neutral-500'}>
                                 ● {peer.isOnline ? 'Online' : 'Offline'}
                               </span>
-                              <span className="text-neutral-400">{peer.handleTag}</span>
                             </div>
                           </div>
                         </div>
@@ -1554,7 +1553,6 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                             <p className="font-btn text-xs sm:text-sm font-bold text-[#EAF4FF] truncate">
                               {req.fromDisplayName}
                             </p>
-                            <p className="text-[11px] text-neutral-400">{req.fromHandleTag}</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-1.5 shrink-0">
@@ -1602,7 +1600,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                               {req.toDisplayName}
                             </p>
                             <p className="text-[11px] text-neutral-400">
-                              {req.toHandleTag} • {t('Đang chờ xác nhận', 'Pending')}
+                              {t('Đang chờ xác nhận', 'Pending')}
                             </p>
                           </div>
                         </div>
@@ -1648,7 +1646,6 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                             <p className="font-btn text-xs sm:text-sm font-bold text-[#EAF4FF] truncate">
                               {rec.targetDisplayName}
                             </p>
-                            <p className="text-[11px] text-neutral-400">{rec.targetHandleTag}</p>
                           </div>
                         </div>
                         <button

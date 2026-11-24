@@ -389,80 +389,64 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
           {/* Left Column Top: P1 Lives */}
           <div
             data-testid="battle-hud-lives"
-            className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-red-500/45"
+            className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-red-500/45 min-w-0"
           >
             <span className="text-red-400 font-black text-[11px] shrink-0">P1</span>
-            <span className="inline-flex items-center gap-0.5 shrink-0">
-              {[0, 1, 2].map((idx) => (
-                <Heart
-                  key={idx}
-                  className={`w-3 h-3 shrink-0 ${
-                    idx < (vsP1?.lives ?? 0)
-                      ? 'text-red-400 fill-red-400'
-                      : 'text-neutral-700'
-                  }`}
-                />
-              ))}
+            <span className="inline-flex items-center gap-1 font-extrabold text-red-400 whitespace-nowrap shrink-0">
+              <Heart
+                className={`w-3 h-3 shrink-0 ${
+                  (vsP1?.lives ?? 0) > 0 ? 'text-red-400 fill-red-400' : 'text-neutral-700'
+                }`}
+              />
+              <span>{vsP1?.lives ?? 0}</span>
             </span>
           </div>
 
           {/* Right Column Top (replaces Enemy Remaining): P2 Lives */}
           <div
             data-testid="battle-hud-vs-p2-lives"
-            className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-[#FFB800]/45"
+            className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-[#FFB800]/45 min-w-0"
           >
             <span className="text-[#FFB800] font-black text-[11px] shrink-0">P2</span>
-            <span className="inline-flex items-center gap-0.5 shrink-0">
-              {[0, 1, 2].map((idx) => (
-                <Heart
-                  key={idx}
-                  className={`w-3 h-3 shrink-0 ${
-                    idx < (vsP2?.lives ?? 0)
-                      ? 'text-[#FFB800] fill-[#FFB800]'
-                      : 'text-neutral-700'
-                  }`}
-                />
-              ))}
+            <span className="inline-flex items-center gap-1 font-extrabold text-[#FFB800] whitespace-nowrap shrink-0">
+              <Heart
+                className={`w-3 h-3 shrink-0 ${
+                  (vsP2?.lives ?? 0) > 0 ? 'text-[#FFB800] fill-[#FFB800]' : 'text-neutral-700'
+                }`}
+              />
+              <span>{vsP2?.lives ?? 0}</span>
             </span>
           </div>
 
           {/* Left Column Bottom (directly under P1): AI 1 Lives */}
           <div
             data-testid="battle-hud-vs-ai1-lives"
-            className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-[#00F0FF]/45"
+            className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-[#00F0FF]/45 min-w-0"
           >
             <span className="text-[#00F0FF] font-black text-[11px] shrink-0">AI 1</span>
-            <span className="inline-flex items-center gap-0.5 shrink-0">
-              {[0, 1, 2].map((idx) => (
-                <Heart
-                  key={idx}
-                  className={`w-3 h-3 shrink-0 ${
-                    idx < (vsAi1?.lives ?? 0)
-                      ? 'text-[#00F0FF] fill-[#00F0FF]'
-                      : 'text-neutral-700'
-                  }`}
-                />
-              ))}
+            <span className="inline-flex items-center gap-1 font-extrabold text-[#00F0FF] whitespace-nowrap shrink-0">
+              <Heart
+                className={`w-3 h-3 shrink-0 ${
+                  (vsAi1?.lives ?? 0) > 0 ? 'text-[#00F0FF] fill-[#00F0FF]' : 'text-neutral-700'
+                }`}
+              />
+              <span>{vsAi1?.lives ?? 0}</span>
             </span>
           </div>
 
           {/* Right Column Bottom (replaces XP): AI 2 Lives */}
           <div
             data-testid="battle-hud-vs-ai2-lives"
-            className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-neutral-500/45"
+            className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-neutral-500/45 min-w-0"
           >
             <span className="text-neutral-300 font-black text-[11px] shrink-0">AI 2</span>
-            <span className="inline-flex items-center gap-0.5 shrink-0">
-              {[0, 1, 2].map((idx) => (
-                <Heart
-                  key={idx}
-                  className={`w-3 h-3 shrink-0 ${
-                    idx < (vsAi2?.lives ?? 0)
-                      ? 'text-neutral-300 fill-neutral-300'
-                      : 'text-neutral-700'
-                  }`}
-                />
-              ))}
+            <span className="inline-flex items-center gap-1 font-extrabold text-neutral-300 whitespace-nowrap shrink-0">
+              <Heart
+                className={`w-3 h-3 shrink-0 ${
+                  (vsAi2?.lives ?? 0) > 0 ? 'text-neutral-300 fill-neutral-300' : 'text-neutral-700'
+                }`}
+              />
+              <span>{vsAi2?.lives ?? 0}</span>
             </span>
           </div>
         </div>
@@ -474,40 +458,32 @@ export const BattleCenterHudStats: React.FC<BattleCenterHudStatsProps> = ({
           {/* Slot 1: P1 Remaining Lives */}
           <div
             data-testid="battle-hud-lives"
-            className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-red-500/45"
+            className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-red-500/45 min-w-0"
           >
             <span className="text-red-400 font-black text-[11px] shrink-0">P1</span>
-            <span className="inline-flex items-center gap-0.5 shrink-0">
-              {[0, 1, 2].map((idx) => (
-                <Heart
-                  key={idx}
-                  className={`w-3 h-3 shrink-0 ${
-                    idx < (vsP1?.lives ?? 0)
-                      ? 'text-red-400 fill-red-400'
-                      : 'text-neutral-700'
-                  }`}
-                />
-              ))}
+            <span className="inline-flex items-center gap-1 font-extrabold text-red-400 whitespace-nowrap shrink-0">
+              <Heart
+                className={`w-3 h-3 shrink-0 ${
+                  (vsP1?.lives ?? 0) > 0 ? 'text-red-400 fill-red-400' : 'text-neutral-700'
+                }`}
+              />
+              <span>{vsP1?.lives ?? 0}</span>
             </span>
           </div>
 
           {/* Slot 2 (replaces Enemy Remaining): P2 Remaining Lives */}
           <div
             data-testid="battle-hud-vs-p2-lives"
-            className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-[#FFB800]/45"
+            className="flex items-center justify-between gap-1 px-2 py-1 rounded bg-[#050510]/90 border border-[#FFB800]/45 min-w-0"
           >
             <span className="text-[#FFB800] font-black text-[11px] shrink-0">P2</span>
-            <span className="inline-flex items-center gap-0.5 shrink-0">
-              {[0, 1, 2].map((idx) => (
-                <Heart
-                  key={idx}
-                  className={`w-3 h-3 shrink-0 ${
-                    idx < (vsP2?.lives ?? 0)
-                      ? 'text-[#FFB800] fill-[#FFB800]'
-                      : 'text-neutral-700'
-                  }`}
-                />
-              ))}
+            <span className="inline-flex items-center gap-1 font-extrabold text-[#FFB800] whitespace-nowrap shrink-0">
+              <Heart
+                className={`w-3 h-3 shrink-0 ${
+                  (vsP2?.lives ?? 0) > 0 ? 'text-[#FFB800] fill-[#FFB800]' : 'text-neutral-700'
+                }`}
+              />
+              <span>{vsP2?.lives ?? 0}</span>
             </span>
           </div>
 
