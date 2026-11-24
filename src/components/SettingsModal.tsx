@@ -36,6 +36,7 @@ import {
   Mail,
   MessageSquare,
   Trash2,
+  History,
 } from 'lucide-react';
 import { SoundManager, type AudioSettings } from '../core/audio.ts';
 import { MusicManager } from '../core/musicManager.ts';
@@ -90,6 +91,7 @@ import {
 import { useLanguage, tx } from '../core/i18n.ts';
 import { LanguageSelector } from './LanguageSelector.tsx';
 import { FriendsAdminPanel } from './FriendsAdminPanel.tsx';
+import { VersionHistoryAdminPanel } from './VersionHistoryAdminPanel.tsx';
 
 export type SettingsTabId =
   | 'ACCOUNT'
@@ -101,7 +103,8 @@ export type SettingsTabId =
   | 'FRIENDS_ADMIN'
   | 'SYSTEM_LOGS'
   | 'MAINTENANCE'
-  | 'CONTACT_MESSAGES';
+  | 'CONTACT_MESSAGES'
+  | 'VERSION_HISTORY';
 
 /**
  * M7.3.11.6 Section 3: Kích thước khung chuẩn đồng nhất cho tất cả các mục con trong Cài đặt hệ thống
@@ -210,6 +213,11 @@ export function getAvailableSettingsTabsForRole(
     tabs.push({
       id: 'CONTACT_MESSAGES',
       label: 'Tin nhắn',
+      adminOnly: true,
+    });
+    tabs.push({
+      id: 'VERSION_HISTORY',
+      label: 'Phiên bản',
       adminOnly: true,
     });
   }
@@ -860,6 +868,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         return <Wrench className="w-3.5 h-3.5" />;
       case 'CONTACT_MESSAGES':
         return <MessageSquare className="w-3.5 h-3.5" />;
+      case 'VERSION_HISTORY':
+        return <History className="w-3.5 h-3.5" />;
     }
   };
 
@@ -959,7 +969,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                                     ? t('Tin nhắn', 'Messages')
                                     : tab.id === 'FRIENDS_ADMIN'
                                       ? t('Quản lý bạn bè', 'Friends Admin')
-                                      : tab.label}
+                                      : tab.id === 'VERSION_HISTORY'
+                                        ? t('Phiên bản', 'Versions')
+                                        : tab.label}
                 </span>
               </button>
             );
@@ -3030,6 +3042,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
              ========================================================================= */}
           {activeTab === 'FRIENDS_ADMIN' && (isVerifiedSuperAdmin || userRole === 'MOD') && (
             <FriendsAdminPanel currentUser={currentUser as any} />
+          )}
+
+          {/* =========================================================================
+              TAB 11: LỊCH SỬ PHIÊN BẢN & CẬP NHẬT (CHỈ DÀNH CHO ADMIN)
+             ========================================================================= */}
+          {activeTab === 'VERSION_HISTORY' && isVerifiedSuperAdmin && (
+            <VersionHistoryAdminPanel />
           )}
         </div>
 
