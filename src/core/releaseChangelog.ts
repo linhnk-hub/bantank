@@ -31,6 +31,35 @@ export interface ReleaseVersionEntry {
  */
 export const RELEASE_CHANGELOG: ReadonlyArray<ReleaseVersionEntry> = [
   {
+    id: 'rel-1-8-7',
+    version: 'v1.8.7',
+    releasedAt: '24/11/2026 19:02',
+    titleVi: 'Khắc phục lỗi Deploy GitHub Pages trùng artifact & nâng cấp Node.js 24',
+    titleEn: 'Fix GitHub Pages Duplicate Artifact Deploy Error & Upgrade to Node.js 24',
+    changes: [
+      {
+        headingVi: 'Sửa lỗi Multiple artifacts named "github-pages" trên GitHub Actions',
+        headingEn: 'Fixed Multiple "github-pages" Artifacts Error on GitHub Actions',
+        subPointsVi: [
+          'Tách quy trình CI/CD trong .github/workflows/main.yml thành 2 job độc lập: build và deploy (needs: build) để khi chạy lại job deploy không bị tải lên trùng lặp gói artifact.',
+          'Gắn mã định danh duy nhất theo từng lượt chạy (github-pages-${{ github.run_id }}-${{ github.run_attempt }}) cho cả bước upload-pages-artifact và deploy-pages, loại bỏ triệt để lỗi xung đột 2 artifact cùng tên.',
+        ],
+        subPointsEn: [
+          'Split the GitHub Pages workflow into separate build and deploy (needs: build) jobs so re-running a deployment never re-uploads a duplicate artifact.',
+          'Scoped the Pages artifact name per run attempt (github-pages-${{ github.run_id }}-${{ github.run_attempt }}) across upload-pages-artifact and deploy-pages.',
+        ],
+      },
+      {
+        headingVi: 'Nâng cấp toàn bộ GitHub Actions lên chuẩn Node.js 24',
+        headingEn: 'Upgraded GitHub Actions to Node.js 24 Runtime',
+        descriptionVi:
+          'Nâng cấp actions/checkout@v7, actions/setup-node@v7 (Node 24), actions/configure-pages@v6, actions/upload-pages-artifact@v5 và actions/deploy-pages@v5 để loại bỏ cảnh báo ngừng hỗ trợ Node.js 20.',
+        descriptionEn:
+          'Upgraded actions/checkout@v7, actions/setup-node@v7 (Node 24), actions/configure-pages@v6, actions/upload-pages-artifact@v5, and actions/deploy-pages@v5 to eliminate the Node.js 20 deprecation warning.',
+      },
+    ],
+  },
+  {
     id: 'rel-1-8-6',
     version: 'v1.8.6',
     releasedAt: '24/11/2026 16:45',
