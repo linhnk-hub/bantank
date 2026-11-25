@@ -351,7 +351,7 @@ export interface CoopP2PChannelAdapter {
 }
 
 export const COOP_ONLINE_CONFIG = {
-  ROOM_CODE_LENGTH: 6,
+  ROOM_CODE_LENGTH: 4,
   ROOM_TTL_MS: 15 * 60 * 1000, // 15 minutes max ceiling in firestore.rules (900,000 ms)
   CLOCK_SKEW_BUFFER_MS: 90 * 1000, // 90s buffer (absorbs up to +60s client clock skew + 30s network jitter)
   EFFECTIVE_WAITING_TTL_MS: (15 * 60 - 90) * 1000, // 810,000 ms (13m30s effective waiting room TTL on client)
@@ -447,13 +447,13 @@ export function buildCreateRoomStepErrorMessage(
 const ROOM_CODE_ALPHABET = '0123456789';
 
 /**
- * Sinh mã phòng ngẫu nhiên theo định dạng BTxxxx (bắt đầu bằng "BT" + 4 chữ số ngẫu nhiên 0-9).
+ * Sinh mã phòng ngẫu nhiên gồm 4 chữ số từ 0-9.
  */
 export function generateRoomCode(existingCodes?: Set<string>): string {
-  const randomSuffixLength = Math.max(1, COOP_ONLINE_CONFIG.ROOM_CODE_LENGTH - 2);
+  const codeLength = Math.max(1, COOP_ONLINE_CONFIG.ROOM_CODE_LENGTH);
   for (let attempt = 0; attempt < 20; attempt++) {
-    let code = 'BT';
-    for (let i = 0; i < randomSuffixLength; i++) {
+    let code = '';
+    for (let i = 0; i < codeLength; i++) {
       const idx = Math.floor(Math.random() * ROOM_CODE_ALPHABET.length);
       code += ROOM_CODE_ALPHABET[idx];
     }
@@ -461,15 +461,15 @@ export function generateRoomCode(existingCodes?: Set<string>): string {
       return code;
     }
   }
-  return 'BT8899';
+  return '8899';
 }
 
 /**
- * Chuẩn hóa và kiểm tra định dạng mã phòng BTxxxx (bắt buộc "BT" + 4 chữ số 0-9).
+ * Chuẩn hóa và kiểm tra định dạng mã phòng (bắt buộc gồm 4 chữ số 0-9).
  */
 export function validateRoomCodeFormat(rawCode: string): { valid: boolean; normalized: string } {
   const normalized = (rawCode || '').trim().toUpperCase();
-  const valid = /^BT[0-9]{4}$/.test(normalized);
+  const valid = /^[0-9]{4}$/.test(normalized);
   return { valid, normalized };
 }
 
@@ -545,7 +545,7 @@ export function parseRematchPointer(raw: string | null | undefined): {
   const rest = raw.slice(REMATCH_POINTER_PREFIX.length);
   const parts = rest.split('::');
   const code = (parts[0] || '').trim().toUpperCase();
-  if (!/^BT[0-9]{4}$/.test(code)) return null;
+  if (!/^[0-9]{4}$/.test(code)) return null;
   const parsedStage = Number.parseInt(parts[1] || '1', 10);
   const stageId = Number.isInteger(parsedStage) && parsedStage >= 1 && parsedStage <= TOTAL_CAMPAIGN_STAGES ? parsedStage : 1;
   const password = parts.slice(2).join('::');
@@ -636,7 +636,7 @@ export function verifyRoomPassword(
 export function getPublicQuickJoinSlotCodesForBucket(bucketIndex: number): string[] {
   const threeDigits = String(Math.abs(Math.floor(bucketIndex)) % 1000).padStart(3, '0');
   const slotChars = ['0', '1', '2', '3', '4'];
-  return slotChars.map((s) => `BT${threeDigits}${s}`);
+  return slotChars.map((s) => `${threeDigits}${s}`);
 }
 
 export function getPublicQuickJoinCandidateCodes(nowMs: number = Date.now()): string[] {
@@ -872,7 +872,7 @@ export function evaluateJoinRoomCandidate(
     return {
       success: false,
       errorCode: 'INVALID_CODE_FORMAT',
-      message: 'Mã phòng không hợp lệ (định dạng bắt buộc BTxxxx, gồm BT + 4 chữ số từ 0-9).',
+      message: 'Mã phòng không hợp lệ (định dạng bắt buộc gồm 4 chữ số từ 0-9).',
     };
   }
 
@@ -1047,7 +1047,7 @@ export function evaluateCoopRoomRuleCreate(params: {
 }): boolean {
   const { authUid, isVerifiedPersonalGmail, requestTimeMs, roomCode, incoming } = params;
   if (!authUid || !isVerifiedPersonalGmail) return false;
-  if (!/^BT[0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) return false;
+  if (!/^[0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) return false;
   if (incoming.hostUid !== authUid) return false;
   if (incoming.status !== 'WAITING') return false;
   if (incoming.difficulty !== 'DEFAULT' && incoming.difficulty !== 'EXTREME') return false;
@@ -1162,7 +1162,7 @@ export function evaluateCoopRoomRuleUpdate(params: {
   // Immutable core fields & schema check (expiresAt cannot be extended or modified on update)
   if (
     incoming.roomCode !== existing.roomCode ||
-    !/^BT[0-9]{4}$/.test(incoming.roomCode) ||
+    !/^[0-9]{4}$/.test(incoming.roomCode) ||
     incoming.hostUid !== existing.hostUid ||
     incoming.hostDisplayName !== existing.hostDisplayName ||
     incoming.difficulty !== existing.difficulty ||
@@ -1416,7 +1416,7 @@ export function evaluateCoopSignalingRuleCreate(params: {
   if (!authUid || !isVerifiedPersonalGmail) return false;
   if (existingSignaling !== null) return false; // Document already exists -> create denied
   if (!parentRoom) return false; // Parent room must exist
-  if (!/^BT[0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) return false;
+  if (!/^[0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) return false;
   if (parentRoom.hostUid !== authUid) return false;
   if (parentRoom.status !== 'WAITING') return false;
   if (requestTimeMs >= parentRoom.expiresAt) return false;
@@ -1453,7 +1453,7 @@ export function evaluateCoopSignalingRuleUpdate(params: {
   if (!authUid || !isVerifiedPersonalGmail || !parentRoom) {
     return { allowed: false, matchedBranch: null };
   }
-  if (!/^BT[0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) {
+  if (!/^[0-9]{4}$/.test(roomCode) || incoming.roomCode !== roomCode) {
     return { allowed: false, matchedBranch: null };
   }
 
@@ -3336,7 +3336,7 @@ export class CoopOnlineManager {
       return {
         success: false,
         errorCode: 'INVALID_CODE_FORMAT',
-        message: 'Mã phòng không hợp lệ (định dạng bắt buộc BTxxxx, gồm BT + 4 chữ số từ 0-9).',
+        message: 'Mã phòng không hợp lệ (định dạng bắt buộc gồm 4 chữ số từ 0-9).',
       };
     }
 
@@ -4691,7 +4691,7 @@ export class CoopOnlineManager {
       return {
         success: false,
         errorCode: 'INVALID_CODE_FORMAT',
-        message: 'Mã phòng không hợp lệ (định dạng bắt buộc BTxxxx, gồm BT + 4 chữ số từ 0-9).',
+        message: 'Mã phòng không hợp lệ (định dạng bắt buộc gồm 4 chữ số từ 0-9).',
       };
     }
 

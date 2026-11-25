@@ -31,6 +31,63 @@ export interface ReleaseVersionEntry {
  */
 export const RELEASE_CHANGELOG: ReadonlyArray<ReleaseVersionEntry> = [
   {
+    id: 'rel-1-8-8',
+    version: 'v1.8.8',
+    releasedAt: '25/11/2026 01:30',
+    titleVi: 'Sửa lỗi tường thép căn cứ, quản trị Chat chung, chuẩn hóa mã phòng 4 số & nâng cấp trang chủ PC',
+    titleEn: 'Fix Base Steel Wall Visual Bug, Admin Global Chat Moderation, 4-Digit Room Codes & Desktop Home Scale',
+    changes: [
+      {
+        headingVi: 'Sửa lỗi hiển thị tường thép bảo vệ căn cứ khi hết thời gian',
+        headingEn: 'Fixed Base Eagle Shield Wall Expiry Visual Sync',
+        subPointsVi: [
+          'Đồng bộ đầy đủ cả 5 ô tường quanh căn cứ (phía trên và 2 bên) về lại tường gạch khi vật phẩm bảo vệ căn cứ hết hiệu lực, khắc phục tình trạng 3 ô phía trên bị kẹt hình tường thép dù đạn vẫn bắn xuyên được.',
+          'Bổ sung cơ chế tự dọn sprite gạch/thép cũ không còn tồn tại trong bản đồ địa hình.',
+        ],
+        subPointsEn: [
+          'Synced all 5 base wall tiles (top and both sides) cleanly back to brick when Eagle Shield expires, eliminating stuck steel textures.',
+          'Added automatic stale brick/steel sprite cleanup on terrain sync.',
+        ],
+      },
+      {
+        headingVi: 'Sửa nút Xóa tìm kiếm Cộng đồng & bổ sung quyền Admin xóa Chat chung',
+        headingEn: 'Fixed Community Search Clear Button & Added Admin Global Chat Deletion',
+        subPointsVi: [
+          'Nút Xóa trong mục Tìm kiếm Cộng đồng nay xóa sạch từ khóa lẫn danh sách kết quả đang hiển thị ngay khi bấm.',
+          'Tài khoản Admin có quyền xóa từng tin nhắn hoặc xóa toàn bộ tin nhắn (có bước xác nhận) trong kênh Chat chung Cộng đồng.',
+        ],
+        subPointsEn: [
+          'Clear button in Community Search now clears both the query and displayed results immediately.',
+          'Admin accounts can now delete individual messages or purge all Global Chat messages with confirmation.',
+        ],
+      },
+      {
+        headingVi: 'Chuẩn hóa mã phòng 4 chữ số (bỏ tiền tố BT) & tối ưu hiển thị Mobile',
+        headingEn: 'Standardized 4-Digit Room Codes (Removed BT Prefix) & Compact Mobile Badge',
+        subPointsVi: [
+          'Loại bỏ hoàn toàn tiền tố "BT" khỏi chuỗi mã phòng (chỉ gồm 4 chữ số), quy tắc Firestore, ô nhập mã và toàn bộ hướng dẫn/nhãn hiển thị hệ thống.',
+          'Trên điện thoại, khung mã phòng hiển thị gọn gàng cùng chiều cao và phong cách như nhãn "P1 VS P2" và "PHÒNG CÔNG KHAI".',
+        ],
+        subPointsEn: [
+          'Removed the "BT" prefix from room codes (pure 4-digit numeric format), Firestore rules, join input, and all system labels/guides.',
+          'On mobile, the room code box now matches the height and badge styling of "P1 VS P2" and "PUBLIC ROOM".',
+        ],
+      },
+      {
+        headingVi: 'Tinh gọn thẻ chế độ & tăng 30% kích thước trang chủ trên máy tính',
+        headingEn: 'Cleaned Mode Card Badges & Scaled Desktop Home UI by +30%',
+        subPointsVi: [
+          'Gỡ bỏ nhãn phụ 1P CAMPAIGN, 2P CO-OP, PVP ONLINE trên các nút chế độ trang chủ.',
+          'Tăng 30% kích thước hiển thị tổng thể, tiêu đề, thanh chỉ số và các nút bấm trang chủ trên giao diện máy tính mà vẫn giữ nguyên bố cục gọn gàng trên điện thoại.',
+        ],
+        subPointsEn: [
+          'Removed 1P CAMPAIGN, 2P CO-OP, and PVP ONLINE caption badges from Home mode buttons.',
+          'Increased overall Home screen display and button sizes by 30% on desktop while preserving mobile layout.',
+        ],
+      },
+    ],
+  },
+  {
     id: 'rel-1-8-7',
     version: 'v1.8.7',
     releasedAt: '24/11/2026 19:02',

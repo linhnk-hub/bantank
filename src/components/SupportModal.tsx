@@ -478,8 +478,8 @@ export const SupportModal: React.FC<SupportModalProps> = ({
                 </div>
                 <p className="text-neutral-400">
                   {t(
-                    'Tạo phòng hoặc nhập mã phòng BTxxxx cùng người chơi P2 trên 2 thiết bị riêng. Không tạm dừng; dùng nút Thoát để rời trận.',
-                    'Create or join a BTxxxx room with Player 2 on 2 separate devices. No pause; use Exit to leave match.'
+                    'Tạo phòng hoặc nhập mã phòng 4 chữ số cùng người chơi P2 trên 2 thiết bị riêng. Không tạm dừng; dùng nút Thoát để rời trận.',
+                    'Create or join a 4-digit room with Player 2 on 2 separate devices. No pause; use Exit to leave match.'
                   )}
                 </p>
               </div>

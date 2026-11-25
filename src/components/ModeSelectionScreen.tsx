@@ -802,8 +802,8 @@ export const ModeSelectionScreen: React.FC<ModeSelectionScreenProps> = ({
 
                     <p className="text-sm text-neutral-200 leading-snug">
                       {t(
-                        'Tạo hoặc vào phòng bằng mã BTxxxx cùng bạn bè.',
-                        'Create or join a room via BTxxxx code with a friend.'
+                        'Tạo hoặc vào phòng bằng mã phòng 4 chữ số cùng bạn bè.',
+                        'Create or join a room via 4-digit room code with a friend.'
                       )}
                     </p>
                   </div>

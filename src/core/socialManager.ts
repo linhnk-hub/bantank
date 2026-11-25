@@ -230,6 +230,8 @@ export interface SocialStorageAdapter {
 
   // Global Chat
   addGlobalMessage(msg: GlobalChatMessage): Promise<void>;
+  deleteGlobalMessage(id: string): Promise<void>;
+  deleteAllGlobalMessages(): Promise<number>;
   listGlobalMessages(pageSize: number, beforeMs?: number): Promise<GlobalChatMessage[]>;
   subscribeGlobalMessages(
     pageSize: number,
@@ -508,6 +510,21 @@ export class InMemorySocialStorageAdapter implements SocialStorageAdapter {
     }
     this.globalMessages.push({ ...msg });
     this.emitGlobalChat();
+  }
+
+  public async deleteGlobalMessage(id: string): Promise<void> {
+    const before = this.globalMessages.length;
+    this.globalMessages = this.globalMessages.filter((m) => m.id !== id);
+    if (this.globalMessages.length !== before) {
+      this.emitGlobalChat();
+    }
+  }
+
+  public async deleteAllGlobalMessages(): Promise<number> {
+    const count = this.globalMessages.length;
+    this.globalMessages = [];
+    this.emitGlobalChat();
+    return count;
   }
 
   public async listGlobalMessages(
@@ -975,6 +992,49 @@ export class FirestoreSocialStorageAdapter implements SocialStorageAdapter {
           throw retryErr;
         }
       }
+      throw err;
+    }
+  }
+
+  public async deleteGlobalMessage(id: string): Promise<void> {
+    const db = this.getDbOrNull();
+    if (!db) {
+      await this.fallback.deleteGlobalMessage(id);
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, 'global_chat_messages', id));
+      await this.fallback.deleteGlobalMessage(id);
+      this.rulesDenied = false;
+    } catch (err) {
+      this.handleErr(err);
+      throw err;
+    }
+  }
+
+  public async deleteAllGlobalMessages(): Promise<number> {
+    const db = this.getDbOrNull();
+    if (!db) {
+      return this.fallback.deleteAllGlobalMessages();
+    }
+    let totalDeleted = 0;
+    try {
+      for (let round = 0; round < 50; round++) {
+        const snap = await getDocs(
+          query(collection(db, 'global_chat_messages'), limit(200))
+        );
+        if (snap.empty) break;
+        await Promise.all(
+          snap.docs.map((d) => deleteDoc(doc(db, 'global_chat_messages', d.id)))
+        );
+        totalDeleted += snap.docs.length;
+        if (snap.docs.length < 200) break;
+      }
+      await this.fallback.deleteAllGlobalMessages();
+      this.rulesDenied = false;
+      return totalDeleted;
+    } catch (err) {
+      this.handleErr(err);
       throw err;
     }
   }
@@ -2193,6 +2253,125 @@ export class SocialManager {
         success: false,
         errorCode: 'NETWORK_ERROR',
         message: err?.message || 'Không thể gửi tin nhắn do lỗi mạng. Bạn có thể thử gửi lại.',
+      };
+    }
+  }
+
+  public async adminDeleteGlobalMessage(
+    actor: AuthIdentityLike | null,
+    messageId: string
+  ): Promise<SocialActionResult<void>> {
+    if (resolveUserRole(actor) !== 'ADMIN') {
+      SystemAuditLogger.getInstance().recordEvent({
+        severity: 'WARNING',
+        category: 'SECURITY_PERMISSION_DENIED',
+        eventType: 'ADMIN_DELETE_GLOBAL_CHAT_MSG_DENIED',
+        message: `Từ chối thao tác xóa tin nhắn chat chung từ tài khoản không phải ADMIN (vai trò: ${resolveUserRole(actor)}).`,
+        uid: actor?.uid ?? null,
+        userEmail: actor?.email ?? null,
+        source: 'SocialManager.adminDeleteGlobalMessage',
+        outcome: 'FAILURE',
+      });
+      return {
+        success: false,
+        errorCode: 'PERMISSION_DENIED',
+        message: 'Chỉ tài khoản ADMIN mới có quyền xóa tin nhắn chat chung.',
+      };
+    }
+    const cleanId = (messageId || '').trim();
+    if (!cleanId) {
+      return {
+        success: false,
+        errorCode: 'INVALID_INPUT',
+        message: 'Thiếu mã tin nhắn cần xóa.',
+      };
+    }
+    try {
+      await this.adapter.deleteGlobalMessage(cleanId);
+      SystemAuditLogger.getInstance().recordEvent({
+        severity: 'INFO',
+        category: 'ADMIN_MOD_ACTION',
+        eventType: 'ADMIN_DELETE_GLOBAL_CHAT_MSG',
+        message: `ADMIN đã xóa 1 tin nhắn chat chung (${cleanId}).`,
+        uid: actor?.uid ?? null,
+        userEmail: actor?.email ?? null,
+        source: 'SocialManager.adminDeleteGlobalMessage',
+        outcome: 'SUCCESS',
+        metadata: { messageId: cleanId },
+      });
+      return {
+        success: true,
+        message: 'Đã xóa tin nhắn chat chung.',
+      };
+    } catch (err: any) {
+      if (isFirestorePermissionError(err)) {
+        return {
+          success: false,
+          errorCode: 'PERMISSION_DENIED',
+          message: 'Không đủ quyền Firestore để xóa tin nhắn chat chung.',
+        };
+      }
+      return {
+        success: false,
+        errorCode: 'NETWORK_ERROR',
+        message: err?.message || 'Không thể xóa tin nhắn lúc này. Vui lòng thử lại.',
+      };
+    }
+  }
+
+  public async adminDeleteAllGlobalMessages(
+    actor: AuthIdentityLike | null
+  ): Promise<SocialActionResult<{ deletedCount: number }>> {
+    if (resolveUserRole(actor) !== 'ADMIN') {
+      SystemAuditLogger.getInstance().recordEvent({
+        severity: 'WARNING',
+        category: 'SECURITY_PERMISSION_DENIED',
+        eventType: 'ADMIN_DELETE_ALL_GLOBAL_CHAT_DENIED',
+        message: `Từ chối thao tác xóa toàn bộ chat chung từ tài khoản không phải ADMIN (vai trò: ${resolveUserRole(actor)}).`,
+        uid: actor?.uid ?? null,
+        userEmail: actor?.email ?? null,
+        source: 'SocialManager.adminDeleteAllGlobalMessages',
+        outcome: 'FAILURE',
+      });
+      return {
+        success: false,
+        errorCode: 'PERMISSION_DENIED',
+        message: 'Chỉ tài khoản ADMIN mới có quyền xóa toàn bộ tin nhắn chat chung.',
+      };
+    }
+    try {
+      const deletedCount = await this.adapter.deleteAllGlobalMessages();
+      SystemAuditLogger.getInstance().recordEvent({
+        severity: 'WARNING',
+        category: 'ADMIN_MOD_ACTION',
+        eventType: 'ADMIN_DELETE_ALL_GLOBAL_CHAT',
+        message: `ADMIN đã xóa toàn bộ tin nhắn chat chung (${deletedCount} tin nhắn).`,
+        uid: actor?.uid ?? null,
+        userEmail: actor?.email ?? null,
+        source: 'SocialManager.adminDeleteAllGlobalMessages',
+        outcome: 'SUCCESS',
+        metadata: { deletedCount },
+      });
+      return {
+        success: true,
+        data: { deletedCount },
+        message:
+          deletedCount > 0
+            ? `Đã xóa toàn bộ ${deletedCount} tin nhắn chat chung.`
+            : 'Kênh chat chung hiện không có tin nhắn nào.',
+      };
+    } catch (err: any) {
+      if (isFirestorePermissionError(err)) {
+        return {
+          success: false,
+          errorCode: 'PERMISSION_DENIED',
+          message: 'Không đủ quyền Firestore để xóa toàn bộ tin nhắn chat chung.',
+        };
+      }
+      return {
+        success: false,
+        errorCode: 'NETWORK_ERROR',
+        message: err?.message || 'Không thể xóa toàn bộ tin nhắn lúc này. Vui lòng thử lại.',
       };
     }
   }

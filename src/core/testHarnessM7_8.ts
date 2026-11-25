@@ -153,7 +153,7 @@ async function main(): Promise<void> {
     'VS_ONLINE',
     'Mã hóa/giải mã chế độ phòng VS_P1_P2 & VS_P1_AI_P2_AI trong giới hạn <= 80 ký tự (giữ nguyên schema Firestore Production)',
     () => {
-      const code = 'BT4021';
+      const code = '4021';
       const e1 = encodeHostDisplayNameWithLock('Nguyen Van Commander Very Long Display Name For Safety Check', code, true, 'pass123', 'VS_P1_P2');
       assert(e1.length <= 80, `Encoded hostDisplayName exceeds 80 chars: ${e1.length}`);
       const d1 = decodeHostDisplayNameAndLock(e1);
@@ -161,7 +161,7 @@ async function main(): Promise<void> {
       assert(d1.hasPassword === true, 'Expected hasPassword=true');
       assert(!d1.cleanDisplayName.includes('[VS1]') && !d1.cleanDisplayName.includes('[LOCK:'), 'Clean name leaked tags');
 
-      const e2 = encodeHostDisplayNameWithLock('CommanderTwo', 'BT9901', false, undefined, 'VS_P1_AI_P2_AI');
+      const e2 = encodeHostDisplayNameWithLock('CommanderTwo', '9901', false, undefined, 'VS_P1_AI_P2_AI');
       const d2 = decodeHostDisplayNameAndLock(e2);
       assert(d2.roomMode === 'VS_P1_AI_P2_AI', `Expected VS_P1_AI_P2_AI, got ${d2.roomMode}`);
       assert(d2.hasPassword === false, 'Expected hasPassword=false');
@@ -176,38 +176,38 @@ async function main(): Promise<void> {
     'Cách ly phòng nghiêm ngặt giữa COOP_ONLINE, VS_P1_P2 và VS_P1_AI_P2_AI (chặn join chéo chế độ, chặn người thứ 3, chặn trùng Host)',
     () => {
       const now = 1_700_000_000_000;
-      const vs1Room = makeRoomDoc('BT1122', 'VS_P1_P2', alice.uid!, now, 'secret99');
-      const vs2Room = makeRoomDoc('BT3344', 'VS_P1_AI_P2_AI', alice.uid!, now);
+      const vs1Room = makeRoomDoc('1122', 'VS_P1_P2', alice.uid!, now, 'secret99');
+      const vs2Room = makeRoomDoc('3344', 'VS_P1_AI_P2_AI', alice.uid!, now);
 
       // Join VS_P1_P2 with COOP_ONLINE expectation -> WRONG_ROOM_MODE
-      const wrongMode1 = evaluateJoinRoomCandidate(vs1Room, 'BT1122', { uid: bob.uid! }, now, true, {
+      const wrongMode1 = evaluateJoinRoomCandidate(vs1Room, '1122', { uid: bob.uid! }, now, true, {
         expectedRoomMode: 'COOP_ONLINE',
         password: 'secret99',
       });
       assert(!wrongMode1.success && wrongMode1.errorCode === 'WRONG_ROOM_MODE', `Expected WRONG_ROOM_MODE, got ${wrongMode1.errorCode}`);
 
       // Join VS_P1_AI_P2_AI with VS_P1_P2 expectation -> WRONG_ROOM_MODE
-      const wrongMode2 = evaluateJoinRoomCandidate(vs2Room, 'BT3344', { uid: bob.uid! }, now, true, {
+      const wrongMode2 = evaluateJoinRoomCandidate(vs2Room, '3344', { uid: bob.uid! }, now, true, {
         expectedRoomMode: 'VS_P1_P2',
       });
       assert(!wrongMode2.success && wrongMode2.errorCode === 'WRONG_ROOM_MODE', `Expected WRONG_ROOM_MODE, got ${wrongMode2.errorCode}`);
 
       // Wrong password rejected
-      const wrongPass = evaluateJoinRoomCandidate(vs1Room, 'BT1122', { uid: bob.uid! }, now, true, {
+      const wrongPass = evaluateJoinRoomCandidate(vs1Room, '1122', { uid: bob.uid! }, now, true, {
         expectedRoomMode: 'VS_P1_P2',
         password: 'wrong',
       });
       assert(!wrongPass.success && wrongPass.errorCode === 'WRONG_PASSWORD', `Expected WRONG_PASSWORD, got ${wrongPass.errorCode}`);
 
       // Same user as host rejected
-      const sameUser = evaluateJoinRoomCandidate(vs1Room, 'BT1122', { uid: alice.uid! }, now, true, {
+      const sameUser = evaluateJoinRoomCandidate(vs1Room, '1122', { uid: alice.uid! }, now, true, {
         expectedRoomMode: 'VS_P1_P2',
         password: 'secret99',
       });
       assert(!sameUser.success && sameUser.errorCode === 'SAME_USER_AS_HOST', `Expected SAME_USER_AS_HOST, got ${sameUser.errorCode}`);
 
       // Valid P2 join passes
-      const okJoin = evaluateJoinRoomCandidate(vs1Room, 'BT1122', { uid: bob.uid! }, now, true, {
+      const okJoin = evaluateJoinRoomCandidate(vs1Room, '1122', { uid: bob.uid! }, now, true, {
         expectedRoomMode: 'VS_P1_P2',
         password: 'secret99',
       });
@@ -215,7 +215,7 @@ async function main(): Promise<void> {
 
       // Third player rejected when room already has guestUid
       const fullRoom: CoopRoomDocument = { ...vs1Room, guestUid: bob.uid!, guestDisplayName: 'Bob' };
-      const thirdPlayer = evaluateJoinRoomCandidate(fullRoom, 'BT1122', { uid: charlie.uid! }, now, true, {
+      const thirdPlayer = evaluateJoinRoomCandidate(fullRoom, '1122', { uid: charlie.uid! }, now, true, {
         expectedRoomMode: 'VS_P1_P2',
         password: 'secret99',
       });
@@ -492,9 +492,9 @@ async function main(): Promise<void> {
       assert(reqsB.sent.length === 0 && reqsB.received.length === 0, 'Pending requests left over for Bob');
 
       // Room invite allowed for confirmed friends, denied for non-friends
-      const invOk = await mgr.sendRoomInviteToFriend(alice, bob.uid!, 'BT5566', 'VS_P1_P2', false, now + 300);
+      const invOk = await mgr.sendRoomInviteToFriend(alice, bob.uid!, '5566', 'VS_P1_P2', false, now + 300);
       assert(invOk.success, 'Room invite to confirmed friend failed');
-      const invDenied = await mgr.sendRoomInviteToFriend(alice, charlie.uid!, 'BT5566', 'VS_P1_P2', false, now + 300);
+      const invDenied = await mgr.sendRoomInviteToFriend(alice, charlie.uid!, '5566', 'VS_P1_P2', false, now + 300);
       assert(!invDenied.success && invDenied.errorCode === 'PERMISSION_DENIED', 'Room invite to non-friend was not denied');
     }
   );

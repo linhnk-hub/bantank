@@ -21,6 +21,7 @@ import {
   ShieldAlert,
   ShieldCheck,
   Star,
+  Trash2,
   UserCheck,
   UserMinus,
   UserPlus,
@@ -39,7 +40,7 @@ import {
   type PrivateChatMessage,
   type PublicPlayerProfile,
 } from '../core/socialManager.ts';
-import type { AuthIdentityLike } from '../core/authManager.ts';
+import { resolveUserRole, type AuthIdentityLike } from '../core/authManager.ts';
 import type { CoopRoomDocument } from '../core/coopOnlineManager.ts';
 import { localizeMilitaryRankTitle } from '../core/playerLevelSystem.ts';
 import { useLanguage } from '../core/i18n.ts';
@@ -134,7 +135,11 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
   const [lastFailedGlobalText, setLastFailedGlobalText] = useState<string | null>(null);
   const [isSendingGlobal, setIsSendingGlobal] = useState(false);
   const [loadingOlderGlobal, setLoadingOlderGlobal] = useState(false);
+  const [deletingGlobalMsgId, setDeletingGlobalMsgId] = useState<string | null>(null);
+  const [isDeletingAllGlobal, setIsDeletingAllGlobal] = useState(false);
+  const [confirmDeleteAllGlobal, setConfirmDeleteAllGlobal] = useState(false);
   const globalChatEndRef = useRef<HTMLDivElement | null>(null);
+  const isAdmin = resolveUserRole(currentUser) === 'ADMIN';
 
   // Friends modal state
   const [friendsTab, setFriendsTab] = useState<'LIST' | 'RECEIVED' | 'SENT' | 'DELETED'>('LIST');
@@ -575,11 +580,12 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
   }, [isDrawerOpen, drawerTab, currentUser?.uid]);
 
   const handleClearSearch = useCallback(() => {
-    hasClearedSearchRef.current = false;
+    hasClearedSearchRef.current = true;
     setSearchQuery('');
+    setSearchResults([]);
     setSearchNotice(null);
-    void loadChatHistoryPeers();
-  }, [loadChatHistoryPeers]);
+    setIsShowingChatHistory(false);
+  }, []);
 
   const handleAcceptFriendRequest = useCallback(
     async (requestId: string) => {
@@ -661,6 +667,48 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
       }
     } finally {
       setLoadingOlderGlobal(false);
+    }
+  };
+
+  const handleAdminDeleteGlobalMessage = async (msgId: string) => {
+    if (!isAdmin || deletingGlobalMsgId || isDeletingAllGlobal) return;
+    setDeletingGlobalMsgId(msgId);
+    setGlobalError(null);
+    try {
+      const res = await social.adminDeleteGlobalMessage(currentUser, msgId);
+      if (!res.success) {
+        setGlobalError(
+          res.message || t('Không thể xóa tin nhắn chat chung.', 'Failed to delete message.')
+        );
+        return;
+      }
+      setGlobalMessages((prev) => prev.filter((m) => m.id !== msgId));
+      showTempFeedback(t('Đã xóa tin nhắn chat chung.', 'Global chat message deleted.'));
+    } finally {
+      setDeletingGlobalMsgId(null);
+    }
+  };
+
+  const handleAdminDeleteAllGlobalMessages = async () => {
+    if (!isAdmin || isDeletingAllGlobal) return;
+    setIsDeletingAllGlobal(true);
+    setGlobalError(null);
+    try {
+      const res = await social.adminDeleteAllGlobalMessages(currentUser);
+      if (!res.success) {
+        setGlobalError(
+          res.message ||
+            t('Không thể xóa toàn bộ tin nhắn chat chung.', 'Failed to delete all messages.')
+        );
+        return;
+      }
+      setGlobalMessages([]);
+      setConfirmDeleteAllGlobal(false);
+      showTempFeedback(
+        res.message || t('Đã xóa toàn bộ tin nhắn chat chung.', 'All global chat messages deleted.')
+      );
+    } finally {
+      setIsDeletingAllGlobal(false);
     }
   };
 
@@ -1148,23 +1196,73 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
             {/* TAB 2: GLOBAL CHAT */}
             {drawerTab === 'GLOBAL_CHAT' && (
               <div className="flex-1 flex flex-col overflow-hidden p-3 gap-2">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
                   <span className="text-[11px] text-neutral-400">
                     {t('Kênh chat chung thời gian thực', 'Real-time global chat channel')}
                   </span>
-                  {globalMessages.length >= 20 && (
-                    <button
-                      type="button"
-                      disabled={loadingOlderGlobal}
-                      onClick={() => void handleLoadOlderGlobal()}
-                      className="text-[11px] text-[#00F0FF] hover:underline font-bold cursor-pointer disabled:opacity-50"
-                    >
-                      {loadingOlderGlobal
-                        ? t('Đang tải...', 'Loading...')
-                        : t('Tải tin cũ hơn', 'Load older')}
-                    </button>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {globalMessages.length >= 20 && (
+                      <button
+                        type="button"
+                        disabled={loadingOlderGlobal}
+                        onClick={() => void handleLoadOlderGlobal()}
+                        className="text-[11px] text-[#00F0FF] hover:underline font-bold cursor-pointer disabled:opacity-50"
+                      >
+                        {loadingOlderGlobal
+                          ? t('Đang tải...', 'Loading...')
+                          : t('Tải tin cũ hơn', 'Load older')}
+                      </button>
+                    )}
+                    {isAdmin && globalMessages.length > 0 && !confirmDeleteAllGlobal && (
+                      <button
+                        type="button"
+                        data-testid="global-chat-delete-all-btn"
+                        disabled={isDeletingAllGlobal}
+                        onClick={() => setConfirmDeleteAllGlobal(true)}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-950/70 hover:bg-red-900/80 border border-red-500/45 text-red-300 font-btn font-bold text-[10px] cursor-pointer disabled:opacity-50"
+                        title={t('Xóa toàn bộ tin nhắn chat chung', 'Delete all global chat messages')}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                        <span>{t('Xóa tất cả', 'Delete All')}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
+
+                {isAdmin && confirmDeleteAllGlobal && (
+                  <div
+                    data-testid="global-chat-delete-all-confirm"
+                    className="px-2.5 py-2 rounded-lg bg-red-950/80 border border-red-500/55 text-red-100 text-[11px] flex items-center justify-between gap-2"
+                  >
+                    <span className="font-semibold">
+                      {t(
+                        'Xác nhận xóa toàn bộ tin nhắn chat chung?',
+                        'Confirm deleting all global chat messages?'
+                      )}
+                    </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        data-testid="global-chat-delete-all-confirm-yes"
+                        disabled={isDeletingAllGlobal}
+                        onClick={() => void handleAdminDeleteAllGlobalMessages()}
+                        className="px-2.5 py-1 rounded bg-red-600 hover:bg-red-500 text-white font-btn font-bold text-[10px] cursor-pointer disabled:opacity-50"
+                      >
+                        {isDeletingAllGlobal
+                          ? t('Đang xóa...', 'Deleting...')
+                          : t('Xác nhận', 'Confirm')}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={isDeletingAllGlobal}
+                        onClick={() => setConfirmDeleteAllGlobal(false)}
+                        className="px-2 py-1 rounded bg-neutral-800 hover:bg-neutral-700 text-neutral-200 font-btn font-bold text-[10px] cursor-pointer disabled:opacity-50"
+                      >
+                        {t('Hủy', 'Cancel')}
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex-1 overflow-y-auto space-y-2.5 pr-1 bg-[#050510]/70 rounded-lg p-2.5 border border-neutral-800">
                   {globalMessages.length === 0 ? (
@@ -1227,34 +1325,50 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                               </div>
                             </div>
 
-                            {!isMe && (
+                            {(!isMe || isAdmin) && (
                               <div className="flex items-center gap-1 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => openPrivateChatWithPeer(senderProfile)}
-                                  className="w-6 h-6 rounded bg-neutral-900 hover:bg-[#00F0FF]/20 text-[#00F0FF] flex items-center justify-center cursor-pointer"
-                                  title={t('Chat riêng', 'Private Chat')}
-                                >
-                                  <MessageSquare className="w-3 h-3" />
-                                </button>
-                                {canShowAddFriend(msg.senderUid) && (
+                                {!isMe && (
+                                  <>
+                                    <button
+                                      type="button"
+                                      onClick={() => openPrivateChatWithPeer(senderProfile)}
+                                      className="w-6 h-6 rounded bg-neutral-900 hover:bg-[#00F0FF]/20 text-[#00F0FF] flex items-center justify-center cursor-pointer"
+                                      title={t('Chat riêng', 'Private Chat')}
+                                    >
+                                      <MessageSquare className="w-3 h-3" />
+                                    </button>
+                                    {canShowAddFriend(msg.senderUid) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleSendFriendRequest(senderProfile)}
+                                        className="w-6 h-6 rounded bg-neutral-900 hover:bg-emerald-500/20 text-emerald-400 flex items-center justify-center cursor-pointer"
+                                        title={t('Kết bạn', 'Add Friend')}
+                                      >
+                                        <UserPlus className="w-3 h-3" />
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() => setProfileModalUser(senderProfile)}
+                                      className="w-6 h-6 rounded bg-neutral-900 hover:bg-amber-500/20 text-amber-300 flex items-center justify-center cursor-pointer"
+                                      title={t('Thông tin', 'Info')}
+                                    >
+                                      <Info className="w-3 h-3" />
+                                    </button>
+                                  </>
+                                )}
+                                {isAdmin && (
                                   <button
                                     type="button"
-                                    onClick={() => void handleSendFriendRequest(senderProfile)}
-                                    className="w-6 h-6 rounded bg-neutral-900 hover:bg-emerald-500/20 text-emerald-400 flex items-center justify-center cursor-pointer"
-                                    title={t('Kết bạn', 'Add Friend')}
+                                    data-testid={`global-chat-delete-msg-${msg.id}`}
+                                    disabled={deletingGlobalMsgId === msg.id || isDeletingAllGlobal}
+                                    onClick={() => void handleAdminDeleteGlobalMessage(msg.id)}
+                                    className="w-6 h-6 rounded bg-red-950/70 hover:bg-red-500/30 border border-red-500/35 text-red-400 flex items-center justify-center cursor-pointer disabled:opacity-40"
+                                    title={t('Xóa tin nhắn này', 'Delete this message')}
                                   >
-                                    <UserPlus className="w-3 h-3" />
+                                    <Trash2 className="w-3 h-3" />
                                   </button>
                                 )}
-                                <button
-                                  type="button"
-                                  onClick={() => setProfileModalUser(senderProfile)}
-                                  className="w-6 h-6 rounded bg-neutral-900 hover:bg-amber-500/20 text-amber-300 flex items-center justify-center cursor-pointer"
-                                  title={t('Thông tin', 'Info')}
-                                >
-                                  <Info className="w-3 h-3" />
-                                </button>
                               </div>
                             )}
                           </div>
@@ -1355,9 +1469,9 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                     type="button"
                     data-testid="social-search-clear-btn"
                     onClick={handleClearSearch}
-                    disabled={!searchQuery && !searchNotice}
+                    disabled={!searchQuery && searchResults.length === 0 && !searchNotice}
                     className="px-2.5 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 text-neutral-200 font-btn font-bold text-xs cursor-pointer shrink-0 disabled:opacity-40"
-                    title={t('Xóa từ khóa tìm kiếm', 'Clear search keyword')}
+                    title={t('Xóa từ khóa và kết quả tìm kiếm', 'Clear search keyword and results')}
                   >
                     {t('Xóa', 'Clear')}
                   </button>
@@ -1392,7 +1506,12 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                             'Chưa có tài khoản nào trong lịch sử nhắn tin.',
                             'No accounts in your messaging history yet.'
                           )
-                        : t('Không tìm thấy tài khoản phù hợp.', 'No matching accounts found.')}
+                        : hasClearedSearchRef.current
+                          ? t(
+                              'Nhập tên hiển thị rồi bấm "Tìm" để tìm tài khoản.',
+                              'Enter a display name and click "Find" to search accounts.'
+                            )
+                          : t('Không tìm thấy tài khoản phù hợp.', 'No matching accounts found.')}
                     </p>
                   ) : (
                     searchResults.map((acc) => {

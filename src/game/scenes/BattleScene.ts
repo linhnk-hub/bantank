@@ -16,6 +16,7 @@ import { generateTileTextures } from '../textureGenerator.ts';
 import { SoundManager } from '../../core/audio.ts';
 import { MusicManager } from '../../core/musicManager.ts';
 import { CoopOnlineManager } from '../../core/coopOnlineManager.ts';
+import { EAGLE_SHIELD_SIDE_WALL_COORDS } from '../../core/supportItemSystem.ts';
 
 interface ActiveVisualEffect {
   id: string;
@@ -1256,6 +1257,20 @@ export class BattleScene extends Phaser.Scene {
 
     // Sync only modified brick tiles (fast Map lookup avoids per-frame string splitting)
     const subTiles = terrain.brickSubTiles;
+    for (const [key] of Array.from(this.renderedBrickMasks.entries())) {
+      if (!(key in subTiles)) {
+        const sepIdx = key.indexOf('_');
+        const r = parseInt(key.slice(0, sepIdx), 10);
+        const c = parseInt(key.slice(sepIdx + 1), 10);
+        const spriteKey = `brick_${r}_${c}`;
+        const existing = this.terrainSprites.get(spriteKey);
+        if (existing) {
+          existing.destroy();
+          this.terrainSprites.delete(spriteKey);
+        }
+        this.renderedBrickMasks.delete(key);
+      }
+    }
     for (const key in subTiles) {
       const mask = subTiles[key];
       const prevMask = this.renderedBrickMasks.get(key);
@@ -1278,8 +1293,22 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
-    // Sync only modified steel tiles (damaged by Power tank bullets)
+    // Sync only modified steel tiles (damaged by Power tank bullets or reverted when Eagle Shield expires)
     const steelTiles = terrain.steelSubTiles;
+    for (const [key] of Array.from(this.renderedSteelMasks.entries())) {
+      if (!steelTiles || !(key in steelTiles)) {
+        const sepIdx = key.indexOf('_');
+        const r = parseInt(key.slice(0, sepIdx), 10);
+        const c = parseInt(key.slice(sepIdx + 1), 10);
+        const spriteKey = `steel_${r}_${c}`;
+        const existing = this.terrainSprites.get(spriteKey);
+        if (existing) {
+          existing.destroy();
+          this.terrainSprites.delete(spriteKey);
+        }
+        this.renderedSteelMasks.delete(key);
+      }
+    }
     if (steelTiles) {
       for (const key in steelTiles) {
         const mask = steelTiles[key];
@@ -1304,10 +1333,11 @@ export class BattleScene extends Phaser.Scene {
       }
     }
 
-    // Sync Eagle Shield dynamic tile type swaps at (12,5) and (12,7) between BRICK and STEEL
-    for (const col of [5, 7]) {
-      const r = 12;
+    // Sync Eagle Shield dynamic tile type swaps across ALL 5 base wall cells:
+    // (12,5), (11,5), (11,6), (11,7), (12,7) between BRICK, STEEL, and EMPTY
+    for (const { row: r, col } of EAGLE_SHIELD_SIDE_WALL_COORDS) {
       const tileType = terrain.currentMap[r]?.[col];
+      const cellKey = `${r}_${col}`;
       const brickKey = `brick_${r}_${col}`;
       const steelKey = `steel_${r}_${col}`;
       if (tileType === TILE_TYPES.STEEL) {
@@ -1315,37 +1345,37 @@ export class BattleScene extends Phaser.Scene {
         if (existingBrick) {
           existingBrick.destroy();
           this.terrainSprites.delete(brickKey);
-          this.renderedBrickMasks.delete(`${r}_${col}`);
+          this.renderedBrickMasks.delete(cellKey);
         }
-        if (!this.terrainSprites.has(steelKey)) {
-          const mask = terrain.steelSubTiles?.[`${r}_${col}`] ?? SUB_TILE_MASKS.ALL;
+        const mask = terrain.steelSubTiles?.[cellKey] ?? SUB_TILE_MASKS.ALL;
+        if (!this.terrainSprites.has(steelKey) && mask > 0) {
           this.renderSteelTile(r, col, mask);
-          this.renderedSteelMasks.set(`${r}_${col}`, mask);
+          this.renderedSteelMasks.set(cellKey, mask);
         }
       } else if (tileType === TILE_TYPES.BRICK) {
         const existingSteel = this.terrainSprites.get(steelKey);
         if (existingSteel) {
           existingSteel.destroy();
           this.terrainSprites.delete(steelKey);
-          this.renderedSteelMasks.delete(`${r}_${col}`);
+          this.renderedSteelMasks.delete(cellKey);
         }
-        const mask = terrain.brickSubTiles[`${r}_${col}`] ?? SUB_TILE_MASKS.ALL;
+        const mask = terrain.brickSubTiles[cellKey] ?? SUB_TILE_MASKS.ALL;
         if (!this.terrainSprites.has(brickKey) && mask > 0) {
           this.renderBrickTile(r, col, mask);
-          this.renderedBrickMasks.set(`${r}_${col}`, mask);
+          this.renderedBrickMasks.set(cellKey, mask);
         }
       } else if (tileType === TILE_TYPES.EMPTY) {
         const existingSteel = this.terrainSprites.get(steelKey);
         if (existingSteel) {
           existingSteel.destroy();
           this.terrainSprites.delete(steelKey);
-          this.renderedSteelMasks.delete(`${r}_${col}`);
+          this.renderedSteelMasks.delete(cellKey);
         }
         const existingBrick = this.terrainSprites.get(brickKey);
         if (existingBrick) {
           existingBrick.destroy();
           this.terrainSprites.delete(brickKey);
-          this.renderedBrickMasks.delete(`${r}_${col}`);
+          this.renderedBrickMasks.delete(cellKey);
         }
       }
     }

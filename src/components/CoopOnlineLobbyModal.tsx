@@ -764,23 +764,14 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                   </label>
                   <input
                     type="text"
-                    maxLength={6}
+                    inputMode="numeric"
+                    maxLength={4}
                     value={joinCodeInput}
                     onChange={(e) => {
-                      const raw = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-                      if (raw.length === 0) {
-                        setJoinCodeInput('');
-                        return;
-                      }
-                      if (raw === 'B') {
-                        setJoinCodeInput('B');
-                        return;
-                      }
-                      const body = raw.startsWith('BT') ? raw.slice(2) : raw.replace(/^B/, '');
-                      const digits = body.replace(/[^0-9]/g, '').slice(0, 4);
-                      setJoinCodeInput(`BT${digits}`);
+                      const digits = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+                      setJoinCodeInput(digits);
                     }}
-                    placeholder={t('VD: BT4829', 'e.g. BT4829')}
+                    placeholder={t('VD: 4829', 'e.g. 4829')}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-neutral-950 border border-neutral-700 focus:border-sky-400 focus:outline-none text-center font-mono text-sm font-black tracking-[0.25em] text-sky-300 uppercase placeholder:tracking-normal placeholder:font-sans placeholder:text-xs placeholder:text-neutral-600"
                   />
                 </div>
@@ -816,7 +807,7 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
 
               <button
                 type="submit"
-                disabled={isBusy || !/^BT[0-9]{4}$/.test(joinCodeInput.trim())}
+                disabled={isBusy || !/^[0-9]{4}$/.test(joinCodeInput.trim())}
                 className="w-full py-3 px-4 rounded-xl bg-sky-500 hover:bg-sky-400 text-black font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg active:scale-[0.99] disabled:opacity-50 cursor-pointer"
               >
                 {isBusy ? (
@@ -938,12 +929,29 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                   ? t('CÓ MẬT KHẨU', 'PASSWORD PROTECTED')
                   : t('PHÒNG CÔNG KHAI', 'PUBLIC ROOM')}
               </span>
+
+              {/* Mobile Room Code Badge — matches height & style of "P1 VS P2" and "PHÒNG CÔNG KHAI" */}
+              <button
+                type="button"
+                data-testid="mobile-room-code-badge"
+                onClick={handleCopyCode}
+                title={t('Copy mã phòng', 'Copy room code')}
+                className="sm:hidden text-[10px] font-black uppercase px-2 py-0.5 rounded border bg-sky-950/80 text-sky-300 border-sky-500/45 inline-flex items-center gap-1 cursor-pointer active:scale-95 transition-transform"
+              >
+                <span>{t('MÃ PHÒNG:', 'CODE:')}</span>
+                <span className="font-mono tracking-wider">{room.roomCode}</span>
+                {copied ? (
+                  <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                ) : (
+                  <Copy className="w-3 h-3 text-sky-300 shrink-0" />
+                )}
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Room Code Box */}
-        <div className="flex items-center gap-2 bg-neutral-950 border border-sky-500/40 rounded-xl px-3 py-1.5">
+        {/* Desktop Room Code Box */}
+        <div className="hidden sm:flex items-center gap-2 bg-neutral-950 border border-sky-500/40 rounded-xl px-3 py-1.5">
           <div>
             <div className="text-[9px] uppercase tracking-wider text-neutral-500 font-bold">
               {t('Mã phòng', 'Room Code')}

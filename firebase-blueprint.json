@@ -120,7 +120,7 @@
       "description": "Metadata tối thiểu của phòng chơi Co-op Online (không chứa WebRTC SDP/ICE, ảnh đại diện hay kết quả riêng).",
       "type": "object",
       "properties": {
-        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6, "pattern": "^BT[A-Z0-9]{4}$" },
+        "roomCode": { "type": "string", "minLength": 4, "maxLength": 4, "pattern": "^[0-9]{4}$" },
         "status": { "type": "string", "enum": ["WAITING", "PLAYING", "FINISHED", "ABANDONED", "EXPIRED"] },
         "difficulty": { "type": "string", "enum": ["DEFAULT", "EXTREME"] },
         "hostUid": { "type": "string" },
@@ -155,7 +155,7 @@
       "description": "Tài liệu phụ riêng tư chỉ cho phép Host và Guest đã tham gia phòng đọc/ghi WebRTC SDP/ICE và kết quả trận đấu.",
       "type": "object",
       "properties": {
-        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6, "pattern": "^BT[A-Z0-9]{4}$" },
+        "roomCode": { "type": "string", "minLength": 4, "maxLength": 4, "pattern": "^[0-9]{4}$" },
         "hostUid": { "type": "string" },
         "guestUid": { "type": "string" },
         "rtcOffer": { "type": "string", "maxLength": 16384 },
@@ -623,7 +623,7 @@
         "fromUid": { "type": "string", "minLength": 1, "maxLength": 128 },
         "fromDisplayName": { "type": "string", "minLength": 1, "maxLength": 60 },
         "toUid": { "type": "string", "minLength": 1, "maxLength": 128 },
-        "roomCode": { "type": "string", "minLength": 6, "maxLength": 6, "pattern": "^BT[0-9]{4}$" },
+        "roomCode": { "type": "string", "minLength": 4, "maxLength": 4, "pattern": "^[0-9]{4}$" },
         "roomMode": { "type": "string", "enum": ["COOP_ONLINE", "VS_P1_P2", "VS_P1_AI_P2_AI"] },
         "hasPassword": { "type": "boolean" },
         "createdAtMs": { "type": "number" },

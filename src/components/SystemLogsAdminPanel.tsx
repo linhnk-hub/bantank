@@ -878,7 +878,7 @@ export const SystemLogsAdminPanel: React.FC<SystemLogsAdminPanelProps> = ({ user
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Tìm theo UID, tên người chơi, email, mã phòng BTxxxx, thông điệp..."
+                  placeholder="Tìm theo UID, tên người chơi, email, mã phòng, thông điệp..."
                   className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-neutral-950 border border-neutral-700 text-white text-xs"
                 />
               </div>
