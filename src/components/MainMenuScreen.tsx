@@ -361,7 +361,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             className={`relative neo-bevel-card rounded-xl lg:rounded-2xl border transition-all duration-150 overflow-hidden flex flex-col ${
               expandedGroup === 'SOLO'
                 ? 'border-[#FFB800] neo-bevel-amber'
-                : 'border-[#FFB800]/65 hover:border-[#FFB800] hover:-translate-y-0.5'
+                : 'border-[#FFB800]/60 hover:border-[#FFB800] hover:-translate-y-0.5'
             }`}
           >
             <button
@@ -372,7 +372,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               onClick={() =>
                 setExpandedGroup((prev) => (prev === 'SOLO' ? null : 'SOLO'))
               }
-              className="group relative w-full flex-1 text-left px-4 py-2.5 sm:px-4 sm:py-3 lg:px-6 lg:py-4 flex flex-col justify-between min-h-[98px] md:min-h-[112px] lg:min-h-[146px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
+              className="group relative w-full flex-1 text-left px-4 py-2.5 sm:px-4 sm:py-3 lg:px-6 lg:py-4 flex flex-col justify-end min-h-[98px] md:min-h-[112px] lg:min-h-[146px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
               {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
@@ -387,20 +387,26 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 <div className="absolute inset-x-0 top-[36%] h-2.5 tv-card-glitch-bar" />
               </div>
 
-              <div className="relative z-10 flex items-center justify-end gap-2 mb-1.5">
+              <div className="relative z-10 mt-auto flex items-center gap-2.5 lg:gap-3">
+                <h2
+                  className={`font-btn text-xl sm:text-2xl lg:text-[2rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
+                    expandedGroup === 'SOLO'
+                      ? 'text-[#FFB800]'
+                      : 'text-[#EAF4FF] group-hover:text-[#FFB800]'
+                  }`}
+                >
+                  SOLO
+                </h2>
                 <span
-                  className={`w-7 h-7 lg:w-9 lg:h-9 rounded-lg bg-[#050510]/75 border border-[#FFB800]/55 flex items-center justify-center text-[#FFB800] transition-transform duration-200 ${
-                    expandedGroup === 'SOLO' ? 'rotate-180 bg-[#FFB800] text-[#050510]' : ''
+                  data-testid="home-mode-solo-arrow"
+                  className={`w-7 h-7 lg:w-9 lg:h-9 rounded-lg border flex items-center justify-center text-[#FFB800] transition-all duration-200 shrink-0 ${
+                    expandedGroup === 'SOLO'
+                      ? 'rotate-180 bg-[#FFB800]/25 border-[#FFB800] shadow-[0_0_16px_rgba(255,184,0,0.65)]'
+                      : 'bg-[#050510]/75 border-[#FFB800]/60 shadow-[0_0_10px_rgba(255,184,0,0.25)] group-hover:bg-[#FFB800]/20 group-hover:border-[#FFB800] group-hover:shadow-[0_0_14px_rgba(255,184,0,0.5)]'
                   }`}
                 >
                   <ChevronDown className="w-4 h-4 lg:w-5 lg:h-5" />
                 </span>
-              </div>
-
-              <div className="relative z-10 mt-auto">
-                <h2 className="font-btn text-xl sm:text-2xl lg:text-[2rem] font-black text-[#EAF4FF] group-hover:text-[#FFB800] transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight">
-                  SOLO
-                </h2>
               </div>
             </button>
 
@@ -450,7 +456,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             className={`relative neo-bevel-card rounded-xl lg:rounded-2xl border transition-all duration-150 overflow-hidden flex flex-col ${
               expandedGroup === 'COOP'
                 ? 'border-[#00F0FF] neo-bevel-cyan'
-                : 'border-[#00F0FF]/55 hover:border-[#00F0FF] hover:-translate-y-0.5'
+                : 'border-[#00F0FF]/60 hover:border-[#00F0FF] hover:-translate-y-0.5'
             }`}
           >
             <button
@@ -461,7 +467,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               onClick={() =>
                 setExpandedGroup((prev) => (prev === 'COOP' ? null : 'COOP'))
               }
-              className="group relative w-full flex-1 text-left px-4 py-2.5 sm:px-4 sm:py-3 lg:px-6 lg:py-4 flex flex-col justify-between min-h-[98px] md:min-h-[112px] lg:min-h-[146px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
+              className="group relative w-full flex-1 text-left px-4 py-2.5 sm:px-4 sm:py-3 lg:px-6 lg:py-4 flex flex-col justify-end min-h-[98px] md:min-h-[112px] lg:min-h-[146px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
               {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
@@ -482,20 +488,26 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 />
               </div>
 
-              <div className="relative z-10 flex items-center justify-end gap-2 mb-1.5">
+              <div className="relative z-10 mt-auto flex items-center gap-2.5 lg:gap-3">
+                <h2
+                  className={`font-btn text-xl sm:text-2xl lg:text-[2rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
+                    expandedGroup === 'COOP'
+                      ? 'text-[#00F0FF]'
+                      : 'text-[#EAF4FF] group-hover:text-[#00F0FF]'
+                  }`}
+                >
+                  CO-OP
+                </h2>
                 <span
-                  className={`w-7 h-7 lg:w-9 lg:h-9 rounded-lg bg-[#050510]/75 border border-[#00F0FF]/55 flex items-center justify-center text-[#00F0FF] transition-transform duration-200 ${
-                    expandedGroup === 'COOP' ? 'rotate-180 bg-[#00F0FF] text-[#050510]' : ''
+                  data-testid="home-mode-coop-arrow"
+                  className={`w-7 h-7 lg:w-9 lg:h-9 rounded-lg border flex items-center justify-center text-[#00F0FF] transition-all duration-200 shrink-0 ${
+                    expandedGroup === 'COOP'
+                      ? 'rotate-180 bg-[#00F0FF]/25 border-[#00F0FF] shadow-[0_0_16px_rgba(0,240,255,0.65)]'
+                      : 'bg-[#050510]/75 border-[#00F0FF]/60 shadow-[0_0_10px_rgba(0,240,255,0.25)] group-hover:bg-[#00F0FF]/20 group-hover:border-[#00F0FF] group-hover:shadow-[0_0_14px_rgba(0,240,255,0.5)]'
                   }`}
                 >
                   <ChevronDown className="w-4 h-4 lg:w-5 lg:h-5" />
                 </span>
-              </div>
-
-              <div className="relative z-10 mt-auto">
-                <h2 className="font-btn text-xl sm:text-2xl lg:text-[2rem] font-black text-[#EAF4FF] group-hover:text-[#00F0FF] transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight">
-                  CO-OP
-                </h2>
               </div>
             </button>
 
@@ -555,7 +567,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
             className={`relative neo-bevel-card rounded-xl lg:rounded-2xl border transition-all duration-150 overflow-hidden flex flex-col ${
               expandedGroup === 'VS'
                 ? 'border-[#FF0055] neo-bevel-red'
-                : 'border-[#FF0055]/55 hover:border-[#FF0055] hover:-translate-y-0.5'
+                : 'border-[#FF0055]/60 hover:border-[#FF0055] hover:-translate-y-0.5'
             }`}
           >
             <button
@@ -566,7 +578,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               onClick={() =>
                 setExpandedGroup((prev) => (prev === 'VS' ? null : 'VS'))
               }
-              className="group relative w-full flex-1 text-left px-4 py-2.5 sm:px-4 sm:py-3 lg:px-6 lg:py-4 flex flex-col justify-between min-h-[98px] md:min-h-[112px] lg:min-h-[146px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
+              className="group relative w-full flex-1 text-left px-4 py-2.5 sm:px-4 sm:py-3 lg:px-6 lg:py-4 flex flex-col justify-end min-h-[98px] md:min-h-[112px] lg:min-h-[146px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
             >
               {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
               <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
@@ -587,20 +599,26 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 />
               </div>
 
-              <div className="relative z-10 flex items-center justify-end gap-2 mb-1.5">
+              <div className="relative z-10 mt-auto flex items-center gap-2.5 lg:gap-3">
+                <h2
+                  className={`font-btn text-xl sm:text-2xl lg:text-[2rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
+                    expandedGroup === 'VS'
+                      ? 'text-[#FF0055]'
+                      : 'text-[#EAF4FF] group-hover:text-[#FF0055]'
+                  }`}
+                >
+                  VS
+                </h2>
                 <span
-                  className={`w-7 h-7 lg:w-9 lg:h-9 rounded-lg bg-[#050510]/75 border border-[#FF0055]/55 flex items-center justify-center text-[#FF0055] transition-transform duration-200 ${
-                    expandedGroup === 'VS' ? 'rotate-180 bg-[#FF0055] text-white' : ''
+                  data-testid="home-mode-vs-arrow"
+                  className={`w-7 h-7 lg:w-9 lg:h-9 rounded-lg border flex items-center justify-center text-[#FF0055] transition-all duration-200 shrink-0 ${
+                    expandedGroup === 'VS'
+                      ? 'rotate-180 bg-[#FF0055]/25 border-[#FF0055] shadow-[0_0_16px_rgba(255,0,85,0.65)]'
+                      : 'bg-[#050510]/75 border-[#FF0055]/60 shadow-[0_0_10px_rgba(255,0,85,0.25)] group-hover:bg-[#FF0055]/20 group-hover:border-[#FF0055] group-hover:shadow-[0_0_14px_rgba(255,0,85,0.5)]'
                   }`}
                 >
                   <ChevronDown className="w-4 h-4 lg:w-5 lg:h-5" />
                 </span>
-              </div>
-
-              <div className="relative z-10 mt-auto">
-                <h2 className="font-btn text-xl sm:text-2xl lg:text-[2rem] font-black text-[#EAF4FF] group-hover:text-[#FF0055] transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight">
-                  VS
-                </h2>
               </div>
             </button>
 

@@ -31,6 +31,27 @@ export interface ReleaseVersionEntry {
  */
 export const RELEASE_CHANGELOG: ReadonlyArray<ReleaseVersionEntry> = [
   {
+    id: 'rel-1-8-9',
+    version: 'v1.8.9',
+    releasedAt: '25/11/2026 02:04',
+    titleVi: 'Đưa mũi tên xổ xuống menu cạnh tiêu đề SOLO / CO-OP / VS & đồng bộ màu sắc hiệu ứng',
+    titleEn: 'Position Dropdown Arrows Beside SOLO / CO-OP / VS Titles with Unified Colors & Effects',
+    changes: [
+      {
+        headingVi: 'Đồng bộ vị trí, màu sắc và hiệu ứng mũi tên xổ xuống trên Trang chủ',
+        headingEn: 'Unified Home Mode Card Dropdown Arrows',
+        subPointsVi: [
+          'Di chuyển mũi tên xổ xuống menu nằm trực tiếp kế bên tiêu đề các nút SOLO, CO-OP và VS.',
+          'Thống nhất màu sắc và hiệu ứng sáng/xoay khi di chuột hoặc mở rộng: SOLO màu vàng (#FFB800), CO-OP màu xanh (#00F0FF), VS màu đỏ (#FF0055).',
+        ],
+        subPointsEn: [
+          'Moved dropdown chevron indicators directly beside the SOLO, CO-OP, and VS button titles.',
+          'Unified hover/expanded glow and rotation effects: SOLO yellow (#FFB800), CO-OP blue/cyan (#00F0FF), VS red (#FF0055).',
+        ],
+      },
+    ],
+  },
+  {
     id: 'rel-1-8-8',
     version: 'v1.8.8',
     releasedAt: '25/11/2026 01:30',
