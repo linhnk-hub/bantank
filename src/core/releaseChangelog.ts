@@ -31,6 +31,27 @@ export interface ReleaseVersionEntry {
  */
 export const RELEASE_CHANGELOG: ReadonlyArray<ReleaseVersionEntry> = [
   {
+    id: 'rel-1-8-10',
+    version: 'v1.8.10',
+    releasedAt: '25/11/2026 02:30',
+    titleVi: 'Tinh chỉnh vị trí mũi tên menu Trang chủ & bố cục tiêu đề Phòng chờ',
+    titleEn: 'Refine Home Dropdown Arrow Position & Waiting Room Header Layout',
+    changes: [
+      {
+        headingVi: 'Sắp xếp lại vị trí mũi tên Trang chủ & các nhãn Phòng chờ',
+        headingEn: 'Reordered Home Arrows & Waiting Room Badges',
+        subPointsVi: [
+          'Đưa mũi tên xổ xuống nằm trước tiêu đề các nút SOLO, CO-OP, VS trên Trang chủ.',
+          'Đưa dòng "MÃ PHÒNG: xxxx" lên nằm kế bên tiêu đề "PHÒNG CHỜ..." và sắp xếp nhãn "PHÒNG CÔNG KHAI" nằm trước nhãn "Độ khó: ...".',
+        ],
+        subPointsEn: [
+          'Placed dropdown chevron arrows before the SOLO, CO-OP, and VS titles on the Home screen.',
+          'Moved "CODE: xxxx" beside the "WAITING ROOM" heading and placed the "PUBLIC ROOM" badge before the "Difficulty" badge.',
+        ],
+      },
+    ],
+  },
+  {
     id: 'rel-1-8-9',
     version: 'v1.8.9',
     releasedAt: '25/11/2026 02:04',

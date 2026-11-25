@@ -889,13 +889,44 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
           <div className="w-9 h-9 rounded-xl bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-400 shrink-0 mt-0.5">
             <Globe className="w-5 h-5" />
           </div>
-          <div>
-            <div className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
-              {room.roomMode && room.roomMode !== 'COOP_ONLINE'
-                ? t('PHÒNG CHỜ', 'WAITING ROOM')
-                : t('PHÒNG CHỜ CO-OP ONLINE', 'CO-OP ONLINE WAITING ROOM')}
+          <div className="min-w-0">
+            <div className="flex items-center flex-wrap gap-1.5">
+              <div className="text-xs sm:text-sm font-black uppercase tracking-wider text-white">
+                {room.roomMode && room.roomMode !== 'COOP_ONLINE'
+                  ? t('PHÒNG CHỜ', 'WAITING ROOM')
+                  : t('PHÒNG CHỜ CO-OP ONLINE', 'CO-OP ONLINE WAITING ROOM')}
+              </div>
+
+              {/* Mobile Room Code Badge — inline beside the title */}
+              <button
+                type="button"
+                data-testid="mobile-room-code-badge"
+                onClick={handleCopyCode}
+                title={t('Copy mã phòng', 'Copy room code')}
+                className="sm:hidden text-[10px] font-black uppercase px-2 py-0.5 rounded border bg-sky-950/80 text-sky-300 border-sky-500/45 inline-flex items-center gap-1 cursor-pointer active:scale-95 transition-transform"
+              >
+                <span>{t('MÃ PHÒNG:', 'CODE:')}</span>
+                <span className="font-mono tracking-wider">{room.roomCode}</span>
+                {copied ? (
+                  <Check className="w-3 h-3 text-emerald-400 shrink-0" />
+                ) : (
+                  <Copy className="w-3 h-3 text-sky-300 shrink-0" />
+                )}
+              </button>
             </div>
             <div className="flex items-center flex-wrap gap-1.5 mt-1">
+              <span
+                className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border flex items-center ${
+                  room.hasPassword
+                    ? 'bg-sky-950/80 text-sky-300 border-sky-500/40'
+                    : 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                }`}
+              >
+                {room.hasPassword
+                  ? t('CÓ MẬT KHẨU', 'PASSWORD PROTECTED')
+                  : t('PHÒNG CÔNG KHAI', 'PUBLIC ROOM')}
+              </span>
+
               {room.roomMode && room.roomMode !== 'COOP_ONLINE' ? (
                 <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded border bg-rose-950/80 text-rose-300 border-rose-500/45 flex items-center gap-1">
                   {room.roomMode === 'VS_P1_P2' ? 'P1 VS P2' : 'P1 + A.I VS P2 + A.I'}
@@ -917,35 +948,6 @@ export const CoopOnlineLobbyPanel: React.FC<CoopOnlineLobbyPanelProps> = ({
                     : t('Độ khó: Giải trí', 'Difficulty: Casual')}
                 </span>
               )}
-
-              <span
-                className={`text-[10px] font-black uppercase px-2 py-0.5 rounded border flex items-center ${
-                  room.hasPassword
-                    ? 'bg-sky-950/80 text-sky-300 border-sky-500/40'
-                    : 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
-                }`}
-              >
-                {room.hasPassword
-                  ? t('CÓ MẬT KHẨU', 'PASSWORD PROTECTED')
-                  : t('PHÒNG CÔNG KHAI', 'PUBLIC ROOM')}
-              </span>
-
-              {/* Mobile Room Code Badge — matches height & style of "P1 VS P2" and "PHÒNG CÔNG KHAI" */}
-              <button
-                type="button"
-                data-testid="mobile-room-code-badge"
-                onClick={handleCopyCode}
-                title={t('Copy mã phòng', 'Copy room code')}
-                className="sm:hidden text-[10px] font-black uppercase px-2 py-0.5 rounded border bg-sky-950/80 text-sky-300 border-sky-500/45 inline-flex items-center gap-1 cursor-pointer active:scale-95 transition-transform"
-              >
-                <span>{t('MÃ PHÒNG:', 'CODE:')}</span>
-                <span className="font-mono tracking-wider">{room.roomCode}</span>
-                {copied ? (
-                  <Check className="w-3 h-3 text-emerald-400 shrink-0" />
-                ) : (
-                  <Copy className="w-3 h-3 text-sky-300 shrink-0" />
-                )}
-              </button>
             </div>
           </div>
         </div>

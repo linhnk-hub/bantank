@@ -388,15 +388,6 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               </div>
 
               <div className="relative z-10 mt-auto flex items-center gap-2.5 lg:gap-3">
-                <h2
-                  className={`font-btn text-xl sm:text-2xl lg:text-[2rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
-                    expandedGroup === 'SOLO'
-                      ? 'text-[#FFB800]'
-                      : 'text-[#EAF4FF] group-hover:text-[#FFB800]'
-                  }`}
-                >
-                  SOLO
-                </h2>
                 <span
                   data-testid="home-mode-solo-arrow"
                   className={`w-7 h-7 lg:w-9 lg:h-9 rounded-lg border flex items-center justify-center text-[#FFB800] transition-all duration-200 shrink-0 ${
@@ -407,6 +398,15 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 >
                   <ChevronDown className="w-4 h-4 lg:w-5 lg:h-5" />
                 </span>
+                <h2
+                  className={`font-btn text-xl sm:text-2xl lg:text-[2rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
+                    expandedGroup === 'SOLO'
+                      ? 'text-[#FFB800]'
+                      : 'text-[#EAF4FF] group-hover:text-[#FFB800]'
+                  }`}
+                >
+                  SOLO
+                </h2>
               </div>
             </button>
 
@@ -489,15 +489,6 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               </div>
 
               <div className="relative z-10 mt-auto flex items-center gap-2.5 lg:gap-3">
-                <h2
-                  className={`font-btn text-xl sm:text-2xl lg:text-[2rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
-                    expandedGroup === 'COOP'
-                      ? 'text-[#00F0FF]'
-                      : 'text-[#EAF4FF] group-hover:text-[#00F0FF]'
-                  }`}
-                >
-                  CO-OP
-                </h2>
                 <span
                   data-testid="home-mode-coop-arrow"
                   className={`w-7 h-7 lg:w-9 lg:h-9 rounded-lg border flex items-center justify-center text-[#00F0FF] transition-all duration-200 shrink-0 ${
@@ -508,6 +499,15 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 >
                   <ChevronDown className="w-4 h-4 lg:w-5 lg:h-5" />
                 </span>
+                <h2
+                  className={`font-btn text-xl sm:text-2xl lg:text-[2rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
+                    expandedGroup === 'COOP'
+                      ? 'text-[#00F0FF]'
+                      : 'text-[#EAF4FF] group-hover:text-[#00F0FF]'
+                  }`}
+                >
+                  CO-OP
+                </h2>
               </div>
             </button>
 
@@ -600,15 +600,6 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
               </div>
 
               <div className="relative z-10 mt-auto flex items-center gap-2.5 lg:gap-3">
-                <h2
-                  className={`font-btn text-xl sm:text-2xl lg:text-[2rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
-                    expandedGroup === 'VS'
-                      ? 'text-[#FF0055]'
-                      : 'text-[#EAF4FF] group-hover:text-[#FF0055]'
-                  }`}
-                >
-                  VS
-                </h2>
                 <span
                   data-testid="home-mode-vs-arrow"
                   className={`w-7 h-7 lg:w-9 lg:h-9 rounded-lg border flex items-center justify-center text-[#FF0055] transition-all duration-200 shrink-0 ${
@@ -619,6 +610,15 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 >
                   <ChevronDown className="w-4 h-4 lg:w-5 lg:h-5" />
                 </span>
+                <h2
+                  className={`font-btn text-xl sm:text-2xl lg:text-[2rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
+                    expandedGroup === 'VS'
+                      ? 'text-[#FF0055]'
+                      : 'text-[#EAF4FF] group-hover:text-[#FF0055]'
+                  }`}
+                >
+                  VS
+                </h2>
               </div>
             </button>
 
