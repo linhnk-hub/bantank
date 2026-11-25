@@ -35,6 +35,10 @@ import { getFirebaseAuth, getFirebaseDb } from './firebaseConfig.ts';
 import { ScoreManager } from './scoreManager.ts';
 import { SystemAuditLogger } from './systemAuditLogger.ts';
 import {
+  DisplayNameRegistry,
+  normalizeDisplayName,
+} from './displayNameRegistry.ts';
+import {
   RBAC_PERMISSION_MATRIX,
   SOLE_ADMIN_EMAIL,
   REVOKED_LEGACY_ADMIN_EMAIL,
@@ -1176,9 +1180,23 @@ export class AuthManager {
           : '';
       const googleDisplayName =
         typeof targetUser.displayName === 'string' && targetUser.displayName.trim().length > 0
-          ? targetUser.displayName.trim().slice(0, 40)
+          ? normalizeDisplayName(targetUser.displayName)
           : '';
-      const targetDisplayName = existingCustomDisplayName || googleDisplayName;
+      let targetDisplayName = existingCustomDisplayName || googleDisplayName;
+
+      // Bảo vệ tên hiển thị duy nhất toàn hệ thống:
+      // Nếu tài khoản chưa có tên lưu trên /users/{uid} và tên Google/email bị trùng với tài khoản khác,
+      // không ghi tên trùng vào /users/{uid} (màn hình ép đổi tên sẽ xử lý ngay sau đăng nhập).
+      if (!existingCustomDisplayName && targetDisplayName) {
+        const availability = await DisplayNameRegistry.getInstance().checkDisplayNameAvailability(
+          targetDisplayName,
+          targetUser.uid,
+          { enforceMinLength: false }
+        );
+        if (!availability.available && availability.errorCode === 'DUPLICATE') {
+          targetDisplayName = '';
+        }
+      }
 
       // Bước 1: Thử ghi đầy đủ với lastLoginAt, firstLoginAt, loginCount & email
       const fullPayload: Record<string, unknown> = {
@@ -2129,7 +2147,10 @@ export class AuthManager {
    * Updates user profile (displayName and photoURL) via Firebase Authentication.
    * Strictly preserves email, UID, tokens, and Firestore security rules.
    */
-  public async updateUserProfile(profile: { displayName?: string; photoURL?: string }): Promise<{ success: boolean; error?: string }> {
+  public async updateUserProfile(
+    profile: { displayName?: string; photoURL?: string },
+    options?: { skipUniquenessCheck?: boolean }
+  ): Promise<{ success: boolean; error?: string }> {
     if (this.trialModeActive) {
       return { success: false, error: 'Chế độ Chơi thử không cho phép lưu hồ sơ.' };
     }
@@ -2138,9 +2159,25 @@ export class AuthManager {
       return { success: false, error: 'Chưa đăng nhập.' };
     }
     const nextDisplayName =
-      profile.displayName !== undefined ? profile.displayName.trim() : (user.displayName || '');
+      profile.displayName !== undefined
+        ? normalizeDisplayName(profile.displayName)
+        : (user.displayName || '');
     const nextPhotoURL =
       profile.photoURL !== undefined ? profile.photoURL.trim() : (user.photoURL || '');
+
+    if (profile.displayName !== undefined && !options?.skipUniquenessCheck) {
+      const claimRes = await DisplayNameRegistry.getInstance().claimUniqueDisplayName(
+        user.uid,
+        nextDisplayName,
+        user.displayName
+      );
+      if (!claimRes.success) {
+        return {
+          success: false,
+          error: claimRes.message || 'Tên bị trùng trong hệ thống. Vui lòng chọn tên hiển thị khác.',
+        };
+      }
+    }
 
     try {
       if (typeof updateProfile === 'function' && this.auth?.currentUser) {

@@ -174,13 +174,23 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     setSuccessMessage(null);
 
     try {
-      if (displayName.trim()) {
-        await avatarManager.updateDisplayName(displayName.trim()).catch(() => {});
+      const trimmed = displayName.trim();
+      if (!trimmed) {
+        setErrorMessage('Tên hiển thị không được để trống.');
+        return;
       }
-      const res = await authManager.updateUserProfile({
-        displayName: displayName.trim(),
-        photoURL: user.photoURL || '',
-      });
+      const nameRes = await avatarManager.updateDisplayName(trimmed);
+      if (!nameRes.success) {
+        setErrorMessage(nameRes.message || 'Tên bị trùng trong hệ thống. Vui lòng chọn tên khác.');
+        return;
+      }
+      const res = await authManager.updateUserProfile(
+        {
+          displayName: trimmed,
+          photoURL: user.photoURL || '',
+        },
+        { skipUniquenessCheck: true }
+      );
 
       if (!res.success) {
         setErrorMessage(res.error || 'Cập nhật thất bại. Vui lòng thử lại.');

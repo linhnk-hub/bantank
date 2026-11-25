@@ -202,6 +202,18 @@ export interface AdminPairInspection {
   friendship: FriendshipRecord | null;
 }
 
+export interface PrivateChatThreadRecord {
+  chatId: string;
+  userA: string;
+  userB: string;
+  userADisplayName: string;
+  userBDisplayName: string;
+  userAAvatarUrl: string | null;
+  userBAvatarUrl: string | null;
+  lastSenderUid: string;
+  lastMessageAtMs: number;
+}
+
 export interface SocialStorageAdapter {
   readonly isFirestoreBacked: boolean;
   // Presence & Public Profile
@@ -238,6 +250,9 @@ export interface SocialStorageAdapter {
     onUpdate: (messages: PrivateChatMessage[]) => void,
     onError?: (err: unknown) => void
   ): Unsubscribe;
+  upsertPrivateChatThread(thread: PrivateChatThreadRecord): Promise<void>;
+  listPrivateChatThreadsForUser(uid: string, maxItems?: number): Promise<PrivateChatThreadRecord[]>;
+  hasPrivateMessages(chatId: string): Promise<boolean>;
 
   // Friend Requests & Friendships
   getFriendRequest(id: string): Promise<FriendRequestRecord | null>;
@@ -393,6 +408,7 @@ export class InMemorySocialStorageAdapter implements SocialStorageAdapter {
   private presenceMap = new Map<string, PresenceRecord>();
   private globalMessages: GlobalChatMessage[] = [];
   private privateMessages = new Map<string, PrivateChatMessage[]>();
+  private privateThreads = new Map<string, PrivateChatThreadRecord>();
   private friendRequests = new Map<string, FriendRequestRecord>();
   private friendships = new Map<string, FriendshipRecord>();
   private deletedFriends = new Map<string, Map<string, DeletedFriendRecord>>();
@@ -564,6 +580,51 @@ export class InMemorySocialStorageAdapter implements SocialStorageAdapter {
     return () => {
       subs?.delete(wrapped);
     };
+  }
+
+  public async upsertPrivateChatThread(thread: PrivateChatThreadRecord): Promise<void> {
+    this.privateThreads.set(thread.chatId, { ...thread });
+  }
+
+  public async listPrivateChatThreadsForUser(
+    uid: string,
+    maxItems: number = 50
+  ): Promise<PrivateChatThreadRecord[]> {
+    const merged = new Map<string, PrivateChatThreadRecord>();
+    for (const thread of this.privateThreads.values()) {
+      if (thread.userA === uid || thread.userB === uid) {
+        merged.set(thread.chatId, { ...thread });
+      }
+    }
+    // Infer legacy in-memory threads from existing privateMessages if not explicitly indexed
+    for (const [chatId, msgs] of this.privateMessages.entries()) {
+      if (!msgs.length || merged.has(chatId)) continue;
+      const parts = chatId.split('__');
+      if (parts.length !== 2) continue;
+      const [userA, userB] = parts;
+      if (userA !== uid && userB !== uid) continue;
+      const latest = msgs[msgs.length - 1];
+      const profA = this.presenceMap.get(userA);
+      const profB = this.presenceMap.get(userB);
+      merged.set(chatId, {
+        chatId,
+        userA,
+        userB,
+        userADisplayName: profA?.displayName || (latest.senderUid === userA ? latest.senderDisplayName : 'Commander'),
+        userBDisplayName: profB?.displayName || (latest.senderUid === userB ? latest.senderDisplayName : 'Commander'),
+        userAAvatarUrl: profA?.avatarUrl ?? null,
+        userBAvatarUrl: profB?.avatarUrl ?? null,
+        lastSenderUid: latest.senderUid,
+        lastMessageAtMs: latest.createdAtMs,
+      });
+    }
+    return Array.from(merged.values())
+      .sort((a, b) => b.lastMessageAtMs - a.lastMessageAtMs)
+      .slice(0, maxItems);
+  }
+
+  public async hasPrivateMessages(chatId: string): Promise<boolean> {
+    return (this.privateMessages.get(chatId)?.length ?? 0) > 0;
   }
 
   public async getFriendRequest(id: string): Promise<FriendRequestRecord | null> {
@@ -1062,6 +1123,73 @@ export class FirestoreSocialStorageAdapter implements SocialStorageAdapter {
       unsub();
       fallbackUnsub?.();
     };
+  }
+
+  public async upsertPrivateChatThread(thread: PrivateChatThreadRecord): Promise<void> {
+    await this.fallback.upsertPrivateChatThread(thread);
+    const db = this.getDbOrNull();
+    if (!db) return;
+    try {
+      await setDoc(doc(db, 'private_chats', thread.chatId), thread);
+      this.rulesDenied = false;
+    } catch (err) {
+      if (isFirestorePermissionError(err)) {
+        try {
+          const retryThread: PrivateChatThreadRecord = {
+            ...thread,
+            lastMessageAtMs: Math.floor(Date.now()),
+          };
+          await setDoc(doc(db, 'private_chats', retryThread.chatId), retryThread);
+          await this.fallback.upsertPrivateChatThread(retryThread);
+          this.rulesDenied = false;
+          return;
+        } catch {
+          // Non-fatal: thread index write failed (rules/clock skew), fallback cache still holds it
+          return;
+        }
+      }
+      // Non-fatal index error
+    }
+  }
+
+  public async listPrivateChatThreadsForUser(
+    uid: string,
+    maxItems: number = 50
+  ): Promise<PrivateChatThreadRecord[]> {
+    const fallbackList = await this.fallback.listPrivateChatThreadsForUser(uid, maxItems);
+    const db = this.getDbOrNull();
+    if (!db) return fallbackList;
+    try {
+      const col = collection(db, 'private_chats');
+      const [snapA, snapB] = await Promise.all([
+        getDocs(query(col, where('userA', '==', uid), limit(maxItems))),
+        getDocs(query(col, where('userB', '==', uid), limit(maxItems))),
+      ]);
+      const byId = new Map<string, PrivateChatThreadRecord>();
+      for (const item of fallbackList) byId.set(item.chatId, item);
+      for (const d of [...snapA.docs, ...snapB.docs]) {
+        const rec = d.data() as PrivateChatThreadRecord;
+        if (rec && rec.chatId) {
+          byId.set(rec.chatId, rec);
+        }
+      }
+      return Array.from(byId.values())
+        .sort((a, b) => b.lastMessageAtMs - a.lastMessageAtMs)
+        .slice(0, maxItems);
+    } catch {
+      return fallbackList;
+    }
+  }
+
+  public async hasPrivateMessages(chatId: string): Promise<boolean> {
+    const db = this.getDbOrNull();
+    if (!db) return this.fallback.hasPrivateMessages(chatId);
+    try {
+      const snap = await getDocs(query(collection(db, 'private_chats', chatId, 'messages'), limit(1)));
+      return !snap.empty;
+    } catch {
+      return this.fallback.hasPrivateMessages(chatId);
+    }
   }
 
   public async getFriendRequest(id: string): Promise<FriendRequestRecord | null> {
@@ -1728,7 +1856,217 @@ export class SocialManager {
   }
 
   /**
-   * M7.8 Mục V: Tìm kiếm tài khoản toàn hệ thống (Online & Offline), chỉ trả về dữ liệu công khai an toàn.
+   * Đồng bộ ngay tên hiển thị / avatar mới lên `/user_presence/{uid}` và `/public_profiles/{uid}`
+   * sau khi người chơi đổi tên thành công.
+   */
+  public async refreshOwnPresenceDisplayName(
+    user: AuthIdentityLike | null,
+    explicitNowMs?: number
+  ): Promise<void> {
+    if (!user || !user.uid) return;
+    const nowMs = this.resolveNowMs(explicitNowMs);
+    const snap = SessionManager.getInstance().getSnapshot();
+    const record = this.buildPresenceRecordForUser(user, snap.sessionId ?? null, nowMs);
+    try {
+      await this.adapter.upsertPresenceAndProfile(record);
+    } catch {
+      // Non-fatal
+    }
+  }
+
+  private getChatHistoryLocalKey(myUid: string): string {
+    return `bto_social_chat_peers_${myUid}`;
+  }
+
+  private readLocalChatHistoryPeers(
+    myUid: string
+  ): Array<{ uid: string; displayName: string; avatarUrl: string | null; lastMessageAtMs: number }> {
+    if (typeof window === 'undefined' || !window.localStorage || !myUid) return [];
+    try {
+      const raw = window.localStorage.getItem(this.getChatHistoryLocalKey(myUid));
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter((item) => item && typeof item.uid === 'string' && item.uid && item.uid !== myUid)
+        .map((item) => ({
+          uid: String(item.uid),
+          displayName: typeof item.displayName === 'string' && item.displayName.trim() ? item.displayName : 'Commander',
+          avatarUrl: typeof item.avatarUrl === 'string' ? item.avatarUrl : null,
+          lastMessageAtMs: typeof item.lastMessageAtMs === 'number' ? item.lastMessageAtMs : 0,
+        }));
+    } catch {
+      return [];
+    }
+  }
+
+  public recordChatHistoryPeerLocally(
+    myUid: string,
+    peer: { uid: string; displayName?: string | null; avatarUrl?: string | null },
+    lastMessageAtMs: number = Date.now()
+  ): void {
+    if (!myUid || !peer?.uid || peer.uid === myUid) return;
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    try {
+      const existing = this.readLocalChatHistoryPeers(myUid);
+      const map = new Map<
+        string,
+        { uid: string; displayName: string; avatarUrl: string | null; lastMessageAtMs: number }
+      >();
+      for (const item of existing) map.set(item.uid, item);
+      const prev = map.get(peer.uid);
+      map.set(peer.uid, {
+        uid: peer.uid,
+        displayName:
+          (peer.displayName && peer.displayName.trim()) || prev?.displayName || 'Commander',
+        avatarUrl: peer.avatarUrl !== undefined ? peer.avatarUrl : (prev?.avatarUrl ?? null),
+        lastMessageAtMs: Math.max(prev?.lastMessageAtMs ?? 0, lastMessageAtMs),
+      });
+      const sorted = Array.from(map.values())
+        .sort((a, b) => b.lastMessageAtMs - a.lastMessageAtMs)
+        .slice(0, 60);
+      window.localStorage.setItem(this.getChatHistoryLocalKey(myUid), JSON.stringify(sorted));
+    } catch {
+      // Ignore storage errors
+    }
+  }
+
+  /**
+   * Trả về CHỈ các tài khoản mà người dùng hiện tại có lịch sử nhắn tin riêng 1-1
+   * (từ chỉ mục `/private_chats`, cache cục bộ và rà soát hội thoại cũ với bạn bè/người trực tuyến).
+   */
+  public async listChatHistoryPeers(
+    myUid: string,
+    nowMs: number = Date.now()
+  ): Promise<PublicPlayerProfile[]> {
+    if (!myUid) return [];
+
+    const peerMeta = new Map<
+      string,
+      { displayName: string; avatarUrl: string | null; lastMessageAtMs: number }
+    >();
+
+    // 1. Authoritative `/private_chats` index threads
+    try {
+      const threads = await this.adapter.listPrivateChatThreadsForUser(myUid, 50);
+      for (const t of threads) {
+        const isA = t.userA === myUid;
+        const peerUid = isA ? t.userB : t.userA;
+        if (!peerUid || peerUid === myUid) continue;
+        const prev = peerMeta.get(peerUid);
+        peerMeta.set(peerUid, {
+          displayName: (isA ? t.userBDisplayName : t.userADisplayName) || prev?.displayName || 'Commander',
+          avatarUrl: (isA ? t.userBAvatarUrl : t.userAAvatarUrl) ?? prev?.avatarUrl ?? null,
+          lastMessageAtMs: Math.max(prev?.lastMessageAtMs ?? 0, t.lastMessageAtMs || 0),
+        });
+      }
+    } catch {
+      // Continue with local & legacy discovery
+    }
+
+    // 2. Client local cache of chatted peers
+    for (const localPeer of this.readLocalChatHistoryPeers(myUid)) {
+      const prev = peerMeta.get(localPeer.uid);
+      peerMeta.set(localPeer.uid, {
+        displayName: prev?.displayName || localPeer.displayName,
+        avatarUrl: prev?.avatarUrl ?? localPeer.avatarUrl,
+        lastMessageAtMs: Math.max(prev?.lastMessageAtMs ?? 0, localPeer.lastMessageAtMs),
+      });
+    }
+
+    // 3. Backfill legacy private chats created before `/private_chats` index doc existed
+    //    (bounded check on confirmed friends + currently online peers not yet in peerMeta)
+    try {
+      const candidateUids: string[] = [];
+      const seenCandidates = new Set<string>(peerMeta.keys());
+      seenCandidates.add(myUid);
+      const friendships = await this.adapter.listFriendshipsForUser(myUid);
+      for (const f of friendships) {
+        const pUid = f.userA === myUid ? f.userB : f.userA;
+        if (pUid && !seenCandidates.has(pUid)) {
+          seenCandidates.add(pUid);
+          candidateUids.push(pUid);
+        }
+      }
+      for (const p of this.cachedPresence) {
+        if (p.uid && !seenCandidates.has(p.uid)) {
+          seenCandidates.add(p.uid);
+          candidateUids.push(p.uid);
+        }
+      }
+      const boundedCandidates = candidateUids.slice(0, 20);
+      if (boundedCandidates.length > 0) {
+        const checks = await Promise.all(
+          boundedCandidates.map(async (peerUid) => {
+            const chatId = buildPairId(myUid, peerUid);
+            const msgs = await this.adapter.listPrivateMessages(chatId, 1);
+            return { peerUid, latest: msgs.length > 0 ? msgs[msgs.length - 1] : null };
+          })
+        );
+        for (const item of checks) {
+          if (!item.latest) continue;
+          const presenceRec = this.cachedPresence.find((p) => p.uid === item.peerUid);
+          const displayName =
+            presenceRec?.displayName ||
+            (item.latest.senderUid === item.peerUid ? item.latest.senderDisplayName : 'Commander');
+          const avatarUrl =
+            presenceRec?.avatarUrl ??
+            (item.latest.senderUid === item.peerUid ? item.latest.senderAvatarUrl : null);
+          peerMeta.set(item.peerUid, {
+            displayName,
+            avatarUrl,
+            lastMessageAtMs: item.latest.createdAtMs || 0,
+          });
+          this.recordChatHistoryPeerLocally(
+            myUid,
+            { uid: item.peerUid, displayName, avatarUrl },
+            item.latest.createdAtMs || nowMs
+          );
+        }
+      }
+    } catch {
+      // Non-fatal legacy discovery
+    }
+
+    if (peerMeta.size === 0) return [];
+
+    // 4. Enrich with live presence & latest public profiles
+    const presenceByUid = new Map<string, PresenceRecord>();
+    for (const r of this.cachedPresence) presenceByUid.set(r.uid, r);
+
+    const sortedEntries = Array.from(peerMeta.entries()).sort(
+      (a, b) => b[1].lastMessageAtMs - a[1].lastMessageAtMs
+    );
+
+    const profiles = await Promise.all(
+      sortedEntries.map(async ([peerUid, meta]) => {
+        const livePresence = presenceByUid.get(peerUid);
+        if (livePresence) {
+          return toSafePublicProfile(livePresence, nowMs);
+        }
+        const pub = await this.adapter.getPublicProfile(peerUid);
+        if (pub) {
+          return toSafePublicProfile(pub, nowMs);
+        }
+        return {
+          uid: peerUid,
+          handleTag: buildHandleTag(peerUid),
+          displayName: meta.displayName || 'Commander',
+          avatarUrl: meta.avatarUrl ?? null,
+          roleBadge: 'PLAYER' as UserRole,
+          rankTitle: 'Binh nhì',
+          stars: 0,
+          isOnline: false,
+          lastSeenMs: meta.lastMessageAtMs || nowMs,
+        };
+      })
+    );
+
+    return profiles;
+  }
+
+  /**
+   * M7.8 Mục V: Tìm kiếm tài khoản theo từ khóa (KHÔNG trả về toàn bộ danh sách hệ thống khi từ khóa rỗng).
    */
   public async searchAccounts(
     rawQuery: string,
@@ -1745,10 +2083,12 @@ export class SocialManager {
     this.lastSearchAt = nowMs;
 
     const keyword = rawQuery.trim().toLowerCase();
+    if (!keyword) {
+      return { success: true, data: [] };
+    }
     const all = await this.adapter.listPublicProfiles(120);
     const filtered = all
       .filter((r) => {
-        if (!keyword) return true;
         return (
           r.displayName.toLowerCase().includes(keyword) ||
           (r.handleTag || buildHandleTag(r.uid)).toLowerCase().includes(keyword)
@@ -2313,6 +2653,37 @@ export class SocialManager {
       await this.adapter.addPrivateMessage(msg);
       this.lastPrivateMsgSentAt.set(recipientUid, nowMs);
       this.sentClientMsgIds.add(clientMsgId);
+
+      // Cập nhật chỉ mục lịch sử nhắn tin riêng (/private_chats/{chatId}) và bộ nhớ cục bộ
+      const [userA, userB] = sender.uid < recipientUid ? [sender.uid, recipientUid] : [recipientUid, sender.uid];
+      const recipientProfile =
+        this.cachedPresence.find((p) => p.uid === recipientUid) ||
+        (await this.adapter.getPublicProfile(recipientUid).catch(() => null));
+      const recipientDisplayName = sanitizeSocialDisplayName(recipientProfile?.displayName || 'Commander');
+      const recipientAvatarUrl = sanitizeSocialAvatarUrl(recipientProfile?.avatarUrl ?? null);
+      const thread: PrivateChatThreadRecord = {
+        chatId,
+        userA,
+        userB,
+        userADisplayName: userA === sender.uid ? msg.senderDisplayName : recipientDisplayName,
+        userBDisplayName: userB === sender.uid ? msg.senderDisplayName : recipientDisplayName,
+        userAAvatarUrl: userA === sender.uid ? msg.senderAvatarUrl : recipientAvatarUrl,
+        userBAvatarUrl: userB === sender.uid ? msg.senderAvatarUrl : recipientAvatarUrl,
+        lastSenderUid: sender.uid,
+        lastMessageAtMs: nowMs,
+      };
+      void this.adapter.upsertPrivateChatThread(thread);
+      this.recordChatHistoryPeerLocally(
+        sender.uid,
+        {
+          uid: recipientUid,
+          displayName: recipientDisplayName,
+          avatarUrl: recipientAvatarUrl,
+        },
+        nowMs
+      );
+      this.emitMutation();
+
       return { success: true, data: msg };
     } catch (err: any) {
       if (isFirestorePermissionError(err)) {

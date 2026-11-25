@@ -31,6 +31,57 @@ export interface ReleaseVersionEntry {
  */
 export const RELEASE_CHANGELOG: ReadonlyArray<ReleaseVersionEntry> = [
   {
+    id: 'rel-1-8-6',
+    version: 'v1.8.6',
+    releasedAt: '24/11/2026 16:45',
+    titleVi: 'Hiển thị tab Phiên bản Admin, sửa Tìm kiếm Cộng đồng, ẩn ID & tên duy nhất',
+    titleEn: 'Admin Versions Tab Fix, Chat-History Search, Hide Account IDs & Unique Display Names',
+    changes: [
+      {
+        headingVi: 'Khắc phục không thấy mục Phiên bản khi đăng nhập tài khoản Admin',
+        headingEn: 'Fixed Missing Versions Tab in Admin System Settings',
+        descriptionVi:
+          'Chuyển thanh tab Cài đặt hệ thống sang tự động xuống dòng (flex-wrap) và đồng bộ kiểm tra quyền Admin theo cả vai trò lẫn email quản trị để tab Phiên bản luôn hiển thị rõ ràng, không bị khuất mép phải.',
+        descriptionEn:
+          'Switched the System Settings tab bar to wrap cleanly across rows and aligned Admin verification checks so the Versions tab is always immediately visible without horizontal clipping.',
+      },
+      {
+        headingVi: 'Sửa lỗi Tìm kiếm Cộng đồng liệt kê toàn bộ tài khoản',
+        headingEn: 'Fixed Community Search Dumping All System Accounts',
+        subPointsVi: [
+          'Ghi nhận và khắc phục lỗi khi bấm tab/nút Tìm kiếm trong mục Cộng đồng trước đây tự liệt kê toàn bộ danh sách tài khoản hệ thống.',
+          'Mục Tìm kiếm mặc định nay chỉ liệt kê các tài khoản mà người dùng hiện tại đã có lịch sử nhắn tin riêng (1-1), đồng thời lưu chỉ mục hội thoại trên Firestore (/private_chats/{chatId}) và bộ nhớ cục bộ.',
+        ],
+        subPointsEn: [
+          'Fixed the bug where opening the Community Search tab or clicking Find with an empty query dumped all system accounts.',
+          'Search now lists only accounts with whom the current user has private 1-on-1 messaging history by default, backed by a Firestore private chat index (/private_chats/{chatId}) and local history cache.',
+        ],
+      },
+      {
+        headingVi: 'Bỏ hiển thị ID tài khoản trong Tìm kiếm và Quản lý bạn bè',
+        headingEn: 'Removed Account IDs in Community Search and Friends Management',
+        descriptionVi:
+          'Ẩn hoàn toàn mã định danh #BT-... khỏi kết quả Tìm kiếm, tiêu đề Chat riêng, popup Hồ sơ người chơi và mục Quản lý bạn bè toàn hệ thống.',
+        descriptionEn:
+          'Removed #BT-... handle tags from Community Search results, Private Chat headers, Public Profile popups, and the System Friends Management panel.',
+      },
+      {
+        headingVi: 'Kiểm tra tên hiển thị duy nhất toàn hệ thống & ép đổi tên khi trùng',
+        headingEn: 'System-Wide Unique Display Name Enforcement & Forced Rename Modal',
+        subPointsVi: [
+          'Thiết lập bảng khóa tên hiển thị duy nhất toàn hệ thống (/display_names/{nameHash}) kết hợp rà soát đối chiếu hồ sơ hiện có (không phân biệt hoa/thường và khoảng trắng thừa).',
+          'Chặn đặt tên trùng ở mọi nơi đổi tên (Cài đặt Thông tin, Hồ sơ người chơi, đăng ký mới).',
+          'Khi tài khoản đăng nhập có tên từ Google/email bị trùng với tên đã tồn tại trong hệ thống, lập tức hiển thị màn hình thông báo "Tên bị trùng trong hệ thống" kèm hộp thoại bắt buộc đổi tên duy nhất ngay trước khi vào ứng dụng.',
+        ],
+        subPointsEn: [
+          'Added a global unique display name lock registry (/display_names/{nameHash}) cross-checked against existing public profiles (case-insensitive, collapsed whitespace).',
+          'Blocked duplicate names across all rename entry points (Settings Profile, User Profile modal, and initial sign-in).',
+          'When an account signs in with a Google/email-derived name that collides with an existing system name, a blocking "Name Already Exists in System" modal immediately requires choosing a unique display name before entering.',
+        ],
+      },
+    ],
+  },
+  {
     id: 'rel-1-8-5',
     version: 'v1.8.5',
     releasedAt: '24/11/2026 03:25',

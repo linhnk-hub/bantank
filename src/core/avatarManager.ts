@@ -60,6 +60,12 @@ import {
 } from './authManager.ts';
 import { SessionManager } from './sessionManager.ts';
 import { SystemAuditLogger } from './systemAuditLogger.ts';
+import {
+  DISPLAY_NAME_MIN_LENGTH,
+  DisplayNameRegistry,
+  normalizeDisplayName,
+} from './displayNameRegistry.ts';
+import { SocialManager } from './socialManager.ts';
 
 export const AVATAR_LIMITS = {
   MAX_FILE_SIZE_BYTES: 5 * 1024 * 1024, // 5 MiB (5,242,880 bytes)
@@ -5320,12 +5326,19 @@ export class AvatarManager {
       };
     }
 
-    const cleanName = (newDisplayName || '').trim().slice(0, 40);
+    const cleanName = normalizeDisplayName(newDisplayName);
     if (!cleanName) {
       return {
         success: false,
         errorCode: 'INVALID_DISPLAY_NAME',
         message: 'Tên hiển thị không được để trống.',
+      };
+    }
+    if (cleanName.length < DISPLAY_NAME_MIN_LENGTH) {
+      return {
+        success: false,
+        errorCode: 'INVALID_DISPLAY_NAME',
+        message: `Tên hiển thị cần tối thiểu ${DISPLAY_NAME_MIN_LENGTH} ký tự.`,
       };
     }
 
@@ -5339,6 +5352,21 @@ export class AvatarManager {
     }
 
     const existingMeta = this.userMetadataCache.get(currentUser.uid);
+    const previousName = existingMeta?.displayName || currentUser.displayName || null;
+    const claimRes = await DisplayNameRegistry.getInstance().claimUniqueDisplayName(
+      currentUser.uid,
+      cleanName,
+      previousName
+    );
+    if (!claimRes.success) {
+      return {
+        success: false,
+        errorCode: claimRes.errorCode || 'DUPLICATE_DISPLAY_NAME',
+        message:
+          claimRes.message || 'Tên bị trùng trong hệ thống. Vui lòng chọn tên hiển thị khác.',
+      };
+    }
+
     const avatarType: PlayerAvatarType = existingMeta?.avatarType ?? 'google';
     const avatarId = avatarType === 'catalog' ? existingMeta?.avatarId ?? null : null;
     const userRef = doc(db, 'users', currentUser.uid);
@@ -5366,7 +5394,10 @@ export class AvatarManager {
         avatarId,
         avatarUpdatedAtMs: existingMeta?.avatarUpdatedAtMs ?? 0,
       });
-      await auth.updateUserProfile({ displayName: cleanName });
+      await auth.updateUserProfile({ displayName: cleanName }, { skipUniquenessCheck: true });
+      void SocialManager.getInstance().refreshOwnPresenceDisplayName(
+        auth.getCurrentUser() || currentUser
+      );
       this.notify();
       return {
         success: true,

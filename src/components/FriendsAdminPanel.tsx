@@ -146,7 +146,7 @@ export const FriendsAdminPanel: React.FC<FriendsAdminPanelProps> = ({ currentUse
             type="text"
             value={searchKeyword}
             onChange={(e) => setSearchKeyword(e.target.value)}
-            placeholder={t('Tìm theo tên tài khoản A / B hoặc mã #BT-...', 'Search account A / B name or #BT- tag...')}
+            placeholder={t('Tìm theo tên tài khoản A / B...', 'Search account A / B name...')}
             className="w-full pl-9 pr-3 py-2 rounded-lg bg-neutral-950 border border-neutral-700 focus:border-[#00F0FF] focus:outline-none text-xs text-white"
           />
         </div>
@@ -204,7 +204,7 @@ export const FriendsAdminPanel: React.FC<FriendsAdminPanelProps> = ({ currentUse
                     className="font-btn font-bold text-[#00F0FF] hover:underline cursor-pointer"
                     title={t('Xem tất cả bạn bè của tài khoản A', 'Inspect Account A friends')}
                   >
-                    {f.userADisplayName} ({f.userAHandleTag})
+                    {f.userADisplayName}
                   </button>
                   <span className="text-neutral-500 font-bold">↔</span>
                   <button
@@ -213,7 +213,7 @@ export const FriendsAdminPanel: React.FC<FriendsAdminPanelProps> = ({ currentUse
                     className="font-btn font-bold text-[#FFB800] hover:underline cursor-pointer"
                     title={t('Xem tất cả bạn bè của tài khoản B', 'Inspect Account B friends')}
                   >
-                    {f.userBDisplayName} ({f.userBHandleTag})
+                    {f.userBDisplayName}
                   </button>
                 </div>
                 <p className="text-[11px] text-neutral-400">

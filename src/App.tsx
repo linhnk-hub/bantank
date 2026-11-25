@@ -23,6 +23,8 @@ import { DevToolsDrawer } from './components/DevToolsDrawer.tsx';
 import { SettingsModal, type SettingsTabId } from './components/SettingsModal.tsx';
 import { SupportModal } from './components/SupportModal.tsx';
 import { ContactModal } from './components/ContactModal.tsx';
+import { DuplicateDisplayNameModal } from './components/DuplicateDisplayNameModal.tsx';
+import { DisplayNameRegistry } from './core/displayNameRegistry.ts';
 import { SoundManager } from './core/audio.ts';
 import { MusicManager, type GameModeScope } from './core/musicManager.ts';
 import {
@@ -156,6 +158,12 @@ export default function App() {
     coopManager.getRematchReadyState()
   );
   const [maintenanceInterruptAlert, setMaintenanceInterruptAlert] = useState<string | null>(null);
+  const [duplicateNameConflict, setDuplicateNameConflict] = useState<{
+    uid: string;
+    conflictedName: string;
+    email: string | null;
+  } | null>(null);
+  const [isCheckingUniqueDisplayName, setIsCheckingUniqueDisplayName] = useState<boolean>(false);
 
   // Sync live peer Ping, active lobby room, post-stage/rematch ready status & online network telemetry toggle preference
   useEffect(() => {
@@ -289,10 +297,50 @@ export default function App() {
     setGameState({ ...gameEngine.getState() });
   }, [gameEngine, clearVirtualTouchInputs]);
 
+  // Kiểm tra tên hiển thị duy nhất toàn hệ thống ngay khi đăng nhập tài khoản thật
+  useEffect(() => {
+    if (!currentUser || !currentUser.uid || isTrialMode) {
+      setDuplicateNameConflict(null);
+      setIsCheckingUniqueDisplayName(false);
+      return;
+    }
+    let cancelled = false;
+    setIsCheckingUniqueDisplayName(true);
+    void DisplayNameRegistry.getInstance()
+      .checkAndClaimLoginDisplayName(currentUser)
+      .then((res) => {
+        if (cancelled) return;
+        if (res.hasConflict) {
+          setDuplicateNameConflict({
+            uid: currentUser.uid,
+            conflictedName: res.conflictedName,
+            email: currentUser.email ?? null,
+          });
+        } else {
+          setDuplicateNameConflict(null);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setIsCheckingUniqueDisplayName(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUser?.uid, isTrialMode]);
+
   // M7.8 Section III: Tie Online Presence strictly to existing AuthManager + SessionManager (NO independent Session system)
+  // Tạm dừng đồng bộ Presence công khai trong lúc người dùng đang bị yêu cầu đổi tên trùng.
   useEffect(() => {
     const socialMgr = SocialManager.getInstance();
-    if (currentUser && !isTrialMode && sessionSnapshot.status === 'ACTIVE') {
+    if (
+      currentUser &&
+      !isTrialMode &&
+      sessionSnapshot.status === 'ACTIVE' &&
+      !isCheckingUniqueDisplayName &&
+      !duplicateNameConflict
+    ) {
       socialMgr.startPresenceForSession(
         currentUser,
         sessionSnapshot.status,
@@ -301,7 +349,14 @@ export default function App() {
     } else {
       void socialMgr.stopPresence();
     }
-  }, [currentUser, isTrialMode, sessionSnapshot.status, sessionSnapshot.sessionId]);
+  }, [
+    currentUser,
+    isTrialMode,
+    sessionSnapshot.status,
+    sessionSnapshot.sessionId,
+    isCheckingUniqueDisplayName,
+    duplicateNameConflict,
+  ]);
 
   useEffect(() => {
     const onBeforeUnload = () => {
@@ -1546,6 +1601,24 @@ export default function App() {
     </div>
   ) : null;
 
+  const duplicateDisplayNameModalOverlay =
+    currentUser && !isTrialMode && duplicateNameConflict ? (
+      <DuplicateDisplayNameModal
+        isOpen={true}
+        conflictedName={duplicateNameConflict.conflictedName}
+        userEmail={duplicateNameConflict.email}
+        onResolved={() => {
+          setDuplicateNameConflict(null);
+          setCurrentUser(authManager.getCurrentUser());
+          setProfileRevision((r) => r + 1);
+        }}
+        onSignOut={() => {
+          setDuplicateNameConflict(null);
+          void handleSignOut();
+        }}
+      />
+    ) : null;
+
   const socialOverlayHubElement = currentUser && !isTrialMode ? (
     <SocialOverlayHub
       currentUser={currentUser}
@@ -1582,6 +1655,7 @@ export default function App() {
           }}
         />
         {maintenanceModalOverlay}
+        {duplicateDisplayNameModalOverlay}
       </div>
     );
   }
@@ -1691,6 +1765,7 @@ export default function App() {
           onSignOut={handleSignOut}
         />
         {maintenanceModalOverlay}
+        {duplicateDisplayNameModalOverlay}
       </div>
     );
   }
@@ -1774,6 +1849,7 @@ export default function App() {
           onSignOut={handleSignOut}
         />
         {maintenanceModalOverlay}
+        {duplicateDisplayNameModalOverlay}
       </div>
     );
   }
@@ -2453,6 +2529,7 @@ export default function App() {
 
       {socialOverlayHubElement}
       {maintenanceModalOverlay}
+      {duplicateDisplayNameModalOverlay}
     </div>
   );
 }

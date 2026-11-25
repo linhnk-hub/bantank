@@ -2581,6 +2581,140 @@ service cloud.firestore {
         && isVerifiedPersonalGmail()
         && (existing().fromUid == request.auth.uid || existing().toUid == request.auth.uid);
     }
+
+    // 12.10 Chỉ mục hội thoại chat riêng 1-1 (/private_chats/{chatId})
+    //       - Chỉ 2 người tham gia (userA / userB) được xem và cập nhật chỉ mục lịch sử nhắn tin.
+    //       - Bảo đảm Secure List Queries (không gọi get()/exists() trong allow list).
+    function isValidPrivateChatThreadDoc(data, chatId) {
+      return isValidCompoundPairId(chatId)
+        && data.keys().hasAll([
+          'chatId',
+          'userA',
+          'userB',
+          'userADisplayName',
+          'userBDisplayName',
+          'userAAvatarUrl',
+          'userBAvatarUrl',
+          'lastSenderUid',
+          'lastMessageAtMs'
+        ])
+        && data.keys().hasOnly([
+          'chatId',
+          'userA',
+          'userB',
+          'userADisplayName',
+          'userBDisplayName',
+          'userAAvatarUrl',
+          'userBAvatarUrl',
+          'lastSenderUid',
+          'lastMessageAtMs'
+        ])
+        && data.chatId == chatId
+        && isValidId(data.userA)
+        && isValidId(data.userB)
+        && data.userA < data.userB
+        && chatId == data.userA + '__' + data.userB
+        && data.lastSenderUid == request.auth.uid
+        && (request.auth.uid == data.userA || request.auth.uid == data.userB)
+        && data.userADisplayName is string
+        && data.userADisplayName.size() >= 1
+        && data.userADisplayName.size() <= 60
+        && data.userBDisplayName is string
+        && data.userBDisplayName.size() >= 1
+        && data.userBDisplayName.size() <= 60
+        && isValidOptionalSocialAvatarUrl(data.userAAvatarUrl)
+        && isValidOptionalSocialAvatarUrl(data.userBAvatarUrl)
+        && isValidSocialNowMillis(data.lastMessageAtMs);
+    }
+
+    match /private_chats/{chatId} {
+      allow get: if isValidCompoundPairId(chatId)
+        && isVerifiedPersonalGmail()
+        && isUidInCompoundPairId(chatId, request.auth.uid);
+      allow list: if isVerifiedPersonalGmail()
+        && (existing().userA == request.auth.uid || existing().userB == request.auth.uid);
+      allow create: if isVerifiedPersonalGmail()
+        && isValidPrivateChatThreadDoc(incoming(), chatId)
+        && !isSocialPairBlocked(incoming().userA, incoming().userB);
+      allow update: if isVerifiedPersonalGmail()
+        && isValidPrivateChatThreadDoc(incoming(), chatId)
+        && existing().chatId == incoming().chatId
+        && existing().userA == incoming().userA
+        && existing().userB == incoming().userB
+        && !isSocialPairBlocked(existing().userA, existing().userB)
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'userADisplayName',
+          'userBDisplayName',
+          'userAAvatarUrl',
+          'userBAvatarUrl',
+          'lastSenderUid',
+          'lastMessageAtMs'
+        ]);
+      allow delete: if false;
+    }
+
+    // 13. Bảng khóa tên hiển thị duy nhất toàn hệ thống (/display_names/{nameHash})
+    //     - Chống trùng lặp tên hiển thị ở tầng cơ sở dữ liệu (không chứa email/PII).
+    //     - allow list: if false (chống quét danh sách); allow get chỉ kiểm tra theo hash cụ thể.
+    //     - Chỉ chủ sở hữu (ownerUid == request.auth.uid) được cập nhật cách viết hoa/thường hoặc giải phóng tên cũ.
+    function isValidDisplayNameHashId(nameHash) {
+      return nameHash is string
+        && nameHash.size() == 67
+        && nameHash.matches('^dn_[a-f0-9]{64}$');
+    }
+
+    function isValidDisplayNameRegistryDoc(data, nameHash) {
+      return isValidDisplayNameHashId(nameHash)
+        && data.keys().hasAll([
+          'nameHash',
+          'displayName',
+          'displayNameNormalized',
+          'ownerUid',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'nameHash',
+          'displayName',
+          'displayNameNormalized',
+          'ownerUid',
+          'updatedAt'
+        ])
+        && data.nameHash == nameHash
+        && data.displayName is string
+        && data.displayName.size() >= 1
+        && data.displayName.size() <= 40
+        && data.displayNameNormalized is string
+        && data.displayNameNormalized.size() >= 1
+        && data.displayNameNormalized.size() <= 40
+        && data.displayNameNormalized == data.displayName.lower()
+        && data.ownerUid is string
+        && isValidId(data.ownerUid)
+        && data.ownerUid == request.auth.uid
+        && data.updatedAt is timestamp
+        && data.updatedAt == request.time;
+    }
+
+    match /display_names/{nameHash} {
+      allow get: if isValidDisplayNameHashId(nameHash) && isVerifiedPersonalGmail();
+      allow list: if false;
+      allow create: if isValidDisplayNameHashId(nameHash)
+        && isVerifiedPersonalGmail()
+        && isValidDisplayNameRegistryDoc(incoming(), nameHash);
+      allow update: if isValidDisplayNameHashId(nameHash)
+        && isVerifiedPersonalGmail()
+        && isValidDisplayNameRegistryDoc(incoming(), nameHash)
+        && existing().ownerUid == request.auth.uid
+        && incoming().ownerUid == existing().ownerUid
+        && incoming().nameHash == existing().nameHash
+        && incoming().displayNameNormalized == existing().displayNameNormalized
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'displayName',
+          'updatedAt'
+        ]);
+      allow delete: if isValidDisplayNameHashId(nameHash)
+        && isVerifiedPersonalGmail()
+        && (existing().ownerUid == request.auth.uid || isAdmin());
+    }
   }
 }
 

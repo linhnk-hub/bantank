@@ -254,11 +254,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const currentUser = propUser ?? authManager.getCurrentUser();
   const currentUid = (currentUser as any)?.uid || authManager.getCurrentUser()?.uid || '';
-  const isVerifiedSuperAdmin =
-    isSuperAdmin &&
-    Boolean(currentUser?.email && currentUser.email.toLowerCase() === SUPER_ADMIN_EMAIL);
-
   const userRole = resolveUserRole(currentUser);
+  const isVerifiedSuperAdmin =
+    (isSuperAdmin || userRole === 'ADMIN') &&
+    Boolean(currentUser?.email && currentUser.email.trim().toLowerCase() === SUPER_ADMIN_EMAIL);
+
   const roleFrameClasses = getRoleNameFrameClasses(userRole);
 
   const [activeTab, setActiveTab] = useState<SettingsTabId>(
@@ -926,7 +926,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         </div>
 
         {/* Navigation Tabs (M7.3.9 Mục 3 & 4) */}
-        <div className="bg-[#050510]/95 px-3 py-2 border-b border-[#687386]/40 flex items-center gap-1.5 overflow-x-auto shrink-0">
+        <div className="bg-[#050510]/95 px-3 py-2 border-b border-[#687386]/40 flex flex-wrap items-center gap-1.5 shrink-0">
           {availableTabs.map((tab) => {
             const isSelected = activeTab === tab.id;
             return (

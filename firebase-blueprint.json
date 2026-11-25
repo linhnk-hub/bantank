@@ -640,6 +640,78 @@
         "createdAtMs",
         "expiresAtMs"
       ]
+    },
+    "DisplayNameRegistry": {
+      "title": "DisplayNameRegistry",
+      "description": "Bảng đăng ký tên hiển thị duy nhất toàn hệ thống (/display_names/{nameHash}), không chứa email/PII.",
+      "type": "object",
+      "properties": {
+        "nameHash": {
+          "type": "string",
+          "minLength": 67,
+          "maxLength": 67,
+          "pattern": "^dn_[a-f0-9]{64}$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "displayNameNormalized": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40
+        },
+        "ownerUid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "nameHash",
+        "displayName",
+        "displayNameNormalized",
+        "ownerUid",
+        "updatedAt"
+      ]
+    },
+    "PrivateChatThread": {
+      "title": "PrivateChatThread",
+      "description": "Chỉ mục hội thoại nhắn tin riêng 1-1 (/private_chats/{chatId}) để liệt kê chính xác các tài khoản có lịch sử nhắn tin.",
+      "type": "object",
+      "properties": {
+        "chatId": {
+          "type": "string",
+          "minLength": 4,
+          "maxLength": 260,
+          "pattern": "^[a-zA-Z0-9_\\-]+__[a-zA-Z0-9_\\-]+$"
+        },
+        "userA": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userB": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "userADisplayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "userBDisplayName": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "userAAvatarUrl": { "type": ["string", "null"], "maxLength": 1024 },
+        "userBAvatarUrl": { "type": ["string", "null"], "maxLength": 1024 },
+        "lastSenderUid": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "lastMessageAtMs": { "type": "number" }
+      },
+      "required": [
+        "chatId",
+        "userA",
+        "userB",
+        "userADisplayName",
+        "userBDisplayName",
+        "userAAvatarUrl",
+        "userBAvatarUrl",
+        "lastSenderUid",
+        "lastMessageAtMs"
+      ]
     }
   },
   "firestore": {
@@ -654,6 +726,10 @@
     "/users/{uid}/deleted_friends/{targetUid}": {
       "schema": { "$ref": "#/entities/DeletedFriend" },
       "description": "Danh sách đã xóa bạn riêng tư của từng tài khoản (M7.8)."
+    },
+    "/display_names/{nameHash}": {
+      "schema": { "$ref": "#/entities/DisplayNameRegistry" },
+      "description": "Khóa duy nhất tên hiển thị toàn hệ thống (chống trùng lặp tên, không PII)."
     },
     "/avatar_catalog/{avatarId}": {
       "schema": { "$ref": "#/entities/AvatarCatalogItem" },
@@ -694,6 +770,10 @@
     "/global_chat_messages/{msgId}": {
       "schema": { "$ref": "#/entities/GlobalChatMessage" },
       "description": "Chat chung toàn hệ thống M7.8 (tối đa 300 ký tự)."
+    },
+    "/private_chats/{chatId}": {
+      "schema": { "$ref": "#/entities/PrivateChatThread" },
+      "description": "Chỉ mục hội thoại chat riêng 1-1 cho danh sách lịch sử nhắn tin."
     },
     "/private_chats/{chatId}/messages/{msgId}": {
       "schema": { "$ref": "#/entities/PrivateChatMessage" },

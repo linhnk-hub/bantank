@@ -179,6 +179,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
   // Community manual refresh & unread incoming private message blink tracking (message-ID based, immune to clock skew)
   const [isRefreshingCommunity, setIsRefreshingCommunity] = useState(false);
   const [dismissedRulesBanner, setDismissedRulesBanner] = useState(false);
+  const [isShowingChatHistory, setIsShowingChatHistory] = useState(true);
   const hasClearedSearchRef = useRef(false);
   const [unreadSenderUids, setUnreadSenderUids] = useState<string[]>([]);
   const [unreadSenderProfiles, setUnreadSenderProfiles] = useState<
@@ -362,6 +363,17 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
     const unsub = social.subscribePrivateChat(currentUser.uid, privateChatPeer.uid, (msgs) => {
       setPrivateMessages(msgs);
       const latestMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+      if (latestMsg) {
+        social.recordChatHistoryPeerLocally(
+          currentUser.uid!,
+          {
+            uid: privateChatPeer.uid,
+            displayName: privateChatPeer.displayName,
+            avatarUrl: privateChatPeer.avatarUrl,
+          },
+          latestMsg.createdAtMs
+        );
+      }
       markPeerMessagesRead(privateChatPeer.uid, latestMsg?.id);
     });
     return () => unsub();
@@ -401,6 +413,16 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
         }
         const prevSeenId = seenInitialMsgIdByPeerRef.current[peerUid];
         seenInitialMsgIdByPeerRef.current[peerUid] = latestMsg.id;
+
+        social.recordChatHistoryPeerLocally(
+          currentUser.uid!,
+          {
+            uid: peerUid,
+            displayName: latestMsg.senderUid === peerUid ? latestMsg.senderDisplayName : undefined,
+            avatarUrl: latestMsg.senderUid === peerUid ? latestMsg.senderAvatarUrl : undefined,
+          },
+          latestMsg.createdAtMs
+        );
 
         if (latestMsg.senderUid !== peerUid) return;
 
@@ -454,56 +476,110 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
     };
   }, [currentUser?.uid, sessionStatus, watchedPeerKey, social, markPeerMessagesRead]);
 
+  // Load ONLY accounts with whom the current user has private 1-on-1 messaging history
+  const loadChatHistoryPeers = useCallback(async () => {
+    if (!currentUser?.uid) {
+      setSearchResults([]);
+      setIsShowingChatHistory(true);
+      return;
+    }
+    setSearchLoading(true);
+    setSearchNotice(null);
+    setIsShowingChatHistory(true);
+    try {
+      const peers = await social.listChatHistoryPeers(currentUser.uid);
+      setSearchResults(peers);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [currentUser?.uid, social]);
+
   const handleRefreshCommunity = useCallback(async () => {
     if (!currentUser?.uid || isRefreshingCommunity) return;
     setIsRefreshingCommunity(true);
     try {
       await Promise.all([social.refreshPresenceSnapshot(), refreshFriendsData()]);
-      if (drawerTab === 'SEARCH' && (!hasClearedSearchRef.current || searchQuery.trim().length > 0)) {
-        const res = await social.searchAccounts(searchQuery, Date.now(), true);
-        if (res.success && res.data) {
-          setSearchResults(res.data);
+      if (drawerTab === 'SEARCH') {
+        const trimmed = searchQuery.trim();
+        if (trimmed.length > 0) {
+          const res = await social.searchAccounts(trimmed, Date.now(), true);
+          if (res.success && res.data) {
+            const kwLower = trimmed.toLowerCase();
+            setIsShowingChatHistory(false);
+            setSearchResults(
+              res.data.filter(
+                (acc) =>
+                  acc.uid !== currentUser.uid &&
+                  acc.displayName.toLowerCase().includes(kwLower)
+              )
+            );
+          }
+        } else if (!hasClearedSearchRef.current) {
+          await loadChatHistoryPeers();
         }
       }
     } finally {
       setIsRefreshingCommunity(false);
     }
-  }, [currentUser?.uid, isRefreshingCommunity, social, refreshFriendsData, drawerTab, searchQuery]);
+  }, [
+    currentUser?.uid,
+    isRefreshingCommunity,
+    social,
+    refreshFriendsData,
+    drawerTab,
+    searchQuery,
+    loadChatHistoryPeers,
+  ]);
 
-  // Search handler
+  // Search handler: empty query ONLY lists accounts with messaging history (never dumps all accounts)
   const handleRunSearch = useCallback(
     async (kw: string) => {
       hasClearedSearchRef.current = false;
+      const trimmed = kw.trim();
+      if (!trimmed) {
+        await loadChatHistoryPeers();
+        return;
+      }
       setSearchLoading(true);
       setSearchNotice(null);
+      setIsShowingChatHistory(false);
       try {
-        const res = await social.searchAccounts(kw);
+        const res = await social.searchAccounts(trimmed);
         if (!res.success) {
           setSearchNotice(res.message || t('Không thể tìm kiếm lúc này.', 'Search unavailable.'));
         } else {
-          setSearchResults(res.data ?? []);
+          const kwLower = trimmed.toLowerCase();
+          setSearchResults(
+            (res.data ?? []).filter(
+              (acc) =>
+                acc.uid !== currentUser?.uid &&
+                acc.displayName.toLowerCase().includes(kwLower)
+            )
+          );
         }
       } finally {
         setSearchLoading(false);
       }
     },
-    [social, t]
+    [social, t, currentUser?.uid, loadChatHistoryPeers]
   );
 
   useEffect(() => {
     if (isDrawerOpen && drawerTab === 'SEARCH' && currentUser?.uid) {
-      if (!hasClearedSearchRef.current) {
+      if (searchQuery.trim().length > 0) {
         void handleRunSearch(searchQuery);
+      } else if (!hasClearedSearchRef.current) {
+        void loadChatHistoryPeers();
       }
     }
   }, [isDrawerOpen, drawerTab, currentUser?.uid]);
 
   const handleClearSearch = useCallback(() => {
-    hasClearedSearchRef.current = true;
+    hasClearedSearchRef.current = false;
     setSearchQuery('');
-    setSearchResults([]);
     setSearchNotice(null);
-  }, []);
+    void loadChatHistoryPeers();
+  }, [loadChatHistoryPeers]);
 
   const handleAcceptFriendRequest = useCallback(
     async (requestId: string) => {
@@ -672,7 +748,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
   const filteredOnlinePlayers = mergedCommunityPlayers.filter((p) => {
     const kw = onlineFilter.trim().toLowerCase();
     if (!kw) return true;
-    return p.displayName.toLowerCase().includes(kw) || p.handleTag.toLowerCase().includes(kw);
+    return p.displayName.toLowerCase().includes(kw);
   });
 
   const activeFriendReqPopup =
@@ -1264,7 +1340,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder={t('Tìm theo tên hiển thị hoặc mã #BT-...', 'Search by name or #BT-... tag')}
+                      placeholder={t('Tìm theo tên hiển thị...', 'Search by display name...')}
                       className="w-full pl-9 pr-3 py-2 rounded-lg bg-[#050510] border border-neutral-700 focus:border-[#00F0FF] focus:outline-none text-xs text-white"
                     />
                   </div>
@@ -1279,13 +1355,20 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                     type="button"
                     data-testid="social-search-clear-btn"
                     onClick={handleClearSearch}
-                    disabled={!searchQuery && searchResults.length === 0 && !searchNotice}
+                    disabled={!searchQuery && !searchNotice}
                     className="px-2.5 py-2 rounded-lg bg-neutral-800 hover:bg-neutral-700 border border-neutral-600 text-neutral-200 font-btn font-bold text-xs cursor-pointer shrink-0 disabled:opacity-40"
-                    title={t('Xóa danh sách tìm kiếm', 'Clear search results')}
+                    title={t('Xóa từ khóa tìm kiếm', 'Clear search keyword')}
                   >
                     {t('Xóa', 'Clear')}
                   </button>
                 </form>
+
+                {isShowingChatHistory && (
+                  <div className="flex items-center justify-between text-[11px] font-btn font-bold uppercase tracking-wider text-[#00F0FF]/85 px-1">
+                    <span>{t('Lịch sử nhắn tin', 'Messaging History')}</span>
+                    <span className="text-neutral-400">{searchResults.length}</span>
+                  </div>
+                )}
 
                 {searchNotice && (
                   <div className="px-3 py-2 rounded bg-amber-950/60 border border-amber-500/40 text-amber-200 text-xs flex items-center justify-between gap-2">
@@ -1304,7 +1387,12 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                 <div className="flex-1 overflow-y-auto space-y-2 pr-1">
                   {searchResults.length === 0 ? (
                     <p className="text-center text-xs text-neutral-400 py-8">
-                      {t('Không tìm thấy tài khoản phù hợp.', 'No matching accounts found.')}
+                      {isShowingChatHistory
+                        ? t(
+                            'Chưa có tài khoản nào trong lịch sử nhắn tin.',
+                            'No accounts in your messaging history yet.'
+                          )
+                        : t('Không tìm thấy tài khoản phù hợp.', 'No matching accounts found.')}
                     </p>
                   ) : (
                     searchResults.map((acc) => {
@@ -1339,7 +1427,6 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                                 <span className={acc.isOnline ? 'text-emerald-400 font-semibold' : 'text-neutral-500'}>
                                   ● {acc.isOnline ? 'Online' : 'Offline'}
                                 </span>
-                                <span className="text-neutral-400">{acc.handleTag}</span>
                               </div>
                             </div>
                           </div>
@@ -1759,8 +1846,7 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                       <span className="text-emerald-400 font-semibold">● Online</span>
                     ) : (
                       <span>● Offline</span>
-                    )}{' '}
-                    • {privateChatPeer.handleTag}
+                    )}
                   </p>
                 </div>
               </div>
@@ -1914,7 +2000,6 @@ export const SocialOverlayHub: React.FC<SocialOverlayHubProps> = ({
                   <h4 className="font-btn text-base font-black text-[#EAF4FF]">
                     {profileModalUser.displayName}
                   </h4>
-                  <p className="text-xs text-neutral-400">{profileModalUser.handleTag}</p>
                   <span
                     className={`inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded border ${
                       profileModalUser.isOnline
