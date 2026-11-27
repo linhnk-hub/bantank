@@ -13,10 +13,43 @@ import {
 } from '../../core/types.ts';
 import { GameEngine, NEUTRAL_INPUT } from '../../core/gameEngine.ts';
 import { generateTileTextures } from '../textureGenerator.ts';
+import {
+  RENDER_CONFIG,
+  logicalToRenderPx,
+  logicalToRenderPoint,
+  logicalToRenderRect,
+  tileGridToRenderPoint,
+} from '../renderConfig.ts';
 import { SoundManager } from '../../core/audio.ts';
 import { MusicManager } from '../../core/musicManager.ts';
 import { CoopOnlineManager } from '../../core/coopOnlineManager.ts';
 import { EAGLE_SHIELD_SIDE_WALL_COORDS } from '../../core/supportItemSystem.ts';
+
+const BATTLE_RENDER_DEPTH = {
+  BACKGROUND: 0,
+  TERRAIN: 1,
+  EAGLE_BASE: 2,
+  ENEMY_TANK: 9,
+  PLAYER_TANK: 10,
+  ENEMY_SHIELD: 11,
+  PLAYER_SHIELD: 12,
+  BULLET: 15,
+  VS_SAFE_ZONE: 18,
+  GRASS: 20,
+  SUPPORT_ITEM: 22,
+  HIT_SPARK: 25,
+  TANK_EXPLOSION: 26,
+  BASE_EXPLOSION: 27,
+  P1_EXPLOSION: 28,
+} as const;
+
+const LOGICAL_SHIELD_OFFSET_PX = 1;
+const LOGICAL_SHIELD_SIZE_PX = 18;
+const RENDER_SHIELD_SIZE_PX = logicalToRenderPx(LOGICAL_SHIELD_SIZE_PX); // 72
+const RENDER_BULLET_SIZE_PX = logicalToRenderPx(BULLET_CONFIG.SIZE); // 16
+const RENDER_SUPPORT_TIMER_OFFSET_PX = logicalToRenderPx(15); // 60
+const RENDER_SUPPORT_TIMER_FONT_PX = logicalToRenderPx(7); // 28
+const RENDER_SUPPORT_TIMER_PAD_X_PX = logicalToRenderPx(1); // 4
 
 interface ActiveVisualEffect {
   id: string;
@@ -350,29 +383,48 @@ export class BattleScene extends Phaser.Scene {
   }
 
   create(): void {
-    // 1. Generate all textures (tiles, tank, bullet, enemies, ruined base)
+    // 1. Generate fallback procedural textures (tiles, tank, bullet, enemies, ruined base, VFX)
     generateTileTextures(this);
 
-    // 2. Black background
+    // 2. Black background (832x832 projected render surface)
     this.add
-      .rectangle(0, 0, MAP_DIMENSIONS.TOTAL_WIDTH_PX, MAP_DIMENSIONS.TOTAL_HEIGHT_PX, 0x000000)
-      .setOrigin(0, 0);
+      .rectangle(
+        0,
+        0,
+        RENDER_CONFIG.RENDER_WORLD_WIDTH_PX,
+        RENDER_CONFIG.RENDER_WORLD_HEIGHT_PX,
+        0x000000
+      )
+      .setOrigin(0, 0)
+      .setDepth(BATTLE_RENDER_DEPTH.BACKGROUND);
 
     // 3. Render initial terrain
     this.refreshAllTerrain();
 
     // 4. Create Tank P1 Sprite
     const p1 = this.engine.getState().p1;
-    this.p1Sprite = this.add.image(p1.x, p1.y, `tank_p1_${p1.direction.toLowerCase()}`);
+    const p1RenderPos = logicalToRenderPoint(p1.x, p1.y);
+    this.p1Sprite = this.add.image(
+      p1RenderPos.x,
+      p1RenderPos.y,
+      `tank_p1_${p1.direction.toLowerCase()}`
+    );
     this.p1Sprite.setOrigin(0, 0);
-    this.p1Sprite.setDisplaySize(16, 16);
-    this.p1Sprite.setDepth(10);
+    this.p1Sprite.setDisplaySize(
+      RENDER_CONFIG.RENDER_TILE_SIZE_PX,
+      RENDER_CONFIG.RENDER_TILE_SIZE_PX
+    );
+    this.p1Sprite.setDepth(BATTLE_RENDER_DEPTH.PLAYER_TANK);
 
     // 5. Create P1 Shield Aura Sprite
-    this.p1ShieldSprite = this.add.image(p1.x - 1, p1.y - 1, 'shield_aura');
+    const p1ShieldRenderPos = logicalToRenderPoint(
+      p1.x - LOGICAL_SHIELD_OFFSET_PX,
+      p1.y - LOGICAL_SHIELD_OFFSET_PX
+    );
+    this.p1ShieldSprite = this.add.image(p1ShieldRenderPos.x, p1ShieldRenderPos.y, 'shield_aura');
     this.p1ShieldSprite.setOrigin(0, 0);
-    this.p1ShieldSprite.setDisplaySize(18, 18);
-    this.p1ShieldSprite.setDepth(12);
+    this.p1ShieldSprite.setDisplaySize(RENDER_SHIELD_SIZE_PX, RENDER_SHIELD_SIZE_PX);
+    this.p1ShieldSprite.setDepth(BATTLE_RENDER_DEPTH.PLAYER_SHIELD);
     this.p1ShieldSprite.setVisible(false);
 
     // 6. Setup Keyboard Input
@@ -397,7 +449,7 @@ export class BattleScene extends Phaser.Scene {
 
     // 6b. Create Sudden Death Safe Zone / Danger Zone Graphics Overlay (VS mode only)
     this.vsSafeZoneGraphics = this.add.graphics();
-    this.vsSafeZoneGraphics.setDepth(18);
+    this.vsSafeZoneGraphics.setDepth(BATTLE_RENDER_DEPTH.VS_SAFE_ZONE);
 
     // 7. Subscribe to engine audio events
     this.engine.on('P1_SHOOT', () => {
@@ -620,8 +672,8 @@ export class BattleScene extends Phaser.Scene {
     // 3. Update P1 Tank & Shield
     if (this.p1Sprite) {
       if (state.p1.isAlive && !state.p1State.isDead) {
-        let p1X = state.p1.x;
-        let p1Y = state.p1.y;
+        let p1LogicalX = state.p1.x;
+        let p1LogicalY = state.p1.y;
         if (isOnlineGuest && state.matchState === 'PLAYING') {
           this.p1VisualPos = this.computeSmoothedPos(
             this.p1VisualPos,
@@ -631,18 +683,23 @@ export class BattleScene extends Phaser.Scene {
             24,
             16
           );
-          p1X = this.p1VisualPos.x;
-          p1Y = this.p1VisualPos.y;
+          p1LogicalX = this.p1VisualPos.x;
+          p1LogicalY = this.p1VisualPos.y;
         } else {
           this.p1VisualPos = null;
         }
 
-        if (this.p1Sprite.x !== p1X || this.p1Sprite.y !== p1Y) {
-          this.p1Sprite.setPosition(p1X, p1Y);
+        const p1RenderPos = logicalToRenderPoint(p1LogicalX, p1LogicalY);
+        if (this.p1Sprite.x !== p1RenderPos.x || this.p1Sprite.y !== p1RenderPos.y) {
+          this.p1Sprite.setPosition(p1RenderPos.x, p1RenderPos.y);
         }
         const p1TexKey = `tank_p1_${state.p1.direction.toLowerCase()}`;
         if (this.p1Sprite.texture.key !== p1TexKey) {
           this.p1Sprite.setTexture(p1TexKey);
+          this.p1Sprite.setDisplaySize(
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX,
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX
+          );
         }
         if (!this.p1Sprite.visible) {
           this.p1Sprite.setVisible(true);
@@ -662,8 +719,15 @@ export class BattleScene extends Phaser.Scene {
           }
 
           if (this.p1ShieldSprite) {
-            if (this.p1ShieldSprite.x !== p1X - 1 || this.p1ShieldSprite.y !== p1Y - 1) {
-              this.p1ShieldSprite.setPosition(p1X - 1, p1Y - 1);
+            const p1ShieldRenderPos = logicalToRenderPoint(
+              p1LogicalX - LOGICAL_SHIELD_OFFSET_PX,
+              p1LogicalY - LOGICAL_SHIELD_OFFSET_PX
+            );
+            if (
+              this.p1ShieldSprite.x !== p1ShieldRenderPos.x ||
+              this.p1ShieldSprite.y !== p1ShieldRenderPos.y
+            ) {
+              this.p1ShieldSprite.setPosition(p1ShieldRenderPos.x, p1ShieldRenderPos.y);
             }
             if (!this.p1ShieldSprite.visible) {
               this.p1ShieldSprite.setVisible(true);
@@ -690,48 +754,66 @@ export class BattleScene extends Phaser.Scene {
 
     // 3b. Update P2 Tank & Shield (if P2 exists in 2-Player mode)
     if (state.p2) {
-      const targetP2X = guestVisual ? guestVisual.p2RenderX : state.p2.x;
-      const targetP2Y = guestVisual ? guestVisual.p2RenderY : state.p2.y;
+      const targetP2LogicalX = guestVisual ? guestVisual.p2RenderX : state.p2.x;
+      const targetP2LogicalY = guestVisual ? guestVisual.p2RenderY : state.p2.y;
       const p2RenderDir = guestVisual ? guestVisual.p2RenderDirection : state.p2.direction;
 
-      let p2RenderX = targetP2X;
-      let p2RenderY = targetP2Y;
+      let p2LogicalX = targetP2LogicalX;
+      let p2LogicalY = targetP2LogicalY;
       if (isOnlineGuest && state.matchState === 'PLAYING' && state.p2.isAlive && (!state.p2State || !state.p2State.isDead)) {
         this.p2VisualPos = this.computeSmoothedPos(
           this.p2VisualPos,
-          targetP2X,
-          targetP2Y,
+          targetP2LogicalX,
+          targetP2LogicalY,
           rawDelta,
           28,
           16
         );
-        p2RenderX = this.p2VisualPos.x;
-        p2RenderY = this.p2VisualPos.y;
+        p2LogicalX = this.p2VisualPos.x;
+        p2LogicalY = this.p2VisualPos.y;
       } else {
         this.p2VisualPos = null;
       }
 
+      const p2RenderPos = logicalToRenderPoint(p2LogicalX, p2LogicalY);
+      const p2ShieldRenderPos = logicalToRenderPoint(
+        p2LogicalX - LOGICAL_SHIELD_OFFSET_PX,
+        p2LogicalY - LOGICAL_SHIELD_OFFSET_PX
+      );
+      const p2TexPrefix = this.getP2TankTexturePrefix(state.gameMode);
+      const p2TexKey = `${p2TexPrefix}_${p2RenderDir.toLowerCase()}`;
+
       if (!this.p2Sprite) {
-        this.p2Sprite = this.add.image(p2RenderX, p2RenderY, `tank_p2_${p2RenderDir.toLowerCase()}`);
+        this.p2Sprite = this.add.image(p2RenderPos.x, p2RenderPos.y, p2TexKey);
         this.p2Sprite.setOrigin(0, 0);
-        this.p2Sprite.setDisplaySize(16, 16);
-        this.p2Sprite.setDepth(10);
+        this.p2Sprite.setDisplaySize(
+          RENDER_CONFIG.RENDER_TILE_SIZE_PX,
+          RENDER_CONFIG.RENDER_TILE_SIZE_PX
+        );
+        this.p2Sprite.setDepth(BATTLE_RENDER_DEPTH.PLAYER_TANK);
       }
       if (!this.p2ShieldSprite) {
-        this.p2ShieldSprite = this.add.image(p2RenderX - 1, p2RenderY - 1, 'shield_aura');
+        this.p2ShieldSprite = this.add.image(
+          p2ShieldRenderPos.x,
+          p2ShieldRenderPos.y,
+          'shield_aura'
+        );
         this.p2ShieldSprite.setOrigin(0, 0);
-        this.p2ShieldSprite.setDisplaySize(18, 18);
-        this.p2ShieldSprite.setDepth(12);
+        this.p2ShieldSprite.setDisplaySize(RENDER_SHIELD_SIZE_PX, RENDER_SHIELD_SIZE_PX);
+        this.p2ShieldSprite.setDepth(BATTLE_RENDER_DEPTH.PLAYER_SHIELD);
         this.p2ShieldSprite.setVisible(false);
       }
 
       if (state.p2.isAlive && (!state.p2State || !state.p2State.isDead)) {
-        if (this.p2Sprite.x !== p2RenderX || this.p2Sprite.y !== p2RenderY) {
-          this.p2Sprite.setPosition(p2RenderX, p2RenderY);
+        if (this.p2Sprite.x !== p2RenderPos.x || this.p2Sprite.y !== p2RenderPos.y) {
+          this.p2Sprite.setPosition(p2RenderPos.x, p2RenderPos.y);
         }
-        const p2TexKey = `tank_p2_${p2RenderDir.toLowerCase()}`;
         if (this.p2Sprite.texture.key !== p2TexKey) {
           this.p2Sprite.setTexture(p2TexKey);
+          this.p2Sprite.setDisplaySize(
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX,
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX
+          );
         }
         if (!this.p2Sprite.visible) {
           this.p2Sprite.setVisible(true);
@@ -750,8 +832,11 @@ export class BattleScene extends Phaser.Scene {
             this.p2Sprite.setAlpha(tankAlpha);
           }
           if (this.p2ShieldSprite) {
-            if (this.p2ShieldSprite.x !== p2RenderX - 1 || this.p2ShieldSprite.y !== p2RenderY - 1) {
-              this.p2ShieldSprite.setPosition(p2RenderX - 1, p2RenderY - 1);
+            if (
+              this.p2ShieldSprite.x !== p2ShieldRenderPos.x ||
+              this.p2ShieldSprite.y !== p2ShieldRenderPos.y
+            ) {
+              this.p2ShieldSprite.setPosition(p2ShieldRenderPos.x, p2ShieldRenderPos.y);
             }
             if (!this.p2ShieldSprite.visible) {
               this.p2ShieldSprite.setVisible(true);
@@ -787,8 +872,8 @@ export class BattleScene extends Phaser.Scene {
       if (!enemy.isAlive) continue;
       activeEnemyIds.add(enemy.id);
 
-      let enemyX = enemy.x;
-      let enemyY = enemy.y;
+      let enemyLogicalX = enemy.x;
+      let enemyLogicalY = enemy.y;
       if (isOnlineGuest && state.matchState === 'PLAYING') {
         const smoothedEnemy = this.computeSmoothedPos(
           this.enemyVisualPositions.get(enemy.id),
@@ -799,23 +884,33 @@ export class BattleScene extends Phaser.Scene {
           16
         );
         this.enemyVisualPositions.set(enemy.id, smoothedEnemy);
-        enemyX = smoothedEnemy.x;
-        enemyY = smoothedEnemy.y;
+        enemyLogicalX = smoothedEnemy.x;
+        enemyLogicalY = smoothedEnemy.y;
       }
 
+      const enemyRenderPos = logicalToRenderPoint(enemyLogicalX, enemyLogicalY);
       let sprite = this.enemySprites.get(enemy.id);
       const textureKey = `tank_${enemy.enemyType.toLowerCase()}_${enemy.direction.toLowerCase()}`;
 
       if (!sprite) {
-        sprite = this.add.image(enemyX, enemyY, textureKey);
+        sprite = this.add.image(enemyRenderPos.x, enemyRenderPos.y, textureKey);
         sprite.setOrigin(0, 0);
-        sprite.setDisplaySize(16, 16);
-        sprite.setDepth(9);
+        sprite.setDisplaySize(
+          RENDER_CONFIG.RENDER_TILE_SIZE_PX,
+          RENDER_CONFIG.RENDER_TILE_SIZE_PX
+        );
+        sprite.setDepth(BATTLE_RENDER_DEPTH.ENEMY_TANK);
         this.enemySprites.set(enemy.id, sprite);
       } else {
-        sprite.setPosition(enemyX, enemyY);
+        if (sprite.x !== enemyRenderPos.x || sprite.y !== enemyRenderPos.y) {
+          sprite.setPosition(enemyRenderPos.x, enemyRenderPos.y);
+        }
         if (sprite.texture.key !== textureKey) {
           sprite.setTexture(textureKey);
+          sprite.setDisplaySize(
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX,
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX
+          );
         }
       }
 
@@ -828,14 +923,24 @@ export class BattleScene extends Phaser.Scene {
         const auraAlpha = pulsePhase ? 0.9 : 0.4;
         sprite.setAlpha(tankAlpha);
 
+        const enemyShieldRenderPos = logicalToRenderPoint(
+          enemyLogicalX - LOGICAL_SHIELD_OFFSET_PX,
+          enemyLogicalY - LOGICAL_SHIELD_OFFSET_PX
+        );
         if (!shield) {
-          shield = this.add.image(enemyX - 1, enemyY - 1, 'shield_aura');
+          shield = this.add.image(
+            enemyShieldRenderPos.x,
+            enemyShieldRenderPos.y,
+            'shield_aura'
+          );
           shield.setOrigin(0, 0);
-          shield.setDisplaySize(18, 18);
-          shield.setDepth(11);
+          shield.setDisplaySize(RENDER_SHIELD_SIZE_PX, RENDER_SHIELD_SIZE_PX);
+          shield.setDepth(BATTLE_RENDER_DEPTH.ENEMY_SHIELD);
           this.enemyShieldSprites.set(enemy.id, shield);
         } else {
-          shield.setPosition(enemyX - 1, enemyY - 1);
+          if (shield.x !== enemyShieldRenderPos.x || shield.y !== enemyShieldRenderPos.y) {
+            shield.setPosition(enemyShieldRenderPos.x, enemyShieldRenderPos.y);
+          }
           shield.setVisible(true);
         }
         shield.setAlpha(auraAlpha);
@@ -908,17 +1013,20 @@ export class BattleScene extends Phaser.Scene {
         }
       }
 
+      const bulletRenderPos = logicalToRenderPoint(bX, bY);
       let bSprite = this.bulletSprites.get(b.id);
       const bTex = b.ownerType === 'enemy' ? 'bullet_enemy' : 'bullet';
 
       if (!bSprite) {
-        bSprite = this.add.image(bX, bY, bTex);
+        bSprite = this.add.image(bulletRenderPos.x, bulletRenderPos.y, bTex);
         bSprite.setOrigin(0, 0);
-        bSprite.setDisplaySize(4, 4);
-        bSprite.setDepth(15);
+        bSprite.setDisplaySize(RENDER_BULLET_SIZE_PX, RENDER_BULLET_SIZE_PX);
+        bSprite.setDepth(BATTLE_RENDER_DEPTH.BULLET);
         this.bulletSprites.set(b.id, bSprite);
       } else {
-        bSprite.setPosition(bX, bY);
+        if (bSprite.x !== bulletRenderPos.x || bSprite.y !== bulletRenderPos.y) {
+          bSprite.setPosition(bulletRenderPos.x, bulletRenderPos.y);
+        }
       }
     }
 
@@ -948,12 +1056,14 @@ export class BattleScene extends Phaser.Scene {
         isGameOver: state.matchState === 'GAME_OVER',
       });
       if (ev.type === 'HIT_SPARK') {
-        const clampedX = Math.max(4, Math.min(MAP_DIMENSIONS.TOTAL_WIDTH_PX - 4, ev.x));
-        const clampedY = Math.max(4, Math.min(MAP_DIMENSIONS.TOTAL_HEIGHT_PX - 4, ev.y));
-        const spark = this.add.image(clampedX, clampedY, 'hit_spark');
+        const clampedLogicalX = Math.max(4, Math.min(MAP_DIMENSIONS.TOTAL_WIDTH_PX - 4, ev.x));
+        const clampedLogicalY = Math.max(4, Math.min(MAP_DIMENSIONS.TOTAL_HEIGHT_PX - 4, ev.y));
+        const sparkRenderPos = logicalToRenderPoint(clampedLogicalX, clampedLogicalY);
+        const sparkRenderSize = logicalToRenderPx(8);
+        const spark = this.add.image(sparkRenderPos.x, sparkRenderPos.y, 'hit_spark');
         spark.setOrigin(0.5, 0.5);
-        spark.setDisplaySize(8, 8);
-        spark.setDepth(25);
+        spark.setDisplaySize(sparkRenderSize, sparkRenderSize);
+        spark.setDepth(BATTLE_RENDER_DEPTH.HIT_SPARK);
         this.visualEffects.push({
           id: ev.id,
           type: ev.type,
@@ -962,13 +1072,19 @@ export class BattleScene extends Phaser.Scene {
           totalDurationMs: 150,
         });
       } else if (ev.type === 'TANK_EXPLOSION' || ev.type === 'P1_EXPLOSION') {
-        // Tank explosion max size 32x32 -> clamp center within [16, 192] so it stays 100% inside Canvas
-        const clampedX = Math.max(16, Math.min(MAP_DIMENSIONS.TOTAL_WIDTH_PX - 16, ev.x));
-        const clampedY = Math.max(16, Math.min(MAP_DIMENSIONS.TOTAL_HEIGHT_PX - 16, ev.y));
-        const exp = this.add.image(clampedX, clampedY, 'explosion_1');
+        // Tank explosion max logical size 32x32 -> clamp center within [16, 192] so it stays 100% inside Canvas
+        const clampedLogicalX = Math.max(16, Math.min(MAP_DIMENSIONS.TOTAL_WIDTH_PX - 16, ev.x));
+        const clampedLogicalY = Math.max(16, Math.min(MAP_DIMENSIONS.TOTAL_HEIGHT_PX - 16, ev.y));
+        const expRenderPos = logicalToRenderPoint(clampedLogicalX, clampedLogicalY);
+        const initialExpRenderSize = logicalToRenderPx(16);
+        const exp = this.add.image(expRenderPos.x, expRenderPos.y, 'explosion_1');
         exp.setOrigin(0.5, 0.5);
-        exp.setDisplaySize(16, 16);
-        exp.setDepth(ev.type === 'P1_EXPLOSION' ? 28 : 26);
+        exp.setDisplaySize(initialExpRenderSize, initialExpRenderSize);
+        exp.setDepth(
+          ev.type === 'P1_EXPLOSION'
+            ? BATTLE_RENDER_DEPTH.P1_EXPLOSION
+            : BATTLE_RENDER_DEPTH.TANK_EXPLOSION
+        );
         this.visualEffects.push({
           id: ev.id,
           type: ev.type,
@@ -977,13 +1093,15 @@ export class BattleScene extends Phaser.Scene {
           totalDurationMs: 700, // Exactly 0.7s according to M3/M4 spec
         });
       } else if (ev.type === 'BASE_EXPLOSION') {
-        // Eagle explosion max size 48x48 -> clamp center within [24, 184] so it stays 100% inside Canvas
-        const clampedX = Math.max(24, Math.min(MAP_DIMENSIONS.TOTAL_WIDTH_PX - 24, ev.x));
-        const clampedY = Math.max(24, Math.min(MAP_DIMENSIONS.TOTAL_HEIGHT_PX - 24, ev.y));
-        const exp = this.add.image(clampedX, clampedY, 'eagle_exp_1');
+        // Eagle explosion max logical size 48x48 -> clamp center within [24, 184] so it stays 100% inside Canvas
+        const clampedLogicalX = Math.max(24, Math.min(MAP_DIMENSIONS.TOTAL_WIDTH_PX - 24, ev.x));
+        const clampedLogicalY = Math.max(24, Math.min(MAP_DIMENSIONS.TOTAL_HEIGHT_PX - 24, ev.y));
+        const baseExpRenderPos = logicalToRenderPoint(clampedLogicalX, clampedLogicalY);
+        const initialBaseExpRenderSize = logicalToRenderPx(24);
+        const exp = this.add.image(baseExpRenderPos.x, baseExpRenderPos.y, 'eagle_exp_1');
         exp.setOrigin(0.5, 0.5);
-        exp.setDisplaySize(24, 24);
-        exp.setDepth(27);
+        exp.setDisplaySize(initialBaseExpRenderSize, initialBaseExpRenderSize);
+        exp.setDepth(BATTLE_RENDER_DEPTH.BASE_EXPLOSION);
         this.visualEffects.push({
           id: ev.id,
           type: ev.type,
@@ -1006,39 +1124,41 @@ export class BattleScene extends Phaser.Scene {
           if (eff.type === 'TANK_EXPLOSION' || eff.type === 'P1_EXPLOSION') {
             const progress = eff.elapsedMs / eff.totalDurationMs;
             let nextExpTex = 'explosion_4';
-            let nextExpSize = 24;
+            let nextLogicalExpSize = 24;
             if (progress < 0.25) {
               nextExpTex = 'explosion_1';
-              nextExpSize = 16;
+              nextLogicalExpSize = 16;
             } else if (progress < 0.55) {
               nextExpTex = 'explosion_2';
-              nextExpSize = 24;
+              nextLogicalExpSize = 24;
             } else if (progress < 0.8) {
               nextExpTex = 'explosion_3';
-              nextExpSize = 32;
+              nextLogicalExpSize = 32;
             }
             if (eff.sprite.texture.key !== nextExpTex) {
+              const nextRenderExpSize = logicalToRenderPx(nextLogicalExpSize);
               eff.sprite.setTexture(nextExpTex);
-              eff.sprite.setDisplaySize(nextExpSize, nextExpSize);
+              eff.sprite.setDisplaySize(nextRenderExpSize, nextRenderExpSize);
             }
           } else if (eff.type === 'BASE_EXPLOSION') {
             // Distinct Eagle Base Explosion frames: radiant white, golden amber, shockwave rings
             const progress = eff.elapsedMs / eff.totalDurationMs;
             let nextBaseTex = 'eagle_exp_4';
-            let nextBaseSize = 36;
+            let nextLogicalBaseSize = 36;
             if (progress < 0.25) {
               nextBaseTex = 'eagle_exp_1';
-              nextBaseSize = 24;
+              nextLogicalBaseSize = 24;
             } else if (progress < 0.55) {
               nextBaseTex = 'eagle_exp_2';
-              nextBaseSize = 36;
+              nextLogicalBaseSize = 36;
             } else if (progress < 0.8) {
               nextBaseTex = 'eagle_exp_3';
-              nextBaseSize = 48;
+              nextLogicalBaseSize = 48;
             }
             if (eff.sprite.texture.key !== nextBaseTex) {
+              const nextRenderBaseSize = logicalToRenderPx(nextLogicalBaseSize);
               eff.sprite.setTexture(nextBaseTex);
-              eff.sprite.setDisplaySize(nextBaseSize, nextBaseSize);
+              eff.sprite.setDisplaySize(nextRenderBaseSize, nextRenderBaseSize);
             }
           } else if (eff.type === 'HIT_SPARK') {
             eff.sprite.setAlpha(Math.max(0, 1.0 - eff.elapsedMs / eff.totalDurationMs));
@@ -1085,13 +1205,12 @@ export class BattleScene extends Phaser.Scene {
 
     const state = this.engine.getState();
     const terrain = state.terrain;
-    const tileSize = MAP_DIMENSIONS.TILE_SIZE_PX;
+    const renderTileSize = RENDER_CONFIG.RENDER_TILE_SIZE_PX;
 
     for (let r = 0; r < MAP_DIMENSIONS.ROWS; r++) {
       for (let c = 0; c < MAP_DIMENSIONS.COLS; c++) {
         const tileType = terrain.currentMap[r][c];
-        const x = c * tileSize;
-        const y = r * tileSize;
+        const tileRenderPos = tileGridToRenderPoint(c, r);
 
         if (tileType === TILE_TYPES.EMPTY) {
           continue;
@@ -1102,10 +1221,10 @@ export class BattleScene extends Phaser.Scene {
           const ruinedTexKey = 'tile_9_ruined';
           const texKey = terrain.isBaseDestroyed ? ruinedTexKey : normalTexKey;
 
-          const baseImg = this.add.image(x, y, texKey);
+          const baseImg = this.add.image(tileRenderPos.x, tileRenderPos.y, texKey);
           baseImg.setOrigin(0, 0);
-          baseImg.setDisplaySize(tileSize, tileSize);
-          baseImg.setDepth(2);
+          baseImg.setDisplaySize(renderTileSize, renderTileSize);
+          baseImg.setDepth(BATTLE_RENDER_DEPTH.EAGLE_BASE);
           this.terrainSprites.set(`base_${r}_${c}`, baseImg);
           this.baseSprites.push({
             sprite: baseImg,
@@ -1132,11 +1251,15 @@ export class BattleScene extends Phaser.Scene {
         }
 
         // WATER, GRASS, ICE
-        const img = this.add.image(x, y, `tile_${tileType}`);
+        const img = this.add.image(tileRenderPos.x, tileRenderPos.y, `tile_${tileType}`);
         img.setOrigin(0, 0);
-        img.setDisplaySize(tileSize, tileSize);
+        img.setDisplaySize(renderTileSize, renderTileSize);
         // Grass has higher depth to cover tanks
-        img.setDepth(tileType === TILE_TYPES.GRASS ? 20 : 1);
+        img.setDepth(
+          tileType === TILE_TYPES.GRASS
+            ? BATTLE_RENDER_DEPTH.GRASS
+            : BATTLE_RENDER_DEPTH.TERRAIN
+        );
         this.terrainSprites.set(`tile_${r}_${c}`, img);
       }
     }
@@ -1152,36 +1275,49 @@ export class BattleScene extends Phaser.Scene {
 
     if (mask === 0) return;
 
-    const x = c * 16;
-    const y = r * 16;
+    const tileRenderPos = tileGridToRenderPoint(c, r);
+    const renderTileSize = RENDER_CONFIG.RENDER_TILE_SIZE_PX;
+    const renderSubTileSize = RENDER_CONFIG.RENDER_SUB_TILE_SIZE_PX;
 
     if (mask === SUB_TILE_MASKS.ALL) {
-      const img = this.add.image(x, y, 'tile_1');
+      const img = this.add.image(tileRenderPos.x, tileRenderPos.y, 'tile_1');
       img.setOrigin(0, 0);
-      img.setDisplaySize(16, 16);
-      img.setDepth(1);
+      img.setDisplaySize(renderTileSize, renderTileSize);
+      img.setDepth(BATTLE_RENDER_DEPTH.TERRAIN);
       (img as any).renderedMask = mask;
       this.terrainSprites.set(key, img);
       return;
     }
 
-    const container = this.add.container(x, y);
-    container.setDepth(1);
+    const container = this.add.container(tileRenderPos.x, tileRenderPos.y);
+    container.setDepth(BATTLE_RENDER_DEPTH.TERRAIN);
 
     if (mask & SUB_TILE_MASKS.TL) {
-      const sub = this.add.image(0, 0, 'brick_sub_tl').setOrigin(0, 0).setDisplaySize(8, 8);
+      const sub = this.add
+        .image(0, 0, 'brick_sub_tl')
+        .setOrigin(0, 0)
+        .setDisplaySize(renderSubTileSize, renderSubTileSize);
       container.add(sub);
     }
     if (mask & SUB_TILE_MASKS.TR) {
-      const sub = this.add.image(8, 0, 'brick_sub_tr').setOrigin(0, 0).setDisplaySize(8, 8);
+      const sub = this.add
+        .image(renderSubTileSize, 0, 'brick_sub_tr')
+        .setOrigin(0, 0)
+        .setDisplaySize(renderSubTileSize, renderSubTileSize);
       container.add(sub);
     }
     if (mask & SUB_TILE_MASKS.BL) {
-      const sub = this.add.image(0, 8, 'brick_sub_bl').setOrigin(0, 0).setDisplaySize(8, 8);
+      const sub = this.add
+        .image(0, renderSubTileSize, 'brick_sub_bl')
+        .setOrigin(0, 0)
+        .setDisplaySize(renderSubTileSize, renderSubTileSize);
       container.add(sub);
     }
     if (mask & SUB_TILE_MASKS.BR) {
-      const sub = this.add.image(8, 8, 'brick_sub_br').setOrigin(0, 0).setDisplaySize(8, 8);
+      const sub = this.add
+        .image(renderSubTileSize, renderSubTileSize, 'brick_sub_br')
+        .setOrigin(0, 0)
+        .setDisplaySize(renderSubTileSize, renderSubTileSize);
       container.add(sub);
     }
 
@@ -1199,36 +1335,49 @@ export class BattleScene extends Phaser.Scene {
 
     if (mask === 0) return;
 
-    const x = c * 16;
-    const y = r * 16;
+    const tileRenderPos = tileGridToRenderPoint(c, r);
+    const renderTileSize = RENDER_CONFIG.RENDER_TILE_SIZE_PX;
+    const renderSubTileSize = RENDER_CONFIG.RENDER_SUB_TILE_SIZE_PX;
 
     if (mask === SUB_TILE_MASKS.ALL) {
-      const img = this.add.image(x, y, 'tile_2');
+      const img = this.add.image(tileRenderPos.x, tileRenderPos.y, 'tile_2');
       img.setOrigin(0, 0);
-      img.setDisplaySize(16, 16);
-      img.setDepth(1);
+      img.setDisplaySize(renderTileSize, renderTileSize);
+      img.setDepth(BATTLE_RENDER_DEPTH.TERRAIN);
       (img as any).renderedMask = mask;
       this.terrainSprites.set(key, img);
       return;
     }
 
-    const container = this.add.container(x, y);
-    container.setDepth(1);
+    const container = this.add.container(tileRenderPos.x, tileRenderPos.y);
+    container.setDepth(BATTLE_RENDER_DEPTH.TERRAIN);
 
     if (mask & SUB_TILE_MASKS.TL) {
-      const sub = this.add.image(0, 0, 'steel_sub_tl').setOrigin(0, 0).setDisplaySize(8, 8);
+      const sub = this.add
+        .image(0, 0, 'steel_sub_tl')
+        .setOrigin(0, 0)
+        .setDisplaySize(renderSubTileSize, renderSubTileSize);
       container.add(sub);
     }
     if (mask & SUB_TILE_MASKS.TR) {
-      const sub = this.add.image(8, 0, 'steel_sub_tr').setOrigin(0, 0).setDisplaySize(8, 8);
+      const sub = this.add
+        .image(renderSubTileSize, 0, 'steel_sub_tr')
+        .setOrigin(0, 0)
+        .setDisplaySize(renderSubTileSize, renderSubTileSize);
       container.add(sub);
     }
     if (mask & SUB_TILE_MASKS.BL) {
-      const sub = this.add.image(0, 8, 'steel_sub_bl').setOrigin(0, 0).setDisplaySize(8, 8);
+      const sub = this.add
+        .image(0, renderSubTileSize, 'steel_sub_bl')
+        .setOrigin(0, 0)
+        .setDisplaySize(renderSubTileSize, renderSubTileSize);
       container.add(sub);
     }
     if (mask & SUB_TILE_MASKS.BR) {
-      const sub = this.add.image(8, 8, 'steel_sub_br').setOrigin(0, 0).setDisplaySize(8, 8);
+      const sub = this.add
+        .image(renderSubTileSize, renderSubTileSize, 'steel_sub_br')
+        .setOrigin(0, 0)
+        .setDisplaySize(renderSubTileSize, renderSubTileSize);
       container.add(sub);
     }
 
@@ -1245,12 +1394,20 @@ export class BattleScene extends Phaser.Scene {
         const targetRuined = item.ruinedTexKey || 'tile_9_ruined';
         if (item.sprite.active && item.sprite.texture.key !== targetRuined) {
           item.sprite.setTexture(targetRuined);
+          item.sprite.setDisplaySize(
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX,
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX
+          );
         }
       }
     } else {
       for (const item of this.baseSprites) {
         if (item.sprite.active && item.sprite.texture.key !== item.normalTexKey) {
           item.sprite.setTexture(item.normalTexKey);
+          item.sprite.setDisplaySize(
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX,
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX
+          );
         }
       }
     }
@@ -1403,6 +1560,10 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  private getP2TankTexturePrefix(gameMode: GameCoreState['gameMode']): 'tank_ai2' | 'tank_p2' {
+    return gameMode === 'TWO_PLAYERS_AI' ? 'tank_ai2' : 'tank_p2';
+  }
+
   private getSupportItemTextureKey(type: string): string {
     switch (type) {
       case 'BOMB':
@@ -1426,31 +1587,46 @@ export class BattleScene extends Phaser.Scene {
       activeIds.add(item.id);
       let entry = this.supportItemSprites.get(item.id);
       const texKey = this.getSupportItemTextureKey(item.type);
+      const itemRenderPos = logicalToRenderPoint(item.x, item.y);
 
       if (!entry) {
-        const container = this.add.container(item.x, item.y);
-        container.setDepth(18);
+        const container = this.add.container(itemRenderPos.x, itemRenderPos.y);
+        container.setDepth(BATTLE_RENDER_DEPTH.SUPPORT_ITEM);
 
         const icon = this.add.image(0, 0, texKey);
         icon.setOrigin(0, 0);
-        icon.setDisplaySize(16, 16);
+        icon.setDisplaySize(
+          RENDER_CONFIG.RENDER_TILE_SIZE_PX,
+          RENDER_CONFIG.RENDER_TILE_SIZE_PX
+        );
 
-        const timerText = this.add.text(15, 15, `${item.remainingSeconds}s`, {
-          fontFamily: 'monospace',
-          fontSize: '7px',
-          color: '#fef08a',
-          backgroundColor: '#090d16d9',
-          padding: { x: 1, y: 0 },
-        });
+        const timerText = this.add.text(
+          RENDER_SUPPORT_TIMER_OFFSET_PX,
+          RENDER_SUPPORT_TIMER_OFFSET_PX,
+          `${item.remainingSeconds}s`,
+          {
+            fontFamily: 'monospace',
+            fontSize: `${RENDER_SUPPORT_TIMER_FONT_PX}px`,
+            color: '#fef08a',
+            backgroundColor: '#090d16d9',
+            padding: { x: RENDER_SUPPORT_TIMER_PAD_X_PX, y: 0 },
+          }
+        );
         timerText.setOrigin(1, 1);
 
         container.add([icon, timerText]);
         entry = { container, icon, timerText };
         this.supportItemSprites.set(item.id, entry);
       } else {
-        entry.container.setPosition(item.x, item.y);
+        if (entry.container.x !== itemRenderPos.x || entry.container.y !== itemRenderPos.y) {
+          entry.container.setPosition(itemRenderPos.x, itemRenderPos.y);
+        }
         if (entry.icon.texture.key !== texKey) {
           entry.icon.setTexture(texKey);
+          entry.icon.setDisplaySize(
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX,
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX
+          );
         }
         const label = `${item.remainingSeconds}s`;
         if (entry.timerText.text !== label) {
@@ -1503,8 +1679,8 @@ export class BattleScene extends Phaser.Scene {
       if (c.isDead || !c.tank.isAlive) continue;
       activeAiIds.add(c.id);
 
-      let aiX = c.tank.x;
-      let aiY = c.tank.y;
+      let aiLogicalX = c.tank.x;
+      let aiLogicalY = c.tank.y;
       if (isOnlineGuest && state.matchState === 'PLAYING') {
         const smoothedAi = this.computeSmoothedPos(
           this.vsAiVisualPositions.get(c.id),
@@ -1515,25 +1691,33 @@ export class BattleScene extends Phaser.Scene {
           16
         );
         this.vsAiVisualPositions.set(c.id, smoothedAi);
-        aiX = smoothedAi.x;
-        aiY = smoothedAi.y;
+        aiLogicalX = smoothedAi.x;
+        aiLogicalY = smoothedAi.y;
       }
 
+      const aiRenderPos = logicalToRenderPoint(aiLogicalX, aiLogicalY);
       const prefix = c.role === 'AI_1' ? 'tank_ai1' : 'tank_ai2';
       const texKey = `${prefix}_${c.tank.direction.toLowerCase()}`;
       let sprite = this.vsAiSprites.get(c.id);
       if (!sprite) {
-        sprite = this.add.image(aiX, aiY, texKey);
+        sprite = this.add.image(aiRenderPos.x, aiRenderPos.y, texKey);
         sprite.setOrigin(0, 0);
-        sprite.setDisplaySize(16, 16);
-        sprite.setDepth(10);
+        sprite.setDisplaySize(
+          RENDER_CONFIG.RENDER_TILE_SIZE_PX,
+          RENDER_CONFIG.RENDER_TILE_SIZE_PX
+        );
+        sprite.setDepth(BATTLE_RENDER_DEPTH.PLAYER_TANK);
         this.vsAiSprites.set(c.id, sprite);
       } else {
-        if (sprite.x !== aiX || sprite.y !== aiY) {
-          sprite.setPosition(aiX, aiY);
+        if (sprite.x !== aiRenderPos.x || sprite.y !== aiRenderPos.y) {
+          sprite.setPosition(aiRenderPos.x, aiRenderPos.y);
         }
         if (sprite.texture.key !== texKey) {
           sprite.setTexture(texKey);
+          sprite.setDisplaySize(
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX,
+            RENDER_CONFIG.RENDER_TILE_SIZE_PX
+          );
         }
       }
 
@@ -1541,14 +1725,20 @@ export class BattleScene extends Phaser.Scene {
       if (c.protectionTicksRemaining > 0) {
         const pulse = Math.floor(c.protectionTicksRemaining / 6) % 2 === 0;
         sprite.setAlpha(pulse ? 0.72 : 1.0);
+        const aiShieldRenderPos = logicalToRenderPoint(
+          aiLogicalX - LOGICAL_SHIELD_OFFSET_PX,
+          aiLogicalY - LOGICAL_SHIELD_OFFSET_PX
+        );
         if (!shield) {
-          shield = this.add.image(aiX - 1, aiY - 1, 'shield_aura');
+          shield = this.add.image(aiShieldRenderPos.x, aiShieldRenderPos.y, 'shield_aura');
           shield.setOrigin(0, 0);
-          shield.setDisplaySize(18, 18);
-          shield.setDepth(12);
+          shield.setDisplaySize(RENDER_SHIELD_SIZE_PX, RENDER_SHIELD_SIZE_PX);
+          shield.setDepth(BATTLE_RENDER_DEPTH.PLAYER_SHIELD);
           this.vsAiShieldSprites.set(c.id, shield);
         } else {
-          shield.setPosition(aiX - 1, aiY - 1);
+          if (shield.x !== aiShieldRenderPos.x || shield.y !== aiShieldRenderPos.y) {
+            shield.setPosition(aiShieldRenderPos.x, aiShieldRenderPos.y);
+          }
           shield.setVisible(true);
         }
         shield.setAlpha(pulse ? 0.95 : 0.45);
@@ -1576,7 +1766,7 @@ export class BattleScene extends Phaser.Scene {
       this.vsAiVisualPositions.clear();
     }
 
-    // 2. Render Sudden Death Danger Zone & Safe Zone perimeter overlay
+    // 2. Render Sudden Death Danger Zone & Safe Zone perimeter overlay (projected to 832x832)
     if (!this.vsSafeZoneGraphics) return;
     const g = this.vsSafeZoneGraphics;
     g.clear();
@@ -1585,23 +1775,32 @@ export class BattleScene extends Phaser.Scene {
       return;
     }
 
-    const W = MAP_DIMENSIONS.TOTAL_WIDTH_PX;
-    const H = MAP_DIMENSIONS.TOTAL_HEIGHT_PX;
+    const logicalW = MAP_DIMENSIONS.TOTAL_WIDTH_PX;
+    const logicalH = MAP_DIMENSIONS.TOTAL_HEIGHT_PX;
+    const renderW = RENDER_CONFIG.RENDER_WORLD_WIDTH_PX;
+    const renderH = RENDER_CONFIG.RENDER_WORLD_HEIGHT_PX;
     const b = vs.safeZone.bounds;
     const pulseAlpha = 0.28 + 0.08 * Math.sin(vs.tickCount * 0.12);
 
     if (b.isFullyCollapsed) {
       g.fillStyle(0xff0044, Math.min(0.45, pulseAlpha + 0.1));
-      g.fillRect(0, 0, W, H);
+      g.fillRect(0, 0, renderW, renderH);
     } else if (vs.safeZone.shrinkLevel > 0) {
-      g.fillStyle(0xff0044, pulseAlpha);
-      if (b.minY > 0) g.fillRect(0, 0, W, b.minY);
-      if (b.maxY < H) g.fillRect(0, b.maxY, W, H - b.maxY);
-      if (b.minX > 0) g.fillRect(0, b.minY, b.minX, b.maxY - b.minY);
-      if (b.maxX < W) g.fillRect(b.maxX, b.minY, W - b.maxX, b.maxY - b.minY);
+      const renderMinX = logicalToRenderPx(b.minX);
+      const renderMinY = logicalToRenderPx(b.minY);
+      const renderMaxX = logicalToRenderPx(b.maxX);
+      const renderMaxY = logicalToRenderPx(b.maxY);
 
-      g.lineStyle(1.5, 0xff2a6d, 0.95);
-      g.strokeRect(b.minX, b.minY, b.maxX - b.minX, b.maxY - b.minY);
+      g.fillStyle(0xff0044, pulseAlpha);
+      if (b.minY > 0) g.fillRect(0, 0, renderW, renderMinY);
+      if (b.maxY < logicalH) g.fillRect(0, renderMaxY, renderW, renderH - renderMaxY);
+      if (b.minX > 0) g.fillRect(0, renderMinY, renderMinX, renderMaxY - renderMinY);
+      if (b.maxX < logicalW) {
+        g.fillRect(renderMaxX, renderMinY, renderW - renderMaxX, renderMaxY - renderMinY);
+      }
+
+      g.lineStyle(logicalToRenderPx(1.5), 0xff2a6d, 0.95);
+      g.strokeRect(renderMinX, renderMinY, renderMaxX - renderMinX, renderMaxY - renderMinY);
     }
 
     // Imminent shrink preview border (<= 5s before next shrink)
@@ -1609,8 +1808,19 @@ export class BattleScene extends Phaser.Scene {
       const nb = vs.safeZone.nextBounds;
       const blinkOn = Math.floor(vs.tickCount / 10) % 2 === 0;
       if (blinkOn) {
-        g.lineStyle(1, 0xffb800, 0.9);
-        g.strokeRect(nb.minX, nb.minY, nb.maxX - nb.minX, nb.maxY - nb.minY);
+        const nextRenderRect = logicalToRenderRect({
+          x: nb.minX,
+          y: nb.minY,
+          width: nb.maxX - nb.minX,
+          height: nb.maxY - nb.minY,
+        });
+        g.lineStyle(logicalToRenderPx(1), 0xffb800, 0.9);
+        g.strokeRect(
+          nextRenderRect.x,
+          nextRenderRect.y,
+          nextRenderRect.width,
+          nextRenderRect.height
+        );
       }
     }
   }

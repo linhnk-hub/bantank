@@ -1,0 +1,898 @@
+{
+  "schemaVersion": "1.1.0",
+  "artSystem": "ART_SYSTEM_V1.1",
+  "phase": "GATE_2_PHASE_2.1",
+  "projectionScale": 4,
+  "logicalTilePx": 16,
+  "sourceTilePx": 64,
+  "quarterTilePx": 32,
+  "totalResourceGroups": 19,
+  "totalPngFiles": 51,
+  "coopAiSpriteMapping": {
+    "mode": "TWO_PLAYERS_AI",
+    "allyTankGroup": "ai-p2",
+    "phaserKeyPrefix": "tank_ai2"
+  },
+  "assets": [
+    {
+      "id": "p1_up",
+      "phaserKey": "tank_p1_up",
+      "category": "tank",
+      "group": "p1",
+      "direction": "UP",
+      "path": "assets/tanks/p1/p1_up.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p1_right",
+      "phaserKey": "tank_p1_right",
+      "category": "tank",
+      "group": "p1",
+      "direction": "RIGHT",
+      "path": "assets/tanks/p1/p1_right.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p1_down",
+      "phaserKey": "tank_p1_down",
+      "category": "tank",
+      "group": "p1",
+      "direction": "DOWN",
+      "path": "assets/tanks/p1/p1_down.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p1_left",
+      "phaserKey": "tank_p1_left",
+      "category": "tank",
+      "group": "p1",
+      "direction": "LEFT",
+      "path": "assets/tanks/p1/p1_left.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p2_up",
+      "phaserKey": "tank_p2_up",
+      "category": "tank",
+      "group": "p2",
+      "direction": "UP",
+      "path": "assets/tanks/p2/p2_up.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p2_right",
+      "phaserKey": "tank_p2_right",
+      "category": "tank",
+      "group": "p2",
+      "direction": "RIGHT",
+      "path": "assets/tanks/p2/p2_right.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p2_down",
+      "phaserKey": "tank_p2_down",
+      "category": "tank",
+      "group": "p2",
+      "direction": "DOWN",
+      "path": "assets/tanks/p2/p2_down.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p2_left",
+      "phaserKey": "tank_p2_left",
+      "category": "tank",
+      "group": "p2",
+      "direction": "LEFT",
+      "path": "assets/tanks/p2/p2_left.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "basic_up",
+      "phaserKey": "tank_basic_up",
+      "category": "tank",
+      "group": "basic",
+      "direction": "UP",
+      "path": "assets/tanks/basic/basic_up.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "basic_right",
+      "phaserKey": "tank_basic_right",
+      "category": "tank",
+      "group": "basic",
+      "direction": "RIGHT",
+      "path": "assets/tanks/basic/basic_right.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "basic_down",
+      "phaserKey": "tank_basic_down",
+      "category": "tank",
+      "group": "basic",
+      "direction": "DOWN",
+      "path": "assets/tanks/basic/basic_down.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "basic_left",
+      "phaserKey": "tank_basic_left",
+      "category": "tank",
+      "group": "basic",
+      "direction": "LEFT",
+      "path": "assets/tanks/basic/basic_left.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "fast_up",
+      "phaserKey": "tank_fast_up",
+      "category": "tank",
+      "group": "fast",
+      "direction": "UP",
+      "path": "assets/tanks/fast/fast_up.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "fast_right",
+      "phaserKey": "tank_fast_right",
+      "category": "tank",
+      "group": "fast",
+      "direction": "RIGHT",
+      "path": "assets/tanks/fast/fast_right.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "fast_down",
+      "phaserKey": "tank_fast_down",
+      "category": "tank",
+      "group": "fast",
+      "direction": "DOWN",
+      "path": "assets/tanks/fast/fast_down.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "fast_left",
+      "phaserKey": "tank_fast_left",
+      "category": "tank",
+      "group": "fast",
+      "direction": "LEFT",
+      "path": "assets/tanks/fast/fast_left.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "power_up",
+      "phaserKey": "tank_power_up",
+      "category": "tank",
+      "group": "power",
+      "direction": "UP",
+      "path": "assets/tanks/power/power_up.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "power_right",
+      "phaserKey": "tank_power_right",
+      "category": "tank",
+      "group": "power",
+      "direction": "RIGHT",
+      "path": "assets/tanks/power/power_right.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "power_down",
+      "phaserKey": "tank_power_down",
+      "category": "tank",
+      "group": "power",
+      "direction": "DOWN",
+      "path": "assets/tanks/power/power_down.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "power_left",
+      "phaserKey": "tank_power_left",
+      "category": "tank",
+      "group": "power",
+      "direction": "LEFT",
+      "path": "assets/tanks/power/power_left.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "armor_up",
+      "phaserKey": "tank_armor_up",
+      "category": "tank",
+      "group": "armor",
+      "direction": "UP",
+      "path": "assets/tanks/armor/armor_up.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "armor_right",
+      "phaserKey": "tank_armor_right",
+      "category": "tank",
+      "group": "armor",
+      "direction": "RIGHT",
+      "path": "assets/tanks/armor/armor_right.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "armor_down",
+      "phaserKey": "tank_armor_down",
+      "category": "tank",
+      "group": "armor",
+      "direction": "DOWN",
+      "path": "assets/tanks/armor/armor_down.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "armor_left",
+      "phaserKey": "tank_armor_left",
+      "category": "tank",
+      "group": "armor",
+      "direction": "LEFT",
+      "path": "assets/tanks/armor/armor_left.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p1_up",
+      "phaserKey": "tank_ai1_up",
+      "category": "tank",
+      "group": "ai-p1",
+      "direction": "UP",
+      "path": "assets/tanks/ai-p1/ai_p1_up.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p1_right",
+      "phaserKey": "tank_ai1_right",
+      "category": "tank",
+      "group": "ai-p1",
+      "direction": "RIGHT",
+      "path": "assets/tanks/ai-p1/ai_p1_right.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p1_down",
+      "phaserKey": "tank_ai1_down",
+      "category": "tank",
+      "group": "ai-p1",
+      "direction": "DOWN",
+      "path": "assets/tanks/ai-p1/ai_p1_down.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p1_left",
+      "phaserKey": "tank_ai1_left",
+      "category": "tank",
+      "group": "ai-p1",
+      "direction": "LEFT",
+      "path": "assets/tanks/ai-p1/ai_p1_left.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p2_up",
+      "phaserKey": "tank_ai2_up",
+      "category": "tank",
+      "group": "ai-p2",
+      "direction": "UP",
+      "path": "assets/tanks/ai-p2/ai_p2_up.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p2_right",
+      "phaserKey": "tank_ai2_right",
+      "category": "tank",
+      "group": "ai-p2",
+      "direction": "RIGHT",
+      "path": "assets/tanks/ai-p2/ai_p2_right.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p2_down",
+      "phaserKey": "tank_ai2_down",
+      "category": "tank",
+      "group": "ai-p2",
+      "direction": "DOWN",
+      "path": "assets/tanks/ai-p2/ai_p2_down.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p2_left",
+      "phaserKey": "tank_ai2_left",
+      "category": "tank",
+      "group": "ai-p2",
+      "direction": "LEFT",
+      "path": "assets/tanks/ai-p2/ai_p2_left.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "eagle_alive",
+      "phaserKey": "tile_9",
+      "aliases": [
+        "tile_9_center",
+        "tile_eagle_center"
+      ],
+      "category": "defensive",
+      "group": "eagle-base",
+      "state": "ALIVE",
+      "path": "assets/environment/eagle-base/eagle_alive.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "eagle_destroyed",
+      "phaserKey": "tile_9_ruined",
+      "aliases": [
+        "tile_eagle_ruined"
+      ],
+      "category": "defensive",
+      "group": "eagle-base",
+      "state": "DESTROYED",
+      "path": "assets/environment/eagle-base/eagle_destroyed.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "brick_full",
+      "phaserKey": "tile_1",
+      "category": "defensive",
+      "group": "brick",
+      "variant": "full",
+      "path": "assets/environment/brick/brick_full.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "brick_q_tl",
+      "phaserKey": "brick_sub_tl",
+      "category": "defensive",
+      "group": "brick",
+      "variant": "quarter_tl",
+      "bitMask": 1,
+      "path": "assets/environment/brick/brick_q_tl.png",
+      "width": 32,
+      "height": 32,
+      "logicalWidth": 8,
+      "logicalHeight": 8,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "brick_q_tr",
+      "phaserKey": "brick_sub_tr",
+      "category": "defensive",
+      "group": "brick",
+      "variant": "quarter_tr",
+      "bitMask": 2,
+      "path": "assets/environment/brick/brick_q_tr.png",
+      "width": 32,
+      "height": 32,
+      "logicalWidth": 8,
+      "logicalHeight": 8,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "brick_q_bl",
+      "phaserKey": "brick_sub_bl",
+      "category": "defensive",
+      "group": "brick",
+      "variant": "quarter_bl",
+      "bitMask": 4,
+      "path": "assets/environment/brick/brick_q_bl.png",
+      "width": 32,
+      "height": 32,
+      "logicalWidth": 8,
+      "logicalHeight": 8,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "brick_q_br",
+      "phaserKey": "brick_sub_br",
+      "category": "defensive",
+      "group": "brick",
+      "variant": "quarter_br",
+      "bitMask": 8,
+      "path": "assets/environment/brick/brick_q_br.png",
+      "width": 32,
+      "height": 32,
+      "logicalWidth": 8,
+      "logicalHeight": 8,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "steel_full",
+      "phaserKey": "tile_2",
+      "category": "environment",
+      "group": "steel",
+      "variant": "full",
+      "path": "assets/environment/steel/steel_full.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "steel_q_tl",
+      "phaserKey": "steel_sub_tl",
+      "category": "environment",
+      "group": "steel",
+      "variant": "quarter_tl",
+      "bitMask": 1,
+      "path": "assets/environment/steel/steel_q_tl.png",
+      "width": 32,
+      "height": 32,
+      "logicalWidth": 8,
+      "logicalHeight": 8,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "steel_q_tr",
+      "phaserKey": "steel_sub_tr",
+      "category": "environment",
+      "group": "steel",
+      "variant": "quarter_tr",
+      "bitMask": 2,
+      "path": "assets/environment/steel/steel_q_tr.png",
+      "width": 32,
+      "height": 32,
+      "logicalWidth": 8,
+      "logicalHeight": 8,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "steel_q_bl",
+      "phaserKey": "steel_sub_bl",
+      "category": "environment",
+      "group": "steel",
+      "variant": "quarter_bl",
+      "bitMask": 4,
+      "path": "assets/environment/steel/steel_q_bl.png",
+      "width": 32,
+      "height": 32,
+      "logicalWidth": 8,
+      "logicalHeight": 8,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "steel_q_br",
+      "phaserKey": "steel_sub_br",
+      "category": "environment",
+      "group": "steel",
+      "variant": "quarter_br",
+      "bitMask": 8,
+      "path": "assets/environment/steel/steel_q_br.png",
+      "width": 32,
+      "height": 32,
+      "logicalWidth": 8,
+      "logicalHeight": 8,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ice",
+      "phaserKey": "tile_5",
+      "category": "environment",
+      "group": "ice",
+      "path": "assets/environment/ice/ice.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "grass",
+      "phaserKey": "tile_4",
+      "category": "environment",
+      "group": "grass",
+      "path": "assets/environment/grass/grass.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ],
+      "depthNote": "Conceals Tanks (depth 20 > Tanks 9/10); below Support Items (Phase 2.4 layer fix)"
+    },
+    {
+      "id": "water",
+      "phaserKey": "tile_3",
+      "category": "environment",
+      "group": "water",
+      "path": "assets/environment/water/water.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "item_bomb",
+      "phaserKey": "item_bomb",
+      "category": "powerup",
+      "group": "bomb",
+      "path": "assets/powerups/bomb/item_bomb.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ],
+      "layerRequirement": "Must render above GRASS in Phase 2.4"
+    },
+    {
+      "id": "item_steel_wall",
+      "phaserKey": "item_eagle_shield",
+      "category": "powerup",
+      "group": "steel-wall",
+      "path": "assets/powerups/steel-wall/item_steel_wall.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ],
+      "layerRequirement": "Must render above GRASS in Phase 2.4"
+    },
+    {
+      "id": "item_firepower",
+      "phaserKey": "item_firepower",
+      "category": "powerup",
+      "group": "firepower",
+      "path": "assets/powerups/firepower/item_firepower.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ],
+      "layerRequirement": "Must render above GRASS in Phase 2.4"
+    },
+    {
+      "id": "item_speed",
+      "phaserKey": "item_speed_boost",
+      "category": "powerup",
+      "group": "speed",
+      "path": "assets/powerups/speed/item_speed.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ],
+      "layerRequirement": "Must render above GRASS in Phase 2.4"
+    }
+  ]
+}

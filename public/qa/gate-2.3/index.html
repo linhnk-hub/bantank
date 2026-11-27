@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gate 2.3 – Isolated Render Proof (Bắn Tank Online Art System V1.1)</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 16px;
+      background: #0b1020;
+      color: #e2e8f0;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    }
+    .header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #1e293b;
+      margin-bottom: 16px;
+    }
+    .title {
+      font-size: 16px;
+      font-weight: 700;
+      color: #facc15;
+    }
+    .subtitle {
+      font-size: 12px;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+    button {
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      padding: 6px 10px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    button:hover { background: #334155; }
+    button.active {
+      background: #0284c7;
+      border-color: #38bdf8;
+      color: #ffffff;
+      font-weight: 700;
+    }
+    .stage-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      align-items: flex-start;
+    }
+    .canvas-box {
+      background: #020617;
+      border: 2px solid #334155;
+      padding: 8px;
+      display: inline-block;
+    }
+    canvas {
+      display: block;
+      background: #000000;
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+    }
+    .panel {
+      flex: 1;
+      min-width: 280px;
+      max-width: 440px;
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 6px;
+      padding: 12px;
+      font-size: 12px;
+      line-height: 1.5;
+    }
+    .panel h3 {
+      margin: 0 0 8px 0;
+      font-size: 13px;
+      color: #38bdf8;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 4px;
+    }
+    .metric {
+      display: flex;
+      justify-content: space-between;
+      border-bottom: 1px dashed #1e293b;
+      padding: 3px 0;
+    }
+    .ok { color: #4ade80; font-weight: 700; }
+    .warn { color: #fbbf24; font-weight: 700; }
+    .note {
+      margin-top: 10px;
+      padding: 8px;
+      background: #172554;
+      border: 1px solid #1d4ed8;
+      border-radius: 4px;
+      color: #bfdbfe;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="title">GATE 2.3 – ISOLATED RENDER PROOF | ART SYSTEM V1.1</div>
+      <div class="subtitle">Logical World: 208×208 (13×13 × 16px) | Fixed 60Hz Simulation | Projection Scale: 4× → 832×832 Surface | Zero Production Edits</div>
+    </div>
+    <div id="statusBadge" class="warn">Loading manifest...</div>
+  </div>
+
+  <div class="controls">
+    <button id="btnViewBattle" class="active">1. Battlefield Proof (832×832)</button>
+    <button id="btnViewTanks">2. Tanks 8×4 Matrix</button>
+    <button id="btnViewEnv">3. Environment &amp; Quarters</button>
+    <button id="btnViewItems">4. Support Items &amp; Layering</button>
+    <button id="btnProjToggle" class="active">Mode: Projection 4× (832×832)</button>
+    <button id="btnDepthToggle" class="active">Item Depth: Proof (22 &gt; Grass 20)</button>
+    <button id="btnOverlayToggle">Grid &amp; 14×14 Hitbox: OFF</button>
+    <button id="btnSimToggle" class="active">Fixed 60Hz Sim: RUNNING</button>
+  </div>
+
+  <div class="stage-wrap">
+    <div class="canvas-box">
+      <canvas id="proofCanvas" width="832" height="832" style="width: 624px; height: 624px;"></canvas>
+    </div>
+    <div class="panel">
+      <h3>Render Projection &amp; Simulation Telemetry</h3>
+      <div class="metric"><span>Manifest Assets Loaded</span><span id="mAssets" class="ok">0 / 51</span></div>
+      <div class="metric"><span>Logical World Size</span><span>208 × 208 px (13×13 tiles)</span></div>
+      <div class="metric"><span>Projection Scale</span><span id="mScale" class="ok">4× (1:1 64px Texel)</span></div>
+      <div class="metric"><span>Backing Render Surface</span><span id="mSurface">832 × 832 px</span></div>
+      <div class="metric"><span>Smoothing / Anti-Alias</span><span class="ok">DISABLED (Nearest-Neighbor)</span></div>
+      <div class="metric"><span>Fixed Timestep</span><span>60 Hz (16.667 ms/tick)</span></div>
+      <div class="metric"><span>Simulation Tick Count</span><span id="mTicks">0</span></div>
+      <div class="metric"><span>P1 Logical Coord (Sim)</span><span id="mP1">x=48.0, y=192.0 (14×14 hb)</span></div>
+      <div class="metric"><span>AI P2 Co-op Ally Mapping</span><span class="ok">TWO_PLAYERS_AI → tank_ai2_*</span></div>
+      <div class="metric"><span>Support Item Depth</span><span id="mDepth" class="ok">22 (ABOVE Grass 20)</span></div>
+      <div class="note">
+        <strong>Isolation Guarantee:</strong> Tệp này chạy hoàn toàn độc lập trong <code>public/qa/gate-2.3/</code>.
+        Không sửa <code>BattleScene.ts</code>, <code>PhaserGame.tsx</code>, <code>textureGenerator.ts</code>,
+        <code>asset_manifest.json</code> hay bất kỳ tệp PNG nào. Tọa độ mô phỏng luôn giữ nguyên trong không gian
+        <code>[0..208] × [0..208]</code>; phép chiếu <code>4×</code> chỉ thực hiện tại bước vẽ cuối cùng.
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (async function () {
+      const LOGICAL_WORLD = 208;
+      const LOGICAL_TILE = 16;
+      const LOGICAL_QUARTER = 8;
+      const FIXED_DT_MS = 1000 / 60;
+
+      const canvas = document.getElementById('proofCanvas');
+      const ctx = canvas.getContext('2d', { alpha: false });
+      const statusBadge = document.getElementById('statusBadge');
+      const mAssets = document.getElementById('mAssets');
+      const mScale = document.getElementById('mScale');
+      const mSurface = document.getElementById('mSurface');
+      const mTicks = document.getElementById('mTicks');
+      const mP1 = document.getElementById('mP1');
+      const mDepth = document.getElementById('mDepth');
+
+      let activeView = 'battle';
+      let useProjection4x = true;
+      let itemAboveGrass = true;
+      let showOverlay = false;
+      let simRunning = true;
+
+      // Load manifest and all 51 approved PNGs
+      const manifestResp = await fetch('/assets/manifests/asset_manifest.json');
+      const manifest = await manifestResp.json();
+      const textures = new Map();
+
+      await Promise.all(
+        manifest.assets.map((entry) => new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            textures.set(entry.phaserKey, img);
+            resolve();
+          };
+          img.onerror = () => reject(new Error('Failed to load ' + entry.path));
+          img.src = '/' + entry.path;
+        }))
+      );
+
+      mAssets.textContent = `${textures.size} / ${manifest.totalPngFiles}`;
+      statusBadge.textContent = `READY: ${textures.size}/51 PNGs LOADED`;
+      statusBadge.className = 'ok';
+
+      // Pure 208x208 logical simulation state (NEVER multiplied by 4)
+      const simState = {
+        ticks: 0,
+        tanks: [
+          { id: 'p1', prefix: 'tank_p1', x: 48, y: 192, dir: 'UP', minX: 48, maxX: 48, minY: 160, maxY: 192, vx: 0, vy: -0.5 },
+          { id: 'ai2', prefix: 'tank_ai2', x: 144, y: 192, dir: 'UP', minX: 128, maxX: 144, minY: 192, maxY: 192, vx: -0.4, vy: 0 },
+          { id: 'p2', prefix: 'tank_p2', x: 32, y: 144, dir: 'RIGHT', minX: 16, maxX: 80, minY: 144, maxY: 144, vx: 0.5, vy: 0 },
+          { id: 'ai1', prefix: 'tank_ai1', x: 160, y: 128, dir: 'LEFT', minX: 112, maxX: 176, minY: 128, maxY: 128, vx: -0.5, vy: 0 },
+          { id: 'basic', prefix: 'tank_basic', x: 0, y: 0, dir: 'DOWN', minX: 0, maxX: 0, minY: 0, maxY: 48, vx: 0, vy: 0.4 },
+          { id: 'fast', prefix: 'tank_fast', x: 96, y: 0, dir: 'DOWN', minX: 96, maxX: 96, minY: 0, maxY: 32, vx: 0, vy: 0.7 },
+          { id: 'power', prefix: 'tank_power', x: 192, y: 0, dir: 'LEFT', minX: 160, maxX: 192, minY: 0, maxY: 0, vx: -0.5, vy: 0 },
+          { id: 'armor', prefix: 'tank_armor', x: 64, y: 64, dir: 'RIGHT', minX: 48, maxX: 112, minY: 64, maxY: 64, vx: 0.35, vy: 0 }
+        ],
+        supportItems: [
+          { key: 'item_bomb', x: 32, y: 80 },
+          { key: 'item_eagle_shield', x: 96, y: 112 },
+          { key: 'item_firepower', x: 144, y: 80 },
+          { key: 'item_speed_boost', x: 176, y: 144 }
+        ]
+      };
+
+      // Terrain layout (13x13 logical tiles) showcasing all tile types + quarter bitmasks
+      // 0=empty, 1=brick, 2=steel, 3=water, 4=grass, 5=ice, 9=eagle_alive, 10=eagle_destroyed
+      const mapGrid = [
+        [0, 1, 0, 0, 2, 0, 0, 0, 2, 0, 0, 1, 0],
+        [0, 1, 0, 5, 5, 0, 1, 0, 5, 5, 0, 1, 0],
+        [0, 1, 0, 5, 5, 0, 2, 0, 5, 5, 0, 1, 0],
+        [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        [3, 3, 0, 1, 4, 4, 4, 4, 4, 1, 0, 3, 3],
+        [3, 3, 4, 4, 4, 0, 0, 0, 4, 4, 4, 3, 3],
+        [0, 0, 4, 0, 0, 2, 0, 2, 0, 0, 4, 0, 0],
+        [0, 1, 0, 0, 0, 4, 4, 4, 0, 0, 0, 1, 0],
+        [0, 1, 4, 4, 0, 0, 0, 0, 0, 4, 4, 1, 0],
+        [0, 0, 4, 4, 0, 1, 0, 1, 0, 4, 4, 0, 0],
+        [0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 0],
+        [0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0],
+        [10, 0, 0, 0, 0, 1, 9, 1, 0, 0, 0, 0, 0]
+      ];
+
+      // Quarter-tile bitmask overrides (TL=1, TR=2, BL=4, BR=8)
+      const brickQuarters = { '1_1': 0b1011, '1_6': 0b0111, '11_5': 0b1101, '11_7': 0b1110 };
+      const steelQuarters = { '0_4': 0b1100, '0_8': 0b0011, '6_5': 0b1010, '6_7': 0b0101 };
+
+      function stepSimulation() {
+        simState.ticks++;
+        for (const t of simState.tanks) {
+          t.x += t.vx;
+          t.y += t.vy;
+          if (t.vx !== 0) {
+            if (t.x <= t.minX) { t.x = t.minX; t.vx = Math.abs(t.vx); t.dir = 'RIGHT'; }
+            if (t.x >= t.maxX) { t.x = t.maxX; t.vx = -Math.abs(t.vx); t.dir = 'LEFT'; }
+          }
+          if (t.vy !== 0) {
+            if (t.y <= t.minY) { t.y = t.minY; t.vy = Math.abs(t.vy); t.dir = 'DOWN'; }
+            if (t.y >= t.maxY) { t.y = t.maxY; t.vy = -Math.abs(t.vy); t.dir = 'UP'; }
+          }
+        }
+        mTicks.textContent = String(simState.ticks);
+        const p1 = simState.tanks[0];
+        mP1.textContent = `x=${p1.x.toFixed(1)}, y=${p1.y.toFixed(1)} (14×14 hb)`;
+      }
+
+      // Projection helper: maps logical [0..208] -> backing canvas [0..832] or [0..208]
+      function drawLogical(key, lx, ly, lw, lh, scale) {
+        const img = textures.get(key);
+        if (!img) return;
+        ctx.drawImage(
+          img,
+          Math.round(lx * scale),
+          Math.round(ly * scale),
+          Math.round(lw * scale),
+          Math.round(lh * scale)
+        );
+      }
+
+      function drawSubTile(prefix, mask, lx, ly, scale) {
+        if (mask & 1) drawLogical(prefix + '_tl', lx, ly, LOGICAL_QUARTER, LOGICAL_QUARTER, scale);
+        if (mask & 2) drawLogical(prefix + '_tr', lx + 8, ly, LOGICAL_QUARTER, LOGICAL_QUARTER, scale);
+        if (mask & 4) drawLogical(prefix + '_bl', lx, ly + 8, LOGICAL_QUARTER, LOGICAL_QUARTER, scale);
+        if (mask & 8) drawLogical(prefix + '_br', lx + 8, ly + 8, LOGICAL_QUARTER, LOGICAL_QUARTER, scale);
+      }
+
+      function renderBattlefield(scale) {
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Layer 1: Terrain (Brick, Steel, Water, Ice) + Layer 2: Eagle
+        for (let r = 0; r < 13; r++) {
+          for (let c = 0; c < 13; c++) {
+            const tile = mapGrid[r][c];
+            const lx = c * LOGICAL_TILE;
+            const ly = r * LOGICAL_TILE;
+            const key = `${r}_${c}`;
+            if (tile === 1) {
+              if (brickQuarters[key] !== undefined) drawSubTile('brick_sub', brickQuarters[key], lx, ly, scale);
+              else drawLogical('tile_1', lx, ly, 16, 16, scale);
+            } else if (tile === 2) {
+              if (steelQuarters[key] !== undefined) drawSubTile('steel_sub', steelQuarters[key], lx, ly, scale);
+              else drawLogical('tile_2', lx, ly, 16, 16, scale);
+            } else if (tile === 3) {
+              drawLogical('tile_3', lx, ly, 16, 16, scale);
+            } else if (tile === 5) {
+              drawLogical('tile_5', lx, ly, 16, 16, scale);
+            } else if (tile === 9) {
+              drawLogical('tile_9', lx, ly, 16, 16, scale);
+            } else if (tile === 10) {
+              drawLogical('tile_9_ruined', lx, ly, 16, 16, scale);
+            }
+          }
+        }
+
+        // Layer 9/10: All 8 Tank Groups
+        for (const t of simState.tanks) {
+          drawLogical(`${t.prefix}_${t.dir.toLowerCase()}`, t.x, t.y, 16, 16, scale);
+        }
+
+        // If simulating current Production Depth (18 < Grass 20), draw items BEFORE grass
+        if (!itemAboveGrass) {
+          for (const it of simState.supportItems) {
+            drawLogical(it.key, it.x, it.y, 16, 16, scale);
+          }
+        }
+
+        // Layer 20: Grass Overlay (conceals Tanks underneath)
+        for (let r = 0; r < 13; r++) {
+          for (let c = 0; c < 13; c++) {
+            if (mapGrid[r][c] === 4) {
+              drawLogical('tile_4', c * LOGICAL_TILE, r * LOGICAL_TILE, 16, 16, scale);
+            }
+          }
+        }
+
+        // Layer 22 (Isolated Render Proof): Support Items ABOVE Grass
+        if (itemAboveGrass) {
+          for (const it of simState.supportItems) {
+            drawLogical(it.key, it.x, it.y, 16, 16, scale);
+          }
+        }
+
+        // Optional logical 16x16 grid & 14x14 hitbox proof overlay
+        if (showOverlay) {
+          ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+          ctx.lineWidth = 1;
+          for (let i = 0; i <= 13; i++) {
+            const p = i * LOGICAL_TILE * scale + 0.5;
+            ctx.beginPath(); ctx.moveTo(p, 0); ctx.lineTo(p, canvas.height); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, p); ctx.lineTo(canvas.width, p); ctx.stroke();
+          }
+          ctx.strokeStyle = '#f43f5e';
+          ctx.lineWidth = Math.max(1, scale / 2);
+          for (const t of simState.tanks) {
+            ctx.strokeRect((t.x + 1) * scale, (t.y + 1) * scale, 14 * scale, 14 * scale);
+          }
+        }
+      }
+
+      function renderTankMatrix(scale) {
+        ctx.fillStyle = '#090d16';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const groups = ['tank_p1', 'tank_p2', 'tank_basic', 'tank_fast', 'tank_power', 'tank_armor', 'tank_ai1', 'tank_ai2'];
+        const dirs = ['up', 'right', 'down', 'left'];
+        groups.forEach((g, row) => {
+          dirs.forEach((d, col) => {
+            const lx = 16 + col * 48;
+            const ly = 8 + row * 24;
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(lx * scale, ly * scale, 16 * scale, 16 * scale);
+            drawLogical(`${g}_${d}`, lx, ly, 16, 16, scale);
+          });
+        });
+      }
+
+      function renderEnvMatrix(scale) {
+        ctx.fillStyle = '#090d16';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const fulls = ['tile_9', 'tile_9_ruined', 'tile_1', 'tile_2', 'tile_5', 'tile_4', 'tile_3'];
+        fulls.forEach((k, i) => {
+          drawLogical(k, 8 + i * 28, 16, 16, 16, scale);
+        });
+        // Brick 4 quarters assembled & damaged
+        drawSubTile('brick_sub', 0b1111, 16, 64, scale);
+        drawSubTile('brick_sub', 0b0111, 48, 64, scale);
+        drawSubTile('brick_sub', 0b1100, 80, 64, scale);
+        // Steel 4 quarters assembled & damaged
+        drawSubTile('steel_sub', 0b1111, 16, 112, scale);
+        drawSubTile('steel_sub', 0b1011, 48, 112, scale);
+        drawSubTile('steel_sub', 0b0101, 80, 112, scale);
+      }
+
+      function renderItemsMatrix(scale) {
+        ctx.fillStyle = '#090d16';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        const items = ['item_bomb', 'item_eagle_shield', 'item_firepower', 'item_speed_boost'];
+        items.forEach((k, i) => {
+          const lx = 24 + i * 44;
+          // Row 1: on black
+          ctx.fillStyle = '#000000';
+          ctx.fillRect(lx * scale, 24 * scale, 16 * scale, 16 * scale);
+          drawLogical(k, lx, 24, 16, 16, scale);
+          // Row 2: UNDER Grass (current production depth 18 < 20)
+          drawLogical(k, lx, 72, 16, 16, scale);
+          drawLogical('tile_4', lx, 72, 16, 16, scale);
+          // Row 3: ABOVE Grass (Render Proof depth 22 > 20)
+          drawLogical('tile_4', lx, 120, 16, 16, scale);
+          drawLogical(k, lx, 120, 16, 16, scale);
+        });
+      }
+
+      function updateCanvasResolution() {
+        const target = useProjection4x ? 832 : 208;
+        if (canvas.width !== target || canvas.height !== target) {
+          canvas.width = target;
+          canvas.height = target;
+        }
+        ctx.imageSmoothingEnabled = false;
+        mScale.textContent = useProjection4x ? '4× (1:1 64px Texel)' : '1× (Legacy 208px Surface)';
+        mScale.className = useProjection4x ? 'ok' : 'warn';
+        mSurface.textContent = `${target} × ${target} px`;
+      }
+
+      function renderFrame() {
+        updateCanvasResolution();
+        const scale = useProjection4x ? 4 : 1;
+        if (activeView === 'battle') renderBattlefield(scale);
+        else if (activeView === 'tanks') renderTankMatrix(scale);
+        else if (activeView === 'env') renderEnvMatrix(scale);
+        else renderItemsMatrix(scale);
+      }
+
+      // Wire controls
+      const viewButtons = {
+        battle: document.getElementById('btnViewBattle'),
+        tanks: document.getElementById('btnViewTanks'),
+        env: document.getElementById('btnViewEnv'),
+        items: document.getElementById('btnViewItems')
+      };
+      function setView(v) {
+        activeView = v;
+        Object.entries(viewButtons).forEach(([k, btn]) => btn.classList.toggle('active', k === v));
+        renderFrame();
+      }
+      viewButtons.battle.onclick = () => setView('battle');
+      viewButtons.tanks.onclick = () => setView('tanks');
+      viewButtons.env.onclick = () => setView('env');
+      viewButtons.items.onclick = () => setView('items');
+
+      const btnProj = document.getElementById('btnProjToggle');
+      btnProj.onclick = () => {
+        useProjection4x = !useProjection4x;
+        btnProj.textContent = useProjection4x ? 'Mode: Projection 4× (832×832)' : 'Mode: Logical 1× (208×208)';
+        btnProj.classList.toggle('active', useProjection4x);
+        renderFrame();
+      };
+
+      const btnDepth = document.getElementById('btnDepthToggle');
+      btnDepth.onclick = () => {
+        itemAboveGrass = !itemAboveGrass;
+        btnDepth.textContent = itemAboveGrass ? 'Item Depth: Proof (22 > Grass 20)' : 'Item Depth: Production (18 < Grass 20)';
+        btnDepth.classList.toggle('active', itemAboveGrass);
+        mDepth.textContent = itemAboveGrass ? '22 (ABOVE Grass 20)' : '18 (BELOW Grass 20 - Prod)';
+        mDepth.className = itemAboveGrass ? 'ok' : 'warn';
+        renderFrame();
+      };
+
+      const btnOverlay = document.getElementById('btnOverlayToggle');
+      btnOverlay.onclick = () => {
+        showOverlay = !showOverlay;
+        btnOverlay.textContent = showOverlay ? 'Grid & 14×14 Hitbox: ON' : 'Grid & 14×14 Hitbox: OFF';
+        btnOverlay.classList.toggle('active', showOverlay);
+        renderFrame();
+      };
+
+      const btnSim = document.getElementById('btnSimToggle');
+      btnSim.onclick = () => {
+        simRunning = !simRunning;
+        btnSim.textContent = simRunning ? 'Fixed 60Hz Sim: RUNNING' : 'Fixed 60Hz Sim: PAUSED';
+        btnSim.classList.toggle('active', simRunning);
+      };
+
+      // Fixed 60Hz accumulator loop
+      let lastTime = performance.now();
+      let acc = 0;
+      function loop(now) {
+        const dt = Math.min(now - lastTime, 100);
+        lastTime = now;
+        if (simRunning) {
+          acc += dt;
+          while (acc >= FIXED_DT_MS) {
+            stepSimulation();
+            acc -= FIXED_DT_MS;
+          }
+        }
+        renderFrame();
+        requestAnimationFrame(loop);
+      }
+      requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>

@@ -5,7 +5,8 @@
 
 import React, { useEffect, useRef } from 'react';
 import Phaser from 'phaser';
-import { MAP_DIMENSIONS } from '../core/constants.ts';
+import { RENDER_CONFIG } from './renderConfig.ts';
+import { ArtSystemPreloadScene } from './assetLoader.ts';
 import { StageViewerScene, type SceneTileHoverInfo } from './scenes/StageViewerScene.ts';
 import { BattleScene } from './scenes/BattleScene.ts';
 import { GameEngine } from '../core/gameEngine.ts';
@@ -48,6 +49,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
     if (!containerRef.current) return;
 
     let activeScene: Phaser.Scene;
+    let targetSceneKey: string;
 
     if (mode === 'inspector') {
       const stageScene = new StageViewerScene();
@@ -56,6 +58,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
         stageScene.setTileHoverCallback(onTileHover);
       }
       activeScene = stageScene;
+      targetSceneKey = 'StageViewerScene';
     } else {
       const battleScene = new BattleScene(engine);
       battleSceneRef.current = battleScene;
@@ -69,6 +72,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
         battleScene.setPauseCallback(onPause);
       }
       activeScene = battleScene;
+      targetSceneKey = 'BattleScene';
     }
 
     const isCoarseTouchDevice =
@@ -80,11 +84,13 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
       battleSceneRef.current.setFpsLimit(fpsLimit);
     }
 
+    const preloadScene = new ArtSystemPreloadScene(targetSceneKey);
+
     const config: Phaser.Types.Core.GameConfig = {
       type: isCoarseTouchDevice ? Phaser.CANVAS : Phaser.AUTO,
       parent: containerRef.current,
-      width: MAP_DIMENSIONS.TOTAL_WIDTH_PX,
-      height: MAP_DIMENSIONS.TOTAL_HEIGHT_PX,
+      width: RENDER_CONFIG.RENDER_WORLD_WIDTH_PX,
+      height: RENDER_CONFIG.RENDER_WORLD_HEIGHT_PX,
       backgroundColor: '#000000',
       pixelArt: true, // Crisp retro nearest-neighbor pixel rendering
       roundPixels: true,
@@ -105,7 +111,7 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
         forceSetTimeOut: false,
         smoothStep: false,
       },
-      scene: [activeScene],
+      scene: [preloadScene, activeScene],
     };
 
     const game = new Phaser.Game(config);
@@ -189,7 +195,10 @@ export const PhaserGame: React.FC<PhaserGameProps> = ({
   // Instantly recalculate & refresh Phaser scale on canvasSizePx or orientation update
   useEffect(() => {
     if (gameRef.current) {
-      gameRef.current.scale.resize(MAP_DIMENSIONS.TOTAL_WIDTH_PX, MAP_DIMENSIONS.TOTAL_HEIGHT_PX);
+      gameRef.current.scale.resize(
+        RENDER_CONFIG.RENDER_WORLD_WIDTH_PX,
+        RENDER_CONFIG.RENDER_WORLD_HEIGHT_PX
+      );
       gameRef.current.scale.refresh();
     }
   }, [canvasSizePx]);
