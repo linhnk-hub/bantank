@@ -8,6 +8,7 @@ import { MAP_DIMENSIONS, BULLET_CONFIG } from '../../core/constants.ts';
 import {
   TILE_TYPES,
   SUB_TILE_MASKS,
+  type Direction,
   type InputState,
   type GameCoreState,
 } from '../../core/types.ts';
@@ -20,6 +21,7 @@ import {
   logicalToRenderRect,
   tileGridToRenderPoint,
 } from '../renderConfig.ts';
+import { TankTrackAnimator } from '../tankTrackAnimator.ts';
 import { SoundManager } from '../../core/audio.ts';
 import { MusicManager } from '../../core/musicManager.ts';
 import { CoopOnlineManager } from '../../core/coopOnlineManager.ts';
@@ -107,6 +109,9 @@ export class BattleScene extends Phaser.Scene {
   private renderThrottleAccumulatorMs: number = 0;
   private activeEnemyIds: Set<string> = new Set();
   private activeBulletIds: Set<string> = new Set();
+  private activeVsAiIds: Set<string> = new Set();
+  private trackAnimator: TankTrackAnimator = new TankTrackAnimator();
+  private lastTrackAnimTickCount: number = -1;
   private lastDispatchMonotonicMs: number = 0;
   private bgTimerId: ReturnType<typeof setInterval> | null = null;
   private visibilityChangeHandler?: () => void;
@@ -571,6 +576,8 @@ export class BattleScene extends Phaser.Scene {
       this.stopBackgroundHostTimer();
       this.resetLocalInputState();
       this.resetGuestVisualSmoothing();
+      this.trackAnimator.clear();
+      this.lastTrackAnimTickCount = -1;
       SoundManager.getInstance().stopAllActiveActionSources();
       if (this.unsubOnlineSnapshots) {
         this.unsubOnlineSnapshots();
@@ -655,12 +662,14 @@ export class BattleScene extends Phaser.Scene {
     }
 
     // When user enables 30 FPS power-saving mode, keep simulation accurate but throttle sprite/canvas updates to ~30Hz
+    let renderElapsedMs = rawDelta;
     if (this.targetFpsLimit === 30 && state.matchState === 'PLAYING') {
       this.renderThrottleAccumulatorMs += rawDelta;
       if (this.renderThrottleAccumulatorMs < 31) {
         this.reportHudStateIfNeeded(rawDelta, state);
         return;
       }
+      renderElapsedMs = this.renderThrottleAccumulatorMs;
       this.renderThrottleAccumulatorMs = 0;
     }
 
@@ -668,6 +677,11 @@ export class BattleScene extends Phaser.Scene {
       (this.engine.getGameMode() === 'TWO_PLAYERS_ONLINE' || this.engine.isVsMode()) &&
       CoopOnlineManager.getInstance().getRole() === 'GUEST';
     const guestVisual = isOnlineGuest ? this.engine.getGuestVisualState() : null;
+    const isMatchPlaying = state.matchState === 'PLAYING';
+    const ticksAdvanced =
+      this.lastTrackAnimTickCount < 0
+        ? 1
+        : Math.max(0, state.tickCount - this.lastTrackAnimTickCount);
 
     // 3. Update P1 Tank & Shield
     if (this.p1Sprite) {
@@ -679,7 +693,7 @@ export class BattleScene extends Phaser.Scene {
             this.p1VisualPos,
             state.p1.x,
             state.p1.y,
-            rawDelta,
+            renderElapsedMs,
             24,
             16
           );
@@ -693,7 +707,18 @@ export class BattleScene extends Phaser.Scene {
         if (this.p1Sprite.x !== p1RenderPos.x || this.p1Sprite.y !== p1RenderPos.y) {
           this.p1Sprite.setPosition(p1RenderPos.x, p1RenderPos.y);
         }
-        const p1TexKey = `tank_p1_${state.p1.direction.toLowerCase()}`;
+        const p1BaseTexKey = `tank_p1_${state.p1.direction.toLowerCase()}`;
+        const p1TexKey = this.resolveTankTrackTextureKey(
+          'p1',
+          p1BaseTexKey,
+          p1LogicalX,
+          p1LogicalY,
+          state.p1.direction,
+          isMatchPlaying,
+          renderElapsedMs,
+          ticksAdvanced,
+          isOnlineGuest
+        );
         if (this.p1Sprite.texture.key !== p1TexKey) {
           this.p1Sprite.setTexture(p1TexKey);
           this.p1Sprite.setDisplaySize(
@@ -746,6 +771,7 @@ export class BattleScene extends Phaser.Scene {
         }
       } else {
         this.p1VisualPos = null;
+        this.trackAnimator.resetEntity('p1');
         if (this.p1Sprite.visible) this.p1Sprite.setVisible(false);
         if (this.p1Sprite.alpha !== 1.0) this.p1Sprite.setAlpha(1.0);
         if (this.p1ShieldSprite && this.p1ShieldSprite.visible) this.p1ShieldSprite.setVisible(false);
@@ -760,12 +786,13 @@ export class BattleScene extends Phaser.Scene {
 
       let p2LogicalX = targetP2LogicalX;
       let p2LogicalY = targetP2LogicalY;
-      if (isOnlineGuest && state.matchState === 'PLAYING' && state.p2.isAlive && (!state.p2State || !state.p2State.isDead)) {
+      const isP2Active = state.p2.isAlive && (!state.p2State || !state.p2State.isDead);
+      if (isOnlineGuest && state.matchState === 'PLAYING' && isP2Active) {
         this.p2VisualPos = this.computeSmoothedPos(
           this.p2VisualPos,
           targetP2LogicalX,
           targetP2LogicalY,
-          rawDelta,
+          renderElapsedMs,
           28,
           16
         );
@@ -781,10 +808,10 @@ export class BattleScene extends Phaser.Scene {
         p2LogicalY - LOGICAL_SHIELD_OFFSET_PX
       );
       const p2TexPrefix = this.getP2TankTexturePrefix(state.gameMode);
-      const p2TexKey = `${p2TexPrefix}_${p2RenderDir.toLowerCase()}`;
+      const p2BaseTexKey = `${p2TexPrefix}_${p2RenderDir.toLowerCase()}`;
 
       if (!this.p2Sprite) {
-        this.p2Sprite = this.add.image(p2RenderPos.x, p2RenderPos.y, p2TexKey);
+        this.p2Sprite = this.add.image(p2RenderPos.x, p2RenderPos.y, p2BaseTexKey);
         this.p2Sprite.setOrigin(0, 0);
         this.p2Sprite.setDisplaySize(
           RENDER_CONFIG.RENDER_TILE_SIZE_PX,
@@ -804,10 +831,21 @@ export class BattleScene extends Phaser.Scene {
         this.p2ShieldSprite.setVisible(false);
       }
 
-      if (state.p2.isAlive && (!state.p2State || !state.p2State.isDead)) {
+      if (isP2Active) {
         if (this.p2Sprite.x !== p2RenderPos.x || this.p2Sprite.y !== p2RenderPos.y) {
           this.p2Sprite.setPosition(p2RenderPos.x, p2RenderPos.y);
         }
+        const p2TexKey = this.resolveTankTrackTextureKey(
+          'p2',
+          p2BaseTexKey,
+          p2LogicalX,
+          p2LogicalY,
+          p2RenderDir,
+          isMatchPlaying,
+          renderElapsedMs,
+          ticksAdvanced,
+          isOnlineGuest
+        );
         if (this.p2Sprite.texture.key !== p2TexKey) {
           this.p2Sprite.setTexture(p2TexKey);
           this.p2Sprite.setDisplaySize(
@@ -855,12 +893,14 @@ export class BattleScene extends Phaser.Scene {
         }
       } else {
         this.p2VisualPos = null;
+        this.trackAnimator.resetEntity('p2');
         if (this.p2Sprite.visible) this.p2Sprite.setVisible(false);
         if (this.p2Sprite.alpha !== 1.0) this.p2Sprite.setAlpha(1.0);
         if (this.p2ShieldSprite && this.p2ShieldSprite.visible) this.p2ShieldSprite.setVisible(false);
       }
     } else {
       this.p2VisualPos = null;
+      this.trackAnimator.resetEntity('p2');
       if (this.p2Sprite && this.p2Sprite.visible) this.p2Sprite.setVisible(false);
       if (this.p2ShieldSprite && this.p2ShieldSprite.visible) this.p2ShieldSprite.setVisible(false);
     }
@@ -879,7 +919,7 @@ export class BattleScene extends Phaser.Scene {
           this.enemyVisualPositions.get(enemy.id),
           enemy.x,
           enemy.y,
-          rawDelta,
+          renderElapsedMs,
           22,
           16
         );
@@ -890,7 +930,18 @@ export class BattleScene extends Phaser.Scene {
 
       const enemyRenderPos = logicalToRenderPoint(enemyLogicalX, enemyLogicalY);
       let sprite = this.enemySprites.get(enemy.id);
-      const textureKey = `tank_${enemy.enemyType.toLowerCase()}_${enemy.direction.toLowerCase()}`;
+      const baseTextureKey = `tank_${enemy.enemyType.toLowerCase()}_${enemy.direction.toLowerCase()}`;
+      const textureKey = this.resolveTankTrackTextureKey(
+        `enemy:${enemy.id}`,
+        baseTextureKey,
+        enemyLogicalX,
+        enemyLogicalY,
+        enemy.direction,
+        isMatchPlaying,
+        renderElapsedMs,
+        ticksAdvanced,
+        isOnlineGuest
+      );
 
       if (!sprite) {
         sprite = this.add.image(enemyRenderPos.x, enemyRenderPos.y, textureKey);
@@ -958,6 +1009,7 @@ export class BattleScene extends Phaser.Scene {
         sprite.destroy();
         this.enemySprites.delete(id);
         this.enemyVisualPositions.delete(id);
+        this.trackAnimator.removeEntity(`enemy:${id}`);
         const shield = this.enemyShieldSprites.get(id);
         if (shield) {
           shield.destroy();
@@ -1046,7 +1098,8 @@ export class BattleScene extends Phaser.Scene {
     this.syncSupportItems(state);
 
     // 5c. Render VS Mode A.I Ally Tanks (AI_1 & AI_2) and Sudden Death Safe Zone / Danger Zone Overlay
-    this.syncVsVisuals(state, isOnlineGuest, rawDelta);
+    this.syncVsVisuals(state, isOnlineGuest, renderElapsedMs, ticksAdvanced);
+    this.lastTrackAnimTickCount = state.tickCount;
 
     // 6. Spawn Visual Effects from Combat Events & Trigger Audio
     const newEvents = this.engine.popCombatEvents();
@@ -1183,6 +1236,8 @@ export class BattleScene extends Phaser.Scene {
 
   public refreshAllTerrain(): void {
     this.resetGuestVisualSmoothing();
+    this.trackAnimator.clear();
+    this.lastTrackAnimTickCount = -1;
     // Clean up existing visual effects
     for (const eff of this.visualEffects) {
       eff.sprite.destroy();
@@ -1564,6 +1619,32 @@ export class BattleScene extends Phaser.Scene {
     return gameMode === 'TWO_PLAYERS_AI' ? 'tank_ai2' : 'tank_p2';
   }
 
+  private resolveTankTrackTextureKey(
+    entityId: string,
+    baseFrame0Key: string,
+    logicalX: number,
+    logicalY: number,
+    direction: Direction,
+    isPlaying: boolean,
+    elapsedMs: number,
+    ticksAdvanced: number,
+    isOnlineGuest: boolean
+  ): string {
+    const frame = this.trackAnimator.updateEntity({
+      entityId,
+      x: logicalX,
+      y: logicalY,
+      direction,
+      isPlaying,
+      elapsedMs,
+      ticksAdvanced,
+      isOnlineGuest,
+    });
+    return this.trackAnimator.resolveTextureKey(baseFrame0Key, frame, (key) =>
+      this.textures.exists(key)
+    );
+  }
+
   private getSupportItemTextureKey(type: string): string {
     switch (type) {
       case 'BOMB':
@@ -1655,7 +1736,8 @@ export class BattleScene extends Phaser.Scene {
   private syncVsVisuals(
     state: GameCoreState,
     isOnlineGuest: boolean = false,
-    rawDelta: number = 16
+    rawDelta: number = 16,
+    ticksAdvanced: number = 1
   ): void {
     const vs = state.vsState;
     if (!vs) {
@@ -1667,13 +1749,17 @@ export class BattleScene extends Phaser.Scene {
         this.vsAiShieldSprites.forEach((sp) => sp.destroy());
         this.vsAiShieldSprites.clear();
       }
+      this.activeVsAiIds.clear();
+      this.trackAnimator.prunePrefixedEntities('vs_ai:', this.activeVsAiIds);
       this.vsAiVisualPositions.clear();
       this.vsSafeZoneGraphics?.clear();
       return;
     }
 
     // 1. Sync VS A.I ally tank sprites (AI_1 & AI_2) with Guest interpolation smoothing
-    const activeAiIds = new Set<string>();
+    const activeAiIds = this.activeVsAiIds;
+    activeAiIds.clear();
+    const isMatchPlaying = state.matchState === 'PLAYING';
     for (const c of vs.combatants) {
       if (!c.isAI) continue;
       if (c.isDead || !c.tank.isAlive) continue;
@@ -1697,7 +1783,18 @@ export class BattleScene extends Phaser.Scene {
 
       const aiRenderPos = logicalToRenderPoint(aiLogicalX, aiLogicalY);
       const prefix = c.role === 'AI_1' ? 'tank_ai1' : 'tank_ai2';
-      const texKey = `${prefix}_${c.tank.direction.toLowerCase()}`;
+      const baseTexKey = `${prefix}_${c.tank.direction.toLowerCase()}`;
+      const texKey = this.resolveTankTrackTextureKey(
+        `vs_ai:${c.id}`,
+        baseTexKey,
+        aiLogicalX,
+        aiLogicalY,
+        c.tank.direction,
+        isMatchPlaying,
+        rawDelta,
+        ticksAdvanced,
+        isOnlineGuest
+      );
       let sprite = this.vsAiSprites.get(c.id);
       if (!sprite) {
         sprite = this.add.image(aiRenderPos.x, aiRenderPos.y, texKey);
@@ -1755,6 +1852,7 @@ export class BattleScene extends Phaser.Scene {
         sprite.destroy();
         this.vsAiSprites.delete(id);
         this.vsAiVisualPositions.delete(id);
+        this.trackAnimator.removeEntity(`vs_ai:${id}`);
         const shield = this.vsAiShieldSprites.get(id);
         if (shield) {
           shield.destroy();

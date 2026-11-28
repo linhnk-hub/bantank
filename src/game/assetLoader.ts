@@ -8,7 +8,20 @@ import Phaser from 'phaser';
 export const ART_SYSTEM_MANIFEST_PATH = 'assets/manifests/asset_manifest.json' as const;
 export const ART_SYSTEM_MANIFEST_CACHE_KEY = 'art_system_v1_1_manifest' as const;
 export const ART_SYSTEM_PRELOAD_SCENE_KEY = 'ArtSystemPreloadScene' as const;
-export const EXPECTED_ART_SYSTEM_ASSET_COUNT = 51 as const;
+export const EXPECTED_ART_SYSTEM_ASSET_COUNT = 83 as const;
+
+export const REQUIRED_TANK_TEXTURE_PREFIXES = [
+  'tank_p1',
+  'tank_p2',
+  'tank_basic',
+  'tank_fast',
+  'tank_power',
+  'tank_armor',
+  'tank_ai1',
+  'tank_ai2',
+] as const;
+
+export const REQUIRED_TANK_DIRECTIONS = ['up', 'right', 'down', 'left'] as const;
 
 export const REQUIRED_EAGLE_ALIASES = [
   'tile_9_center',
@@ -23,6 +36,7 @@ export interface ArtSystemManifestAsset {
   readonly category: string;
   readonly group: string;
   readonly direction?: string;
+  readonly frame?: number;
   readonly state?: string;
   readonly variant?: string;
   readonly bitMask?: number;
@@ -256,6 +270,25 @@ export function validateArtSystemManifest(raw: unknown): ManifestValidationResul
     );
   }
 
+  const missingTankKeys: string[] = [];
+  for (const prefix of REQUIRED_TANK_TEXTURE_PREFIXES) {
+    for (const dir of REQUIRED_TANK_DIRECTIONS) {
+      const f0Key = `${prefix}_${dir}`;
+      const f1Key = `${f0Key}_f1`;
+      if (!seenTextureKeys.has(f0Key)) {
+        missingTankKeys.push(f0Key);
+      }
+      if (!seenTextureKeys.has(f1Key)) {
+        missingTankKeys.push(f1Key);
+      }
+    }
+  }
+  if (missingTankKeys.length > 0) {
+    errors.push(
+      `Manifest is missing required tank Frame 0/Frame 1 texture keys (${missingTankKeys.length}): ${missingTankKeys.join(', ')}.`
+    );
+  }
+
   return {
     valid: errors.length === 0,
     errors,
@@ -340,7 +373,8 @@ export function registerEagleCompatibilityAliases(
 }
 
 /**
- * Loads the Art System V1.1 manifest and queues all 51 PNG assets during Phaser's `preload()` phase.
+ * Loads the Art System V1.1 manifest and queues all 83 PNG assets (51 base + 32 tank Frame 1)
+ * during Phaser's `preload()` phase.
  * Existing textures are never overwritten; duplicate keys are never queued.
  * Any missing or failed PNGs are logged clearly and seamlessly fall back to `generateTileTextures()`.
  */
@@ -348,6 +382,7 @@ export function preloadArtSystemAssets(scene: Phaser.Scene): void {
   const queuedKeys = new Set<string>();
   const failedAssets: Array<{ key: string; type: string; url: string }> = [];
   let pendingAliasBindings: ManifestAliasBinding[] = [];
+  let expectedEntryKeys: string[] = [];
   let manifestLoaded = false;
 
   const manifestEventName = `filecomplete-json-${ART_SYSTEM_MANIFEST_CACHE_KEY}`;
@@ -362,6 +397,26 @@ export function preloadArtSystemAssets(scene: Phaser.Scene): void {
     );
   };
 
+  const verifyLoadedTextures = (): void => {
+    if (expectedEntryKeys.length === 0) return;
+    const missingKeys: string[] = [];
+    for (const key of expectedEntryKeys) {
+      if (!scene.textures.exists(key)) {
+        missingKeys.push(key);
+        continue;
+      }
+      const tex = scene.textures.get(key);
+      if (!tex || tex.key === '__MISSING') {
+        missingKeys.push(key);
+      }
+    }
+    if (missingKeys.length > 0) {
+      console.error(
+        `[ArtSystemAssetLoader] Post-preload verification found ${missingKeys.length} missing texture(s) out of ${expectedEntryKeys.length}: ${missingKeys.join(', ')}.`
+      );
+    }
+  };
+
   const enqueueManifestAssets = (manifestData: unknown): number => {
     manifestLoaded = true;
     const validation = validateArtSystemManifest(manifestData);
@@ -374,6 +429,7 @@ export function preloadArtSystemAssets(scene: Phaser.Scene): void {
     }
 
     pendingAliasBindings = validation.aliasBindings;
+    expectedEntryKeys = validation.entries.map((entry) => entry.phaserKey);
 
     let newlyQueuedCount = 0;
     for (const entry of validation.entries) {
@@ -415,8 +471,11 @@ export function preloadArtSystemAssets(scene: Phaser.Scene): void {
       console.error(
         `[ArtSystemAssetLoader] Asset manifest "${ART_SYSTEM_MANIFEST_PATH}" did not load. Falling back to procedural textures.`
       );
-    } else if (pendingAliasBindings.length > 0) {
-      registerEagleCompatibilityAliases(scene, pendingAliasBindings);
+    } else {
+      if (pendingAliasBindings.length > 0) {
+        registerEagleCompatibilityAliases(scene, pendingAliasBindings);
+      }
+      verifyLoadedTextures();
     }
 
     if (failedAssets.length > 0) {
@@ -442,6 +501,7 @@ export function preloadArtSystemAssets(scene: Phaser.Scene): void {
       scene.load.once(Phaser.Loader.Events.COMPLETE, onLoadComplete);
     } else {
       registerEagleCompatibilityAliases(scene, pendingAliasBindings);
+      verifyLoadedTextures();
       cleanupListeners();
     }
     return;

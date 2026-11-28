@@ -1,13 +1,13 @@
 {
   "schemaVersion": "1.1.0",
   "artSystem": "ART_SYSTEM_V1.1",
-  "phase": "GATE_2_PHASE_2.1",
+  "phase": "GATE_2B_TRACK_ANIMATION",
   "projectionScale": 4,
   "logicalTilePx": 16,
   "sourceTilePx": 64,
   "quarterTilePx": 32,
   "totalResourceGroups": 19,
-  "totalPngFiles": 51,
+  "totalPngFiles": 83,
   "coopAiSpriteMapping": {
     "mode": "TWO_PLAYERS_AI",
     "allyTankGroup": "ai-p2",
@@ -548,6 +548,582 @@
       "group": "ai-p2",
       "direction": "LEFT",
       "path": "assets/tanks/ai-p2/ai_p2_left.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p1_up_f1",
+      "phaserKey": "tank_p1_up_f1",
+      "category": "tank",
+      "group": "p1",
+      "direction": "UP",
+      "frame": 1,
+      "path": "assets/tanks/p1/p1_up_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p1_right_f1",
+      "phaserKey": "tank_p1_right_f1",
+      "category": "tank",
+      "group": "p1",
+      "direction": "RIGHT",
+      "frame": 1,
+      "path": "assets/tanks/p1/p1_right_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p1_down_f1",
+      "phaserKey": "tank_p1_down_f1",
+      "category": "tank",
+      "group": "p1",
+      "direction": "DOWN",
+      "frame": 1,
+      "path": "assets/tanks/p1/p1_down_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p1_left_f1",
+      "phaserKey": "tank_p1_left_f1",
+      "category": "tank",
+      "group": "p1",
+      "direction": "LEFT",
+      "frame": 1,
+      "path": "assets/tanks/p1/p1_left_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p2_up_f1",
+      "phaserKey": "tank_p2_up_f1",
+      "category": "tank",
+      "group": "p2",
+      "direction": "UP",
+      "frame": 1,
+      "path": "assets/tanks/p2/p2_up_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p2_right_f1",
+      "phaserKey": "tank_p2_right_f1",
+      "category": "tank",
+      "group": "p2",
+      "direction": "RIGHT",
+      "frame": 1,
+      "path": "assets/tanks/p2/p2_right_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p2_down_f1",
+      "phaserKey": "tank_p2_down_f1",
+      "category": "tank",
+      "group": "p2",
+      "direction": "DOWN",
+      "frame": 1,
+      "path": "assets/tanks/p2/p2_down_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "p2_left_f1",
+      "phaserKey": "tank_p2_left_f1",
+      "category": "tank",
+      "group": "p2",
+      "direction": "LEFT",
+      "frame": 1,
+      "path": "assets/tanks/p2/p2_left_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "basic_up_f1",
+      "phaserKey": "tank_basic_up_f1",
+      "category": "tank",
+      "group": "basic",
+      "direction": "UP",
+      "frame": 1,
+      "path": "assets/tanks/basic/basic_up_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "basic_right_f1",
+      "phaserKey": "tank_basic_right_f1",
+      "category": "tank",
+      "group": "basic",
+      "direction": "RIGHT",
+      "frame": 1,
+      "path": "assets/tanks/basic/basic_right_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "basic_down_f1",
+      "phaserKey": "tank_basic_down_f1",
+      "category": "tank",
+      "group": "basic",
+      "direction": "DOWN",
+      "frame": 1,
+      "path": "assets/tanks/basic/basic_down_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "basic_left_f1",
+      "phaserKey": "tank_basic_left_f1",
+      "category": "tank",
+      "group": "basic",
+      "direction": "LEFT",
+      "frame": 1,
+      "path": "assets/tanks/basic/basic_left_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "fast_up_f1",
+      "phaserKey": "tank_fast_up_f1",
+      "category": "tank",
+      "group": "fast",
+      "direction": "UP",
+      "frame": 1,
+      "path": "assets/tanks/fast/fast_up_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "fast_right_f1",
+      "phaserKey": "tank_fast_right_f1",
+      "category": "tank",
+      "group": "fast",
+      "direction": "RIGHT",
+      "frame": 1,
+      "path": "assets/tanks/fast/fast_right_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "fast_down_f1",
+      "phaserKey": "tank_fast_down_f1",
+      "category": "tank",
+      "group": "fast",
+      "direction": "DOWN",
+      "frame": 1,
+      "path": "assets/tanks/fast/fast_down_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "fast_left_f1",
+      "phaserKey": "tank_fast_left_f1",
+      "category": "tank",
+      "group": "fast",
+      "direction": "LEFT",
+      "frame": 1,
+      "path": "assets/tanks/fast/fast_left_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "power_up_f1",
+      "phaserKey": "tank_power_up_f1",
+      "category": "tank",
+      "group": "power",
+      "direction": "UP",
+      "frame": 1,
+      "path": "assets/tanks/power/power_up_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "power_right_f1",
+      "phaserKey": "tank_power_right_f1",
+      "category": "tank",
+      "group": "power",
+      "direction": "RIGHT",
+      "frame": 1,
+      "path": "assets/tanks/power/power_right_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "power_down_f1",
+      "phaserKey": "tank_power_down_f1",
+      "category": "tank",
+      "group": "power",
+      "direction": "DOWN",
+      "frame": 1,
+      "path": "assets/tanks/power/power_down_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "power_left_f1",
+      "phaserKey": "tank_power_left_f1",
+      "category": "tank",
+      "group": "power",
+      "direction": "LEFT",
+      "frame": 1,
+      "path": "assets/tanks/power/power_left_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "armor_up_f1",
+      "phaserKey": "tank_armor_up_f1",
+      "category": "tank",
+      "group": "armor",
+      "direction": "UP",
+      "frame": 1,
+      "path": "assets/tanks/armor/armor_up_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "armor_right_f1",
+      "phaserKey": "tank_armor_right_f1",
+      "category": "tank",
+      "group": "armor",
+      "direction": "RIGHT",
+      "frame": 1,
+      "path": "assets/tanks/armor/armor_right_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "armor_down_f1",
+      "phaserKey": "tank_armor_down_f1",
+      "category": "tank",
+      "group": "armor",
+      "direction": "DOWN",
+      "frame": 1,
+      "path": "assets/tanks/armor/armor_down_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "armor_left_f1",
+      "phaserKey": "tank_armor_left_f1",
+      "category": "tank",
+      "group": "armor",
+      "direction": "LEFT",
+      "frame": 1,
+      "path": "assets/tanks/armor/armor_left_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p1_up_f1",
+      "phaserKey": "tank_ai1_up_f1",
+      "category": "tank",
+      "group": "ai-p1",
+      "direction": "UP",
+      "frame": 1,
+      "path": "assets/tanks/ai-p1/ai_p1_up_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p1_right_f1",
+      "phaserKey": "tank_ai1_right_f1",
+      "category": "tank",
+      "group": "ai-p1",
+      "direction": "RIGHT",
+      "frame": 1,
+      "path": "assets/tanks/ai-p1/ai_p1_right_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p1_down_f1",
+      "phaserKey": "tank_ai1_down_f1",
+      "category": "tank",
+      "group": "ai-p1",
+      "direction": "DOWN",
+      "frame": 1,
+      "path": "assets/tanks/ai-p1/ai_p1_down_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p1_left_f1",
+      "phaserKey": "tank_ai1_left_f1",
+      "category": "tank",
+      "group": "ai-p1",
+      "direction": "LEFT",
+      "frame": 1,
+      "path": "assets/tanks/ai-p1/ai_p1_left_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p2_up_f1",
+      "phaserKey": "tank_ai2_up_f1",
+      "category": "tank",
+      "group": "ai-p2",
+      "direction": "UP",
+      "frame": 1,
+      "path": "assets/tanks/ai-p2/ai_p2_up_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p2_right_f1",
+      "phaserKey": "tank_ai2_right_f1",
+      "category": "tank",
+      "group": "ai-p2",
+      "direction": "RIGHT",
+      "frame": 1,
+      "path": "assets/tanks/ai-p2/ai_p2_right_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p2_down_f1",
+      "phaserKey": "tank_ai2_down_f1",
+      "category": "tank",
+      "group": "ai-p2",
+      "direction": "DOWN",
+      "frame": 1,
+      "path": "assets/tanks/ai-p2/ai_p2_down_f1.png",
+      "width": 64,
+      "height": 64,
+      "logicalWidth": 16,
+      "logicalHeight": 16,
+      "projectionScale": 4,
+      "origin": [
+        0,
+        0
+      ]
+    },
+    {
+      "id": "ai-p2_left_f1",
+      "phaserKey": "tank_ai2_left_f1",
+      "category": "tank",
+      "group": "ai-p2",
+      "direction": "LEFT",
+      "frame": 1,
+      "path": "assets/tanks/ai-p2/ai_p2_left_f1.png",
       "width": 64,
       "height": 64,
       "logicalWidth": 16,
