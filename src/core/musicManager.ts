@@ -1795,7 +1795,7 @@ export class MusicManager {
             !this.isPaused &&
             !this.previewTrackId &&
             this.activeTrackId === spec.id &&
-            SoundManager.getInstance().getSettings().bgmEnabled
+            this.isBgmEnabledForMode(this.activeContext.mode)
           ) {
             this.unlockFromUserGesture();
           }
@@ -4663,8 +4663,13 @@ export class MusicManager {
     return this.awaitingAutoplayUnlock;
   }
 
+  private isBgmEnabledForMode(mode: GameModeScope = this.activeContext.mode): boolean {
+    const soundManager = SoundManager.getInstance();
+    return soundManager.isBgmEnabledForScope(mode === 'HOME' ? 'HOME' : 'BATTLE');
+  }
+
   public isBgmActivelyPlaying(): boolean {
-    const bgmEnabled = SoundManager.getInstance().getSettings().bgmEnabled;
+    const bgmEnabled = this.isBgmEnabledForMode(this.activeContext.mode);
     if (!bgmEnabled || this.isPaused || this.awaitingAutoplayUnlock) {
       return false;
     }
@@ -4679,7 +4684,7 @@ export class MusicManager {
       const soundManager = SoundManager.getInstance();
       soundManager.unlock();
       this.decodeCachedStaticBgmBlobs();
-      if (this.isPaused || !soundManager.getSettings().bgmEnabled) {
+      if (this.isPaused || !this.isBgmEnabledForMode(this.activeContext.mode)) {
         this.awaitingAutoplayUnlock = false;
         this.removeAutoplayUnlockListeners();
         return;
@@ -4751,17 +4756,36 @@ export class MusicManager {
     }
   }
 
+  /**
+   * Home/Menu audio lifecycle: manages Home audio ONLY and respects independent Home mute preference.
+   */
   public syncMenuPlayback(): void {
+    const soundManager = SoundManager.getInstance();
+    soundManager.enterHomeAudioContext();
     this.isPaused = false;
+
+    const homeBgmEnabled = this.isBgmEnabledForMode('HOME');
+    if (!homeBgmEnabled) {
+      this.activeContext = { stageId: 0, mode: 'HOME' };
+      this.previewTrackId = null;
+      this.stopAllCustomSources();
+      soundManager.stopBgm();
+      this.isPlaying = false;
+      this.awaitingAutoplayUnlock = false;
+      this.removeAutoplayUnlockListeners();
+      this.notify();
+      return;
+    }
+
     const isActivelyRunningAudio =
       (this.currentAudioElement && !this.currentAudioElement.paused) ||
-      (this.currentSource && SoundManager.getInstance().initContext()?.state === 'running');
+      (this.currentSource && soundManager.initContext()?.state === 'running');
     if (
       this.activeContext.stageId === 0 &&
       this.activeContext.mode === 'HOME' &&
       isActivelyRunningAudio &&
       !this.awaitingAutoplayUnlock &&
-      SoundManager.getInstance().getSettings().bgmEnabled
+      this.activeSources.size === 1
     ) {
       this.isPlaying = true;
       this.awaitingAutoplayUnlock = false;
@@ -4772,29 +4796,67 @@ export class MusicManager {
   }
 
   /**
+   * Battle enter audio lifecycle: stops any Home/prior audio, enables Battle BGM by default
+   * (independent of Home mute preference), and starts a single Battle BGM instance.
+   */
+  public enterBattlePlayback(
+    stageId: number,
+    mode: Exclude<GameModeScope, 'HOME'> = 'SOLO'
+  ): void {
+    const soundManager = SoundManager.getInstance();
+    this.stopAllCustomSources();
+    soundManager.stopBgm();
+    soundManager.enterBattleAudioContext(true);
+    this.isPaused = false;
+    this.syncPlaybackWithContext(Math.max(1, stageId), mode);
+  }
+
+  /**
+   * Battle exit audio lifecycle: cleans up all Battle audio and returns cleanly to Home audio preference.
+   */
+  public exitBattlePlayback(): void {
+    this.previewTrackId = null;
+    this.isPaused = false;
+    this.isPlaying = false;
+    this.awaitingAutoplayUnlock = false;
+    this.removeAutoplayUnlockListeners();
+    this.stopAllCustomSources();
+    SoundManager.getInstance().exitBattleAudioContext();
+    this.syncMenuPlayback();
+  }
+
+  /**
    * Synchronizes BGM playback when transitioning stages or changing modes.
-   * Guarantees zero overlapping BGM instances (M7.3.7 Section IV).
+   * Guarantees zero overlapping BGM instances (M7.3.7 Section IV) and strict Home/Battle isolation.
    */
   public syncPlaybackWithContext(
     stageId: number,
     mode: GameModeScope = 'SOLO'
   ): void {
+    const prevMode = this.activeContext.mode;
+    const soundManager = SoundManager.getInstance();
+    if (mode === 'HOME') {
+      soundManager.enterHomeAudioContext();
+    } else if (prevMode === 'HOME' || soundManager.getActiveBgmScope() !== 'BATTLE') {
+      // Transitioning from Home/Menu into a playable Battle scene: Battle BGM starts enabled by default
+      soundManager.enterBattleAudioContext(true);
+    }
+
     this.activeContext = { stageId, mode };
     this.previewTrackId = null;
     const resolved = this.resolveEffectiveTrack(stageId, mode);
-    const soundManager = SoundManager.getInstance();
-    const audioSettings = soundManager.getSettings();
+    const bgmEnabled = this.isBgmEnabledForMode(mode);
 
     // If the exact resolved track is ALREADY actively playing cleanly (not paused, not awaiting unlock),
     // avoid tearing down and recreating the element/source across async auth or screen re-renders.
     const isAlreadyPlayingSameTrack =
-      audioSettings.bgmEnabled &&
+      bgmEnabled &&
       !this.isPaused &&
       !this.awaitingAutoplayUnlock &&
       resolved.trackId &&
       this.activeTrackId === resolved.trackId &&
       this.isPlaying &&
-      this.activeSources.size > 0 &&
+      this.activeSources.size === 1 &&
       ((this.currentAudioElement && !this.currentAudioElement.paused) ||
         (this.currentSource && soundManager.initContext()?.state === 'running') ||
         (typeof Audio === 'undefined' && typeof window === 'undefined'));
@@ -4809,10 +4871,12 @@ export class MusicManager {
     // Always stop all previous custom BGM sources and procedural BGM first
     this.stopAllCustomSources();
 
-    if (!audioSettings.bgmEnabled || this.isPaused) {
+    if (!bgmEnabled || this.isPaused) {
       soundManager.setCustomBgmActive(Boolean(resolved.trackId));
       soundManager.stopBgm();
       this.isPlaying = false;
+      this.awaitingAutoplayUnlock = false;
+      this.removeAutoplayUnlockListeners();
       this.notify();
       return;
     }
@@ -4837,7 +4901,7 @@ export class MusicManager {
           !this.isPaused &&
           !this.previewTrackId &&
           this.activeTrackId === targetId &&
-          SoundManager.getInstance().getSettings().bgmEnabled
+          this.isBgmEnabledForMode(this.activeContext.mode)
         ) {
           this.startTrackBufferPlayback(targetId);
           this.notify();
@@ -4877,7 +4941,7 @@ export class MusicManager {
       const audio = new Audio(streamUrl);
       audio.preload = 'auto';
       audio.loop = this.loopConfig.loop;
-      const targetVol = soundManager.getSettings().bgmEnabled
+      const targetVol = this.isBgmEnabledForMode(this.activeContext.mode)
         ? soundManager.getSettings().bgmVolume
         : 0;
       audio.volume = Math.max(0, Math.min(1, targetVol));
@@ -5043,7 +5107,7 @@ export class MusicManager {
       source.buffer = buffer;
 
       const gainNode = ctx.createGain();
-      const targetVol = soundManager.getSettings().bgmEnabled
+      const targetVol = this.isBgmEnabledForMode(this.activeContext.mode)
         ? soundManager.getSettings().bgmVolume
         : 0;
 
@@ -5167,10 +5231,13 @@ export class MusicManager {
   public onVolumeOrToggleChanged(): void {
     const soundManager = SoundManager.getInstance();
     const settings = soundManager.getSettings();
-    if (!settings.bgmEnabled) {
+    const bgmEnabled = this.isBgmEnabledForMode(this.activeContext.mode);
+    if (!bgmEnabled) {
       this.stopAllCustomSources();
       soundManager.stopBgm();
       this.isPlaying = false;
+      this.awaitingAutoplayUnlock = false;
+      this.removeAutoplayUnlockListeners();
       this.notify();
       return;
     }

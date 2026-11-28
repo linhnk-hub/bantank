@@ -205,7 +205,10 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
   };
 
   return (
-    <div className="relative min-h-[100dvh] w-full flex flex-col justify-between bg-[#050510] text-[#EAF4FF] select-none overflow-x-hidden pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+    <div
+      data-testid="mode-selection-root"
+      className="relative h-[100dvh] max-h-[100dvh] w-full flex flex-col justify-between bg-[#050510] text-[#EAF4FF] select-none overflow-hidden pb-[max(0.25rem,env(safe-area-inset-bottom))]"
+    >
       {/* Tactical Neo-Retro Background Layers */}
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(255,184,0,0.16),rgba(0,240,255,0.06),rgba(5,5,16,0))] pointer-events-none" />
       <div className="fixed inset-0 bg-grid-pattern opacity-35 pointer-events-none" />
@@ -293,12 +296,15 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="relative z-10 flex-1 flex flex-col items-center justify-center px-3 sm:px-6 lg:px-8 py-4 sm:py-6 lg:py-8 max-w-5xl lg:max-w-[1330px] mx-auto w-full animate-neo-fade-in">
-        {/* Hero Brand & Clean Header Progression Stats (Section XI) */}
-        <div className="w-full flex flex-col items-center text-center mb-6 sm:mb-8 lg:mb-10">
-          <div className="flex items-center justify-center gap-2.5 sm:gap-4 lg:gap-6 mb-2.5 lg:mb-4 max-w-full">
-            <GameLogo className="unified-game-logo logo-inline-row lg:scale-[1.25] lg:mr-2" />
+      {/* Main Content Area — Top-anchored so clicking any mode card never shifts logo or buttons */}
+      <main className="relative z-10 flex-1 min-h-0 flex flex-col items-center justify-start overflow-hidden px-3 sm:px-6 lg:px-8 pt-3 sm:pt-5 lg:pt-5 pb-2 sm:pb-3 max-w-5xl lg:max-w-[1440px] mx-auto w-full animate-neo-fade-in">
+        {/* Hero Brand & Clean Header Progression Stats (Fixed Top Anchor) */}
+        <div
+          data-testid="mode-selection-hero"
+          className="w-full shrink-0 flex flex-col items-center text-center mb-4 sm:mb-6 lg:mb-6"
+        >
+          <div className="flex items-center justify-center gap-2.5 sm:gap-4 lg:gap-6 mb-2 lg:mb-3 max-w-full">
+            <GameLogo className="unified-game-logo logo-inline-row mode-select-logo" />
             <div className="text-left min-w-0">
               <div className="text-[10px] sm:text-[11px] lg:text-sm font-hud font-bold uppercase tracking-[0.2em] text-[#00F0FF]">
                 BẮN TANK ONLINE
@@ -316,9 +322,9 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
           {/* Stacked Progression Bar: Rank below Quân hàm, XP below Kinh nghiệm, Stars + Star icon below Sao */}
           <div
             data-testid="home-header-stats-bar"
-            className="mt-2 lg:mt-4 inline-grid grid-cols-3 divide-x divide-neutral-800 rounded-lg lg:rounded-xl neo-bevel-card border border-[#00F0FF]/30 text-xs sm:text-sm lg:text-lg overflow-hidden"
+            className="mt-1.5 lg:mt-2.5 inline-grid grid-cols-3 divide-x divide-neutral-800 rounded-lg lg:rounded-xl neo-bevel-card border border-[#00F0FF]/30 text-xs sm:text-sm lg:text-lg overflow-hidden"
           >
-            <div className="flex flex-col items-center justify-center px-3 sm:px-5 lg:px-8 py-2 lg:py-3.5 gap-0.5 lg:gap-1">
+            <div className="flex flex-col items-center justify-center px-3 sm:px-5 lg:px-8 py-1.5 lg:py-2.5 gap-0.5 lg:gap-1">
               <span className="text-[11px] sm:text-xs lg:text-sm text-neutral-400 font-semibold leading-tight">
                 {t('Quân hàm', 'Rank')}
               </span>
@@ -326,7 +332,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                 {rankDisplayLabel}
               </span>
             </div>
-            <div className="flex flex-col items-center justify-center px-3 sm:px-5 lg:px-8 py-2 lg:py-3.5 gap-0.5 lg:gap-1">
+            <div className="flex flex-col items-center justify-center px-3 sm:px-5 lg:px-8 py-1.5 lg:py-2.5 gap-0.5 lg:gap-1">
               <span className="text-[11px] sm:text-xs lg:text-sm text-neutral-400 font-semibold leading-tight">
                 {t('Kinh nghiệm', 'Experience')}
               </span>
@@ -336,7 +342,7 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
                   : '--'}
               </span>
             </div>
-            <div className="flex flex-col items-center justify-center px-3 sm:px-5 lg:px-8 py-2 lg:py-3.5 gap-0.5 lg:gap-1">
+            <div className="flex flex-col items-center justify-center px-3 sm:px-5 lg:px-8 py-1.5 lg:py-2.5 gap-0.5 lg:gap-1">
               <span className="text-[11px] sm:text-xs lg:text-sm text-neutral-400 font-semibold leading-tight">
                 {t('Sao', 'Stars')}
               </span>
@@ -348,346 +354,346 @@ export const MainMenuScreen: React.FC<MainMenuScreenProps> = ({
           </div>
         </div>
 
-        {/* NEO-RETRO 3-Card Home Mode Flow (SOLO | CO-OP | VS) with TV signal glitch backgrounds & equal tablet/desktop heights */}
-        <div
-          data-testid="home-mode-cards-grid"
-          className={`w-full grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-5 lg:gap-7 ${
-            expandedGroup ? 'items-start' : 'items-stretch'
-          }`}
-        >
-          {/* 1. SOLO — Expands Campaign Stage List (Màn 1–10) */}
+        {/* NEO-RETRO 3-Card Home Mode Flow (SOLO | CO-OP | VS) — Stationary top alignment, desktop +30% buttons */}
+        <div className="w-full flex-1 min-h-0 overflow-y-auto md:overflow-visible pb-1">
           <div
-            data-testid="home-mode-card-solo"
-            className={`relative neo-bevel-card rounded-xl lg:rounded-2xl border transition-all duration-150 overflow-hidden flex flex-col ${
-              expandedGroup === 'SOLO'
-                ? 'border-[#FFB800] neo-bevel-amber'
-                : 'border-[#FFB800]/60 hover:border-[#FFB800] hover:-translate-y-0.5'
-            }`}
+            data-testid="home-mode-cards-grid"
+            className="w-full grid grid-cols-1 md:grid-cols-3 gap-3.5 sm:gap-5 lg:gap-8 items-start"
           >
-            <button
-              type="button"
-              data-testid="home-mode-solo-btn"
-              aria-expanded={expandedGroup === 'SOLO'}
-              disabled={isActionDisabled}
-              onClick={() =>
-                setExpandedGroup((prev) => (prev === 'SOLO' ? null : 'SOLO'))
-              }
-              className="group relative w-full flex-1 text-left px-4 py-2.5 sm:px-4 sm:py-3 lg:px-6 lg:py-4 flex flex-col justify-end min-h-[98px] md:min-h-[112px] lg:min-h-[146px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
+            {/* 1. SOLO — Expands Campaign Stage List (Màn 1–10) */}
+            <div
+              data-testid="home-mode-card-solo"
+              className={`relative neo-bevel-card rounded-xl lg:rounded-2xl border transition-colors duration-150 overflow-hidden flex flex-col ${
+                expandedGroup === 'SOLO'
+                  ? 'border-[#FFB800] neo-bevel-amber'
+                  : 'border-[#FFB800]/60 hover:border-[#FFB800]'
+              }`}
             >
-              {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
-              <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-                <img
-                  src="/solo.png"
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover object-center tv-card-bg-static"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/25 to-[#050510]/15" />
-                <div className="absolute inset-0 tv-card-scanlines opacity-40" />
-                <div className="absolute inset-x-0 top-0 h-12 tv-card-scanline-sweep" />
-                <div className="absolute inset-x-0 top-[36%] h-2.5 tv-card-glitch-bar" />
-              </div>
-
-              <div className="relative z-10 mt-auto flex items-center gap-2.5 lg:gap-3">
-                <span
-                  data-testid="home-mode-solo-arrow"
-                  className={`w-7 h-7 lg:w-9 lg:h-9 rounded-lg border flex items-center justify-center text-[#FFB800] transition-all duration-200 shrink-0 ${
-                    expandedGroup === 'SOLO'
-                      ? 'rotate-180 bg-[#FFB800]/25 border-[#FFB800] shadow-[0_0_16px_rgba(255,184,0,0.65)]'
-                      : 'bg-[#050510]/75 border-[#FFB800]/60 shadow-[0_0_10px_rgba(255,184,0,0.25)] group-hover:bg-[#FFB800]/20 group-hover:border-[#FFB800] group-hover:shadow-[0_0_14px_rgba(255,184,0,0.5)]'
-                  }`}
-                >
-                  <ChevronDown className="w-4 h-4 lg:w-5 lg:h-5" />
-                </span>
-                <h2
-                  className={`font-btn text-xl sm:text-2xl lg:text-[2rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
-                    expandedGroup === 'SOLO'
-                      ? 'text-[#FFB800]'
-                      : 'text-[#EAF4FF] group-hover:text-[#FFB800]'
-                  }`}
-                >
-                  SOLO
-                </h2>
-              </div>
-            </button>
-
-            {expandedGroup === 'SOLO' && (
-              <div
-                data-testid="home-solo-stages"
-                className="relative z-10 px-3.5 pb-3.5 pt-2.5 lg:px-5 lg:pb-5 lg:pt-3.5 border-t border-[#FFB800]/25 bg-[#050510]/95 grid grid-cols-2 gap-1.5 lg:gap-2.5 animate-neo-expand max-h-[260px] lg:max-h-[340px] overflow-y-auto"
+              <button
+                type="button"
+                data-testid="home-mode-solo-btn"
+                aria-expanded={expandedGroup === 'SOLO'}
+                disabled={isActionDisabled}
+                onClick={() =>
+                  setExpandedGroup((prev) => (prev === 'SOLO' ? null : 'SOLO'))
+                }
+                className="group relative w-full shrink-0 text-left px-4 py-2.5 sm:px-4 sm:py-3 lg:px-8 lg:py-5 flex flex-col justify-end h-[98px] md:h-[112px] lg:h-[190px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
               >
-                {soloStages.map((stage) => {
-                  const isUnlocked = isSuperAdmin || stage.id <= soloUnlockedStage;
-                  return (
-                    <button
-                      key={stage.id}
-                      type="button"
-                      data-testid={`home-solo-stage-btn-${stage.id}`}
-                      disabled={isActionDisabled || !isUnlocked}
-                      onClick={() => handleSoloStageSelect(stage.id)}
-                      className={`min-h-[42px] lg:min-h-[56px] px-2.5 py-2 lg:px-3.5 lg:py-2.5 rounded-lg border flex items-center justify-between gap-1.5 text-left transition-colors ${
-                        isUnlocked
-                          ? 'bg-[#0b0d1e] hover:bg-[#FFB800]/18 border-[#FFB800]/45 hover:border-[#FFB800] text-white cursor-pointer active:scale-[0.99]'
-                          : 'bg-[#080a16] border-neutral-800/90 text-neutral-500 cursor-not-allowed opacity-65'
-                      }`}
-                    >
+                {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
+                <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+                  <img
+                    src="/solo.png"
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover object-center tv-card-bg-static"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/25 to-[#050510]/15" />
+                  <div className="absolute inset-0 tv-card-scanlines opacity-40" />
+                  <div className="absolute inset-x-0 top-0 h-12 tv-card-scanline-sweep" />
+                  <div className="absolute inset-x-0 top-[36%] h-2.5 tv-card-glitch-bar" />
+                </div>
+
+                <div className="relative z-10 mt-auto flex items-center gap-2.5 lg:gap-4">
+                  <span
+                    data-testid="home-mode-solo-arrow"
+                    className={`w-7 h-7 lg:w-12 lg:h-12 rounded-lg lg:rounded-xl border flex items-center justify-center text-[#FFB800] transition-all duration-200 shrink-0 ${
+                      expandedGroup === 'SOLO'
+                        ? 'rotate-180 bg-[#FFB800]/25 border-[#FFB800] shadow-[0_0_16px_rgba(255,184,0,0.65)]'
+                        : 'bg-[#050510]/75 border-[#FFB800]/60 shadow-[0_0_10px_rgba(255,184,0,0.25)] group-hover:bg-[#FFB800]/20 group-hover:border-[#FFB800] group-hover:shadow-[0_0_14px_rgba(255,184,0,0.5)]'
+                    }`}
+                  >
+                    <ChevronDown className="w-4 h-4 lg:w-6 lg:h-6" />
+                  </span>
+                  <h2
+                    className={`font-btn text-xl sm:text-2xl lg:text-[2.6rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
+                      expandedGroup === 'SOLO'
+                        ? 'text-[#FFB800]'
+                        : 'text-[#EAF4FF] group-hover:text-[#FFB800]'
+                    }`}
+                  >
+                    SOLO
+                  </h2>
+                </div>
+              </button>
+
+              {expandedGroup === 'SOLO' && (
+                <div
+                  data-testid="home-solo-stages"
+                  className="relative z-10 px-3.5 pb-3.5 pt-2.5 lg:px-5 lg:pb-4 lg:pt-3 border-t border-[#FFB800]/25 bg-[#050510]/95 grid grid-cols-2 gap-1.5 lg:gap-2.5 animate-neo-expand max-h-[220px] lg:max-h-[clamp(140px,calc(100dvh-535px),320px)] overflow-y-auto"
+                >
+                  {soloStages.map((stage) => {
+                    const isUnlocked = isSuperAdmin || stage.id <= soloUnlockedStage;
+                    return (
+                      <button
+                        key={stage.id}
+                        type="button"
+                        data-testid={`home-solo-stage-btn-${stage.id}`}
+                        disabled={isActionDisabled || !isUnlocked}
+                        onClick={() => handleSoloStageSelect(stage.id)}
+                        className={`min-h-[42px] lg:min-h-[54px] px-2.5 py-2 lg:px-3.5 lg:py-2.5 rounded-lg border flex items-center justify-between gap-1.5 text-left transition-colors ${
+                          isUnlocked
+                            ? 'bg-[#0b0d1e] hover:bg-[#FFB800]/18 border-[#FFB800]/45 hover:border-[#FFB800] text-white cursor-pointer active:scale-[0.99]'
+                            : 'bg-[#080a16] border-neutral-800/90 text-neutral-500 cursor-not-allowed opacity-65'
+                        }`}
+                      >
+                        <div className="min-w-0">
+                          <div className="font-btn text-xs lg:text-base font-black uppercase truncate">
+                            {t(`Màn ${stage.id}`, `Stage ${stage.id}`)}
+                          </div>
+                          <div className="text-[10px] lg:text-xs text-neutral-400 truncate">
+                            {stage.name}
+                          </div>
+                        </div>
+                        {isUnlocked ? (
+                          <ArrowRight className="w-3.5 h-3.5 lg:w-5 lg:h-5 text-[#FFB800] shrink-0" />
+                        ) : (
+                          <Lock className="w-3.5 h-3.5 lg:w-5 lg:h-5 text-neutral-600 shrink-0" />
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* 2. CO-OP — Expands CO-OP A.I & CO-OP ONLINE */}
+            <div
+              data-testid="home-mode-card-coop"
+              className={`relative neo-bevel-card rounded-xl lg:rounded-2xl border transition-colors duration-150 overflow-hidden flex flex-col ${
+                expandedGroup === 'COOP'
+                  ? 'border-[#00F0FF] neo-bevel-cyan'
+                  : 'border-[#00F0FF]/60 hover:border-[#00F0FF]'
+              }`}
+            >
+              <button
+                type="button"
+                data-testid="home-mode-coop-toggle"
+                aria-expanded={expandedGroup === 'COOP'}
+                disabled={isActionDisabled}
+                onClick={() =>
+                  setExpandedGroup((prev) => (prev === 'COOP' ? null : 'COOP'))
+                }
+                className="group relative w-full shrink-0 text-left px-4 py-2.5 sm:px-4 sm:py-3 lg:px-8 lg:py-5 flex flex-col justify-end h-[98px] md:h-[112px] lg:h-[190px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
+              >
+                {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
+                <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+                  <img
+                    src="/coop.png"
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover object-center tv-card-bg-static"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/25 to-[#050510]/15" />
+                  <div className="absolute inset-0 tv-card-scanlines opacity-40" />
+                  <div
+                    style={{ animationDelay: '-1.4s' }}
+                    className="absolute inset-x-0 top-0 h-12 tv-card-scanline-sweep"
+                  />
+                  <div
+                    style={{ animationDelay: '-2.1s' }}
+                    className="absolute inset-x-0 top-[48%] h-2.5 tv-card-glitch-bar"
+                  />
+                </div>
+
+                <div className="relative z-10 mt-auto flex items-center gap-2.5 lg:gap-4">
+                  <span
+                    data-testid="home-mode-coop-arrow"
+                    className={`w-7 h-7 lg:w-12 lg:h-12 rounded-lg lg:rounded-xl border flex items-center justify-center text-[#00F0FF] transition-all duration-200 shrink-0 ${
+                      expandedGroup === 'COOP'
+                        ? 'rotate-180 bg-[#00F0FF]/25 border-[#00F0FF] shadow-[0_0_16px_rgba(0,240,255,0.65)]'
+                        : 'bg-[#050510]/75 border-[#00F0FF]/60 shadow-[0_0_10px_rgba(0,240,255,0.25)] group-hover:bg-[#00F0FF]/20 group-hover:border-[#00F0FF] group-hover:shadow-[0_0_14px_rgba(0,240,255,0.5)]'
+                    }`}
+                  >
+                    <ChevronDown className="w-4 h-4 lg:w-6 lg:h-6" />
+                  </span>
+                  <h2
+                    className={`font-btn text-xl sm:text-2xl lg:text-[2.6rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
+                      expandedGroup === 'COOP'
+                        ? 'text-[#00F0FF]'
+                        : 'text-[#EAF4FF] group-hover:text-[#00F0FF]'
+                    }`}
+                  >
+                    CO-OP
+                  </h2>
+                </div>
+              </button>
+
+              {expandedGroup === 'COOP' && (
+                <div
+                  data-testid="home-coop-submodes"
+                  className="relative z-10 px-4 pb-4 pt-2 lg:px-5 lg:pb-4 lg:pt-3 border-t border-[#00F0FF]/25 bg-[#050510]/95 grid grid-cols-1 gap-2 lg:gap-2.5 animate-neo-expand lg:max-h-[clamp(140px,calc(100dvh-535px),260px)] overflow-y-auto"
+                >
+                  <button
+                    type="button"
+                    data-testid="home-mode-card-coop-ai"
+                    disabled={isActionDisabled}
+                    onClick={() => handleCoopSubSelect('COOP_AI')}
+                    className="w-full min-h-[46px] lg:min-h-[58px] px-3.5 py-2.5 lg:px-4 lg:py-3 rounded-lg bg-[#0b0d1e] hover:bg-[#00F0FF]/15 border border-[#00F0FF]/45 hover:border-[#00F0FF] flex items-center justify-between gap-2 text-left transition-colors cursor-pointer active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-2 lg:gap-3 min-w-0">
+                      <Bot className="w-4 h-4 lg:w-5 lg:h-5 text-[#00F0FF] shrink-0" />
                       <div className="min-w-0">
-                        <div className="font-btn text-xs lg:text-base font-black uppercase truncate">
-                          {t(`Màn ${stage.id}`, `Stage ${stage.id}`)}
+                        <div className="font-btn text-xs sm:text-sm lg:text-base font-black text-white uppercase">
+                          CO-OP A.I
                         </div>
-                        <div className="text-[10px] lg:text-xs text-neutral-400 truncate">
-                          {stage.name}
+                        <div className="text-[11px] lg:text-sm text-neutral-400 truncate">
+                          {t('P1 phối hợp xe tăng A.I', 'P1 + Ally A.I Tank')}
                         </div>
                       </div>
-                      {isUnlocked ? (
-                        <ArrowRight className="w-3.5 h-3.5 lg:w-5 lg:h-5 text-[#FFB800] shrink-0" />
-                      ) : (
-                        <Lock className="w-3.5 h-3.5 lg:w-5 lg:h-5 text-neutral-600 shrink-0" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 lg:w-5 lg:h-5 text-[#00F0FF] shrink-0" />
+                  </button>
 
-          {/* 2. CO-OP — Expands CO-OP A.I & CO-OP ONLINE */}
-          <div
-            data-testid="home-mode-card-coop"
-            className={`relative neo-bevel-card rounded-xl lg:rounded-2xl border transition-all duration-150 overflow-hidden flex flex-col ${
-              expandedGroup === 'COOP'
-                ? 'border-[#00F0FF] neo-bevel-cyan'
-                : 'border-[#00F0FF]/60 hover:border-[#00F0FF] hover:-translate-y-0.5'
-            }`}
-          >
-            <button
-              type="button"
-              data-testid="home-mode-coop-toggle"
-              aria-expanded={expandedGroup === 'COOP'}
-              disabled={isActionDisabled}
-              onClick={() =>
-                setExpandedGroup((prev) => (prev === 'COOP' ? null : 'COOP'))
-              }
-              className="group relative w-full flex-1 text-left px-4 py-2.5 sm:px-4 sm:py-3 lg:px-6 lg:py-4 flex flex-col justify-end min-h-[98px] md:min-h-[112px] lg:min-h-[146px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
+                  <button
+                    type="button"
+                    data-testid="home-mode-card-coop-online"
+                    disabled={isActionDisabled}
+                    onClick={() => handleCoopSubSelect('COOP_ONLINE')}
+                    className="w-full min-h-[46px] lg:min-h-[58px] px-3.5 py-2.5 lg:px-4 lg:py-3 rounded-lg bg-[#0b0d1e] hover:bg-emerald-500/15 border border-emerald-400/45 hover:border-emerald-400 flex items-center justify-between gap-2 text-left transition-colors cursor-pointer active:scale-[0.99]"
+                  >
+                    <div className="flex items-center gap-2 lg:gap-3 min-w-0">
+                      <Globe className="w-4 h-4 lg:w-5 lg:h-5 text-emerald-400 shrink-0" />
+                      <div className="min-w-0">
+                        <div className="font-btn text-xs sm:text-sm lg:text-base font-black text-white uppercase">
+                          CO-OP ONLINE
+                        </div>
+                        <div className="text-[11px] lg:text-sm text-neutral-400 truncate">
+                          {t('Tạo / Tham gia phòng 2 thiết bị', 'Create / Join 2-device room')}
+                        </div>
+                      </div>
+                    </div>
+                    <ArrowRight className="w-4 h-4 lg:w-5 lg:h-5 text-emerald-400 shrink-0" />
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* 3. VS — Expands P1 VS P2 & P1 + A.I VS P2 + A.I (2-Device Online Lobby) */}
+            <div
+              data-testid="home-mode-card-vs"
+              className={`relative neo-bevel-card rounded-xl lg:rounded-2xl border transition-colors duration-150 overflow-hidden flex flex-col ${
+                expandedGroup === 'VS'
+                  ? 'border-[#FF0055] neo-bevel-red'
+                  : 'border-[#FF0055]/60 hover:border-[#FF0055]'
+              }`}
             >
-              {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
-              <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-                <img
-                  src="/coop.png"
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover object-center tv-card-bg-static"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/25 to-[#050510]/15" />
-                <div className="absolute inset-0 tv-card-scanlines opacity-40" />
-                <div
-                  style={{ animationDelay: '-1.4s' }}
-                  className="absolute inset-x-0 top-0 h-12 tv-card-scanline-sweep"
-                />
-                <div
-                  style={{ animationDelay: '-2.1s' }}
-                  className="absolute inset-x-0 top-[48%] h-2.5 tv-card-glitch-bar"
-                />
-              </div>
-
-              <div className="relative z-10 mt-auto flex items-center gap-2.5 lg:gap-3">
-                <span
-                  data-testid="home-mode-coop-arrow"
-                  className={`w-7 h-7 lg:w-9 lg:h-9 rounded-lg border flex items-center justify-center text-[#00F0FF] transition-all duration-200 shrink-0 ${
-                    expandedGroup === 'COOP'
-                      ? 'rotate-180 bg-[#00F0FF]/25 border-[#00F0FF] shadow-[0_0_16px_rgba(0,240,255,0.65)]'
-                      : 'bg-[#050510]/75 border-[#00F0FF]/60 shadow-[0_0_10px_rgba(0,240,255,0.25)] group-hover:bg-[#00F0FF]/20 group-hover:border-[#00F0FF] group-hover:shadow-[0_0_14px_rgba(0,240,255,0.5)]'
-                  }`}
-                >
-                  <ChevronDown className="w-4 h-4 lg:w-5 lg:h-5" />
-                </span>
-                <h2
-                  className={`font-btn text-xl sm:text-2xl lg:text-[2rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
-                    expandedGroup === 'COOP'
-                      ? 'text-[#00F0FF]'
-                      : 'text-[#EAF4FF] group-hover:text-[#00F0FF]'
-                  }`}
-                >
-                  CO-OP
-                </h2>
-              </div>
-            </button>
-
-            {expandedGroup === 'COOP' && (
-              <div
-                data-testid="home-coop-submodes"
-                className="relative z-10 px-4 pb-4 pt-2 lg:px-5 lg:pb-5 lg:pt-3 border-t border-[#00F0FF]/25 bg-[#050510]/95 grid grid-cols-1 gap-2 lg:gap-3 animate-neo-expand"
+              <button
+                type="button"
+                data-testid="home-mode-vs-toggle"
+                aria-expanded={expandedGroup === 'VS'}
+                disabled={isActionDisabled}
+                onClick={() =>
+                  setExpandedGroup((prev) => (prev === 'VS' ? null : 'VS'))
+                }
+                className="group relative w-full shrink-0 text-left px-4 py-2.5 sm:px-4 sm:py-3 lg:px-8 lg:py-5 flex flex-col justify-end h-[98px] md:h-[112px] lg:h-[190px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
               >
-                <button
-                  type="button"
-                  data-testid="home-mode-card-coop-ai"
-                  disabled={isActionDisabled}
-                  onClick={() => handleCoopSubSelect('COOP_AI')}
-                  className="w-full min-h-[46px] lg:min-h-[60px] px-3.5 py-2.5 lg:px-4 lg:py-3.5 rounded-lg bg-[#0b0d1e] hover:bg-[#00F0FF]/15 border border-[#00F0FF]/45 hover:border-[#00F0FF] flex items-center justify-between gap-2 text-left transition-colors cursor-pointer active:scale-[0.99]"
+                {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
+                <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
+                  <img
+                    src="/vs.png"
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover object-center tv-card-bg-static"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/25 to-[#050510]/15" />
+                  <div className="absolute inset-0 tv-card-scanlines opacity-40" />
+                  <div
+                    style={{ animationDelay: '-2.7s' }}
+                    className="absolute inset-x-0 top-0 h-12 tv-card-scanline-sweep"
+                  />
+                  <div
+                    style={{ animationDelay: '-3.6s' }}
+                    className="absolute inset-x-0 top-[28%] h-2.5 tv-card-glitch-bar"
+                  />
+                </div>
+
+                <div className="relative z-10 mt-auto flex items-center gap-2.5 lg:gap-4">
+                  <span
+                    data-testid="home-mode-vs-arrow"
+                    className={`w-7 h-7 lg:w-12 lg:h-12 rounded-lg lg:rounded-xl border flex items-center justify-center text-[#FF0055] transition-all duration-200 shrink-0 ${
+                      expandedGroup === 'VS'
+                        ? 'rotate-180 bg-[#FF0055]/25 border-[#FF0055] shadow-[0_0_16px_rgba(255,0,85,0.65)]'
+                        : 'bg-[#050510]/75 border-[#FF0055]/60 shadow-[0_0_10px_rgba(255,0,85,0.25)] group-hover:bg-[#FF0055]/20 group-hover:border-[#FF0055] group-hover:shadow-[0_0_14px_rgba(255,0,85,0.5)]'
+                    }`}
+                  >
+                    <ChevronDown className="w-4 h-4 lg:w-6 lg:h-6" />
+                  </span>
+                  <h2
+                    className={`font-btn text-xl sm:text-2xl lg:text-[2.6rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
+                      expandedGroup === 'VS'
+                        ? 'text-[#FF0055]'
+                        : 'text-[#EAF4FF] group-hover:text-[#FF0055]'
+                    }`}
+                  >
+                    VS
+                  </h2>
+                </div>
+              </button>
+
+              {expandedGroup === 'VS' && (
+                <div
+                  data-testid="home-vs-submodes"
+                  className="relative z-10 px-4 pb-4 pt-2 lg:px-5 lg:pb-4 lg:pt-3 border-t border-[#FF0055]/25 bg-[#050510]/95 grid grid-cols-1 gap-2 lg:gap-2.5 animate-neo-expand lg:max-h-[clamp(140px,calc(100dvh-535px),260px)] overflow-y-auto"
                 >
-                  <div className="flex items-center gap-2 lg:gap-3 min-w-0">
-                    <Bot className="w-4 h-4 lg:w-5 lg:h-5 text-[#00F0FF] shrink-0" />
+                  <button
+                    type="button"
+                    data-testid="lobby-vs-p1-p2-btn"
+                    disabled={isActionDisabled || !onStartVsMatch}
+                    onClick={() => handleVsSubSelect('VS_P1_P2')}
+                    className="w-full min-h-[46px] lg:min-h-[58px] px-3.5 py-2.5 lg:px-4 lg:py-3 rounded-lg bg-[#0b0d1e] hover:bg-[#FF0055]/15 border border-[#FF0055]/45 hover:border-[#FF0055] flex items-center justify-between gap-2 text-left transition-colors cursor-pointer disabled:opacity-50 active:scale-[0.99]"
+                  >
                     <div className="min-w-0">
-                      <div className="font-btn text-xs sm:text-sm lg:text-base font-black text-white uppercase">
-                        CO-OP A.I
+                      <div className="font-btn text-xs sm:text-sm lg:text-base font-black text-white uppercase flex items-center gap-1.5">
+                        <span
+                          className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-xs shrink-0"
+                          style={{ backgroundColor: VS_TANK_COLOR_SPEC.P1.hex }}
+                        />
+                        <span>P1 VS P2</span>
+                        <span
+                          className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-xs shrink-0"
+                          style={{ backgroundColor: VS_TANK_COLOR_SPEC.P2.hex }}
+                        />
                       </div>
                       <div className="text-[11px] lg:text-sm text-neutral-400 truncate">
-                        {t('P1 phối hợp xe tăng A.I', 'P1 + Ally A.I Tank')}
+                        {t('Đối kháng 1v1 trực tuyến 2 thiết bị', '1v1 Online PvP on 2 devices')}
                       </div>
                     </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 lg:w-5 lg:h-5 text-[#00F0FF] shrink-0" />
-                </button>
+                    <ArrowRight className="w-4 h-4 lg:w-5 lg:h-5 text-[#FF0055] shrink-0" />
+                  </button>
 
-                <button
-                  type="button"
-                  data-testid="home-mode-card-coop-online"
-                  disabled={isActionDisabled}
-                  onClick={() => handleCoopSubSelect('COOP_ONLINE')}
-                  className="w-full min-h-[46px] lg:min-h-[60px] px-3.5 py-2.5 lg:px-4 lg:py-3.5 rounded-lg bg-[#0b0d1e] hover:bg-emerald-500/15 border border-emerald-400/45 hover:border-emerald-400 flex items-center justify-between gap-2 text-left transition-colors cursor-pointer active:scale-[0.99]"
-                >
-                  <div className="flex items-center gap-2 lg:gap-3 min-w-0">
-                    <Globe className="w-4 h-4 lg:w-5 lg:h-5 text-emerald-400 shrink-0" />
+                  <button
+                    type="button"
+                    data-testid="lobby-vs-ai-btn"
+                    disabled={isActionDisabled || !onStartVsMatch}
+                    onClick={() => handleVsSubSelect('VS_P1_AI_P2_AI')}
+                    className="w-full min-h-[46px] lg:min-h-[58px] px-3.5 py-2.5 lg:px-4 lg:py-3 rounded-lg bg-[#0b0d1e] hover:bg-[#FF0055]/15 border border-[#FF0055]/45 hover:border-[#FF0055] flex items-center justify-between gap-2 text-left transition-colors cursor-pointer disabled:opacity-50 active:scale-[0.99]"
+                  >
                     <div className="min-w-0">
-                      <div className="font-btn text-xs sm:text-sm lg:text-base font-black text-white uppercase">
-                        CO-OP ONLINE
+                      <div className="font-btn text-xs sm:text-sm lg:text-base font-black text-white uppercase flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-xs shrink-0"
+                          style={{ backgroundColor: VS_TANK_COLOR_SPEC.P1.hex }}
+                        />
+                        <span
+                          className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-xs shrink-0"
+                          style={{ backgroundColor: VS_TANK_COLOR_SPEC.AI_1.hex }}
+                        />
+                        <span>P1 + A.I VS P2 + A.I</span>
+                        <span
+                          className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-xs shrink-0"
+                          style={{ backgroundColor: VS_TANK_COLOR_SPEC.P2.hex }}
+                        />
+                        <span
+                          className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-xs shrink-0"
+                          style={{ backgroundColor: VS_TANK_COLOR_SPEC.AI_2.hex }}
+                        />
                       </div>
                       <div className="text-[11px] lg:text-sm text-neutral-400 truncate">
-                        {t('Tạo / Tham gia phòng 2 thiết bị', 'Create / Join 2-device room')}
+                        {t('Đối kháng 2v2 trực tuyến 2 thiết bị', '2v2 Online PvP on 2 devices')}
                       </div>
                     </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 lg:w-5 lg:h-5 text-emerald-400 shrink-0" />
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* 3. VS — Expands P1 VS P2 & P1 + A.I VS P2 + A.I (2-Device Online Lobby) */}
-          <div
-            data-testid="home-mode-card-vs"
-            className={`relative neo-bevel-card rounded-xl lg:rounded-2xl border transition-all duration-150 overflow-hidden flex flex-col ${
-              expandedGroup === 'VS'
-                ? 'border-[#FF0055] neo-bevel-red'
-                : 'border-[#FF0055]/60 hover:border-[#FF0055] hover:-translate-y-0.5'
-            }`}
-          >
-            <button
-              type="button"
-              data-testid="home-mode-vs-toggle"
-              aria-expanded={expandedGroup === 'VS'}
-              disabled={isActionDisabled}
-              onClick={() =>
-                setExpandedGroup((prev) => (prev === 'VS' ? null : 'VS'))
-              }
-              className="group relative w-full flex-1 text-left px-4 py-2.5 sm:px-4 sm:py-3 lg:px-6 lg:py-4 flex flex-col justify-end min-h-[98px] md:min-h-[112px] lg:min-h-[146px] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.99] transition-transform overflow-hidden"
-            >
-              {/* Full-Bleed Static Background (30% Reduced Brightness) + TV Signal Layer */}
-              <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-                <img
-                  src="/vs.png"
-                  alt=""
-                  className="absolute inset-0 w-full h-full object-cover object-center tv-card-bg-static"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-[#050510]/80 via-[#050510]/25 to-[#050510]/15" />
-                <div className="absolute inset-0 tv-card-scanlines opacity-40" />
-                <div
-                  style={{ animationDelay: '-2.7s' }}
-                  className="absolute inset-x-0 top-0 h-12 tv-card-scanline-sweep"
-                />
-                <div
-                  style={{ animationDelay: '-3.6s' }}
-                  className="absolute inset-x-0 top-[28%] h-2.5 tv-card-glitch-bar"
-                />
-              </div>
-
-              <div className="relative z-10 mt-auto flex items-center gap-2.5 lg:gap-3">
-                <span
-                  data-testid="home-mode-vs-arrow"
-                  className={`w-7 h-7 lg:w-9 lg:h-9 rounded-lg border flex items-center justify-center text-[#FF0055] transition-all duration-200 shrink-0 ${
-                    expandedGroup === 'VS'
-                      ? 'rotate-180 bg-[#FF0055]/25 border-[#FF0055] shadow-[0_0_16px_rgba(255,0,85,0.65)]'
-                      : 'bg-[#050510]/75 border-[#FF0055]/60 shadow-[0_0_10px_rgba(255,0,85,0.25)] group-hover:bg-[#FF0055]/20 group-hover:border-[#FF0055] group-hover:shadow-[0_0_14px_rgba(255,0,85,0.5)]'
-                  }`}
-                >
-                  <ChevronDown className="w-4 h-4 lg:w-5 lg:h-5" />
-                </span>
-                <h2
-                  className={`font-btn text-xl sm:text-2xl lg:text-[2rem] font-black transition-colors uppercase tracking-wide drop-shadow-[0_2px_10px_rgba(0,0,0,0.95)] leading-tight ${
-                    expandedGroup === 'VS'
-                      ? 'text-[#FF0055]'
-                      : 'text-[#EAF4FF] group-hover:text-[#FF0055]'
-                  }`}
-                >
-                  VS
-                </h2>
-              </div>
-            </button>
-
-            {expandedGroup === 'VS' && (
-              <div
-                data-testid="home-vs-submodes"
-                className="relative z-10 px-4 pb-4 pt-2 lg:px-5 lg:pb-5 lg:pt-3 border-t border-[#FF0055]/25 bg-[#050510]/95 grid grid-cols-1 gap-2 lg:gap-3 animate-neo-expand"
-              >
-                <button
-                  type="button"
-                  data-testid="lobby-vs-p1-p2-btn"
-                  disabled={isActionDisabled || !onStartVsMatch}
-                  onClick={() => handleVsSubSelect('VS_P1_P2')}
-                  className="w-full min-h-[46px] lg:min-h-[60px] px-3.5 py-2.5 lg:px-4 lg:py-3.5 rounded-lg bg-[#0b0d1e] hover:bg-[#FF0055]/15 border border-[#FF0055]/45 hover:border-[#FF0055] flex items-center justify-between gap-2 text-left transition-colors cursor-pointer disabled:opacity-50 active:scale-[0.99]"
-                >
-                  <div className="min-w-0">
-                    <div className="font-btn text-xs sm:text-sm lg:text-base font-black text-white uppercase flex items-center gap-1.5">
-                      <span
-                        className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-xs shrink-0"
-                        style={{ backgroundColor: VS_TANK_COLOR_SPEC.P1.hex }}
-                      />
-                      <span>P1 VS P2</span>
-                      <span
-                        className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-xs shrink-0"
-                        style={{ backgroundColor: VS_TANK_COLOR_SPEC.P2.hex }}
-                      />
-                    </div>
-                    <div className="text-[11px] lg:text-sm text-neutral-400 truncate">
-                      {t('Đối kháng 1v1 trực tuyến 2 thiết bị', '1v1 Online PvP on 2 devices')}
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 lg:w-5 lg:h-5 text-[#FF0055] shrink-0" />
-                </button>
-
-                <button
-                  type="button"
-                  data-testid="lobby-vs-ai-btn"
-                  disabled={isActionDisabled || !onStartVsMatch}
-                  onClick={() => handleVsSubSelect('VS_P1_AI_P2_AI')}
-                  className="w-full min-h-[46px] lg:min-h-[60px] px-3.5 py-2.5 lg:px-4 lg:py-3.5 rounded-lg bg-[#0b0d1e] hover:bg-[#FF0055]/15 border border-[#FF0055]/45 hover:border-[#FF0055] flex items-center justify-between gap-2 text-left transition-colors cursor-pointer disabled:opacity-50 active:scale-[0.99]"
-                >
-                  <div className="min-w-0">
-                    <div className="font-btn text-xs sm:text-sm lg:text-base font-black text-white uppercase flex items-center gap-1.5 flex-wrap">
-                      <span
-                        className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-xs shrink-0"
-                        style={{ backgroundColor: VS_TANK_COLOR_SPEC.P1.hex }}
-                      />
-                      <span
-                        className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-xs shrink-0"
-                        style={{ backgroundColor: VS_TANK_COLOR_SPEC.AI_1.hex }}
-                      />
-                      <span>P1 + A.I VS P2 + A.I</span>
-                      <span
-                        className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-xs shrink-0"
-                        style={{ backgroundColor: VS_TANK_COLOR_SPEC.P2.hex }}
-                      />
-                      <span
-                        className="w-2.5 h-2.5 lg:w-3 lg:h-3 rounded-xs shrink-0"
-                        style={{ backgroundColor: VS_TANK_COLOR_SPEC.AI_2.hex }}
-                      />
-                    </div>
-                    <div className="text-[11px] lg:text-sm text-neutral-400 truncate">
-                      {t('Đối kháng 2v2 trực tuyến 2 thiết bị', '2v2 Online PvP on 2 devices')}
-                    </div>
-                  </div>
-                  <ArrowRight className="w-4 h-4 lg:w-5 lg:h-5 text-[#FF0055] shrink-0" />
-                </button>
-              </div>
-            )}
+                    <ArrowRight className="w-4 h-4 lg:w-5 lg:h-5 text-[#FF0055] shrink-0" />
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </main>

@@ -645,7 +645,7 @@ export default function App() {
     setGameState({ ...gameEngine.getState() });
   }, [gameEngine, clearVirtualTouchInputs]);
 
-  const getMusicModeFromEngine = useCallback((eng: GameEngine): GameModeScope => {
+  const getMusicModeFromEngine = useCallback((eng: GameEngine): Exclude<GameModeScope, 'HOME'> => {
     const gm = eng.getState().gameMode;
     if (gm === 'TWO_PLAYERS_AI') return 'COOP_AI';
     if (gm === 'TWO_PLAYERS_ONLINE') return 'TWO_PLAYER';
@@ -696,7 +696,7 @@ export default function App() {
       setIsPaused(false);
       const st = gameEngine.getState();
       SoundManager.getInstance().stopAllActiveActionSources();
-      MusicManager.getInstance().syncPlaybackWithContext(
+      MusicManager.getInstance().enterBattlePlayback(
         st.currentStageId,
         getMusicModeFromEngine(gameEngine)
       );
@@ -792,7 +792,7 @@ export default function App() {
         setIsPaused(false);
         const st = gameEngine.getState();
         SoundManager.getInstance().stopAllActiveActionSources();
-        MusicManager.getInstance().syncPlaybackWithContext(1, 'SOLO');
+        MusicManager.getInstance().enterBattlePlayback(1, 'SOLO');
         SystemAuditLogger.getInstance().recordEvent({
           severity: 'INFO',
           category: 'CAMPAIGN_STAGE_EVENT',
@@ -824,7 +824,7 @@ export default function App() {
       setIsPaused(false);
       const st = gameEngine.getState();
       SoundManager.getInstance().stopAllActiveActionSources();
-      MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'TWO_PLAYER');
+      MusicManager.getInstance().enterBattlePlayback(st.currentStageId, 'TWO_PLAYER');
       SystemAuditLogger.getInstance().recordEvent({
         severity: 'INFO',
         category: 'CAMPAIGN_STAGE_EVENT',
@@ -866,7 +866,8 @@ export default function App() {
     });
     setIsPaused(false);
     const st = gameEngine.getState();
-    MusicManager.getInstance().syncPlaybackWithContext(st.currentStageId, 'SOLO');
+    SoundManager.getInstance().stopAllActiveActionSources();
+    MusicManager.getInstance().enterBattlePlayback(st.currentStageId, 'SOLO');
     setGameState({ ...st });
     setAppScreen('BATTLE');
   }, [authManager, gameEngine]);
@@ -904,9 +905,8 @@ export default function App() {
     setReturnToLobbyError(null);
     gameEngine.quitToMenu();
     setIsPaused(false);
-    SoundManager.getInstance().stopAllActiveActionSources();
     const targetScreen = wasTrial || !authManager.getCurrentUser() ? 'WELCOME' : 'MAIN_MENU';
-    MusicManager.getInstance().syncMenuPlayback();
+    MusicManager.getInstance().exitBattlePlayback();
     setGameState({ ...gameEngine.getState() });
     setAppScreen(targetScreen);
   }, [authManager, isTrialMode, gameEngine, coopManager]);
@@ -931,8 +931,7 @@ export default function App() {
       setReturnToLobbyError(null);
       gameEngine.quitToMenu();
       setIsPaused(false);
-      SoundManager.getInstance().stopAllActiveActionSources();
-      MusicManager.getInstance().syncMenuPlayback();
+      MusicManager.getInstance().exitBattlePlayback();
       setGameState({ ...gameEngine.getState() });
       setAppScreen('MAIN_MENU');
       return;
@@ -985,8 +984,7 @@ export default function App() {
           coopManager.clearRematchReadyState();
           gameEngine.quitToMenu();
           setIsPaused(false);
-          SoundManager.getInstance().stopAllActiveActionSources();
-          MusicManager.getInstance().syncMenuPlayback();
+          MusicManager.getInstance().exitBattlePlayback();
           setGameState({ ...gameEngine.getState() });
           handleOpenVsOnlineLobby(prevMode);
           return;
@@ -1000,8 +998,7 @@ export default function App() {
       coopManager.clearRematchReadyState();
       gameEngine.quitToMenu();
       setIsPaused(false);
-      SoundManager.getInstance().stopAllActiveActionSources();
-      MusicManager.getInstance().syncMenuPlayback();
+      MusicManager.getInstance().exitBattlePlayback();
       setGameState({ ...gameEngine.getState() });
       if (prevMode === 'VS_P1_P2' || prevMode === 'VS_P1_AI_P2_AI') {
         setModeSelectionInitialCard(prevMode);
@@ -1061,6 +1058,7 @@ export default function App() {
       setOnlineDisconnectMsg(null);
       gameEngine.quitToMenu();
       MusicManager.getInstance().pause();
+      SoundManager.getInstance().exitBattleAudioContext();
       setIsPaused(false);
       AvatarManager.getInstance().clearSessionStateOnSignOut();
       StageManager.getInstance().stopCloudSync();
@@ -1564,8 +1562,7 @@ export default function App() {
     setReturnToLobbyError(null);
     gameEngine.quitToMenu();
     setIsPaused(false);
-    SoundManager.getInstance().stopAllActiveActionSources();
-    MusicManager.getInstance().syncMenuPlayback();
+    MusicManager.getInstance().exitBattlePlayback();
     setGameState({ ...gameEngine.getState() });
     setAppScreen('WELCOME');
   }, [gameEngine]);
@@ -1638,15 +1635,11 @@ export default function App() {
   ) {
     return (
       <div className="min-h-[100dvh] bg-[#050510] text-[#EAF4FF] flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-[#FFB800] selection:text-black">
-        {!isAuthReady && (
-          <div className="w-full bg-[#0b0d1e]/90 border-b border-[#00F0FF]/30 px-3 py-1 text-center text-[11px] font-mono text-[#FFB800]/90">
-            {t('Đang kiểm tra trạng thái kết nối...', 'Checking connection status...')}
-          </div>
-        )}
         <WelcomeScreen
           onSignIn={handleSignIn}
           onStartTrialMode={handleStartTrialMode}
           isProcessing={authProcessing}
+          isAuthChecking={!isAuthReady}
           errorMessage={authErrorMsg}
           successMessage={logoutSuccessNotice}
           onClearFeedback={() => {
@@ -1663,7 +1656,7 @@ export default function App() {
   // View 2: Main Menu Screen (Authenticated user before entering battle)
   if (appScreen === 'MAIN_MENU' && currentUser) {
     return (
-      <div className="min-h-[100dvh] bg-[#050510] text-[#EAF4FF] flex flex-col justify-start font-sans select-none overflow-x-hidden selection:bg-[#FFB800] selection:text-black">
+      <div className="h-[100dvh] max-h-[100dvh] bg-[#050510] text-[#EAF4FF] flex flex-col justify-start font-sans select-none overflow-hidden selection:bg-[#FFB800] selection:text-black">
         {isSuperAdmin && (
           <DevToolsDrawer
             isOpen={isDevDrawerOpen}

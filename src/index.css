@@ -441,6 +441,18 @@
   flex-shrink: 0;
 }
 
+/* Desktop-only (~30% enlarged) Mode Selection Logo — mobile/tablet retains compact logo-inline-row sizing */
+@media (min-width: 1024px) {
+  .unified-game-logo.logo-inline-row.mode-select-logo {
+    width: 128px !important;
+    height: 128px !important;
+    min-width: 128px !important;
+    min-height: 128px !important;
+    max-width: 128px !important;
+    max-height: 128px !important;
+  }
+}
+
 /* Lightweight GPU-compositor-only TV Signal Interference / Glitch Effect for Home Mode Cards */
 @keyframes tvSignalJitter {
   0%,

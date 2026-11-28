@@ -122,28 +122,28 @@ export const StageClearModal: React.FC<StageClearModalProps> = ({
 
   const rows = [
     {
-      label: t('Tank Thường (Basic)', 'Basic Tank'),
+      label: 'Basic Tank',
       unitXp: SCORE_VALUES.BASIC,
       p1Count: p1Counts.BASIC,
       p2Count: p2Counts.BASIC,
       color: 'text-slate-100',
     },
     {
-      label: t('Tank Nhanh (Fast)', 'Fast Tank'),
+      label: 'Fast Tank',
       unitXp: SCORE_VALUES.FAST,
       p1Count: p1Counts.FAST,
       p2Count: p2Counts.FAST,
       color: 'text-sky-300',
     },
     {
-      label: t('Tank Hỏa Lực (Power)', 'Power Tank'),
+      label: 'Power Tank',
       unitXp: SCORE_VALUES.POWER,
       p1Count: p1Counts.POWER,
       p2Count: p2Counts.POWER,
       color: 'text-emerald-300',
     },
     {
-      label: t('Tank Thiết Giáp (Armor)', 'Armor Tank'),
+      label: 'Armor Tank',
       unitXp: SCORE_VALUES.ARMOR,
       p1Count: p1Counts.ARMOR,
       p2Count: p2Counts.ARMOR,

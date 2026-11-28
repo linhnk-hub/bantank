@@ -1550,21 +1550,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         `Total: ${playerStats.totalEnemiesDefeated}`
                       )}
                     </div>
-                    <div className="grid grid-cols-2 gap-x-2 gap-y-1 pt-0.5 border-t border-neutral-800/80 text-[10px] font-mono text-neutral-300">
-                      <div className="flex items-center justify-between">
-                        <span className="text-neutral-300">Basic:</span>
+                    <div className="space-y-1 pt-1 border-t border-neutral-800/80 text-[10px] font-mono text-neutral-300">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-neutral-300">Basic Tank:</span>
                         <strong className="text-white">{playerStats.defeatedByType.BASIC}</strong>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-blue-400">Fast:</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-blue-400">Fast Tank:</span>
                         <strong className="text-blue-400">{playerStats.defeatedByType.FAST}</strong>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-emerald-400">Power:</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-emerald-400">Power Tank:</span>
                         <strong className="text-emerald-400">{playerStats.defeatedByType.POWER}</strong>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-[#b07b56]">Armor:</span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[#b07b56]">Armor Tank:</span>
                         <strong className="text-[#b07b56]">{playerStats.defeatedByType.ARMOR}</strong>
                       </div>
                     </div>

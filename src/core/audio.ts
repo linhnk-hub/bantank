@@ -9,6 +9,8 @@
  * Generates retro square, triangle, and noise waveforms for authentic Battle City arcade sound.
  */
 
+export type BgmScope = 'HOME' | 'BATTLE';
+
 export interface AudioSettings {
   bgmEnabled: boolean;
   sfxEnabled: boolean;
@@ -177,6 +179,7 @@ export const STATIC_ACTION_SFX_SPECS: Readonly<Record<GameActionSoundId, StaticA
 
 const STORAGE_KEYS = {
   BGM_ENABLED: 'bantank_bgm_enabled',
+  HOME_BGM_ENABLED: 'bantank_home_bgm_enabled',
   SFX_ENABLED: 'bantank_sfx_enabled',
   BGM_VOL: 'bantank_bgm_vol',
   SFX_VOL: 'bantank_sfx_vol',
@@ -197,6 +200,11 @@ export class SoundManager {
   private sfxGain: GainNode | null = null;
 
   private settings: AudioSettings = { ...DEFAULT_AUDIO_SETTINGS };
+
+  // Gate 2C: Independent Home vs Battle BGM state (Home mute never propagates to Battle)
+  private homeBgmEnabled: boolean = DEFAULT_AUDIO_SETTINGS.bgmEnabled;
+  private battleBgmEnabled: boolean = DEFAULT_AUDIO_SETTINGS.bgmEnabled;
+  private activeBgmScope: BgmScope = 'HOME';
 
   private masterMuted: boolean = false;
   private preMuteChannelState: { bgmEnabled: boolean; sfxEnabled: boolean } = {
@@ -291,8 +299,20 @@ export class SoundManager {
   private loadSettings(): void {
     if (typeof window === 'undefined') return;
     try {
-      const bgmEn = localStorage.getItem(STORAGE_KEYS.BGM_ENABLED);
-      if (bgmEn !== null) this.settings.bgmEnabled = bgmEn === 'true';
+      const homeBgmEn = localStorage.getItem(STORAGE_KEYS.HOME_BGM_ENABLED);
+      const legacyBgmEn = localStorage.getItem(STORAGE_KEYS.BGM_ENABLED);
+      if (homeBgmEn !== null) {
+        this.homeBgmEnabled = homeBgmEn === 'true';
+      } else if (legacyBgmEn !== null) {
+        this.homeBgmEnabled = legacyBgmEn === 'true';
+      } else {
+        this.homeBgmEnabled = DEFAULT_AUDIO_SETTINGS.bgmEnabled;
+      }
+
+      // Battle BGM always starts enabled by default independent of Home preference
+      this.battleBgmEnabled = DEFAULT_AUDIO_SETTINGS.bgmEnabled;
+      this.settings.bgmEnabled =
+        this.activeBgmScope === 'BATTLE' ? this.battleBgmEnabled : this.homeBgmEnabled;
 
       const sfxEn = localStorage.getItem(STORAGE_KEYS.SFX_ENABLED);
       if (sfxEn !== null) this.settings.sfxEnabled = sfxEn === 'true';
@@ -327,7 +347,8 @@ export class SoundManager {
   private saveSettings(): void {
     if (typeof window === 'undefined' || ScoreManager.isGlobalTrialMode()) return;
     try {
-      localStorage.setItem(STORAGE_KEYS.BGM_ENABLED, String(this.settings.bgmEnabled));
+      localStorage.setItem(STORAGE_KEYS.HOME_BGM_ENABLED, String(this.homeBgmEnabled));
+      localStorage.setItem(STORAGE_KEYS.BGM_ENABLED, String(this.homeBgmEnabled));
       localStorage.setItem(STORAGE_KEYS.SFX_ENABLED, String(this.settings.sfxEnabled));
       localStorage.setItem(STORAGE_KEYS.BGM_VOL, String(this.settings.bgmVolume));
       localStorage.setItem(STORAGE_KEYS.SFX_VOL, String(this.settings.sfxVolume));
@@ -343,11 +364,190 @@ export class SoundManager {
     return { ...this.settings };
   }
 
+  public getActiveBgmScope(): BgmScope {
+    return this.activeBgmScope;
+  }
+
+  public isBgmEnabledForScope(scope: BgmScope): boolean {
+    if (this.masterMuted) return false;
+    return scope === 'BATTLE' ? this.battleBgmEnabled : this.homeBgmEnabled;
+  }
+
+  /**
+   * Home-only BGM mute state & toggle (never propagates to Battle BGM).
+   */
+  public isHomeBgmMuted(): boolean {
+    return !this.homeBgmEnabled || this.masterMuted;
+  }
+
+  public setHomeBgmMuted(muted: boolean): void {
+    const nextMuted = Boolean(muted);
+    const restoredSfx =
+      this.masterMuted && !this.settings.sfxEnabled
+        ? this.preMuteChannelState.sfxEnabled
+        : this.settings.sfxEnabled;
+
+    this.masterMuted = false;
+    this.homeBgmEnabled = !nextMuted;
+
+    if (this.activeBgmScope === 'HOME') {
+      this.settings = {
+        ...this.settings,
+        bgmEnabled: this.homeBgmEnabled,
+        sfxEnabled: restoredSfx,
+      };
+      if (nextMuted && this.isBgmPlaying) {
+        this.pauseBgm();
+      } else if (!nextMuted && !this.isBgmPlaying && this.isUnlocked && !this.customBgmActive) {
+        this.startBgm();
+      }
+    } else if (this.settings.sfxEnabled !== restoredSfx) {
+      this.settings = {
+        ...this.settings,
+        sfxEnabled: restoredSfx,
+      };
+    }
+
+    this.preMuteChannelState = {
+      bgmEnabled: this.settings.bgmEnabled,
+      sfxEnabled: this.settings.sfxEnabled,
+    };
+
+    this.saveSettings();
+    this.applyVolume();
+    this.notifyListeners();
+    this.notifyMusicManager();
+  }
+
+  public toggleHomeBgmMute(): boolean {
+    const nextMuted = !this.isHomeBgmMuted();
+    this.setHomeBgmMuted(nextMuted);
+    return nextMuted;
+  }
+
+  /**
+   * Battle-only BGM mute state & toggle (never overwrites Home BGM preference).
+   */
+  public isBattleBgmMuted(): boolean {
+    return !this.battleBgmEnabled || this.masterMuted;
+  }
+
+  public setBattleBgmMuted(muted: boolean): void {
+    const nextMuted = Boolean(muted);
+    const restoredSfx =
+      this.masterMuted && !this.settings.sfxEnabled
+        ? this.preMuteChannelState.sfxEnabled
+        : this.settings.sfxEnabled;
+
+    this.masterMuted = false;
+    this.battleBgmEnabled = !nextMuted;
+
+    if (this.activeBgmScope === 'BATTLE') {
+      this.settings = {
+        ...this.settings,
+        bgmEnabled: this.battleBgmEnabled,
+        sfxEnabled: restoredSfx,
+      };
+      if (nextMuted && this.isBgmPlaying) {
+        this.pauseBgm();
+      } else if (!nextMuted && !this.isBgmPlaying && this.isUnlocked && !this.customBgmActive) {
+        this.startBgm();
+      }
+    } else if (this.settings.sfxEnabled !== restoredSfx) {
+      this.settings = {
+        ...this.settings,
+        sfxEnabled: restoredSfx,
+      };
+    }
+
+    this.preMuteChannelState = {
+      bgmEnabled: this.settings.bgmEnabled,
+      sfxEnabled: this.settings.sfxEnabled,
+    };
+
+    this.saveSettings();
+    this.applyVolume();
+    this.notifyListeners();
+    this.notifyMusicManager();
+  }
+
+  public toggleBattleBgmMute(): boolean {
+    const nextMuted = !this.isBattleBgmMuted();
+    this.setBattleBgmMuted(nextMuted);
+    return nextMuted;
+  }
+
+  /**
+   * Lifecycle: Enter Home/Menu audio context. Restores Home BGM preference without altering Battle defaults.
+   */
+  public enterHomeAudioContext(): void {
+    const scopeChanged = this.activeBgmScope !== 'HOME';
+    const nextEffective = this.homeBgmEnabled && !this.masterMuted;
+    const enabledChanged = this.settings.bgmEnabled !== nextEffective;
+    this.activeBgmScope = 'HOME';
+    this.settings = {
+      ...this.settings,
+      bgmEnabled: nextEffective,
+    };
+    if (!nextEffective && this.isBgmPlaying) {
+      this.pauseBgm();
+    }
+    this.applyVolume();
+    if (scopeChanged || enabledChanged) {
+      this.notifyListeners();
+    }
+  }
+
+  /**
+   * Lifecycle: Enter playable Battle audio context.
+   * Battle BGM starts enabled by default independent of Home BGM mute state.
+   */
+  public enterBattleAudioContext(resetBattleBgmToDefault: boolean = true): void {
+    const restoredSfx =
+      this.masterMuted && !this.settings.sfxEnabled
+        ? this.preMuteChannelState.sfxEnabled
+        : this.settings.sfxEnabled;
+
+    this.activeBgmScope = 'BATTLE';
+    if (resetBattleBgmToDefault) {
+      this.battleBgmEnabled = DEFAULT_AUDIO_SETTINGS.bgmEnabled;
+      if (this.masterMuted) {
+        this.masterMuted = false;
+      }
+    }
+
+    this.settings = {
+      ...this.settings,
+      bgmEnabled: this.battleBgmEnabled && !this.masterMuted,
+      sfxEnabled: restoredSfx,
+    };
+    this.applyVolume();
+    this.notifyListeners();
+  }
+
+  /**
+   * Lifecycle: Exit Battle audio context. Cleans up active battle SFX/BGM and restores Home preference.
+   */
+  public exitBattleAudioContext(): void {
+    this.stopAllActiveActionSources();
+    this.stopBgm();
+    this.battleBgmEnabled = DEFAULT_AUDIO_SETTINGS.bgmEnabled;
+    this.activeBgmScope = 'HOME';
+    this.settings = {
+      ...this.settings,
+      bgmEnabled: this.homeBgmEnabled && !this.masterMuted,
+    };
+    this.applyVolume();
+    this.notifyListeners();
+  }
+
   /**
    * M7.3.11.6 Section 4.2: Khôi phục cài đặt âm thanh về mặc định chuẩn.
    */
   public resetSettingsToDefault(): AudioSettings {
     this.masterMuted = false;
+    this.homeBgmEnabled = DEFAULT_AUDIO_SETTINGS.bgmEnabled;
+    this.battleBgmEnabled = DEFAULT_AUDIO_SETTINGS.bgmEnabled;
     this.preMuteChannelState = {
       bgmEnabled: DEFAULT_AUDIO_SETTINGS.bgmEnabled,
       sfxEnabled: DEFAULT_AUDIO_SETTINGS.sfxEnabled,
@@ -395,6 +595,11 @@ export class SoundManager {
       const restoreSfx =
         this.preMuteChannelState.sfxEnabled ||
         (!this.preMuteChannelState.bgmEnabled && !this.preMuteChannelState.sfxEnabled);
+      if (this.activeBgmScope === 'BATTLE') {
+        this.battleBgmEnabled = restoreBgm;
+      } else {
+        this.homeBgmEnabled = restoreBgm;
+      }
       this.settings = {
         ...this.settings,
         bgmEnabled: restoreBgm,
@@ -415,54 +620,39 @@ export class SoundManager {
   }
 
   /**
-   * Top Menu BGM-only mute status & toggle:
-   * Mutes/unmutes only background music (BGM) while keeping gunshots & combat SFX active.
+   * Scope-aware BGM-only mute status & toggle:
+   * Mutes/unmutes only the currently active scope (HOME or BATTLE) while keeping gunshots & combat SFX active.
    */
   public isBgmMuted(): boolean {
-    return !this.settings.bgmEnabled || this.masterMuted;
+    return this.activeBgmScope === 'BATTLE'
+      ? this.isBattleBgmMuted()
+      : this.isHomeBgmMuted();
   }
 
   public setBgmMuted(muted: boolean): void {
-    const nextBgmMuted = Boolean(muted);
-    const restoredSfx =
-      this.masterMuted && !this.settings.sfxEnabled
-        ? this.preMuteChannelState.sfxEnabled
-        : this.settings.sfxEnabled;
-
-    this.masterMuted = false;
-    this.settings = {
-      ...this.settings,
-      bgmEnabled: !nextBgmMuted,
-      sfxEnabled: restoredSfx,
-    };
-    this.preMuteChannelState = {
-      bgmEnabled: this.settings.bgmEnabled,
-      sfxEnabled: this.settings.sfxEnabled,
-    };
-
-    if (nextBgmMuted) {
-      if (this.isBgmPlaying) {
-        this.pauseBgm();
-      }
-    } else if (!this.isBgmPlaying && this.isUnlocked && !this.customBgmActive) {
-      this.startBgm();
+    if (this.activeBgmScope === 'BATTLE') {
+      this.setBattleBgmMuted(muted);
+    } else {
+      this.setHomeBgmMuted(muted);
     }
-
-    this.saveSettings();
-    this.applyVolume();
-    this.notifyListeners();
-    this.notifyMusicManager();
   }
 
   public toggleBgmMute(): boolean {
-    const nextBgmMuted = !this.isBgmMuted();
-    this.setBgmMuted(nextBgmMuted);
-    return nextBgmMuted;
+    return this.activeBgmScope === 'BATTLE'
+      ? this.toggleBattleBgmMute()
+      : this.toggleHomeBgmMute();
   }
 
   public updateSettings(partial: Partial<AudioSettings>): void {
     this.settings = { ...this.settings, ...partial };
     this.masterMuted = false;
+    if (typeof partial.bgmEnabled === 'boolean') {
+      if (this.activeBgmScope === 'BATTLE') {
+        this.battleBgmEnabled = partial.bgmEnabled;
+      } else {
+        this.homeBgmEnabled = partial.bgmEnabled;
+      }
+    }
     this.preMuteChannelState = {
       bgmEnabled: this.settings.bgmEnabled,
       sfxEnabled: this.settings.sfxEnabled,

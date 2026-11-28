@@ -14,22 +14,38 @@ export interface QuickAudioToggleButtonProps {
   frameless?: boolean;
   showLabelOnDesktop?: boolean;
   className?: string;
+  scope?: 'HOME' | 'BATTLE' | 'ACTIVE';
 }
 
 /**
  * Top Menu Quick BGM Mute/Unmute Toggle Button (Neo-Retro V1.0)
  * - Accessible labels: "Tắt nhạc nền" (when BGM is ON) and "Bật nhạc nền" (when BGM is OFF)
  * - Reflects real-time BGM status: playing, awaiting interaction (autoplay blocked), or muted
+ * - Gate 2C: Supports explicit HOME/BATTLE scope isolation so Home mute never affects Battle BGM
  */
 export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
   compact = false,
   frameless = false,
   className = '',
+  scope = 'ACTIVE',
 }) => {
   const { t } = useLanguage();
   const soundManager = SoundManager.getInstance();
   const musicManager = MusicManager.getInstance();
-  const [isBgmMuted, setIsBgmMuted] = useState<boolean>(() => soundManager.isBgmMuted());
+
+  const readScopedMuted = () => {
+    if (scope === 'HOME') return soundManager.isHomeBgmMuted();
+    if (scope === 'BATTLE') return soundManager.isBattleBgmMuted();
+    return soundManager.isBgmMuted();
+  };
+
+  const toggleScopedMute = () => {
+    if (scope === 'HOME') return soundManager.toggleHomeBgmMute();
+    if (scope === 'BATTLE') return soundManager.toggleBattleBgmMute();
+    return soundManager.toggleBgmMute();
+  };
+
+  const [isBgmMuted, setIsBgmMuted] = useState<boolean>(() => readScopedMuted());
   const [isAwaitingUnlock, setIsAwaitingUnlock] = useState<boolean>(() =>
     musicManager.isAwaitingAutoplayUnlock()
   );
@@ -37,7 +53,7 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
 
   useEffect(() => {
     const syncState = () => {
-      setIsBgmMuted(soundManager.isBgmMuted());
+      setIsBgmMuted(readScopedMuted());
       setIsAwaitingUnlock(musicManager.isAwaitingAutoplayUnlock());
     };
     syncState();
@@ -47,29 +63,29 @@ export const QuickAudioToggleButton: React.FC<QuickAudioToggleButtonProps> = ({
       unsubSound();
       unsubMusic();
     };
-  }, [soundManager, musicManager]);
+  }, [soundManager, musicManager, scope]);
 
   const handlePointerDownCapture = () => {
     wasAwaitingUnlockOnPointerDownRef.current =
-      !soundManager.isBgmMuted() && musicManager.isAwaitingAutoplayUnlock();
+      !readScopedMuted() && musicManager.isAwaitingAutoplayUnlock();
   };
 
   const handleToggle = () => {
     const shouldUnlockOnly =
       wasAwaitingUnlockOnPointerDownRef.current ||
-      (!soundManager.isBgmMuted() && musicManager.isAwaitingAutoplayUnlock());
+      (!readScopedMuted() && musicManager.isAwaitingAutoplayUnlock());
     wasAwaitingUnlockOnPointerDownRef.current = false;
 
     soundManager.unlock();
     if (shouldUnlockOnly) {
       musicManager.unlockFromUserGesture();
-      setIsBgmMuted(soundManager.isBgmMuted());
+      setIsBgmMuted(readScopedMuted());
       setIsAwaitingUnlock(musicManager.isAwaitingAutoplayUnlock());
       return;
     }
-    soundManager.toggleBgmMute();
+    toggleScopedMute();
     musicManager.onVolumeOrToggleChanged();
-    setIsBgmMuted(soundManager.isBgmMuted());
+    setIsBgmMuted(readScopedMuted());
     setIsAwaitingUnlock(musicManager.isAwaitingAutoplayUnlock());
   };
 
