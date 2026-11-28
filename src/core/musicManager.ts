@@ -291,6 +291,8 @@ export const STATIC_BGM_TRACK_SPECS: ReadonlyArray<StaticBgmTrackSpec> = [
   },
 ] as const;
 
+export const HOME_BGM_FADE_IN_DURATION_MS = 2800;
+
 const SAFE_AUDIO_FILENAME_REGEX = /^[A-Za-z0-9._-]+\.(mp3|ogg|wav|m4a|aac|webm)$/;
 const SAFE_AUDIO_ASSET_PATH_REGEX =
   /^audio\/(?:(bgm|sfx)\/)?([A-Za-z0-9._-]+\.(mp3|ogg|wav|m4a|aac|webm))$/;
@@ -1648,6 +1650,8 @@ export class MusicManager {
   private currentSource: AudioBufferSourceNode | null = null;
   private currentGain: GainNode | null = null;
   private currentAudioElement: HTMLAudioElement | null = null;
+  private streamFadeRafId: number | null = null;
+  private streamFadeTimerId: ReturnType<typeof setInterval> | null = null;
   private nextCrossfadeTimer: ReturnType<typeof setTimeout> | null = null;
   private activeSources: Set<{ stop: () => void; disconnect: () => void; onended?: ((...args: any[]) => any) | null }> = new Set();
   private playbackGenerationId: number = 0;
@@ -4699,14 +4703,25 @@ export class MusicManager {
         return;
       }
       if (this.currentAudioElement && this.currentAudioElement.paused) {
-        const targetVol = soundManager.getSettings().bgmVolume;
-        this.currentAudioElement.volume = Math.max(0, Math.min(1, targetVol));
-        const p = this.currentAudioElement.play();
+        const audio = this.currentAudioElement;
+        const shouldFadeIn = this.activeContext.mode === 'HOME';
+        const targetVol = Math.max(0, Math.min(1, soundManager.getSettings().bgmVolume));
+        audio.volume = shouldFadeIn ? 0 : targetVol;
+        const applyPostPlayVolume = () => {
+          if (this.currentAudioElement !== audio) return;
+          if (shouldFadeIn) {
+            this.startStreamVolumeFadeIn(audio, HOME_BGM_FADE_IN_DURATION_MS);
+          } else {
+            audio.volume = targetVol;
+          }
+        };
+        const p = audio.play();
         if (p && typeof p.then === 'function') {
           p.then(() => {
             this.isPlaying = true;
             this.awaitingAutoplayUnlock = false;
             this.removeAutoplayUnlockListeners();
+            applyPostPlayVolume();
             this.notify();
           }).catch(() => {
             this.isPlaying = false;
@@ -4717,6 +4732,7 @@ export class MusicManager {
           this.isPlaying = true;
           this.awaitingAutoplayUnlock = false;
           this.removeAutoplayUnlockListeners();
+          applyPostPlayVolume();
           this.notify();
         }
         return;
@@ -4882,6 +4898,8 @@ export class MusicManager {
     }
 
     // If a custom track is resolved AND we have its decoded AudioBuffer or stream URL
+    const shouldFadeInHome = mode === 'HOME';
+    const fadeInDurationMs = shouldFadeInHome ? HOME_BGM_FADE_IN_DURATION_MS : 0;
     if (
       resolved.trackId &&
       (this.audioBuffers.has(resolved.trackId) || this.streamUrls.has(resolved.trackId))
@@ -4889,7 +4907,7 @@ export class MusicManager {
       // Lock procedural BGM off so two BGM tracks can never overlap even on pointerdown/keydown unlock()
       soundManager.setCustomBgmActive(true);
       soundManager.stopBgm();
-      this.startTrackBufferPlayback(resolved.trackId);
+      this.startTrackBufferPlayback(resolved.trackId, shouldFadeInHome, fadeInDurationMs);
     } else if (resolved.trackId && this.soundCatalog.has(resolved.trackId)) {
       const targetId = resolved.trackId;
       soundManager.setCustomBgmActive(true);
@@ -4903,7 +4921,12 @@ export class MusicManager {
           this.activeTrackId === targetId &&
           this.isBgmEnabledForMode(this.activeContext.mode)
         ) {
-          this.startTrackBufferPlayback(targetId);
+          const isHomeCtx = this.activeContext.mode === 'HOME';
+          this.startTrackBufferPlayback(
+            targetId,
+            isHomeCtx,
+            isHomeCtx ? HOME_BGM_FADE_IN_DURATION_MS : 0
+          );
           this.notify();
         }
       });
@@ -4917,7 +4940,65 @@ export class MusicManager {
     this.notify();
   }
 
-  private startTrackStreamPlayback(streamUrl: string): void {
+  private cancelStreamVolumeFadeIn(): void {
+    if (this.streamFadeRafId !== null && typeof cancelAnimationFrame === 'function') {
+      cancelAnimationFrame(this.streamFadeRafId);
+      this.streamFadeRafId = null;
+    }
+    if (this.streamFadeTimerId !== null) {
+      clearInterval(this.streamFadeTimerId);
+      this.streamFadeTimerId = null;
+    }
+  }
+
+  private startStreamVolumeFadeIn(audio: HTMLAudioElement, durationMs: number): void {
+    this.cancelStreamVolumeFadeIn();
+    const soundManager = SoundManager.getInstance();
+    const resolveTargetVolume = (): number => {
+      if (!this.isBgmEnabledForMode(this.activeContext.mode) || this.isPaused) return 0;
+      return Math.max(0, Math.min(1, soundManager.getSettings().bgmVolume));
+    };
+
+    const safeDurationMs = Math.max(0, durationMs);
+    if (safeDurationMs <= 0) {
+      audio.volume = resolveTargetVolume();
+      return;
+    }
+
+    const startTimeMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+    audio.volume = 0;
+
+    const step = () => {
+      if (this.currentAudioElement !== audio || audio.paused) {
+        this.cancelStreamVolumeFadeIn();
+        return;
+      }
+      const targetVol = resolveTargetVolume();
+      const nowMs = typeof performance !== 'undefined' ? performance.now() : Date.now();
+      const rawProgress = Math.max(0, Math.min(1, (nowMs - startTimeMs) / safeDurationMs));
+      // Smooth sine ease-in-out curve for gentle, non-abrupt musical swell
+      const easedProgress = 0.5 - 0.5 * Math.cos(Math.PI * rawProgress);
+      audio.volume = Math.max(0, Math.min(1, targetVol * easedProgress));
+
+      if (rawProgress >= 1) {
+        audio.volume = targetVol;
+        this.cancelStreamVolumeFadeIn();
+        return;
+      }
+
+      if (typeof requestAnimationFrame === 'function') {
+        this.streamFadeRafId = requestAnimationFrame(step);
+      }
+    };
+
+    if (typeof requestAnimationFrame === 'function') {
+      this.streamFadeRafId = requestAnimationFrame(step);
+    } else {
+      this.streamFadeTimerId = setInterval(step, 32);
+    }
+  }
+
+  private startTrackStreamPlayback(streamUrl: string, fadeInDurationMs: number = 0): void {
     const soundManager = SoundManager.getInstance();
     soundManager.setCustomBgmActive(true);
     soundManager.stopBgm();
@@ -4944,11 +5025,24 @@ export class MusicManager {
       const targetVol = this.isBgmEnabledForMode(this.activeContext.mode)
         ? soundManager.getSettings().bgmVolume
         : 0;
-      audio.volume = Math.max(0, Math.min(1, targetVol));
+      const shouldFadeIn = fadeInDurationMs > 0 && targetVol > 0;
+      audio.volume = shouldFadeIn ? 0 : Math.max(0, Math.min(1, targetVol));
       this.currentAudioElement = audio;
+      let hasStartedStreamFade = false;
+
+      const triggerFadeIfNeeded = () => {
+        if (this.currentAudioElement !== audio) return;
+        if (shouldFadeIn && !hasStartedStreamFade) {
+          hasStartedStreamFade = true;
+          this.startStreamVolumeFadeIn(audio, fadeInDurationMs);
+        }
+      };
 
       const handle = {
         stop: () => {
+          if (this.currentAudioElement === audio) {
+            this.cancelStreamVolumeFadeIn();
+          }
           try {
             audio.pause();
             audio.currentTime = 0;
@@ -4961,6 +5055,9 @@ export class MusicManager {
           this.activeSources.delete(handle);
         },
         disconnect: () => {
+          if (this.currentAudioElement === audio) {
+            this.cancelStreamVolumeFadeIn();
+          }
           try {
             audio.removeAttribute('src');
             audio.load();
@@ -4979,6 +5076,7 @@ export class MusicManager {
         if (!audio.loop) {
           this.activeSources.delete(handle);
           if (this.currentAudioElement === audio) {
+            this.cancelStreamVolumeFadeIn();
             this.currentAudioElement = null;
           }
         }
@@ -4988,6 +5086,7 @@ export class MusicManager {
         this.isPlaying = true;
         this.awaitingAutoplayUnlock = false;
         this.removeAutoplayUnlockListeners();
+        triggerFadeIfNeeded();
         this.notify();
       };
 
@@ -4999,6 +5098,7 @@ export class MusicManager {
             this.isPlaying = true;
             this.awaitingAutoplayUnlock = false;
             this.removeAutoplayUnlockListeners();
+            triggerFadeIfNeeded();
             this.notify();
           })
           .catch(() => {
@@ -5009,6 +5109,7 @@ export class MusicManager {
           });
       } else {
         this.isPlaying = true;
+        triggerFadeIfNeeded();
       }
     } catch {
       this.stopAllCustomSources();
@@ -5018,7 +5119,11 @@ export class MusicManager {
     }
   }
 
-  private startTrackBufferPlayback(trackId: string, withFadeIn: boolean = false): void {
+  private startTrackBufferPlayback(
+    trackId: string,
+    withFadeIn: boolean = false,
+    fadeInDurationMs: number = 0
+  ): void {
     // Ensure any previous source is completely stopped before starting a new source
     this.stopAllCustomSources();
     const myGenId = ++this.playbackGenerationId;
@@ -5037,7 +5142,10 @@ export class MusicManager {
     }
 
     if (!buffer && streamUrl) {
-      this.startTrackStreamPlayback(streamUrl);
+      const effectiveStreamFadeMs = withFadeIn
+        ? Math.max(fadeInDurationMs, HOME_BGM_FADE_IN_DURATION_MS)
+        : fadeInDurationMs;
+      this.startTrackStreamPlayback(streamUrl, effectiveStreamFadeMs);
       return;
     }
 
@@ -5069,35 +5177,6 @@ export class MusicManager {
       return;
     }
 
-    if ((ctx as AudioContext).state === 'suspended') {
-      this.awaitingAutoplayUnlock = true;
-      this.ensureAutoplayInteractionUnlock();
-      try {
-        const resumeResult = (ctx as AudioContext).resume?.();
-        if (resumeResult && typeof resumeResult.then === 'function') {
-          resumeResult
-            .then(() => {
-              if ((ctx as AudioContext).state === 'running') {
-                this.awaitingAutoplayUnlock = false;
-                this.removeAutoplayUnlockListeners();
-                this.isPlaying = true;
-                this.notify();
-              }
-            })
-            .catch(() => {
-              this.awaitingAutoplayUnlock = true;
-              this.ensureAutoplayInteractionUnlock();
-            });
-        }
-      } catch {
-        // fallback handled by listeners
-      }
-    } else {
-      this.awaitingAutoplayUnlock = false;
-      this.removeAutoplayUnlockListeners();
-      this.isPlaying = true;
-    }
-
     const startOffset = this.loopConfig.skipSilence ? meta.trimBounds.trimStartSec : 0;
     const endOffset = this.loopConfig.skipSilence ? meta.trimBounds.trimEndSec : buffer.duration;
     const playDuration = Math.max(0.1, endOffset - startOffset);
@@ -5112,6 +5191,59 @@ export class MusicManager {
         : 0;
 
       const now = ctx.currentTime;
+      const requestedFadeSec =
+        fadeInDurationMs > 0
+          ? fadeInDurationMs / 1000
+          : withFadeIn
+          ? this.loopConfig.crossfadeDurationSec
+          : 0;
+      const effectiveFadeInSec =
+        withFadeIn && targetVol > 0 ? Math.min(Math.max(0.2, requestedFadeSec), Math.max(0.2, playDuration * 0.45)) : 0;
+
+      const scheduleGainFadeIn = (startTime: number) => {
+        if (effectiveFadeInSec > 0 && targetVol > 0) {
+          gainNode.gain.cancelScheduledValues?.(startTime);
+          gainNode.gain.setValueAtTime(0.0001, startTime);
+          gainNode.gain.linearRampToValueAtTime(targetVol, startTime + effectiveFadeInSec);
+        } else {
+          gainNode.gain.setValueAtTime(targetVol, startTime);
+        }
+      };
+
+      const isContextSuspended = (ctx as AudioContext).state === 'suspended';
+      if (isContextSuspended) {
+        this.awaitingAutoplayUnlock = true;
+        this.ensureAutoplayInteractionUnlock();
+        gainNode.gain.setValueAtTime(effectiveFadeInSec > 0 ? 0.0001 : targetVol, now);
+        try {
+          const resumeResult = (ctx as AudioContext).resume?.();
+          if (resumeResult && typeof resumeResult.then === 'function') {
+            resumeResult
+              .then(() => {
+                if ((ctx as AudioContext).state === 'running' && this.playbackGenerationId === myGenId) {
+                  this.awaitingAutoplayUnlock = false;
+                  this.removeAutoplayUnlockListeners();
+                  this.isPlaying = true;
+                  if (this.currentGain === gainNode) {
+                    scheduleGainFadeIn(ctx.currentTime);
+                  }
+                  this.notify();
+                }
+              })
+              .catch(() => {
+                this.awaitingAutoplayUnlock = true;
+                this.ensureAutoplayInteractionUnlock();
+              });
+          }
+        } catch {
+          // fallback handled by listeners
+        }
+      } else {
+        this.awaitingAutoplayUnlock = false;
+        this.removeAutoplayUnlockListeners();
+        this.isPlaying = true;
+        scheduleGainFadeIn(now);
+      }
 
       const canCrossfade =
         this.loopConfig.loop &&
@@ -5120,13 +5252,6 @@ export class MusicManager {
 
       if (canCrossfade) {
         const fadeSec = this.loopConfig.crossfadeDurationSec;
-        if (withFadeIn) {
-          gainNode.gain.setValueAtTime(0.001, now);
-          gainNode.gain.linearRampToValueAtTime(targetVol, now + fadeSec);
-        } else {
-          gainNode.gain.setValueAtTime(targetVol, now);
-        }
-
         const fadeOutStart = now + playDuration - fadeSec;
         gainNode.gain.setValueAtTime(targetVol, fadeOutStart);
         gainNode.gain.linearRampToValueAtTime(0.001, now + playDuration);
@@ -5154,7 +5279,6 @@ export class MusicManager {
           }
         }, nextTriggerMs);
       } else {
-        gainNode.gain.setValueAtTime(targetVol, now);
         source.loop = this.loopConfig.loop;
         if (this.loopConfig.loop && this.loopConfig.seamlessLoop) {
           source.loopStart = startOffset;
@@ -5188,6 +5312,7 @@ export class MusicManager {
 
   public stopAllCustomSources(): void {
     this.playbackGenerationId++;
+    this.cancelStreamVolumeFadeIn();
     if (this.nextCrossfadeTimer !== null) {
       clearTimeout(this.nextCrossfadeTimer);
       this.nextCrossfadeTimer = null;
@@ -5244,9 +5369,11 @@ export class MusicManager {
     if (this.currentGain && this.currentSource) {
       const ctx = soundManager.initContext();
       if (ctx) {
+        this.currentGain.gain.cancelScheduledValues?.(ctx.currentTime);
         this.currentGain.gain.setValueAtTime(settings.bgmVolume, ctx.currentTime);
       }
     } else if (this.currentAudioElement) {
+      this.cancelStreamVolumeFadeIn();
       this.currentAudioElement.volume = Math.max(0, Math.min(1, settings.bgmVolume));
     } else if (!this.isPaused) {
       if (this.previewTrackId && this.tracks.has(this.previewTrackId)) {

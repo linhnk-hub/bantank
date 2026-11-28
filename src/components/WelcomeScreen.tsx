@@ -175,7 +175,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             preload="auto"
             loop={homeVideoConfig.loop !== false}
             style={{ opacity: isIntroUiVisible ? homeVideoConfig.opacity : 1 }}
-            className="w-full h-full object-cover transition-opacity duration-700 ease-out"
+            className="w-full h-full object-cover transition-opacity duration-[1200ms] ease-out"
             onLoadStart={() => {
               if (!musicManager.isHomeVideoLoaded(homeVideoUrl)) {
                 setIsVideoBuffering(true);
@@ -195,6 +195,13 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
               musicManager.markHomeVideoLoaded(homeVideoUrl);
               setIsVideoBuffering(false);
               tryPlayIntroVideo();
+              if (
+                !musicManager.isBgmActivelyPlaying() &&
+                !musicManager.isAwaitingAutoplayUnlock() &&
+                !SoundManager.getInstance().isHomeBgmMuted()
+              ) {
+                musicManager.syncMenuPlayback();
+              }
             }}
             onCanPlay={() => {
               musicManager.markHomeVideoLoaded(homeVideoUrl);
@@ -204,6 +211,13 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             onPlaying={() => {
               musicManager.markHomeVideoLoaded(homeVideoUrl);
               setIsVideoBuffering(false);
+              if (
+                !musicManager.isBgmActivelyPlaying() &&
+                !musicManager.isAwaitingAutoplayUnlock() &&
+                !SoundManager.getInstance().isHomeBgmMuted()
+              ) {
+                musicManager.syncMenuPlayback();
+              }
             }}
             onTimeUpdate={(e) => {
               musicManager.setHomeVideoPlaybackTime(e.currentTarget.currentTime);
@@ -211,21 +225,21 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             onError={() => setIsVideoBuffering(false)}
           />
           <div
-            className={`absolute inset-0 bg-gradient-to-b from-[#050510]/72 via-[#050510]/50 to-[#050510]/88 transition-opacity duration-700 ease-out ${
+            className={`absolute inset-0 bg-gradient-to-b from-[#050510]/72 via-[#050510]/50 to-[#050510]/88 transition-opacity duration-[1200ms] ease-out ${
               isIntroUiVisible ? 'opacity-100' : 'opacity-0'
             }`}
           />
         </div>
       )}
 
-      {/* Background Ambience: Neo-Retro tactical grid and radial glow (fades in with foreground UI at 5.000s) */}
+      {/* Background Ambience: Neo-Retro tactical grid and radial glow (fades in gradually with foreground UI at 5.000s) */}
       <div
-        className={`fixed inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(255,184,0,0.16),rgba(5,5,16,0))] pointer-events-none transition-opacity duration-700 ease-out ${
+        className={`fixed inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(255,184,0,0.16),rgba(5,5,16,0))] pointer-events-none transition-opacity duration-[1400ms] ease-out ${
           isIntroUiVisible ? 'opacity-100' : 'opacity-0'
         }`}
       />
       <div
-        className={`fixed inset-0 bg-grid-pattern pointer-events-none transition-opacity duration-700 ease-out ${
+        className={`fixed inset-0 bg-grid-pattern pointer-events-none transition-opacity duration-[1400ms] ease-out ${
           isIntroUiVisible ? 'opacity-20' : 'opacity-0'
         }`}
       />
@@ -234,7 +248,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       <div
         data-testid="welcome-top-controls"
         aria-hidden={!isIntroUiVisible}
-        className={`relative z-20 max-w-4xl mx-auto w-full px-3 sm:px-4 pt-1 flex items-center justify-end gap-2 shrink-0 transition-opacity duration-700 ease-out delay-150 ${
+        className={`relative z-20 max-w-4xl mx-auto w-full px-3 sm:px-4 pt-1 flex items-center justify-end gap-2 shrink-0 transition-opacity duration-[1400ms] ease-out delay-300 ${
           isIntroUiVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       >
@@ -245,7 +259,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
       {/* Notifications: Auth checking / Logout notice / Error alert (revealed cleanly with Home UI at 5.000s) */}
       <div
         aria-hidden={!isIntroUiVisible}
-        className={`relative z-20 max-w-xl mx-auto w-full px-3 sm:px-4 pt-1 sm:pt-2 shrink-0 transition-opacity duration-700 ease-out delay-150 ${
+        className={`relative z-20 max-w-xl mx-auto w-full px-3 sm:px-4 pt-1 sm:pt-2 shrink-0 transition-opacity duration-[1400ms] ease-out delay-300 ${
           isIntroUiVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       >
@@ -303,20 +317,20 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
         }`}
       >
         <div className="flex flex-col items-center text-center max-w-2xl w-full">
-          {/* 1. Official Game Logo Hero — Coordinated Fade-In at 5.000s (Zero Y shift) */}
+          {/* 1. Official Game Logo Hero — Gradual Coordinated Fade-In at 5.000s (Zero Y shift) */}
           <div
             data-testid="welcome-intro-logo"
-            className={`flex justify-center items-center p-0 m-0 transition-opacity duration-700 ease-out delay-0 ${
+            className={`flex justify-center items-center p-0 m-0 transition-opacity duration-[1500ms] ease-out delay-0 ${
               isIntroUiVisible ? 'opacity-100' : 'opacity-0'
             }`}
           >
             <GameLogo />
           </div>
 
-          {/* 2. Slogan Banner Image (/slogan.png) — Coordinated Fade-In at 5.000s (Zero Y shift) */}
+          {/* 2. Slogan Banner Image (/slogan.png) — Gradual Coordinated Fade-In at 5.000s (Zero Y shift) */}
           <h1
             data-testid="welcome-intro-slogan"
-            className={`inline-flex items-center justify-center p-0 m-0 leading-none transition-opacity duration-700 ease-out delay-75 ${
+            className={`inline-flex items-center justify-center p-0 m-0 leading-none transition-opacity duration-[1500ms] ease-out delay-200 ${
               isIntroUiVisible ? 'opacity-100' : 'opacity-0'
             }`}
           >
@@ -333,7 +347,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           {isMaintenanceActive && (
             <div
               data-testid="welcome-maintenance-banner"
-              className={`w-full max-w-md mt-2.5 mb-2 p-3.5 neo-bevel-card neo-bevel-amber text-[#EAF4FF] text-xs sm:text-sm flex flex-col items-center gap-2 shadow-xl transition-opacity duration-700 ease-out delay-150 ${
+              className={`w-full max-w-md mt-2.5 mb-2 p-3.5 neo-bevel-card neo-bevel-amber text-[#EAF4FF] text-xs sm:text-sm flex flex-col items-center gap-2 shadow-xl transition-opacity duration-[1500ms] ease-out delay-300 ${
                 isIntroUiVisible ? 'opacity-100' : 'opacity-0'
               }`}
             >
@@ -366,10 +380,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             </div>
           )}
 
-          {/* 3 & 4. Login Button(s) & Play Trial Button(s) — Coordinated Fade-In at 5.000s (Zero Y shift) */}
+          {/* 3 & 4. Login Button(s) & Play Trial Button(s) — Gradual Coordinated Fade-In at 5.000s (Zero Y shift) */}
           <div
             data-testid="welcome-intro-actions"
-            className={`w-full max-w-[290px] sm:max-w-[320px] flex flex-col items-center gap-3 px-2 mt-3 mb-4 transition-opacity duration-700 ease-out delay-150 ${
+            className={`w-full max-w-[290px] sm:max-w-[320px] flex flex-col items-center gap-3 px-2 mt-3 mb-4 transition-opacity duration-[1500ms] ease-out delay-[350ms] ${
               isIntroUiVisible ? 'opacity-100' : 'opacity-0'
             }`}
           >
@@ -459,10 +473,10 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           </div>
         )}
 
-      {/* Footer — Fades in cleanly at 5.000s at final layout position */}
+      {/* Footer — Gradual fade-in cleanly at 5.000s at final layout position */}
       <footer
         aria-hidden={!isIntroUiVisible}
-        className={`relative z-10 w-full border-t border-[#687386]/30 bg-[#050510]/85 px-4 py-3 text-center text-xs text-[#687386] shrink-0 transition-opacity duration-700 ease-out delay-150 ${
+        className={`relative z-10 w-full border-t border-[#687386]/30 bg-[#050510]/85 px-4 py-3 text-center text-xs text-[#687386] shrink-0 transition-opacity duration-[1400ms] ease-out delay-[350ms] ${
           isIntroUiVisible ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
       >
